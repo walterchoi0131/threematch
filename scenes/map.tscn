@@ -1,0 +1,113 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/map.gd" id="1_script"]
+
+[sub_resource type="LabelSettings" id="LS_title"]
+font_size = 40
+font_color = Color(1, 0.9, 0.3, 1)
+
+[sub_resource type="LabelSettings" id="LS_sub"]
+font_size = 16
+font_color = Color(0.75, 0.75, 0.75, 1)
+
+[sub_resource type="StyleBoxFlat" id="SBF_stage"]
+bg_color = Color(0.18, 0.22, 0.32, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.55, 0.8, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="SBF_locked"]
+bg_color = Color(0.13, 0.13, 0.18, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="SBF_char"]
+bg_color = Color(0.22, 0.18, 0.32, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.7, 0.5, 0.85, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="Map" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 576.0
+offset_bottom = 1024.0
+mouse_filter = 2
+color = Color(0.09, 0.09, 0.14, 1)
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="Title" type="Label" parent="UILayer"]
+offset_left = 0.0
+offset_top = 90.0
+offset_right = 576.0
+offset_bottom = 150.0
+text = "STAGE SELECT"
+label_settings = SubResource("LS_title")
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="UILayer"]
+offset_left = 0.0
+offset_top = 155.0
+offset_right = 576.0
+offset_bottom = 185.0
+text = "Choose your battle"
+label_settings = SubResource("LS_sub")
+horizontal_alignment = 1
+
+[node name="StageList" type="VBoxContainer" parent="UILayer"]
+offset_left = 64.0
+offset_top = 210.0
+offset_right = 512.0
+offset_bottom = 800.0
+theme_override_constants/separation = 16
+
+[node name="Stage1" type="Button" parent="UILayer/StageList"]
+custom_minimum_size = Vector2(0, 110)
+theme_override_styles/normal = SubResource("SBF_stage")
+text = "Stage 1  —  Slay the Slimes"
+
+[node name="Stage2" type="Button" parent="UILayer/StageList"]
+custom_minimum_size = Vector2(0, 110)
+theme_override_styles/normal = SubResource("SBF_locked")
+text = "Stage 2  —  🔒 Coming Soon"
+disabled = true
+modulate = Color(0.55, 0.55, 0.55, 1)
+
+[node name="Stage3" type="Button" parent="UILayer/StageList"]
+custom_minimum_size = Vector2(0, 110)
+theme_override_styles/normal = SubResource("SBF_locked")
+text = "Stage 3  —  🔒 Coming Soon"
+disabled = true
+modulate = Color(0.55, 0.55, 0.55, 1)
+
+[node name="CharactersBtn" type="Button" parent="UILayer"]
+offset_left = 64.0
+offset_top = 870.0
+offset_right = 512.0
+offset_bottom = 930.0
+theme_override_styles/normal = SubResource("SBF_char")
+text = "Characters"
+
+[connection signal="pressed" from="UILayer/StageList/Stage1" to="." method="_on_stage1_pressed"]
+[connection signal="pressed" from="UILayer/CharactersBtn" to="." method="_on_characters_pressed"]

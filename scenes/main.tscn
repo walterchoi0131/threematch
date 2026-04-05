@@ -1,0 +1,141 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
+[ext_resource type="Script" path="res://scripts/battle_manager.gd" id="3_bm"]
+[ext_resource type="Script" path="res://scripts/character_panel.gd" id="4_cp"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+font_size = 20
+font_color = Color(1, 1, 1, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_status"]
+font_size = 40
+font_color = Color(1, 0.9, 0.2, 1)
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_left = 280.0
+offset_right = 856.0
+offset_bottom = 1024.0
+mouse_filter = 2
+color = Color(0.11, 0.11, 0.17, 1)
+
+[node name="LogBackground" type="ColorRect" parent="."]
+offset_right = 280.0
+offset_bottom = 1024.0
+mouse_filter = 2
+color = Color(0.07, 0.07, 0.11, 1)
+
+[node name="Board" parent="." instance=ExtResource("2_board")]
+position = Vector2(312, 258)
+
+[node name="BattleManager" type="Node" parent="."]
+script = ExtResource("3_bm")
+
+[node name="FXLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="TopBar" type="HBoxContainer" parent="UILayer"]
+offset_left = 280.0
+offset_right = 856.0
+offset_bottom = 40.0
+alignment = 1
+
+[node name="ScoreLabel" type="Label" parent="UILayer/TopBar"]
+text = "Score: 0"
+label_settings = SubResource("LabelSettings_title")
+
+[node name="Sep1" type="Label" parent="UILayer/TopBar"]
+text = "  |  "
+label_settings = SubResource("LabelSettings_title")
+
+[node name="TurnLabel" type="Label" parent="UILayer/TopBar"]
+text = "Turn: 0"
+label_settings = SubResource("LabelSettings_title")
+
+[node name="Sep2" type="Label" parent="UILayer/TopBar"]
+text = "  |  "
+label_settings = SubResource("LabelSettings_title")
+
+[node name="RoundLabel" type="Label" parent="UILayer/TopBar"]
+text = "Round: 1"
+label_settings = SubResource("LabelSettings_title")
+
+[node name="PlayerHPBar" type="Control" parent="UILayer"]
+offset_left = 280.0
+offset_top = 770.0
+offset_right = 856.0
+offset_bottom = 794.0
+
+[node name="BG" type="ColorRect" parent="UILayer/PlayerHPBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.3, 0.05, 0.05, 1)
+
+[node name="Fill" type="ColorRect" parent="UILayer/PlayerHPBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.87, 0.12, 0.12, 1)
+
+[node name="HpLabel" type="Label" parent="UILayer/PlayerHPBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+text = "0 / 0"
+horizontal_alignment = 0
+vertical_alignment = 1
+
+[node name="EnemyRow" type="HBoxContainer" parent="UILayer"]
+offset_left = 296.0
+offset_top = 76.0
+offset_right = 840.0
+offset_bottom = 252.0
+mouse_filter = 2
+alignment = 1
+
+[node name="CharacterRow" type="HBoxContainer" parent="UILayer"]
+offset_left = 296.0
+offset_top = 800.0
+offset_right = 840.0
+offset_bottom = 920.0
+alignment = 1
+script = ExtResource("4_cp")
+
+[node name="StatusLabel" type="Label" parent="UILayer"]
+offset_left = 280.0
+offset_top = 358.0
+offset_right = 856.0
+offset_bottom = 665.0
+mouse_filter = 2
+text = ""
+label_settings = SubResource("LabelSettings_status")
+horizontal_alignment = 1
+vertical_alignment = 1
+visible = false
+
+[node name="RestartButton" type="Button" parent="UILayer"]
+offset_left = 420.0
+offset_top = 928.0
+offset_right = 576.0
+offset_bottom = 968.0
+text = "Restart"
+
+[node name="ReturnButton" type="Button" parent="UILayer"]
+offset_left = 584.0
+offset_top = 928.0
+offset_right = 740.0
+offset_bottom = 968.0
+text = "Back to Map"
+visible = false
+
+[connection signal="pressed" from="UILayer/RestartButton" to="." method="_on_restart_pressed"]
+[connection signal="pressed" from="UILayer/ReturnButton" to="." method="_on_return_pressed"]
+
+

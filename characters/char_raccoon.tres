@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/raccoon.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Raccoon"
+gem_type = 2
+level = 5
+base_atk = 2
+atk_growth = 0.6
+base_hp = 40
+hp_growth = 6.0
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(0.30, 0.69, 0.31, 1)
+passive_skill_name = "Photosynthesis2"
+passive_skill_desc = "At the start of each turn, convert 3 gems into leaf gems. Targets fire first, then water."
+active_skill_name = ""
+active_skill_desc = ""
+active_skill_cd = 0
+responding_skills = [{
+"name": "Leaf Storm",
+"desc": "When 6+ leaf gems are blasted in one turn, convert 3 gems into leaf gems. Targets fire first, then water.",
+"threshold": 6,
+"priority": 99,
+"trigger_type": "count"
+}]

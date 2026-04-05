@@ -1,0 +1,87 @@
+[gd_resource type="Resource" script_class="StageData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
+[ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
+[ext_resource type="AudioStreamOggVorbis" uid="uid://bjj11qpqyj3a" path="res://assets/music/battle.ogg" id="5_bgm"]
+
+[sub_resource type="Resource" id="slime_1"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime"
+max_hp = 50
+attack_damage = 6
+attack_interval = 3
+portrait_color = Color(0.2, 0.7, 0.2, 1)
+portrait_texture = ExtResource("3_slimetex")
+element = 2
+
+[sub_resource type="Resource" id="slime_2"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime"
+max_hp = 50
+attack_damage = 6
+attack_interval = 3
+portrait_color = Color(0.2, 0.7, 0.2, 1)
+portrait_texture = ExtResource("3_slimetex")
+element = 2
+
+[sub_resource type="Resource" id="slime_3"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime"
+max_hp = 50
+attack_damage = 6
+attack_interval = 3
+portrait_color = Color(0.2, 0.7, 0.2, 1)
+portrait_texture = ExtResource("3_slimetex")
+element = 2
+
+[sub_resource type="Resource" id="slime_4"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime"
+max_hp = 50
+attack_damage = 6
+attack_interval = 3
+portrait_color = Color(0.2, 0.7, 0.2, 1)
+portrait_texture = ExtResource("3_slimetex")
+element = 2
+
+[sub_resource type="Resource" id="slime_5"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime"
+max_hp = 50
+attack_damage = 6
+attack_interval = 3
+portrait_color = Color(0.2, 0.7, 0.2, 1)
+portrait_texture = ExtResource("3_slimetex")
+element = 2
+
+[sub_resource type="Resource" id="slime_6"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime"
+max_hp = 50
+attack_damage = 6
+attack_interval = 3
+portrait_color = Color(0.2, 0.7, 0.2, 1)
+portrait_texture = ExtResource("3_slimetex")
+element = 2
+
+[sub_resource type="Resource" id="slime_boss"]
+script = ExtResource("2_enemy")
+enemy_name = "Slime Boss"
+max_hp = 150
+attack_damage = 18
+attack_interval = 1
+portrait_color = Color(0.25, 0.47, 0.85, 1)
+portrait_texture = ExtResource("4_blueslime")
+element = 1
+
+[resource]
+script = ExtResource("1_script")
+stage_name = "Dev Stage"
+allowed_types = [0, 1, 2, 6]
+min_match = 2
+columns = 8
+rows = 8
+rounds = [[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]]
+bgm = ExtResource("5_bgm")

@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/husky.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Husky"
+gem_type = 6
+level = 5
+base_atk = 2
+atk_growth = 0.6
+base_hp = 55
+hp_growth = 9.0
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(1.0, 0.92, 0.23, 1)
+passive_skill_name = ""
+passive_skill_desc = ""
+active_skill_name = "There shall be light"
+active_skill_desc = "Enter selection mode: hover to preview a cross shape, click to convert those gems into light gems. CD: 3 turns."
+active_skill_cd = 3
+responding_skills = [{
+"name": "Justice Slash",
+"desc": "Blast 9+ light gems: create a Saint Cross upper gem at tapped cell. Blasting it deals all enemy gems x50 ATK and heals 20% HP.",
+"threshold": 9,
+"priority": 1,
+"trigger_type": "count",
+"fuse_label": "9"
+}]

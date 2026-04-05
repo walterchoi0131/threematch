@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/fox.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Fox"
+gem_type = 0
+level = 5
+base_atk = 2
+atk_growth = 0.6
+base_hp = 45
+hp_growth = 7.0
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(0.91, 0.26, 0.21, 1)
+passive_skill_name = ""
+passive_skill_desc = ""
+active_skill_name = "爆炸"
+active_skill_desc = "Blast every row from top to bottom"
+active_skill_cd = 1
+responding_skills = [{
+"name": "Fireball",
+"desc": "Blast 9+ fire gems: create a Fireball gem at tapped cell. Tap to blast cross area.",
+"threshold": 9,
+"priority": 1,
+"trigger_type": "count",
+"fuse_label": "9"
+}, {
+"name": "Fire Pillar",
+"desc": "Blast 4+ fire gems in a row/column: create a Fire Pillar gem. Tap to blast entire row or column.",
+"threshold": 4,
+"priority": 2,
+"trigger_type": "line",
+"fuse_label": "4"
+}]
