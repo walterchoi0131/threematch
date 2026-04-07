@@ -153,7 +153,7 @@ func _handle_click(pos: Vector2i) -> void:
 		return
 
 	var matches := _find_connected(pos)
-	if matches.size() < min_match:
+	if matches.is_empty():
 		# 寶石抖動提示無效操作
 		if block:
 			var tween := create_tween()

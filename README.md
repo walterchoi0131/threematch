@@ -161,4 +161,8 @@ All falling blocks (both collapse and refill) use the same physics-based animati
 光 - 盾, 炸暗, 恢復, 變身
 暗 - 炸暗以外, 吸血, 影子
 
+珠子移動?
+特定形狀才能變為上級石?
+特定陣法才能變成上級石?
+
 

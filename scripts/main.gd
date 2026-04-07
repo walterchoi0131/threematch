@@ -2,6 +2,7 @@ extends Node2D
 
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const GemParticleScript := preload("res://scripts/gem_particle.gd")
+const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
@@ -36,6 +37,9 @@ var _chain_atk_bonus: float = 0.0    # accumulated chain ATK bonus (0.10 per cha
 const MAX_VFX_PARTICLES := 16
 var _vfx_pool: Array = []
 
+# ── 攻擊交錯延遲（多角色連打時，下一位開始攻擊前等待的秒數）──
+const ATTACK_STAGGER_SEC := 0.2
+
 # ── 戰鬥日誌 ──
 const LOG_PANEL_WIDTH := 272
 const LOG_ENTRY_HEIGHT := 40
@@ -54,6 +58,12 @@ const UPPER_GEM_ICON_PATHS := {
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
+var _speed_label: Label = null
+
+# ── SE ───────────────────────────────────────────────────────
+var _se_blast: AudioStream = null
+var _se_freeze: AudioStream = null
+var _se_impact: AudioStream = null
 
 
 # ── 生命週期 ───────────────────────────────────────────────────
@@ -77,6 +87,7 @@ func _ready() -> void:
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
 	battle_manager.player_defeated.connect(_on_player_defeated)
 	battle_manager.round_cleared.connect(_on_round_cleared)
+	battle_manager.round_transitioning.connect(_on_round_transitioning)
 	battle_manager.battle_won.connect(_on_battle_won)
 	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
@@ -86,6 +97,10 @@ func _ready() -> void:
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
 	return_button.visible = false
+
+	_se_blast = load("res://assets/se/111.wav")
+	_se_freeze = load("res://assets/se/skef_freeze.mp3")
+	_se_impact = load("res://assets/se/skef_atk1_B.mp3")
 
 	_setup_dev_log()
 	_update_skill_ui()
@@ -114,6 +129,17 @@ func _setup_fuse_hints() -> void:
 
 # ── BGM ───────────────────────────────────────────────────────
 
+## 播放一次性音效
+func _play_sfx(stream: AudioStream) -> void:
+	if stream == null:
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	player.finished.connect(player.queue_free)
+	add_child(player)
+	player.play()
+
+
 ## 播放關卡背景音樂
 func _play_bgm() -> void:
 	if current_stage.bgm != null:
@@ -127,12 +153,16 @@ func _play_bgm() -> void:
 
 ## 建立戰鬥日誌 UI（視窗左側獨立區域，不影響右側遊戲畫面）
 func _setup_dev_log() -> void:
+	var outer := VBoxContainer.new()
+	outer.name = "BattleLogOuter"
+	outer.offset_left = 4
+	outer.offset_top = 4
+	outer.offset_right = LOG_PANEL_WIDTH
+	outer.offset_bottom = 1020
+
 	var panel := Control.new()
 	panel.name = "BattleLog"
-	panel.offset_left = 4
-	panel.offset_top = 4
-	panel.offset_right = LOG_PANEL_WIDTH
-	panel.offset_bottom = 1020
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.clip_contents = true
 
 	_log_scroll = ScrollContainer.new()
@@ -144,7 +174,48 @@ func _setup_dev_log() -> void:
 	_log_scroll.add_child(_log_vbox)
 
 	panel.add_child(_log_scroll)
-	$UILayer.add_child(panel)
+	outer.add_child(panel)
+
+	# ── 速度調整滑桿區 ──
+	var speed_section := VBoxContainer.new()
+	speed_section.name = "SpeedSection"
+
+	var speed_title := Label.new()
+	speed_title.text = "Projectile Speed"
+	speed_title.add_theme_font_size_override("font_size", 14)
+	speed_title.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	speed_section.add_child(speed_title)
+
+	_speed_label = Label.new()
+	_speed_label.text = "x%.2f" % TrailProjectileScript.speed_divisor
+	_speed_label.add_theme_font_size_override("font_size", 13)
+	_speed_label.add_theme_color_override("font_color", Color(1, 0.9, 0.4))
+	_speed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	speed_section.add_child(_speed_label)
+
+	var slider := HSlider.new()
+	slider.min_value = 0.1
+	slider.max_value = 5.0
+	slider.step = 0.1
+	slider.value = TrailProjectileScript.speed_divisor
+	slider.custom_minimum_size = Vector2(LOG_PANEL_WIDTH - 8, 28)
+	slider.value_changed.connect(func(v: float) -> void:
+		TrailProjectileScript.speed_divisor = v
+		if _speed_label:
+			_speed_label.text = "x%.2f" % v
+	)
+	speed_section.add_child(slider)
+
+	outer.add_child(speed_section)
+
+	# ── 重新開始按鈕 ──
+	var restart_btn := Button.new()
+	restart_btn.text = "Restart Battle"
+	restart_btn.custom_minimum_size = Vector2(LOG_PANEL_WIDTH - 8, 36)
+	restart_btn.pressed.connect(_on_restart_pressed)
+	outer.add_child(restart_btn)
+
+	$UILayer.add_child(outer)
 
 
 ## 取得寶石圖示的 BBCode（有貼圖用 [img]，否則用彩色文字）
@@ -273,6 +344,7 @@ func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offs
 ## 3. 融合流程：粒子飛向點擊位置 → 放置高階寶石 → 掉落填充
 ## 4. 普通流程：粒子飛向角色卡 → 攻擊動畫 → 回應技能 → 結束回合
 func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array) -> void:
+	_play_sfx(_se_blast)
 	board.is_busy = true  # 鎖定棋盤直到整個攻擊序列結束
 	# 將全局座標轉換為網格座標（用於直線檢測）
 	var grid_positions: Array[Vector2i] = []
@@ -312,7 +384,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 			var gem_pos: Vector2 = global_positions[idx]
 			var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
 			particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
-		await get_tree().create_timer(particle_duration / 2.0 + 0.05).timeout
+		await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 
 		# 在點擊位置放置高階寶石（寶石仍在因為跳過了掉落）
 		for resp in responses:
@@ -324,7 +396,8 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 		battle_manager.finish_turn()
 		await _process_turn_start_passives()
 		_update_skill_ui()
-		board.is_busy = false
+		if not battle_manager.is_round_transitioning:
+			board.is_busy = false
 		return
 
 	# ── 普通攻擊流程（透過通用管線）──
@@ -342,7 +415,8 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 	await _process_turn_start_passives()
 
 	_update_skill_ui()
-	board.is_busy = false
+	if not battle_manager.is_round_transitioning:
+		board.is_busy = false
 
 
 func _on_score_changed(new_score: int) -> void:
@@ -356,7 +430,7 @@ func _acquire_particle() -> Node2D:
 			return p
 	if _vfx_pool.size() < MAX_VFX_PARTICLES:
 		var p := Node2D.new()
-		p.set_script(GemParticleScript)
+		p.set_script(TrailProjectileScript)
 		fx_layer.add_child(p)
 		p.setup()
 		_vfx_pool.append(p)
@@ -421,16 +495,20 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 
 	# 等待所有 VFX 同時飛抵目標
 	if blasted_by_type.size() > 0:
-		await get_tree().create_timer(particle_duration / 2.0 + 0.05).timeout
+		await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 
 	# 啟用延遲死亡：攻擊序列中最後一隻怪不會立刻死亡（過殺機制）
 	for enemy in battle_manager.active_enemies:
 		if is_instance_valid(enemy):
 			enemy.defer_death = true
 
-	# 依序播放所有角色攻擊動畫
-	for attack in all_attacks:
-		await _play_attack_sequence(attack)
+	# 依序播放所有角色攻擊動畫（每位之間只間隔 ATTACK_STAGGER_SEC，不等上一位完成）
+	for i in all_attacks.size():
+		_play_attack_sequence(all_attacks[i])  # fire-and-forget
+		if i < all_attacks.size() - 1:
+			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
+	# 等待最後一位攻擊的投射物落地（最長飛行時間 + 餘裕）
+	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
 
 	# 攻擊序列結束：結算所有延遲死亡的敵人
 	for enemy in battle_manager.active_enemies.duplicate():
@@ -442,7 +520,7 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 
 # ── 攻擊特效 ───────────────────────────────────────────────────
 
-## 播放單次攻擊序列：角色卡上彈 → 攻擊特效 → 角色卡回位
+## 播放單次攻擊序列：角色卡上彈 → 攻擊特效 → 角色卡回位（全部非阻塞，fire-and-forget）
 func _play_attack_sequence(attack: Dictionary) -> void:
 	var char_index: int = attack.char_index
 	var gem_type: Block.Type = attack.gem_type as Block.Type
@@ -489,6 +567,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 					if is_instance_valid(target):
 						target.take_damage(damage)
 						_spawn_damage_number(target.get_global_rect().get_center(), damage, Block.COLORS[gem_type], true, is_super)
+					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				await slash.play(target_pos)
 			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), damage, 1, mult, chain_mult), gem_type, char_data)
@@ -535,6 +614,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
 						captured_target.take_damage(captured_dmg)
 						_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, Block.COLORS[gem_type], true, arrow_super)
+						_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				bullet.play(card_center, target_pos)
 				if arrow_idx < arrow_count - 1:
@@ -544,23 +624,28 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), total_arrow_dmg, arrow_count, raccoon_mult, chain_mult), gem_type, char_data)
 			# 等待最後一枝箭矢到達
 			await get_tree().create_timer(0.45).timeout
-		_:  # 預設攻擊：射出寶石色粒子從角色卡到敵人
+		_:  # 預設攻擊：拖尾弧光從角色卡飛向敵人
 			if is_instance_valid(target):
 				var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
 				var target_pos := target.get_global_rect().get_center()
 				var color: Color = Block.COLORS[gem_type]
-				var particle := Node2D.new()
-				particle.set_script(GemParticleScript)
-				fx_layer.add_child(particle)
-				particle.launch(card_center, target_pos, color, 0.9)
-				await get_tree().create_timer(0.9 / 2.0 + 0.05).timeout
-				if is_instance_valid(target):
-					target.take_damage(damage)
-					_spawn_damage_number(target.get_global_rect().get_center(), damage, color, true, is_super)
+				var trail := Node2D.new()
+				trail.set_script(TrailProjectileScript)
+				fx_layer.add_child(trail)
+				var captured_target := target
+				var captured_dmg := damage
+				trail.deduct_hp.connect(func():
+					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
+						captured_target.take_damage(captured_dmg)
+						_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, color, true, is_super)
+					_play_sfx(_se_impact)
+				, CONNECT_ONE_SHOT)
+				trail.launch(card_center, target_pos, color, 0.5)
+				await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.05).timeout
 			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), damage, 1, mult, chain_mult), gem_type, char_data)
 
-	# Card moves back
-	await character_panel.play_card_return(char_index)
+	# Card moves back (non-blocking)
+	character_panel.play_card_return(char_index)
 
 
 # ── responding skills ─────────────────────────────────────────────────
@@ -579,6 +664,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			# Place a Fireball upper gem at the tapped position
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.FIREBALL)
+			_play_sfx(_se_freeze)
 			var _fc: CharacterData = party[resp.char_index]
 			var _fc_count: int = int(battle_manager.turn_gem_blasts.get(_fc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_fc.gem_type, _fc_count, Block.UpperType.FIREBALL), _fc.gem_type, _fc)
@@ -593,6 +679,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			else:
 				pillar_type = Block.UpperType.FIRE_PILLAR_Y
 			board.place_upper_gem(pos, pillar_type)
+			_play_sfx(_se_freeze)
 			var _pc: CharacterData = party[resp.char_index]
 			var _pc_count: int = int(battle_manager.turn_gem_blasts.get(_pc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_pc.gem_type, _pc_count, pillar_type), _pc.gem_type, _pc)
@@ -601,6 +688,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			# Place a Saint Cross upper gem at the tapped position
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.SAINT_CROSS)
+			_play_sfx(_se_freeze)
 			var _hc: CharacterData = party[resp.char_index]
 			var _hc_count: int = int(battle_manager.turn_gem_blasts.get(_hc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_hc.gem_type, _hc_count, Block.UpperType.SAINT_CROSS), _hc.gem_type, _hc)
@@ -657,7 +745,8 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, tr
 		battle_manager.finish_turn()
 		await _process_turn_start_passives()
 		_update_skill_ui()
-		board.is_busy = false
+		if not battle_manager.is_round_transitioning:
+			board.is_busy = false
 		return
 	# 計算連鏈攻擊加成（每層連鏈 +10%，首次不加）
 	_chain_atk_bonus = (chain_count - 1) * 0.10
@@ -677,7 +766,8 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, tr
 	battle_manager.finish_turn()
 	await _process_turn_start_passives()
 	_update_skill_ui()
-	board.is_busy = false
+	if not battle_manager.is_round_transitioning:
+		board.is_busy = false
 
 
 ## 顯示連鏈數字標籤（縮放彈跳 + 淡出）
@@ -769,7 +859,8 @@ func _on_active_skill_activated(char_index: int) -> void:
 			battle_manager.finish_turn()
 			await _process_turn_start_passives()
 			_update_skill_ui()
-			board.is_busy = false
+			if not battle_manager.is_round_transitioning:
+				board.is_busy = false
 
 
 ## 更新技能 UI（冷卻顯示、就緒發光）
@@ -787,7 +878,7 @@ func _update_skill_ui() -> void:
 
 # ── 敎人攻擊特效 ─────────────────────────────────────────────
 
-## 敎人攻擊時：射出拋物線彈道從敎人到玩家血條
+## 敎人攻擊時：拖尾弧光從敎人飛向玩家血條
 func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	if not is_instance_valid(enemy):
 		battle_manager.apply_player_damage(damage)
@@ -796,13 +887,15 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	var to_pos: Vector2 = player_hp_fill.get_global_rect().get_center()
 	var color: Color = enemy.data.portrait_color
 
-	var proj := Node2D.new()
-	proj.set_script(ProjectileScript)
-	fx_layer.add_child(proj)
-	proj.launch(from_pos, to_pos, color, func() -> void:
+	var trail := Node2D.new()
+	trail.set_script(TrailProjectileScript)
+	fx_layer.add_child(trail)
+	trail.deduct_hp.connect(func() -> void:
 		battle_manager.apply_player_damage(damage)
 		_spawn_damage_number(to_pos, damage, Color(1.0, 0.3, 0.3))
-	)
+		_play_sfx(_se_impact)
+	, CONNECT_ONE_SHOT)
+	trail.launch(from_pos, to_pos, color, 0.5)
 
 
 # ── 戰鬥回呼 ──────────────────────────────────────────────────
@@ -851,9 +944,15 @@ func _on_player_defeated() -> void:
 	return_button.visible = true
 
 
+## 波次轉換中：鎖定棋盤避免玩家在過場期間操作
+func _on_round_transitioning() -> void:
+	board.is_busy = true
+
+
 ## 波次清除
 func _on_round_cleared() -> void:
 	round_label.text = "Round: %d" % (battle_manager.current_round + 1)
+	board.is_busy = false
 
 
 ## 戰鬥勝利

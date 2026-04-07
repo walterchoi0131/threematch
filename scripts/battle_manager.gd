@@ -11,6 +11,7 @@ signal battle_won()
 signal turn_changed(turn: int)
 ## Emitted when an enemy attacks; Main handles projectile VFX then calls apply_player_damage.
 signal enemy_attacked(enemy: Enemy, damage: int)
+signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
 
 # ── references set by Main ────────────────────────────────────────────
 var enemy_container: HBoxContainer
@@ -26,6 +27,8 @@ var targeted_enemy: Enemy = null
 
 var player_max_hp: int = 0
 var player_current_hp: int = 0
+
+var is_round_transitioning: bool = false
 
 var turn: int = 0
 
@@ -258,14 +261,19 @@ func _update_enemy_cds() -> void:
 		enemy.update_cd(enemy.data.attack_interval - remainder)
 
 
-## 處理所有敎人的回合行動
+## 處理所有敎人的回合行動（交錯攻擊，每位間隔一小段時間）
 func _process_enemy_turns() -> void:
+	var attacking: Array[Enemy] = []
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
 		if turn % enemy.data.attack_interval == 0:
-			enemy.flash_attack()
-			_enemy_attack(enemy)
+			attacking.append(enemy)
+	for i in attacking.size():
+		attacking[i].flash_attack()
+		_enemy_attack(attacking[i])
+		if i < attacking.size() - 1:
+			await get_tree().create_timer(0.2).timeout
 
 
 ## 敎人執行攻擊
@@ -300,8 +308,11 @@ func _on_enemy_died(dead_enemy: Enemy) -> void:
 		return
 
 	# 本波敎人全滅 — 進入下一波
+	is_round_transitioning = true
+	round_transitioning.emit()
 	await get_tree().create_timer(0.5).timeout
 	current_round += 1
 	_spawn_round(current_round)
+	is_round_transitioning = false
 	if current_round < stage_rounds.size():
 		round_cleared.emit()
