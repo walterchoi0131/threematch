@@ -1,13 +1,12 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://cskg2v302miqv"]
 
-[ext_resource type="Script" path="res://scripts/map.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://xo704l56k5e4" path="res://scripts/map.gd" id="1_script"]
 
 [sub_resource type="LabelSettings" id="LS_title"]
 font_size = 40
 font_color = Color(1, 0.9, 0.3, 1)
 
 [sub_resource type="LabelSettings" id="LS_sub"]
-font_size = 16
 font_color = Color(0.75, 0.75, 0.75, 1)
 
 [sub_resource type="StyleBoxFlat" id="SBF_stage"]
@@ -46,19 +45,18 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
-[node name="Map" type="Node2D"]
+[node name="Map" type="Node2D" unique_id=1793995455]
 script = ExtResource("1_script")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=2015089920]
 offset_right = 576.0
 offset_bottom = 1024.0
 mouse_filter = 2
 color = Color(0.09, 0.09, 0.14, 1)
 
-[node name="UILayer" type="CanvasLayer" parent="."]
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=973985963]
 
-[node name="Title" type="Label" parent="UILayer"]
-offset_left = 0.0
+[node name="Title" type="Label" parent="UILayer" unique_id=391827912]
 offset_top = 90.0
 offset_right = 576.0
 offset_bottom = 150.0
@@ -66,8 +64,7 @@ text = "STAGE SELECT"
 label_settings = SubResource("LS_title")
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="UILayer"]
-offset_left = 0.0
+[node name="Subtitle" type="Label" parent="UILayer" unique_id=413468933]
 offset_top = 155.0
 offset_right = 576.0
 offset_bottom = 185.0
@@ -75,33 +72,36 @@ text = "Choose your battle"
 label_settings = SubResource("LS_sub")
 horizontal_alignment = 1
 
-[node name="StageList" type="VBoxContainer" parent="UILayer"]
+[node name="StageList" type="VBoxContainer" parent="UILayer" unique_id=156770520]
 offset_left = 64.0
 offset_top = 210.0
 offset_right = 512.0
 offset_bottom = 800.0
 theme_override_constants/separation = 16
 
-[node name="Stage1" type="Button" parent="UILayer/StageList"]
+[node name="Stage1" type="Button" parent="UILayer/StageList" unique_id=706642258]
 custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
 theme_override_styles/normal = SubResource("SBF_stage")
 text = "Stage 1  —  Slay the Slimes"
 
-[node name="Stage2" type="Button" parent="UILayer/StageList"]
+[node name="Stage2" type="Button" parent="UILayer/StageList" unique_id=1888643917]
+modulate = Color(0.55, 0.55, 0.55, 1)
 custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
 theme_override_styles/normal = SubResource("SBF_locked")
+disabled = true
 text = "Stage 2  —  🔒 Coming Soon"
-disabled = true
-modulate = Color(0.55, 0.55, 0.55, 1)
 
-[node name="Stage3" type="Button" parent="UILayer/StageList"]
+[node name="Stage3" type="Button" parent="UILayer/StageList" unique_id=865474164]
+modulate = Color(0.55, 0.55, 0.55, 1)
 custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
 theme_override_styles/normal = SubResource("SBF_locked")
-text = "Stage 3  —  🔒 Coming Soon"
 disabled = true
-modulate = Color(0.55, 0.55, 0.55, 1)
+text = "Stage 3  —  🔒 Coming Soon"
 
-[node name="CharactersBtn" type="Button" parent="UILayer"]
+[node name="CharactersBtn" type="Button" parent="UILayer" unique_id=394326070]
 offset_left = 64.0
 offset_top = 870.0
 offset_right = 512.0

@@ -14,6 +14,8 @@ enum SkillType { NONE, PASSIVE, ACTIVE, RESPONDING }  # 技能類型列舉
 @export var hp_growth: float = 8.0    # 每級血量成長
 @export var portrait_texture: Texture2D  # 頭像貼圖
 @export var portrait_color: Color = Color(0.91, 0.26, 0.21)  # 頭像備用顏色
+@export var portrait_scale: float = 1.0          # 頭像縮放（相對於卡片容器）
+@export var portrait_offset: Vector2 = Vector2.ZERO  # 頭像偏移（相對於卡片左上角）
 
 # ── 技能定義 ─────────────────────────────────────────────────
 @export var passive_skill_name: String = ""   # 被動技能名稱

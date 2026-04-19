@@ -26,12 +26,22 @@ const CHAR_BOAR := preload("res://characters/char_boar.tres")
 const CHAR_RACCOON := preload("res://characters/char_raccoon.tres")
 const CHAR_FOX := preload("res://characters/char_fox.tres")
 const CHAR_HUSKY := preload("res://characters/char_husky.tres")
+const CHAR_PANDA := preload("res://characters/char_panda.tres")
+const CHAR_POLAR := preload("res://characters/char_polar.tres")
 
 var party: Array[CharacterData] = []
 var current_stage: StageData = null
 var _upper_blast_positions: Dictionary = {}  # gem_type -> Array of global positions (for upper gem VFX)
 var _is_upper_gem_turn: bool = false  # set when an upper gem click is in progress
 var _chain_atk_bonus: float = 0.0    # accumulated chain ATK bonus (0.10 per chain)
+var _pending_saint_cross_count: int = 0  # 本次連鏈中累積的聖十字觸發次數
+var _live_chain_label: Label = null       # 連鏈計數標籤 — "×N!" 動態部分
+var _live_chain_header: Label = null      # 連鏈計數標籤 — "Chain" 靜態部分
+var _live_chain_count: int = 0            # 目前連鏈計數（對應 upper_gem_chain_triggered 次數）
+
+# ── 並行融合狀態 ──
+var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
+var _concurrent_fuses: Array = []        # 並行融合資料 [{ tapped_pos, responses, arrival_msec, gem_type, count, grid_positions }]
 
 # ── VFX 粒子池 ──
 const MAX_VFX_PARTICLES := 16
@@ -55,6 +65,8 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.FIRE_PILLAR_X: "res://assets/gems/gem_fire_turnado.png",
 	Block.UpperType.FIRE_PILLAR_Y: "res://assets/gems/gem_fire_turnado.png",
 	Block.UpperType.SAINT_CROSS: "res://assets/gems/gem_saint_cross.png",
+	Block.UpperType.LEAF_SHIELD: "res://assets/gems/gem_leafshield.png",
+	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -64,6 +76,17 @@ var _speed_label: Label = null
 var _se_blast: AudioStream = null
 var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
+
+# ── BGM 預覽模式狀態 ──
+var _bgm_player: AudioStreamPlayer = null   # 背景音樂播放器引用
+var _bgm_preview_tween: Tween = null         # 音量/速度 tween
+
+# ── 戰利品 ───────────────────────────────────────────────────
+var _battle_loot: Dictionary = {}  # 本場戰鬥積累的戰利品; key=ItemDefs.Type, value=int
+const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
+const BGM_PREVIEW_PITCH := 1               # 預覽模式BGM播放速度
+const BGM_PREVIEW_TIME_SCALE := 0.6          # 預覽模式遊戲速度
+const BGM_FADE_DUR := 0.25                   # 音量/速度漸變時間
 
 
 # ── 生命週期 ───────────────────────────────────────────────────
@@ -82,6 +105,9 @@ func _ready() -> void:
 	board.score_changed.connect(_on_score_changed)
 	board.upper_gem_clicked.connect(_on_upper_gem_clicked)
 	board.upper_blast_completed.connect(_on_upper_blast_completed)
+	board.upper_gem_chain_triggered.connect(_on_upper_gem_chain_triggered)
+	board.blast_preview_entered.connect(_on_blast_preview_entered)
+	board.blast_preview_exited.connect(_on_blast_preview_exited)
 
 	battle_manager.enemy_container = enemy_container
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
@@ -91,6 +117,7 @@ func _ready() -> void:
 	battle_manager.battle_won.connect(_on_battle_won)
 	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
+	battle_manager.loot_dropped.connect(_on_loot_dropped)
 
 	character_panel.setup(party)
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
@@ -107,6 +134,7 @@ func _ready() -> void:
 	_setup_fuse_hints()
 	_style_player_hp_label()
 	_play_bgm()
+	_play_stage_intro()
 
 
 ## 設定融合提示：從隊伍角色中收集融合技能並傳遞給棋盤
@@ -125,6 +153,43 @@ func _setup_fuse_hints() -> void:
 				"priority": skill.get("priority", 99),
 			})
 	board.set_fuse_skills(fuse_skills)
+
+
+# ── 進場動畫 ──────────────────────────────────────────────────
+
+## 進場動畫：黑幕淡出 → 角色卡從底部滑入 → 寶石隨機浮現
+func _play_stage_intro() -> void:
+	board.is_busy = true
+
+	# 建立全螢幕黑色遮罩
+	var black_overlay := ColorRect.new()
+	black_overlay.color = Color.BLACK
+	black_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	black_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	black_overlay.z_index = 200
+	fx_layer.add_child(black_overlay)
+
+	board.hide_all_gems()
+
+	# 等一幀讓 UI 佈局完成後再讀取卡片位置
+	await get_tree().process_frame
+	character_panel.prepare_intro()
+
+	# ── 黑幕與寶石同時啟動；卡片延遲 1 秒後啟動 ──
+	var fade_tw := create_tween()
+	fade_tw.tween_property(black_overlay, "color:a", 0.0, 3.4) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	fade_tw.tween_callback(black_overlay.queue_free)
+
+	board.play_gems_intro()  # fire-and-forget，立即開始
+
+	# 等 0.5 秒後啟動卡片滑入
+	await get_tree().create_timer(0.5).timeout
+	character_panel.play_intro_slide()  # fire-and-forget
+
+	# 再等 2.9 秒（黑幕共 3.4 秒）完成後解鎖棋盤
+	await get_tree().create_timer(2.9).timeout
+	board.is_busy = false
 
 
 # ── BGM ───────────────────────────────────────────────────────
@@ -147,6 +212,37 @@ func _play_bgm() -> void:
 		player.stream = current_stage.bgm
 		add_child(player)
 		player.play()
+		_bgm_player = player
+
+
+## 長按預覽開始：漸變降低 BGM 音量、播放速度、遊戲速度
+func _on_blast_preview_entered() -> void:
+	if _bgm_preview_tween != null and _bgm_preview_tween.is_valid():
+		_bgm_preview_tween.kill()
+	_bgm_preview_tween = create_tween().set_parallel(true)
+	_bgm_preview_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	if _bgm_player != null and is_instance_valid(_bgm_player):
+		_bgm_preview_tween.tween_property(_bgm_player, "volume_db", BGM_PREVIEW_VOLUME_DB, BGM_FADE_DUR) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		_bgm_preview_tween.tween_property(_bgm_player, "pitch_scale", BGM_PREVIEW_PITCH, BGM_FADE_DUR) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_bgm_preview_tween.tween_property(Engine, "time_scale", BGM_PREVIEW_TIME_SCALE, BGM_FADE_DUR) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+## 長按預覽結束：漸變還原 BGM 音量、播放速度、遊戲速度
+func _on_blast_preview_exited() -> void:
+	if _bgm_preview_tween != null and _bgm_preview_tween.is_valid():
+		_bgm_preview_tween.kill()
+	_bgm_preview_tween = create_tween().set_parallel(true)
+	_bgm_preview_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	if _bgm_player != null and is_instance_valid(_bgm_player):
+		_bgm_preview_tween.tween_property(_bgm_player, "volume_db", 0.0, BGM_FADE_DUR) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		_bgm_preview_tween.tween_property(_bgm_player, "pitch_scale", 1.0, BGM_FADE_DUR) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_bgm_preview_tween.tween_property(Engine, "time_scale", 1.0, BGM_FADE_DUR) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 
 # ── 開發戰鬥日誌 ──────────────────────────────────────────────
@@ -352,52 +448,31 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 		var local_pos: Vector2 = board.to_local(gp)
 		grid_positions.append(board.world_to_grid(local_pos))
 
-	# 記錄消除資料以觸發回應技能
-	battle_manager.record_blast(gem_type, count, grid_positions)
-
 	# 高階寶石連鏈爆炸期間跳過攻擊序列（統一在結束時計算傷害）
 	if _is_upper_gem_turn:
+		battle_manager.record_blast(gem_type, count, grid_positions)
 		# 儲存每種寶石的爆炸位置（用於 VFX 起始點）
 		if not _upper_blast_positions.has(gem_type):
 			_upper_blast_positions[gem_type] = []
 		_upper_blast_positions[gem_type].append_array(global_positions)
 		return
 
+	# 並行融合：融合管線執行期間的消除信號
+	if _fuse_pipeline_active:
+		_handle_concurrent_fuse_blast(gem_type, count, grid_positions, global_positions)
+		return
+
+	# 記錄消除資料以觸發回應技能
+	battle_manager.record_blast(gem_type, count, grid_positions)
+
 	# 先檢查回應技能以決定流程
 	var responses := battle_manager.check_responding_skills(board)
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 
 	if is_fuse:
-		# ── 融合流程：告訴棋盤跳過掉落，我們在放置高階寶石後再處理 ──
-		board.skip_collapse = true
-
-		var fuse_target: Vector2 = board.to_global(board.grid_to_world(board.last_tapped_pos))
-		var color: Color = Block.COLORS[gem_type]
-		var particle_duration := 1.05  # 與普通爆炸 VFX 飛行速度一致
-		# 寶石粒子飛向點擊位置
-		var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
-		for idx in fuse_total:
-			var particle: Node2D = _acquire_particle()
-			if particle == null:
-				break
-			var gem_pos: Vector2 = global_positions[idx]
-			var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
-			particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
-		await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
-
-		# 在點擊位置放置高階寶石（寶石仍在因為跳過了掉落）
-		for resp in responses:
-			await _execute_responding_skill(resp)
-
-		# Now collapse remaining gems around the upper gem
-		await board.do_collapse()
-
-		battle_manager.finish_turn()
-		await _process_turn_start_passives()
-		_update_skill_ui()
-		if not battle_manager.is_round_transitioning:
-			board.is_busy = false
+		# ── 融合管線（不消耗回合）──
+		await _execute_fuse_pipeline(gem_type, global_positions, responses)
 		return
 
 	# ── 普通攻擊流程（透過通用管線）──
@@ -409,14 +484,8 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 	for resp in responses:
 		await _execute_responding_skill(resp)
 
-	battle_manager.finish_turn()
-
-	# 第4階段：回合開始的被動技能（如浣熊的光合作用）
-	await _process_turn_start_passives()
-
-	_update_skill_ui()
-	if not battle_manager.is_round_transitioning:
-		board.is_busy = false
+	# 第4階段：結束回合（敵人行動 + 被動技能 + 解鎖棋盤）
+	await _end_player_turn()
 
 
 func _on_score_changed(new_score: int) -> void:
@@ -436,6 +505,124 @@ func _acquire_particle() -> Node2D:
 		_vfx_pool.append(p)
 		return p
 	return null
+
+
+# ── 回合管線 ─────────────────────────────────────────────────────
+
+## 融合管線：放置高階寶石（不消耗回合）
+## 粒子飛向點擊位置 → 放置高階寶石 → 處理並行融合 → 掉落填充 → 清除消除資料 → 解鎖棋盤
+func _execute_fuse_pipeline(gem_type: Block.Type, global_positions: Array, responses: Array) -> void:
+	board.skip_collapse = true
+	board.is_fusing = true
+	_fuse_pipeline_active = true
+	_concurrent_fuses.clear()
+
+	var first_tapped_pos: Vector2i = board.last_tapped_pos
+	var fuse_target: Vector2 = board.to_global(board.grid_to_world(first_tapped_pos))
+	var color: Color = Block.COLORS[gem_type]
+	var particle_duration := 1.05
+	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
+	for idx in fuse_total:
+		var particle: Node2D = _acquire_particle()
+		if particle == null:
+			break
+		var gem_pos: Vector2 = global_positions[idx]
+		var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
+		particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
+	await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
+
+	# 放置第一個融合的高階寶石
+	board.last_tapped_pos = first_tapped_pos
+	for resp in responses:
+		await _execute_responding_skill(resp)
+
+	# 處理所有並行融合（等待其粒子到達後放置高階寶石）
+	while _concurrent_fuses.size() > 0:
+		var cf: Dictionary = _concurrent_fuses.pop_front()
+		var now := Time.get_ticks_msec()
+		var arrival: int = cf.arrival_msec
+		if now < arrival:
+			var wait_sec: float = float(arrival - now) / 1000.0
+			await get_tree().create_timer(wait_sec).timeout
+		# 設定此並行融合的資料供 _execute_responding_skill 讀取
+		board.last_tapped_pos = cf.tapped_pos as Vector2i
+		battle_manager.turn_gem_blasts = { cf.gem_type: cf.count }
+		battle_manager.last_blast_positions = cf.grid_positions as Array[Vector2i]
+		for resp in cf.responses:
+			await _execute_responding_skill(resp)
+
+	_fuse_pipeline_active = false
+	board.is_fusing = false
+
+	await board.do_collapse()
+
+	# 不消耗回合，僅清除消除資料
+	battle_manager.reset_blast_data()
+	_update_skill_ui()
+	if not battle_manager.is_round_transitioning:
+		board.is_busy = false
+
+
+## 處理並行融合的 gems_blasted 信號：立即發射粒子並記錄待處理資料
+func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positions: Array[Vector2i], global_positions: Array) -> void:
+	# 暫存並替換 battle_manager 狀態以檢查此次消除的回應技能
+	var saved_blasts: Dictionary = battle_manager.turn_gem_blasts.duplicate()
+	var saved_positions: Array[Vector2i] = battle_manager.last_blast_positions.duplicate()
+	battle_manager.turn_gem_blasts = {}
+	battle_manager.last_blast_positions = []
+	battle_manager.record_blast(gem_type, count, grid_positions)
+	var responses := battle_manager.check_responding_skills(board)
+	# 還原 battle_manager 狀態
+	battle_manager.turn_gem_blasts = saved_blasts
+	battle_manager.last_blast_positions = saved_positions
+
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball"]
+	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
+	if not is_fuse:
+		return
+
+	# 立即發射粒子（與第一次融合動畫並行）
+	var tapped_pos: Vector2i = board._concurrent_fuse_tapped_pos
+	board._concurrent_fuse_tapped_pos = Vector2i(-1, -1)
+	var fuse_target: Vector2 = board.to_global(board.grid_to_world(tapped_pos))
+	var color: Color = Block.COLORS[gem_type]
+	var particle_duration := 1.05
+	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
+	for idx in fuse_total:
+		var particle: Node2D = _acquire_particle()
+		if particle == null:
+			break
+		var gem_pos: Vector2 = global_positions[idx]
+		var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
+		particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
+	var arrival_msec: int = Time.get_ticks_msec() + int((particle_duration / TrailProjectileScript.speed_divisor + 0.05) * 1000)
+	_concurrent_fuses.append({
+		"tapped_pos": tapped_pos,
+		"responses": responses,
+		"arrival_msec": arrival_msec,
+		"gem_type": gem_type,
+		"count": count,
+		"grid_positions": grid_positions,
+	})
+
+
+## 結束玩家回合管線：turn++ → 1 秒延遲 → 敵人行動 → 被動技能 → 解鎖棋盤
+func _end_player_turn() -> void:
+	battle_manager.finish_turn()
+
+	# 敵人行動前 1 秒延遲
+	if battle_manager.has_enemies_to_attack():
+		await get_tree().create_timer(1.0).timeout
+
+	var did_attack: bool = await battle_manager.do_enemy_phase()
+	if did_attack:
+		# 等待最後一個敵人投射物落地
+		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+
+	await _process_turn_start_passives()
+	_update_skill_ui()
+	if not battle_manager.is_round_transitioning:
+		board.is_busy = false
 
 
 # ── 通用消除處理管線 ─────────────────────────────────────────────
@@ -463,28 +650,23 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 		var chain_total: int = mini(raw, budget)
 		var blast_pos_list: Array = blast_positions.get(gem_type, [])
 
-		# 決定粒子飛往的目標位置
-		var card_center: Vector2
-		if attacks.size() > 0:
-			card_center = character_panel.get_card_screen_center(attacks[0].char_index)
-		else:
-			var found_card := false
-			for ci in party.size():
-				if party[ci].gem_type == gem_type:
-					card_center = character_panel.get_card_screen_center(ci)
-					found_card = true
-					break
-			if not found_card:
-				card_center = board.global_position + Vector2(board.columns * 32, -30)
+		# 無對應角色時跳過 VFX
+		if attacks.is_empty():
+			continue
 
-		# 發射 VFX 粒子（從池取得）
-		for i in chain_total:
-			var particle: Node2D = _acquire_particle()
-			if particle == null:
-				break
-			var spread: float = (float(i) / max(chain_total - 1, 1)) * 2.0 - 1.0 if chain_total > 1 else 0.0
-			var from_pos: Vector2 = blast_pos_list[i % blast_pos_list.size()] if blast_pos_list.size() > 0 else board.global_position + Vector2(board.columns * 32, board.rows * 32)
-			particle.launch(from_pos, card_center, color, particle_duration, spread)
+		# 多角色共享同類寶石時，每位角色分配自己的粒子
+		var per_char: int = maxi(1, chain_total / attacks.size())
+		for atk_idx in attacks.size():
+			var card_center: Vector2 = character_panel.get_card_screen_center(attacks[atk_idx].char_index)
+			var char_particles: int = per_char if atk_idx < attacks.size() - 1 else chain_total - per_char * (attacks.size() - 1)
+			for i in char_particles:
+				var particle: Node2D = _acquire_particle()
+				if particle == null:
+					break
+				var global_idx: int = per_char * atk_idx + i
+				var spread: float = (float(global_idx) / max(chain_total - 1, 1)) * 2.0 - 1.0 if chain_total > 1 else 0.0
+				var from_pos: Vector2 = blast_pos_list[global_idx % blast_pos_list.size()] if blast_pos_list.size() > 0 else board.global_position + Vector2(board.columns * 32, board.rows * 32)
+				particle.launch(from_pos, card_center, color, particle_duration, spread)
 
 		# 套用連鏈加成並排入攻擊佇列
 		for attack in attacks:
@@ -493,8 +675,8 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 			attack["chain_mult"] = chain_mult
 			all_attacks.append(attack)
 
-	# 等待所有 VFX 同時飛抵目標
-	if blasted_by_type.size() > 0:
+	# 等待所有 VFX 同時飛抵目標（僅在有攻擊時等待）
+	if all_attacks.size() > 0:
 		await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 
 	# 啟用延遲死亡：攻擊序列中最後一隻怪不會立刻死亡（過殺機制）
@@ -693,6 +875,24 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _hc_count: int = int(battle_manager.turn_gem_blasts.get(_hc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_hc.gem_type, _hc_count, Block.UpperType.SAINT_CROSS), _hc.gem_type, _hc)
 			await get_tree().create_timer(0.15).timeout
+		"Leaf Shield":
+			# Place a Leaf Shield upper gem at the tapped position
+			var pos: Vector2i = board.last_tapped_pos
+			board.place_upper_gem(pos, Block.UpperType.LEAF_SHIELD, Block.Type.GREEN)
+			_play_sfx(_se_freeze)
+			var _lc: CharacterData = party[resp.char_index]
+			var _lc_count: int = int(battle_manager.turn_gem_blasts.get(_lc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_lc.gem_type, _lc_count, Block.UpperType.LEAF_SHIELD), _lc.gem_type, _lc)
+			await get_tree().create_timer(0.15).timeout
+		"Snowball":
+			# Place a Snowball upper gem at the tapped position
+			var pos: Vector2i = board.last_tapped_pos
+			board.place_upper_gem(pos, Block.UpperType.SNOWBALL, Block.Type.BLUE)
+			_play_sfx(_se_freeze)
+			var _sc: CharacterData = party[resp.char_index]
+			var _sc_count: int = int(battle_manager.turn_gem_blasts.get(_sc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_sc.gem_type, _sc_count, Block.UpperType.SNOWBALL), _sc.gem_type, _sc)
+			await get_tree().create_timer(0.15).timeout
 
 
 # ── upper gem handlers ───────────────────────────────────────────────
@@ -701,13 +901,50 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 func _on_upper_gem_clicked() -> void:
 	_is_upper_gem_turn = true
 	_chain_atk_bonus = 0.0
+	_pending_saint_cross_count = 0
 	_upper_blast_positions.clear()
+	_live_chain_count = 0
+	if is_instance_valid(_live_chain_label):
+		_live_chain_label.queue_free()
+		_live_chain_label = null
+	if is_instance_valid(_live_chain_header):
+		_live_chain_header.queue_free()
+		_live_chain_header = null
 
 
-## 高階寶石爆炸完成後：計算連鏈加成、播放攻擊序列
-func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, triggered_upper: Block.UpperType) -> void:
-	# ── 聖十字特殊處理：全部敵方寶石 × 50 攻擊力 + 回復 20% HP ──
-	if triggered_upper == Block.UpperType.SAINT_CROSS:
+## 連鎖爆炸中波及特殊高階寶石時：即時觸發其獨有效果
+func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
+	_live_chain_count += 1
+	if _live_chain_count >= 2:
+		_update_chain_label(_live_chain_count)
+	match upper_type:
+		Block.UpperType.LEAF_SHIELD:
+			# 葉盾：治療 Panda ATK × 5
+			var panda_data: CharacterData = null
+			var panda_index := -1
+			for i in party.size():
+				if party[i].character_name == "Panda":
+					panda_data = party[i]
+					panda_index = i
+					break
+			var heal_atk: int = panda_data.get_atk() if panda_data != null else 5
+			var heal_amount: int = heal_atk * 5
+			battle_manager.apply_heal(heal_amount)
+			if panda_index >= 0:
+				character_panel.show_heal_text(panda_index, heal_amount)
+			_add_log_entry("[b]葉盾[/b] %s 回覆 %d HP" % [_gem_bbcode(Block.Type.GREEN), heal_amount], Block.Type.GREEN, panda_data)
+		Block.UpperType.SAINT_CROSS:
+			# 聖十字：標記需要在結算時執行聖十字效果
+			_pending_saint_cross_count += 1
+
+
+## 高階寶石爆炸完成後：統一結算所有累積的獨有效果 + VFX 攻擊
+func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _triggered_upper: Block.UpperType) -> void:
+	var chain_mult: float = 1.0 + (chain_count - 1) * 0.10
+	var had_saint_cross := _pending_saint_cross_count > 0
+
+	# ── 結算所有累積的聖十字效果 ──
+	if had_saint_cross:
 		var total_enemy_gems := 0
 		for bt in blasted_by_type:
 			total_enemy_gems += blasted_by_type[bt] as int
@@ -720,76 +957,106 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, tr
 				husky_index = i
 				break
 		var base_atk := husky_data.get_atk() if husky_data != null else 5
-		var chain_mult: float = 1.0 + (chain_count - 1) * 0.10
-		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult)
-		# 連鏈 ≥ 2 時顯示連鏈 UI
-		if chain_count >= 2:
-			_show_chain_label(chain_count)
-			await get_tree().create_timer(0.6).timeout
+		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult * _pending_saint_cross_count)
 		# 對所有存活敵人造成傷害
 		for enemy in battle_manager.active_enemies:
 			if is_instance_valid(enemy) and enemy.current_hp > 0:
 				enemy.take_damage(holy_damage)
 				_spawn_damage_number(enemy.get_global_rect().get_center(), holy_damage, Block.COLORS[Block.Type.LIGHT], true)
 				await get_tree().create_timer(0.15).timeout
-		# 回復 20% 最大血量
-		var heal_amount := int(floor(battle_manager.player_max_hp * 0.2))
+		# 回復 20% 最大血量（每個聖十字各回復一次）
+		var heal_amount := int(floor(battle_manager.player_max_hp * 0.2)) * _pending_saint_cross_count
 		battle_manager.apply_heal(heal_amount)
 		if husky_index >= 0:
 			character_panel.show_heal_text(husky_index, heal_amount)
+		var cross_str := "×%d " % _pending_saint_cross_count if _pending_saint_cross_count > 1 else ""
 		var chain_str := (" ×%.1f鎖" % chain_mult) if chain_count >= 2 else ""
-		_add_log_entry("[b]聖十字[/b] %s %d × ⚔%d%s = %d 回覆%d" % [_gem_bbcode(Block.Type.LIGHT), total_enemy_gems, base_atk, chain_str, holy_damage, heal_amount], Block.Type.LIGHT, husky_data)
-		# 重置狀態
-		_is_upper_gem_turn = false
-		_chain_atk_bonus = 0.0
-		battle_manager.finish_turn()
-		await _process_turn_start_passives()
-		_update_skill_ui()
-		if not battle_manager.is_round_transitioning:
-			board.is_busy = false
-		return
-	# 計算連鏈攻擊加成（每層連鏈 +10%，首次不加）
+		_add_log_entry("[b]聖十字[/b] %s%s %d × ⚔%d%s = %d 回覆%d" % [cross_str, _gem_bbcode(Block.Type.LIGHT), total_enemy_gems, base_atk, chain_str, holy_damage, heal_amount], Block.Type.LIGHT, husky_data)
+		_pending_saint_cross_count = 0
+
+	# ── 處理所有非聖十字的寶石類型：透過通用管線播放 VFX → 攻擊 ──
+	var vfx_blasted: Dictionary = {}
+	var vfx_positions: Dictionary = {}
+	for bt in blasted_by_type:
+		# 聖十字已用獨有公式處理 LIGHT 傷害，跳過避免重複
+		if bt as Block.Type == Block.Type.LIGHT and had_saint_cross:
+			continue
+		vfx_blasted[bt] = blasted_by_type[bt]
+	for bt in _upper_blast_positions:
+		if bt as Block.Type == Block.Type.LIGHT and had_saint_cross:
+			continue
+		vfx_positions[bt] = _upper_blast_positions[bt]
+
 	_chain_atk_bonus = (chain_count - 1) * 0.10
 
-	# 連鏈 ≥ 2 時顯示連鏈 UI
-	if chain_count >= 2:
-		_show_chain_label(chain_count)
-		await get_tree().create_timer(0.6).timeout
+	if not vfx_blasted.is_empty():
+		await _process_blast_results(vfx_blasted, vfx_positions, _chain_atk_bonus)
 
-	# 透過通用管線播放 VFX → 攻擊
-	await _process_blast_results(blasted_by_type, _upper_blast_positions, _chain_atk_bonus)
+	# 連鏈標籤淡出
+	if is_instance_valid(_live_chain_label):
+		var fade_tw := create_tween()
+		fade_tw.tween_interval(0.3)
+		fade_tw.tween_property(_live_chain_label, "modulate:a", 0.0, 0.4)
+		fade_tw.tween_callback(_live_chain_label.queue_free)
+		_live_chain_label = null
+	if is_instance_valid(_live_chain_header):
+		var fade_tw2 := create_tween()
+		fade_tw2.tween_interval(0.3)
+		fade_tw2.tween_property(_live_chain_header, "modulate:a", 0.0, 0.4)
+		fade_tw2.tween_callback(_live_chain_header.queue_free)
+		_live_chain_header = null
 
 	# 重置狀態
 	_is_upper_gem_turn = false
 	_chain_atk_bonus = 0.0
 
-	battle_manager.finish_turn()
-	await _process_turn_start_passives()
-	_update_skill_ui()
-	if not battle_manager.is_round_transitioning:
-		board.is_busy = false
+	await _end_player_turn()
 
 
-## 顯示連鏈數字標籤（縮放彈跳 + 淡出）
-func _show_chain_label(chain_count: int) -> void:
-	var label := Label.new()
-	label.text = "Chain ×%d!" % chain_count
-	label.add_theme_font_size_override("font_size", 40)
-	label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.1))
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-	label.add_theme_constant_override("outline_size", 6)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.position = Vector2(get_viewport_rect().size.x / 2 - 100, get_viewport_rect().size.y / 2 - 40)
-	label.z_index = 100
-	label.scale = Vector2(0.5, 0.5)
-	fx_layer.add_child(label)
+## 建立或更新連鏈數字標籤，並播放 pop 彈跳動畫
+func _update_chain_label(count: int) -> void:
+	var screen_cx: float = get_viewport_rect().size.x / 2.0
+	var screen_cy: float = get_viewport_rect().size.y / 2.0
+	var base_font_size: int = 60
+	var font_size: int = int(base_font_size * pow(1.1, count - 2))
+	var base_pop_scale: float = 1.4
+	var pop_scale: float = base_pop_scale * pow(1.1, count - 2)
+
+	# "Chain" 靜態標籤 — 只建立一次
+	if not is_instance_valid(_live_chain_header):
+		_live_chain_header = Label.new()
+		_live_chain_header.text = "Chain"
+		_live_chain_header.add_theme_font_size_override("font_size", 26)
+		_live_chain_header.add_theme_color_override("font_color", Color.WHITE)
+		_live_chain_header.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		_live_chain_header.add_theme_constant_override("outline_size", 4)
+		_live_chain_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_live_chain_header.custom_minimum_size = Vector2(200, 0)
+		_live_chain_header.z_index = 100
+		_live_chain_header.position = Vector2(screen_cx - 100.0, screen_cy - 80.0)
+		fx_layer.add_child(_live_chain_header)
+
+	# "×N!" 動態標籤 — 只建立一次，之後只更新內容
+	if not is_instance_valid(_live_chain_label):
+		_live_chain_label = Label.new()
+		_live_chain_label.add_theme_color_override("font_color", Color.WHITE)
+		_live_chain_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		_live_chain_label.add_theme_constant_override("outline_size", 8)
+		_live_chain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_live_chain_label.custom_minimum_size = Vector2(200, 0)
+		_live_chain_label.z_index = 100
+		_live_chain_label.position = Vector2(screen_cx - 100.0, screen_cy - 50.0)
+		fx_layer.add_child(_live_chain_label)
+
+	_live_chain_label.text = "×%d!" % count
+	_live_chain_label.add_theme_font_size_override("font_size", font_size)
+	_live_chain_label.modulate.a = 1.0
+	_live_chain_label.pivot_offset = Vector2(100.0, font_size * 0.55)
+	_live_chain_label.scale = Vector2(0.5, 0.5)
 
 	var tw := create_tween()
-	tw.tween_property(label, "scale", Vector2(1.2, 1.2), 0.2).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	tw.tween_property(label, "scale", Vector2(1.0, 1.0), 0.1)
-	tw.tween_interval(0.4)
-	tw.tween_property(label, "modulate:a", 0.0, 0.3)
-	tw.tween_callback(label.queue_free)
+	tw.tween_property(_live_chain_label, "scale", Vector2(pop_scale, pop_scale), 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(_live_chain_label, "scale", Vector2(1.0, 1.0), 0.1).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 
 
 # ── 回合開始被動技能 ──────────────────────────────────────────
@@ -856,11 +1123,133 @@ func _on_active_skill_activated(char_index: int) -> void:
 			_add_log_entry("爆炸：%s 消除 %d 顆寶石" % [_gem_bbcode(Block.Type.RED), total_gems], Block.Type.RED, c)
 			# 透過通用管線播放 VFX → 攻擊
 			await _process_blast_results(blasted, _upper_blast_positions)
-			battle_manager.finish_turn()
-			await _process_turn_start_passives()
-			_update_skill_ui()
-			if not battle_manager.is_round_transitioning:
+			await _end_player_turn()
+		"打雪仗":
+			# 打雪仗：動員棋盤上所有雪球飛向目標敵人，每顆造成 ATK×10 傷害
+			var snowballs: Array[Vector2i] = board.find_upper_gems(Block.UpperType.SNOWBALL)
+			if snowballs.is_empty():
+				return
+			battle_manager.use_active_skill(char_index)
+			board.is_busy = true
+			var target: Enemy = battle_manager.targeted_enemy
+			if target == null or not is_instance_valid(target) or target.current_hp <= 0:
+				for e in battle_manager.active_enemies:
+					if is_instance_valid(e) and e.current_hp > 0:
+						target = e
+						break
+			if target == null:
 				board.is_busy = false
+				_update_skill_ui()
+				return
+			var polar_atk := c.get_atk()
+			var snowball_dmg := polar_atk * 10
+			var snowball_count := snowballs.size()
+
+			# ── 第 1 階段：逐顆浮起 ──
+			var float_height := 32.0  # 半格高度
+			var sb_blocks: Array[Block] = []
+			var sb_float_tweens: Array[Tween] = []
+			for i in snowball_count:
+				var sb_pos: Vector2i = snowballs[i]
+				var block: Block = board.grid[sb_pos.x][sb_pos.y]
+				if block == null:
+					continue
+				# 從棋盤網格移除但保留節點
+				board.grid[sb_pos.x][sb_pos.y] = null
+				# 記錄全域位置後重新掛載到 FX 層
+				var gpos: Vector2 = block.global_position
+				block.get_parent().remove_child(block)
+				fx_layer.add_child(block)
+				block.global_position = gpos
+				block.z_index = 10
+				sb_blocks.append(block)
+				# 浮起動畫：0.7 秒向上移動 float_height
+				var float_tw := create_tween()
+				float_tw.tween_property(block, "global_position:y", gpos.y - float_height, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+				await float_tw.finished
+				# 浮起完成後開始循環漂浮
+				var bob_tw := create_tween().set_loops()
+				var bob_base: float = block.global_position.y
+				bob_tw.tween_property(block, "global_position:y", bob_base - 6.0, 0.5).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+				bob_tw.tween_property(block, "global_position:y", bob_base + 6.0, 0.5).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+				sb_float_tweens.append(bob_tw)
+
+			# 啟用延遲死亡
+			for enemy in battle_manager.active_enemies:
+				if is_instance_valid(enemy):
+					enemy.defer_death = true
+
+			# ── 第 2 階段：預計算目標，fire-and-forget 發射 ──
+			var fly_duration := 0.4
+
+			# 預計算每顆雪球的目標與傷害（依序分配存活敵人的 HP）
+			var sim_hp: Dictionary = {}  # enemy -> simulated remaining HP
+			for enemy in battle_manager.active_enemies:
+				if is_instance_valid(enemy):
+					sim_hp[enemy] = enemy.current_hp
+			var sb_targets: Array[Enemy] = []
+			var sb_damages: Array[int] = []
+			var sb_supers: Array[bool] = []
+			for i in sb_blocks.size():
+				# 若目標已被模擬擊殺，切換到下一個
+				if not is_instance_valid(target) or sim_hp.get(target, 0) <= 0:
+					var new_target: Enemy = null
+					for e in battle_manager.active_enemies:
+						if is_instance_valid(e) and sim_hp.get(e, 0) > 0:
+							new_target = e
+							break
+					if new_target != null:
+						target = new_target
+				var mult: float = battle_manager.get_element_multiplier(c.gem_type, target.data.element)
+				var final_dmg: int = int(snowball_dmg * mult)
+				sb_targets.append(target)
+				sb_damages.append(final_dmg)
+				sb_supers.append(mult > 1.0)
+				sim_hp[target] = sim_hp.get(target, 0) - final_dmg
+
+			# 逐顆發射（fire-and-forget，不等抵達）
+			for i in sb_blocks.size():
+				var block: Block = sb_blocks[i]
+				if not is_instance_valid(block):
+					continue
+				# 停止漂浮循環
+				if i < sb_float_tweens.size() and sb_float_tweens[i] != null:
+					sb_float_tweens[i].kill()
+				var hit_target: Enemy = sb_targets[i]
+				var hit_dmg: int = sb_damages[i]
+				var hit_super: bool = sb_supers[i]
+				var target_pos: Vector2 = hit_target.get_global_rect().get_center() if is_instance_valid(hit_target) else board.global_position
+				# 飛行動畫（fire-and-forget）
+				var fly_tw := create_tween()
+				fly_tw.set_parallel(true)
+				fly_tw.tween_property(block, "global_position", target_pos, fly_duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+				fly_tw.tween_property(block, "scale", Vector2(0.6, 0.6), fly_duration)
+				fly_tw.tween_property(block, "modulate:a", 0.5, fly_duration * 0.8).set_delay(fly_duration * 0.2)
+				# 抵達時造成傷害並銷毀
+				fly_tw.finished.connect(func() -> void:
+					if is_instance_valid(hit_target) and (hit_target.current_hp > 0 or hit_target.defer_death):
+						hit_target.take_damage(hit_dmg)
+						_spawn_damage_number(hit_target.get_global_rect().get_center(), hit_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
+						_play_sfx(_se_impact)
+					if is_instance_valid(block):
+						block.queue_free()
+				)
+				# 0.3 秒後發射下一顆
+				if i < sb_blocks.size() - 1:
+					await get_tree().create_timer(0.3).timeout
+
+			# 等最後一顆雪球抵達
+			await get_tree().create_timer(fly_duration + 0.05).timeout
+
+			# 結算延遲死亡
+			for enemy in battle_manager.active_enemies.duplicate():
+				if is_instance_valid(enemy):
+					enemy.defer_death = false
+					if enemy.current_hp <= 0:
+						enemy.finalize_death()
+			_add_log_entry("[b]打雪仗[/b] %s ×%d ⚔%d = %d" % [_gem_bbcode(Block.Type.BLUE), snowball_count, snowball_dmg, snowball_dmg * snowball_count], Block.Type.BLUE, c)
+			await board._collapse_and_fill()
+			await _end_player_turn()
 
 
 ## 更新技能 UI（冷卻顯示、就緒發光）
@@ -879,13 +1268,46 @@ func _update_skill_ui() -> void:
 # ── 敎人攻擊特效 ─────────────────────────────────────────────
 
 ## 敎人攻擊時：拖尾弧光從敎人飛向玩家血條
+## 若棋盤上有葉盾，消耗一個葉盾並減少 50% 傷害
 func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	if not is_instance_valid(enemy):
 		battle_manager.apply_player_damage(damage)
 		return
 	var from_pos: Vector2 = enemy.get_global_rect().get_center()
-	var to_pos: Vector2 = player_hp_fill.get_global_rect().get_center()
 	var color: Color = enemy.data.portrait_color
+
+	# ── 葉盾被動防禦：消耗一個葉盾，傷害減半 ──
+	var shields: Array[Vector2i] = board.find_upper_gems(Block.UpperType.LEAF_SHIELD)
+	if shields.size() > 0:
+		var shield_pos: Vector2i = shields[0]
+		var shield_block: Block = board.grid[shield_pos.x][shield_pos.y]
+		var shield_global: Vector2 = shield_block.global_position if shield_block != null else board.to_global(board.grid_to_world(shield_pos))
+		var reduced_damage: int = int(damage * 0.5)
+
+		# 粒子飛向葉盾位置
+		var trail := Node2D.new()
+		trail.set_script(TrailProjectileScript)
+		fx_layer.add_child(trail)
+		trail.deduct_hp.connect(func() -> void:
+			board.destroy_upper_gem_at(shield_pos)
+			battle_manager.apply_player_damage(reduced_damage)
+			_spawn_damage_number(shield_global, reduced_damage, Color(1.0, 0.3, 0.3))
+			_play_sfx(_se_impact)
+			# 找到 Panda 角色用於日誌
+			var panda_data: CharacterData = null
+			for i in party.size():
+				if party[i].character_name == "Panda":
+					panda_data = party[i]
+					break
+			_add_log_entry("[b]葉盾[/b] 擋下攻擊！%d → %d" % [damage, reduced_damage], Block.Type.GREEN, panda_data)
+			# 盾牌消失後觸發棋盤掌落填充
+			board._collapse_and_fill()
+		, CONNECT_ONE_SHOT)
+		trail.launch(from_pos, shield_global, color, 0.5)
+		return
+
+	# ── 正常流程 ──
+	var to_pos: Vector2 = player_hp_fill.get_global_rect().get_center()
 
 	var trail := Node2D.new()
 	trail.set_script(TrailProjectileScript)
@@ -955,10 +1377,44 @@ func _on_round_cleared() -> void:
 	board.is_busy = false
 
 
+## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
+func _on_loot_dropped(enemy_data: EnemyData, results: Array) -> void:
+	# 找出死亡的敵人節點以取得浮動文字位置（若找不到就用螢幕中央）
+	var popup_pos := Vector2(get_viewport().get_visible_rect().size / 2)
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy) and enemy.data == enemy_data:
+			popup_pos = enemy.get_global_rect().get_center()
+			break
+
+	for result: Dictionary in results:
+		var type: ItemDefs.Type = result.type
+		var amount: int = result.amount
+		# 積累到本場計數
+		var current: int = _battle_loot.get(type, 0)
+		_battle_loot[type] = current + amount
+		# 浮動文字
+		var label_text := "+%d %s" % [amount, ItemDefs.get_display_name(type)]
+		var color: Color = ItemDefs.get_color(type)
+		var dn := Node2D.new()
+		dn.set_script(DamageNumberScript)
+		fx_layer.add_child(dn)
+		dn.show_text(popup_pos, label_text, color)
+
+
 ## 戰鬥勝利
 func _on_battle_won() -> void:
 	board.is_busy = true
-	status_label.text = "VICTORY!"
+	# 將本場戰利品存入 GameState
+	for type: ItemDefs.Type in _battle_loot:
+		GameState.add_loot(type, _battle_loot[type])
+
+	# 組合勝利文字（含戰利品摘要）
+	var summary := "VICTORY!"
+	for type: ItemDefs.Type in _battle_loot:
+		var amount: int = _battle_loot[type]
+		summary += "\n+%d %s" % [amount, ItemDefs.get_display_name(type)]
+
+	status_label.text = summary
 	status_label.modulate = Color(1, 0.9, 0.2)
 	status_label.visible = true
 	return_button.visible = true

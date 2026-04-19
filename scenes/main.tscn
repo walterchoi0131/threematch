@@ -1,98 +1,105 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://xulv6yb25yh1"]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://c060bcd5ai5ck" path="res://scripts/main.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/board.tscn" id="2_board"]
-[ext_resource type="Script" path="res://scripts/battle_manager.gd" id="3_bm"]
-[ext_resource type="Script" path="res://scripts/character_panel.gd" id="4_cp"]
+[ext_resource type="Script" uid="uid://dmq13g01stago" path="res://scripts/battle_manager.gd" id="3_bm"]
+[ext_resource type="Script" uid="uid://qqnyc8l4xwgq" path="res://scripts/character_panel.gd" id="4_cp"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_title"]
 font_size = 20
-font_color = Color(1, 1, 1, 1)
 
 [sub_resource type="LabelSettings" id="LabelSettings_status"]
 font_size = 40
 font_color = Color(1, 0.9, 0.2, 1)
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=530578651]
 script = ExtResource("1_script")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=108499670]
 offset_left = 280.0
 offset_right = 856.0
 offset_bottom = 1024.0
 mouse_filter = 2
 color = Color(0.11, 0.11, 0.17, 1)
 
-[node name="LogBackground" type="ColorRect" parent="."]
+[node name="LogBackground" type="ColorRect" parent="." unique_id=268581978]
 offset_right = 280.0
 offset_bottom = 1024.0
 mouse_filter = 2
 color = Color(0.07, 0.07, 0.11, 1)
 
-[node name="Board" parent="." instance=ExtResource("2_board")]
+[node name="Board" parent="." unique_id=1578621044 instance=ExtResource("2_board")]
 position = Vector2(312, 258)
 
-[node name="BattleManager" type="Node" parent="."]
+[node name="BattleManager" type="Node" parent="." unique_id=631340773]
 script = ExtResource("3_bm")
 
-[node name="FXLayer" type="CanvasLayer" parent="."]
+[node name="FXLayer" type="CanvasLayer" parent="." unique_id=1544662811]
 layer = 10
 
-[node name="UILayer" type="CanvasLayer" parent="."]
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=673824219]
 
-[node name="TopBar" type="HBoxContainer" parent="UILayer"]
+[node name="TopBar" type="HBoxContainer" parent="UILayer" unique_id=36024439]
 offset_left = 280.0
 offset_right = 856.0
 offset_bottom = 40.0
 alignment = 1
 
-[node name="ScoreLabel" type="Label" parent="UILayer/TopBar"]
+[node name="ScoreLabel" type="Label" parent="UILayer/TopBar" unique_id=544831753]
+layout_mode = 2
 text = "Score: 0"
 label_settings = SubResource("LabelSettings_title")
 
-[node name="Sep1" type="Label" parent="UILayer/TopBar"]
+[node name="Sep1" type="Label" parent="UILayer/TopBar" unique_id=341663730]
+layout_mode = 2
 text = "  |  "
 label_settings = SubResource("LabelSettings_title")
 
-[node name="TurnLabel" type="Label" parent="UILayer/TopBar"]
+[node name="TurnLabel" type="Label" parent="UILayer/TopBar" unique_id=653153534]
+layout_mode = 2
 text = "Turn: 0"
 label_settings = SubResource("LabelSettings_title")
 
-[node name="Sep2" type="Label" parent="UILayer/TopBar"]
+[node name="Sep2" type="Label" parent="UILayer/TopBar" unique_id=855623439]
+layout_mode = 2
 text = "  |  "
 label_settings = SubResource("LabelSettings_title")
 
-[node name="RoundLabel" type="Label" parent="UILayer/TopBar"]
+[node name="RoundLabel" type="Label" parent="UILayer/TopBar" unique_id=304478099]
+layout_mode = 2
 text = "Round: 1"
 label_settings = SubResource("LabelSettings_title")
 
-[node name="PlayerHPBar" type="Control" parent="UILayer"]
+[node name="PlayerHPBar" type="Control" parent="UILayer" unique_id=186701662]
+layout_mode = 3
+anchors_preset = 0
 offset_left = 280.0
 offset_top = 770.0
 offset_right = 856.0
 offset_bottom = 794.0
 
-[node name="BG" type="ColorRect" parent="UILayer/PlayerHPBar"]
+[node name="BG" type="ColorRect" parent="UILayer/PlayerHPBar" unique_id=2118585609]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.3, 0.05, 0.05, 1)
 
-[node name="Fill" type="ColorRect" parent="UILayer/PlayerHPBar"]
+[node name="Fill" type="ColorRect" parent="UILayer/PlayerHPBar" unique_id=1533024681]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.87, 0.12, 0.12, 1)
 
-[node name="HpLabel" type="Label" parent="UILayer/PlayerHPBar"]
+[node name="HpLabel" type="Label" parent="UILayer/PlayerHPBar" unique_id=531931617]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
-mouse_filter = 2
 text = "0 / 0"
-horizontal_alignment = 0
 vertical_alignment = 1
 
-[node name="EnemyRow" type="HBoxContainer" parent="UILayer"]
+[node name="EnemyRow" type="HBoxContainer" parent="UILayer" unique_id=1645575475]
 offset_left = 296.0
 offset_top = 76.0
 offset_right = 840.0
@@ -100,42 +107,37 @@ offset_bottom = 252.0
 mouse_filter = 2
 alignment = 1
 
-[node name="CharacterRow" type="HBoxContainer" parent="UILayer"]
+[node name="CharacterRow" type="HBoxContainer" parent="UILayer" unique_id=354252149]
 offset_left = 296.0
-offset_top = 800.0
+offset_top = 860.0
 offset_right = 840.0
 offset_bottom = 920.0
-alignment = 1
 script = ExtResource("4_cp")
 
-[node name="StatusLabel" type="Label" parent="UILayer"]
+[node name="StatusLabel" type="Label" parent="UILayer" unique_id=162691362]
+visible = false
 offset_left = 280.0
 offset_top = 358.0
 offset_right = 856.0
 offset_bottom = 665.0
-mouse_filter = 2
-text = ""
 label_settings = SubResource("LabelSettings_status")
 horizontal_alignment = 1
 vertical_alignment = 1
-visible = false
 
-[node name="RestartButton" type="Button" parent="UILayer"]
+[node name="RestartButton" type="Button" parent="UILayer" unique_id=567740557]
 offset_left = 420.0
 offset_top = 928.0
 offset_right = 576.0
 offset_bottom = 968.0
 text = "Restart"
 
-[node name="ReturnButton" type="Button" parent="UILayer"]
+[node name="ReturnButton" type="Button" parent="UILayer" unique_id=985228363]
+visible = false
 offset_left = 584.0
 offset_top = 928.0
 offset_right = 740.0
 offset_bottom = 968.0
 text = "Back to Map"
-visible = false
 
 [connection signal="pressed" from="UILayer/RestartButton" to="." method="_on_restart_pressed"]
 [connection signal="pressed" from="UILayer/ReturnButton" to="." method="_on_return_pressed"]
-
-

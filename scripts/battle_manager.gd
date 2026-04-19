@@ -12,6 +12,7 @@ signal turn_changed(turn: int)
 ## Emitted when an enemy attacks; Main handles projectile VFX then calls apply_player_damage.
 signal enemy_attacked(enemy: Enemy, damage: int)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
+signal loot_dropped(enemy_data: EnemyData, results: Array)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
 
 # ── references set by Main ────────────────────────────────────────────
 var enemy_container: HBoxContainer
@@ -234,7 +235,7 @@ func get_cooldown(char_index: int) -> int:
 	return skill_cooldowns.get(char_index, -1)
 
 
-## 結束回合：遞增回合計數、減少冷卻、清除本回合資料、處理敎人行動
+## 結束回合：遞增回合計數、減少冷卻、清除本回合資料（不含敵人行動）
 func finish_turn() -> void:
 	turn += 1
 	turn_changed.emit(turn)
@@ -246,8 +247,23 @@ func finish_turn() -> void:
 
 	turn_gem_blasts.clear()
 	last_blast_positions.clear()
-	_process_enemy_turns()
 	_update_enemy_cds()
+
+
+## 清除本回合消除資料（融合管線用：不消耗回合）
+func reset_blast_data() -> void:
+	turn_gem_blasts.clear()
+	last_blast_positions.clear()
+
+
+## 本回合是否有敵人即將行動
+func has_enemies_to_attack() -> bool:
+	for enemy: Enemy in active_enemies:
+		if not is_instance_valid(enemy):
+			continue
+		if turn % enemy.data.attack_interval == 0:
+			return true
+	return false
 
 
 ## 更新敎人的攻擊倒數顯示
@@ -261,19 +277,22 @@ func _update_enemy_cds() -> void:
 		enemy.update_cd(enemy.data.attack_interval - remainder)
 
 
-## 處理所有敎人的回合行動（交錯攻擊，每位間隔一小段時間）
-func _process_enemy_turns() -> void:
+## 執行敵人行動階段（交錯攻擊），回傳是否有敵人發動攻擊
+func do_enemy_phase() -> bool:
 	var attacking: Array[Enemy] = []
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
 		if turn % enemy.data.attack_interval == 0:
 			attacking.append(enemy)
+	if attacking.is_empty():
+		return false
 	for i in attacking.size():
 		attacking[i].flash_attack()
 		_enemy_attack(attacking[i])
 		if i < attacking.size() - 1:
 			await get_tree().create_timer(0.2).timeout
+	return true
 
 
 ## 敎人執行攻擊
@@ -297,7 +316,14 @@ func _on_enemy_pressed(enemy: Enemy) -> void:
 
 
 ## 敎人死亡時：移除、重新指定目標、檢查是否進入下一波
-func _on_enemy_died(dead_enemy: Enemy) -> void:
+func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
+	var loot_results: Array = []
+	for entry: LootItem in dead_enemy.data.loot_table:
+		var result: Dictionary = entry.roll()
+		if not result.is_empty():
+			loot_results.append(result)
+	if not loot_results.is_empty():
+		loot_dropped.emit(dead_enemy.data, loot_results)
 	active_enemies.erase(dead_enemy)
 	if targeted_enemy == dead_enemy:
 		targeted_enemy = null

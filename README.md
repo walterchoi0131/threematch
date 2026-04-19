@@ -165,4 +165,6 @@ All falling blocks (both collapse and refill) use the same physics-based animati
 特定形狀才能變為上級石?
 特定陣法才能變成上級石?
 
-
+祝福石:連鎖他爆炸+9以取得祝福
+畜能石:在他旁邊爆炸會+充能. 點撃會釋放充能
+漫延:若不消除會持續向四處漫延

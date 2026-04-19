@@ -5,7 +5,7 @@ extends Node2D
 
 # ── 寶石類型列舉 ──
 enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS }  # 無、火球、橫火柱、縱火柱、聖十字
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球
 
 const TYPE_COUNT := 7  # 寶石類型總數
 
@@ -39,12 +39,14 @@ const GEM_TEXTURES: Dictionary = {
 	Type.LIGHT: preload("res://assets/gems/gem_light.png"),
 }
 
-# 高階寶石貼圖（火球炸彈 / 火旋風）
+# 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
 const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.FIREBALL: preload("res://assets/gems/gem_fire_bomb.png"),
 	UpperType.FIRE_PILLAR_X: preload("res://assets/gems/gem_fire_turnado.png"),
 	UpperType.FIRE_PILLAR_Y: preload("res://assets/gems/gem_fire_turnado.png"),
 	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_saint_cross.png"),
+	UpperType.LEAF_SHIELD: preload("res://assets/gems/gem_leafshield.png"),
+	UpperType.SNOWBALL: preload("res://assets/gems/gem_snowball.png"),
 }
 
 # 消除動畫精靈圖表（3 列 × 3 行 = 9 幀）
@@ -89,6 +91,7 @@ var _upper_sprite: Sprite2D = null     # 高階寶石覆蓋精靈圖
 var _ray_burst: Node2D = null          # 旋轉放射光芒（高階寶石專用）
 var _fuse_hint_label: Label = null     # 融合提示標籤
 var _fuse_hint_tween: Tween = null     # 融合提示閃爍動畫
+var _fuse_hint_stale := false           # 標記為待清理（用於差異更新）
 
 
 func _ready() -> void:
@@ -118,9 +121,11 @@ func update_visual() -> void:
 	var has_gem: bool = GEM_TEXTURES.has(block_type)  # 是否有美術貼圖
 
 	if visual:
-		var base_color: Color = COLORS[block_type]
-		# 有貼圖時顯示半透明底色；僅圖示時顯示純色
-		visual.color = Color(base_color.r, base_color.g, base_color.b, 0.35) if has_gem else base_color
+		if has_gem:
+			visual.visible = false
+		else:
+			visual.visible = true
+			visual.color = COLORS[block_type]
 
 	if icon_label:
 		icon_label.visible = not has_gem  # 無貼圖時顯示符號
@@ -148,16 +153,24 @@ func _update_upper_overlay() -> void:
 		if gem_sprite:
 			gem_sprite.visible = GEM_TEXTURES.has(block_type)
 		if visual:
-			visual.visible = true
+			visual.visible = not GEM_TEXTURES.has(block_type)
 		if icon_label:
 			icon_label.visible = not GEM_TEXTURES.has(block_type)
 		return
 
-	# 高階寶石 — 顯示對應底色（聖十字=金色，其他=紅色）
-	var upper_base_color: Color = COLORS[Type.LIGHT] if upper_type == UpperType.SAINT_CROSS else COLORS[Type.RED]
+	# 高階寶石 — 顯示對應元素底色
+	var upper_base_color: Color
+	match upper_type:
+		UpperType.SAINT_CROSS:
+			upper_base_color = COLORS[Type.LIGHT]
+		UpperType.LEAF_SHIELD:
+			upper_base_color = COLORS[Type.GREEN]
+		UpperType.SNOWBALL:
+			upper_base_color = COLORS[Type.BLUE]
+		_:
+			upper_base_color = COLORS[Type.RED]
 	if visual:
-		visual.visible = true
-		visual.color = Color(upper_base_color.r, upper_base_color.g, upper_base_color.b, 0.5)
+		visual.visible = false
 	if icon_label:
 		icon_label.visible = false
 	if gem_sprite:
@@ -177,13 +190,17 @@ func _update_upper_overlay() -> void:
 		_ray_burst.z_index = 1  # 在 Visual(z=0) 之上，在 upper_sprite(z=2) 之下
 		add_child(_ray_burst)
 
-	# 依高階宝石類型設定光芒顏色
+	# 依高階寶石類型設定光芒顏色
 	var burst_color: Color
 	match upper_type:
 		UpperType.SAINT_CROSS:
 			burst_color = Color(1.0, 0.95, 0.40, 0.60)
+		UpperType.LEAF_SHIELD:
+			burst_color = Color(0.40, 0.90, 0.35, 0.60)
+		UpperType.SNOWBALL:
+			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		_:
-			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙渴
+			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙
 	_ray_burst.set("ray_color", burst_color)
 
 	_upper_sprite.visible = true
@@ -275,8 +292,25 @@ func fall_to(target_pos: Vector2, duration: float = 0.3, delay: float = 0.0, rev
 
 # ── 融合提示覆蓋層 ────────────────────────────────────────────────
 
+## 標記融合提示為待清理（不立即隱藏，等待差異比對）
+func mark_fuse_hint_stale() -> void:
+	_fuse_hint_stale = true
+
+
+## 若仍為待清理狀態則隱藏融合提示
+func hide_fuse_hint_if_stale() -> void:
+	if _fuse_hint_stale:
+		hide_fuse_hint()
+		_fuse_hint_stale = false
+
+
 ## 顯示融合提示文字（當連接的同色寶石達到融合門檻時閃爍顯示）
 func show_fuse_hint(text: String) -> void:
+	_fuse_hint_stale = false
+	# 若已顯示相同文字且動畫仍在執行，跳過重建
+	if _fuse_hint_label and _fuse_hint_label.visible and _fuse_hint_label.text == text:
+		if _fuse_hint_tween and _fuse_hint_tween.is_valid():
+			return
 	if _fuse_hint_label == null:
 		_fuse_hint_label = Label.new()
 		_fuse_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -59,3 +59,38 @@ func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool 
 	tween.tween_property(label, "modulate:a", 0.0, 0.5)
 	tween.set_parallel(false)
 	tween.tween_callback(queue_free)
+
+
+## 顯示任意文字（與 show_number 相同動畫，供掉落文字等使用）
+func show_text(pos: Vector2, text: String, color: Color) -> void:
+	global_position = pos
+
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	label.add_theme_font_override("font", font)
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_constant_override("outline_size", 4)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+
+	label.position = Vector2(-60, -20)
+	label.size = Vector2(120, 40)
+	add_child(label)
+
+	var tween := create_tween()
+	tween.tween_property(label, "position:y", -55.0, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(label, "position:y", -30.0, 0.12).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(label, "position:y", -42.0, 0.08).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.tween_interval(0.3)
+	tween.set_parallel(true)
+	tween.tween_property(label, "position:y", -75.0, 0.5).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(label, "modulate:a", 0.0, 0.5)
+	tween.set_parallel(false)
+	tween.tween_callback(queue_free)

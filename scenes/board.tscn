@@ -6,6 +6,7 @@
 script = ExtResource("1_script")
 
 [node name="Background" type="ColorRect" parent="."]
+z_index = -1
 offset_left = -6.0
 offset_top = -6.0
 offset_right = 518.0

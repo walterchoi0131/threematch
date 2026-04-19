@@ -1,7 +1,15 @@
-[gd_resource type="Resource" script_class="EnemyData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="EnemyData" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
 [ext_resource type="Texture2D" path="res://assets/slime.png" id="2_texture"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
+
+[sub_resource type="Resource" id="gold_drop"]
+script = ExtResource("3_loot_script")
+item_type = 0
+amount_min = 10
+amount_max = 20
+drop_chance = 1.0
 
 [resource]
 script = ExtResource("1_script")
@@ -11,3 +19,4 @@ attack_damage = 6
 attack_interval = 3
 portrait_color = Color(0.2, 0.7, 0.2, 1)
 portrait_texture = ExtResource("2_texture")
+loot_table = Array[LootItem]([SubResource("gold_drop")])
