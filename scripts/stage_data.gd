@@ -13,3 +13,12 @@ extends Resource
 @export var rounds: Array[Array] = []
 
 @export var bgm: AudioStream = null  # 關卡背景音樂
+
+const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
+@export var pre_dialog: _DialogSequence = null  # 戰鬥前 AVG 對話（可選）
+
+## 教學模式：啟用後使用固定棋盤並觸發教學流程
+@export var is_tutorial: bool = false
+
+## 固定棋盤佈局（二維陣列 [x][y] = Block.Type）。空陣列 = 隨機生成。
+@export var fixed_layout: Array = []

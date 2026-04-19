@@ -6,6 +6,9 @@ const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
+const _BattleDialog := preload("res://scripts/battle_dialog.gd")
+const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
+const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board: Node2D = $Board
@@ -49,6 +52,10 @@ var _vfx_pool: Array = []
 
 # ── 攻擊交錯延遲（多角色連打時，下一位開始攻擊前等待的秒數）──
 const ATTACK_STAGGER_SEC := 0.2
+
+# ── 教學系統 ──
+var _battle_dialog: _BattleDialog = null
+var _tutorial_manager: _TutorialManager = null
 
 # ── 戰鬥日誌 ──
 const LOG_PANEL_WIDTH := 272
@@ -134,6 +141,7 @@ func _ready() -> void:
 	_setup_fuse_hints()
 	_style_player_hp_label()
 	_play_bgm()
+
 	_play_stage_intro()
 
 
@@ -189,7 +197,37 @@ func _play_stage_intro() -> void:
 
 	# 再等 2.9 秒（黑幕共 3.4 秒）完成後解鎖棋盤
 	await get_tree().create_timer(2.9).timeout
+
+	# ── 教學模式 ──
+	if current_stage.is_tutorial:
+		_start_battle_tutorial()
+	else:
+		board.is_busy = false
+
+
+## 啟動戰鬥教學流程
+func _start_battle_tutorial() -> void:
+	# 建立戰鬥對話面板（全螢幕，內含暗色覆蓋層 + 底部對話面板）
+	_battle_dialog = _BattleDialog.new()
+	_battle_dialog.set_anchors_preset(Control.PRESET_FULL_RECT)
+	$UILayer.add_child(_battle_dialog)
+
+	# 建立教學管理器
+	_tutorial_manager = _TutorialManager.new()
+	add_child(_tutorial_manager)
+	_tutorial_manager.setup(board, _battle_dialog)
+	_tutorial_manager.tutorial_finished.connect(_on_tutorial_finished)
+
+	var steps: Array = _Stage1Tutorial.make_steps()
+	_tutorial_manager.start(steps)
+
+
+## 教學完成回呼
+func _on_tutorial_finished() -> void:
 	board.is_busy = false
+	# 隱藏教學對話面板
+	if _battle_dialog != null:
+		_battle_dialog.visible = false
 
 
 # ── BGM ───────────────────────────────────────────────────────

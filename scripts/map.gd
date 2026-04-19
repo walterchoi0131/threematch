@@ -231,10 +231,15 @@ func _on_picker_cancel() -> void:
 	_pending_stage = null
 
 
-## 確認選擇：儲存隊伍並進入戰鬥
+## 確認選擇：儲存隊伍並進入戰鬥（或先進入對話場景）
 func _on_picker_confirm() -> void:
 	GameState.selected_stage = _pending_stage
 	GameState.selected_party.clear()
 	for idx in _selected_indices:
 		GameState.selected_party.append(GameState.owned_characters[idx])
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+	# 有對話 → 先進對話場景；否則直接進戰鬥
+	if _pending_stage.pre_dialog != null and _pending_stage.pre_dialog.lines.size() > 0:
+		get_tree().change_scene_to_file("res://scenes/dialog_box.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/main.tscn")

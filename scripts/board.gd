@@ -39,6 +39,11 @@ var _longpress_overlays: Array[Node] = []  # 爆炸範圍高亮覆蓋層
 var _longpress_dim_tween: Tween = null     # 暗化/還原動畫 tween
 var _longpress_raised_blocks: Array[Block] = []  # 預覽時被抬高 z_index 的方塊
 
+# ── 教學系統 ──
+var _tutorial_filter: Array[Vector2i] = []   # 非空時，只允許點擊這些位置
+var _hand_sprite: Sprite2D = null            # 教學手指圖示
+var _hand_tween: Tween = null                # 手指浮動動畫
+
 signal score_changed(new_score: int)      # 分數變更時發出
 signal gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)  # 寶石消除時發出
 signal upper_gem_clicked()                # 高階寶石被點擊時發出
@@ -96,6 +101,13 @@ func initialize_board() -> void:
 		grid[x].resize(rows)
 		for y in rows:
 			_create_block(x, y)
+	# 若有固定佈局，覆寫寶石類型
+	if stage != null and stage.fixed_layout.size() == columns:
+		for x in columns:
+			var col: Array = stage.fixed_layout[x]
+			for y in rows:
+				if y < col.size() and grid[x][y] != null:
+					grid[x][y].set_block_type(col[y])
 	_update_fuse_hints()
 
 
@@ -256,6 +268,10 @@ func _unhandled_input(event: InputEvent) -> void:
 ## 如果連接數 >= min_match → 消除並掉落填充
 ## 否則 → 抖動提示無效
 func _handle_click(pos: Vector2i) -> void:
+	# 教學過濾：只允許指定位置
+	if _tutorial_filter.size() > 0 and not _tutorial_filter.has(pos):
+		return
+
 	var block: Block = grid[pos.x][pos.y]
 	last_tapped_pos = pos
 
@@ -1116,6 +1132,76 @@ func _update_fuse_hints() -> void:
 			var block: Block = grid[x][y]
 			if block != null:
 				block.hide_fuse_hint_if_stale()
+
+
+# ── 教學系統 ──────────────────────────────────────────────────
+
+## 設定教學點擊過濾：只允許 positions 中的格子被點擊
+func set_tutorial_filter(positions: Array[Vector2i]) -> void:
+	_tutorial_filter = positions
+
+
+## 清除教學點擊過濾
+func clear_tutorial_filter() -> void:
+	_tutorial_filter.clear()
+
+
+## 暗化全部寶石，只保持 positions 中的寶石明亮
+func set_tutorial_highlight(positions: Array[Vector2i]) -> void:
+	var highlight_set := {}
+	for p in positions:
+		highlight_set[p] = true
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null:
+				continue
+			var gp := Vector2i(x, y)
+			var target: Color = Color(1, 1, 1, 1) if highlight_set.has(gp) else Color(0.25, 0.25, 0.3, 1.0)
+			var tw := create_tween()
+			tw.tween_property(block, "modulate", target, 0.3)
+
+
+## 還原所有寶石亮度
+func clear_tutorial_highlight() -> void:
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null:
+				continue
+			var tw := create_tween()
+			tw.tween_property(block, "modulate", Color(1, 1, 1, 1), 0.3)
+
+
+## 在指定格子上顯示手指圖示（浮動動畫）
+func show_hand_hint(grid_pos: Vector2i) -> void:
+	hide_hand_hint()
+	var tex: Texture2D = load("res://assets/Hand3.png")
+	if tex == null:
+		return
+	_hand_sprite = Sprite2D.new()
+	_hand_sprite.texture = tex
+	_hand_sprite.z_index = 50
+	_hand_sprite.scale = Vector2(0.7, 0.7)
+	var base_pos: Vector2 = grid_to_world(grid_pos) + Vector2(16, 20)
+	_hand_sprite.position = base_pos
+	add_child(_hand_sprite)
+	# 浮動上下動畫（循環）
+	_hand_tween = create_tween().set_loops()
+	_hand_tween.tween_property(_hand_sprite, "position:y", base_pos.y - 8, 0.5) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	_hand_tween.tween_property(_hand_sprite, "position:y", base_pos.y + 8, 0.5) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+
+
+## 隱藏手指圖示
+func hide_hand_hint() -> void:
+	if _hand_tween != null and _hand_tween.is_valid():
+		_hand_tween.kill()
+		_hand_tween = null
+	if _hand_sprite != null:
+		_hand_sprite.queue_free()
+		_hand_sprite = null
 
 
 # ── 並行融合系統（允許玩家在融合動畫期間立即觸發另一次融合）────────────
