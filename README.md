@@ -168,3 +168,10 @@ All falling blocks (both collapse and refill) use the same physics-based animati
 祝福石:連鎖他爆炸+9以取得祝福
 畜能石:在他旁邊爆炸會+充能. 點撃會釋放充能
 漫延:若不消除會持續向四處漫延
+
+
+暗珠: 士兵 - 到底部後, 變成皇後, 炸皇後移動的格子
+暗技: 王車易位 調整一行/欄 位移1-3
+
+暗珠: 黑洞, 炸所有珠
+暗技: 重力 選擇1屬性, 將其位移至最底層

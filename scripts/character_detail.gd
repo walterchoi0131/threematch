@@ -16,7 +16,7 @@ func _ready() -> void:
 func _build_ui() -> void:
 	# Background
 	var bg := ColorRect.new()
-	bg.offset_right = 576.0
+	bg.offset_right = 856.0
 	bg.offset_bottom = 1024.0
 	bg.color = Color(0.09, 0.09, 0.14, 1)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -28,13 +28,13 @@ func _build_ui() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.offset_left = 0.0
 	scroll.offset_top = 0.0
-	scroll.offset_right = 576.0
+	scroll.offset_right = 856.0
 	scroll.offset_bottom = 920.0
 	layer.add_child(scroll)
 
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.custom_minimum_size = Vector2(576, 0)
+	vbox.custom_minimum_size = Vector2(856, 0)
 	vbox.add_theme_constant_override("separation", 12)
 	scroll.add_child(vbox)
 
@@ -45,7 +45,7 @@ func _build_ui() -> void:
 
 	# ── Portrait (large, centered) ──
 	var portrait_container := CenterContainer.new()
-	portrait_container.custom_minimum_size = Vector2(576, 300)
+	portrait_container.custom_minimum_size = Vector2(856, 300)
 	vbox.add_child(portrait_container)
 
 	if _char.portrait_texture:
@@ -107,7 +107,7 @@ func _build_ui() -> void:
 
 	# ── Skills section ──
 	var skills_title := Label.new()
-	skills_title.text = "Skills"
+	skills_title.text = Locale.tr_ui("SKILLS")
 	skills_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	skills_title.add_theme_font_size_override("font_size", 24)
 	skills_title.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
@@ -115,25 +115,25 @@ func _build_ui() -> void:
 
 	# Passive
 	if _char.passive_skill_name != "":
-		_add_skill_entry(vbox, "Passive", _char.passive_skill_name, _char.passive_skill_desc, Color(0.3, 0.75, 0.95))
+		_add_skill_entry(vbox, Locale.tr_ui("PASSIVE"), _char.passive_skill_name, _char.passive_skill_desc, Color(0.3, 0.75, 0.95))
 
 	# Active
 	if _char.active_skill_name != "":
-		_add_skill_entry(vbox, "Active", _char.active_skill_name, _char.active_skill_desc, Color(1.0, 0.65, 0.2))
+		_add_skill_entry(vbox, Locale.tr_ui("ACTIVE"), _char.active_skill_name, _char.active_skill_desc, Color(1.0, 0.65, 0.2))
 
 	# Responding — iterate the array of responding skills
 	for skill: Dictionary in _char.responding_skills:
 		var sname: String = skill.get("name", "")
 		var sdesc: String = skill.get("desc", "")
 		if sname != "":
-			_add_skill_entry(vbox, "Responding", sname, sdesc, Color(0.6, 0.9, 0.4))
+			_add_skill_entry(vbox, Locale.tr_ui("RESPONDING"), sname, sdesc, Color(0.6, 0.9, 0.4))
 
 	# ── Back button ──
 	var back_btn := Button.new()
-	back_btn.text = "Back"
-	back_btn.offset_left = 200.0
+	back_btn.text = Locale.tr_ui("BACK")
+	back_btn.offset_left = 330.0
 	back_btn.offset_top = 940.0
-	back_btn.offset_right = 376.0
+	back_btn.offset_right = 526.0
 	back_btn.offset_bottom = 980.0
 	back_btn.pressed.connect(_on_back_pressed)
 	layer.add_child(back_btn)

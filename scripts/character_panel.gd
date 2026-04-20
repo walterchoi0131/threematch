@@ -68,51 +68,11 @@ func play_intro_slide() -> void:
 
 ## 建立單張角色卡片
 func _make_card(c: CharacterData, index: int) -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	# 卡片背景樣式（深色底 + 圓角）
-	var char_color: Color = c.portrait_color
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.08, 0.08, 0.1, 1.0)
-	bg_style.set_corner_radius_all(10)
-	bg_style.set_content_margin_all(0)
-	panel.add_theme_stylebox_override("panel", bg_style)
-
-	# 發光覆蓋層（預設隱藏，先加入使其繪製在頭像下方）
-	var glow := ColorRect.new()
-	glow.color = Color(1.0, 0.9, 0.2, 0.0)
-	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.add_child(glow)
-	_glow_panels[index] = glow
-
-	var clip := Control.new()
-	clip.clip_contents = true
-	clip.set_anchors_preset(Control.PRESET_FULL_RECT)
-	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(clip)
-
-	# 頭像 — 有貼圖用貼圖，否則用色塊
-	if c.portrait_texture:
-		var portrait := TextureRect.new()
-		portrait.texture = c.portrait_texture
-		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		portrait.custom_minimum_size = Vector2(300, 300)
-		portrait.size = Vector2(300, 300)
-		portrait.pivot_offset = Vector2.ZERO
-		portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
-		portrait.position = c.portrait_offset
-		clip.add_child(portrait)
-		_portraits[index] = portrait
-	else:
-		var portrait := ColorRect.new()
-		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
-		portrait.color = c.portrait_color
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		clip.add_child(portrait)
+	var result: Dictionary = CharacterCard.make_battle(c)
+	var panel: PanelContainer = result.panel
+	_glow_panels[index] = result.glow
+	if result.portrait != null:
+		_portraits[index] = result.portrait
 
 	# 冷卻標籤覆蓋層（預設隱藏）
 	var cd_lbl := Label.new()
@@ -126,53 +86,11 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	panel.add_child(cd_lbl)
 	_cd_labels[index] = cd_lbl
 
-	# ── 角色色彩邊框（雙層圓角：內層角色色 + 外層深色） ──
-	var inner_border := Panel.new()
-	inner_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var inner_style := StyleBoxFlat.new()
-	inner_style.draw_center = false
-	inner_style.border_color = char_color
-	inner_style.set_border_width_all(4)
-	inner_style.set_corner_radius_all(10)
-	inner_border.add_theme_stylebox_override("panel", inner_style)
-	panel.add_child(inner_border)
-
-	var outer_border := Panel.new()
-	outer_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var outer_style := StyleBoxFlat.new()
-	outer_style.draw_center = false
-	outer_style.border_color = char_color.darkened(0.35)
-	outer_style.set_border_width_all(2)
-	outer_style.set_corner_radius_all(10)
-	outer_border.add_theme_stylebox_override("panel", outer_style)
-	panel.add_child(outer_border)
-
-	# ── 元素寶石圖示（左上角，中心對齊邊框角落） ──
-	var gem_size := 28
-	var gem_layer := Control.new()
-	gem_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gem_layer.clip_contents = false
-	panel.add_child(gem_layer)
-
-	var gem_icon := TextureRect.new()
-	var gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type)
-	if gem_tex:
-		gem_icon.texture = gem_tex
-	gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gem_icon.pivot_offset = Vector2(gem_size * 0.5, gem_size * 0.5)
-	gem_icon.offset_left = -gem_size * 0.5
-	gem_icon.offset_right = gem_size * 0.5
-	gem_icon.offset_top = -gem_size * 0.5
-	gem_icon.offset_bottom = gem_size * 0.5
-	gem_layer.add_child(gem_icon)
-	_gem_icons[index] = gem_icon
-
-	# 放射光芒（繪製在寶石之下，作為 gem_icon 的子節點自動對齊）
+	# 放射光芒（加到 gem_icon 作為子節點）
+	var gem_icon: TextureRect = result.gem_icon
 	var ray := Node2D.new()
 	ray.set_script(load("res://scripts/ray_burst.gd"))
-	ray.position = Vector2(gem_size * 0.5, gem_size * 0.5)
+	ray.position = Vector2(14.0, 14.0)  # gem_size(28) * 0.5
 	ray.z_index = -1
 	ray.visible = false
 	ray.set("outer_radius", 22.0)
@@ -181,6 +99,7 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	var gem_element_color: Color = Block.COLORS.get(c.gem_type, Color.WHITE)
 	ray.set("ray_color", Color(gem_element_color.r, gem_element_color.g, gem_element_color.b, 0.7))
 	gem_icon.add_child(ray)
+	_gem_icons[index] = gem_icon
 	_gem_rays[index] = ray
 
 	# 點擊處理

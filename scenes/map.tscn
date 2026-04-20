@@ -45,11 +45,23 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
+[sub_resource type="StyleBoxFlat" id="SBF_inv"]
+bg_color = Color(0.18, 0.22, 0.18, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.6, 0.8, 0.4, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
 [node name="Map" type="Node2D" unique_id=1793995455]
 script = ExtResource("1_script")
 
 [node name="Background" type="ColorRect" parent="." unique_id=2015089920]
-offset_right = 576.0
+offset_right = 856.0
 offset_bottom = 1024.0
 mouse_filter = 2
 color = Color(0.09, 0.09, 0.14, 1)
@@ -58,7 +70,7 @@ color = Color(0.09, 0.09, 0.14, 1)
 
 [node name="Title" type="Label" parent="UILayer" unique_id=391827912]
 offset_top = 90.0
-offset_right = 576.0
+offset_right = 856.0
 offset_bottom = 150.0
 text = "STAGE SELECT"
 label_settings = SubResource("LS_title")
@@ -66,16 +78,16 @@ horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="UILayer" unique_id=413468933]
 offset_top = 155.0
-offset_right = 576.0
+offset_right = 856.0
 offset_bottom = 185.0
 text = "Choose your battle"
 label_settings = SubResource("LS_sub")
 horizontal_alignment = 1
 
 [node name="StageList" type="VBoxContainer" parent="UILayer" unique_id=156770520]
-offset_left = 64.0
+offset_left = 140.0
 offset_top = 210.0
-offset_right = 512.0
+offset_right = 716.0
 offset_bottom = 800.0
 theme_override_constants/separation = 16
 
@@ -102,12 +114,21 @@ disabled = true
 text = "Stage 3  —  🔒 Coming Soon"
 
 [node name="CharactersBtn" type="Button" parent="UILayer" unique_id=394326070]
-offset_left = 64.0
+offset_left = 140.0
 offset_top = 870.0
-offset_right = 512.0
+offset_right = 716.0
 offset_bottom = 930.0
 theme_override_styles/normal = SubResource("SBF_char")
 text = "Characters"
 
+[node name="InventoryBtn" type="Button" parent="UILayer"]
+offset_left = 140.0
+offset_top = 940.0
+offset_right = 716.0
+offset_bottom = 1000.0
+theme_override_styles/normal = SubResource("SBF_inv")
+text = "Inventory"
+
 [connection signal="pressed" from="UILayer/StageList/Stage1" to="." method="_on_stage1_pressed"]
 [connection signal="pressed" from="UILayer/CharactersBtn" to="." method="_on_characters_pressed"]
+[connection signal="pressed" from="UILayer/InventoryBtn" to="." method="_on_inventory_pressed"]

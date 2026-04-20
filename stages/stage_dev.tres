@@ -14,31 +14,37 @@ amount_max = 20
 
 [sub_resource type="Resource" id="slime_1"]
 script = ExtResource("2_enemy")
+enemy_level = 3
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
 [sub_resource type="Resource" id="slime_2"]
 script = ExtResource("2_enemy")
+enemy_level = 3
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
 [sub_resource type="Resource" id="slime_3"]
 script = ExtResource("2_enemy")
+enemy_level = 3
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
 [sub_resource type="Resource" id="slime_4"]
 script = ExtResource("2_enemy")
+enemy_level = 3
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
 [sub_resource type="Resource" id="slime_5"]
 script = ExtResource("2_enemy")
+enemy_level = 3
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
 [sub_resource type="Resource" id="slime_6"]
 script = ExtResource("2_enemy")
+enemy_level = 3
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
@@ -50,6 +56,7 @@ drop_chance = 0.7
 [sub_resource type="Resource" id="slime_boss"]
 script = ExtResource("2_enemy")
 enemy_name = "Slime Boss"
+enemy_level = 3
 max_hp = 150
 attack_damage = 18
 attack_interval = 1

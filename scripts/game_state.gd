@@ -13,6 +13,11 @@ var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 var gold: int = 0                      # 玩家持有金幣
 var inventory: Dictionary = {}         # 玩家物品庫存，key = ItemDefs.Type，value = int
 
+# ── 戰鬥結算暫存（戰鬥勝利後寫入，結算場景讀取） ──
+var last_battle_loot: Dictionary = {}              # key=ItemDefs.Type, value=int
+var last_battle_party: Array[CharacterData] = []   # 出戰角色（結算用）
+var last_battle_exp: int = 0                       # 本場獲得的總經驗值
+
 
 ## 新增戰利品到玩家存貨
 func add_loot(type: ItemDefs.Type, amount: int) -> void:

@@ -6,6 +6,46 @@ const _DialogLine := preload("res://scripts/dialog_line.gd")
 
 var current_locale: String = "zh"
 
+# ── UI 翻譯字典 ──────────────────────────────────────────────
+var _translations: Dictionary = {
+	"BATTLE_RESULT": {"zh": "戰鬥結算", "en": "BATTLE RESULT"},
+	"VICTORY": {"zh": "勝利！", "en": "VICTORY!"},
+	"DEFEATED": {"zh": "戰敗", "en": "DEFEATED"},
+	"GOLD": {"zh": "金幣", "en": "Gold"},
+	"EXP": {"zh": "經驗值", "en": "EXP"},
+	"LV_UP": {"zh": "升級！", "en": "Lv UP!"},
+	"TAP_CONTINUE": {"zh": "點擊繼續", "en": "Tap to continue"},
+	"RESTART": {"zh": "重新開始", "en": "Restart"},
+	"RETURN_MAP": {"zh": "返回地圖", "en": "Return to Map"},
+	"INVENTORY": {"zh": "背包", "en": "Inventory"},
+	"NO_ITEMS": {"zh": "尚無物品", "en": "No items yet."},
+	"BACK_MAP": {"zh": "返回地圖", "en": "Back to Map"},
+	"CHARACTERS": {"zh": "角色", "en": "CHARACTERS"},
+	"BACK": {"zh": "返回", "en": "Back"},
+	"SKILLS": {"zh": "技能", "en": "Skills"},
+	"PASSIVE": {"zh": "被動", "en": "Passive"},
+	"ACTIVE": {"zh": "主動", "en": "Active"},
+	"RESPONDING": {"zh": "回應", "en": "Responding"},
+	"STAGE_BOSS": {"zh": "關卡 Boss", "en": "STAGE BOSS"},
+	"SELECT_PARTY": {"zh": "選擇隊伍", "en": "SELECT PARTY"},
+	"CONFIRM": {"zh": "確認", "en": "Confirm"},
+	"CANCEL": {"zh": "取消", "en": "Cancel"},
+	"ROUNDS": {"zh": "波數", "en": "Rounds"},
+	"GEM_DISTRIBUTION": {"zh": "寶石分佈", "en": "Gem Distribution"},
+	"NO_SELECTION": {"zh": "尚未選擇", "en": "No selection"},
+	"ROSTER": {"zh": "角色名冊", "en": "ROSTER"},
+	"STAGE_SELECT": {"zh": "關卡選擇", "en": "STAGE SELECT"},
+	"Dev Stage": {"zh": "實戰訓教", "en": "Stage 1 — Slay the Slimes"},
+}
+
+
+## 取得 UI 翻譯文字
+func tr_ui(key: String) -> String:
+	var entry: Dictionary = _translations.get(key, {})
+	if entry.is_empty():
+		return key
+	return entry.get(current_locale, entry.get("en", key))
+
 
 ## 從 DialogLine 取得當前語系的文字
 func get_dialog_text(line: _DialogLine) -> String:

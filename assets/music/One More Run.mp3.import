@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://baef7tltofudx"
+path="res://.godot/imported/One More Run.mp3-a1504ca5b9df90ec4b4ff5d5427d81e0.mp3str"
+
+[deps]
+
+source_file="res://assets/music/One More Run.mp3"
+dest_files=["res://.godot/imported/One More Run.mp3-a1504ca5b9df90ec4b4ff5d5427d81e0.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

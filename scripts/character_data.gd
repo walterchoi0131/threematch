@@ -7,7 +7,8 @@ enum SkillType { NONE, PASSIVE, ACTIVE, RESPONDING }  # 技能類型列舉
 
 @export var character_name: String = "Hero"  # 角色名稱
 @export var gem_type: Block.Type = Block.Type.RED  # 對應的寶石類型（決定哪種寶石觸發攻擊）
-@export var level: int = 5            # 等級
+@export var level: int = 5            # 等級（玩家角色預設 Lv5）
+var current_exp: int = 0              # 當前累積經驗值（不存入 .tres，執行時管理）
 @export var base_atk: int = 2         # 基礎攻擊力
 @export var atk_growth: float = 0.6   # 每級攻擊力成長
 @export var base_hp: int = 50         # 基礎血量
@@ -40,3 +41,19 @@ func get_atk() -> int:
 ## 計算當前等級的最大血量
 func get_max_hp() -> int:
 	return base_hp + int(floor(level * hp_growth))
+
+
+## 升到下一級所需的總經驗值
+func exp_to_next_level() -> int:
+	return int(floor(80.0 * pow(level, 1.5)))
+
+
+## 增加經驗值並處理升級。回傳升級次數（0 = 未升級）。
+func add_exp(amount: int) -> int:
+	var levels_gained: int = 0
+	current_exp += amount
+	while current_exp >= exp_to_next_level():
+		current_exp -= exp_to_next_level()
+		level += 1
+		levels_gained += 1
+	return levels_gained

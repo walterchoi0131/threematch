@@ -16,20 +16,13 @@ font_color = Color(1, 0.9, 0.2, 1)
 script = ExtResource("1_script")
 
 [node name="Background" type="ColorRect" parent="." unique_id=108499670]
-offset_left = 280.0
 offset_right = 856.0
 offset_bottom = 1024.0
 mouse_filter = 2
 color = Color(0.11, 0.11, 0.17, 1)
 
-[node name="LogBackground" type="ColorRect" parent="." unique_id=268581978]
-offset_right = 280.0
-offset_bottom = 1024.0
-mouse_filter = 2
-color = Color(0.07, 0.07, 0.11, 1)
-
 [node name="Board" parent="." unique_id=1578621044 instance=ExtResource("2_board")]
-position = Vector2(312, 258)
+position = Vector2(172, 258)
 
 [node name="BattleManager" type="Node" parent="." unique_id=631340773]
 script = ExtResource("3_bm")
@@ -40,7 +33,6 @@ layer = 10
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=673824219]
 
 [node name="TopBar" type="HBoxContainer" parent="UILayer" unique_id=36024439]
-offset_left = 280.0
 offset_right = 856.0
 offset_bottom = 40.0
 alignment = 1
@@ -73,7 +65,6 @@ label_settings = SubResource("LabelSettings_title")
 [node name="PlayerHPBar" type="Control" parent="UILayer" unique_id=186701662]
 layout_mode = 3
 anchors_preset = 0
-offset_left = 280.0
 offset_top = 770.0
 offset_right = 856.0
 offset_bottom = 794.0
@@ -100,7 +91,7 @@ text = "0 / 0"
 vertical_alignment = 1
 
 [node name="EnemyRow" type="HBoxContainer" parent="UILayer" unique_id=1645575475]
-offset_left = 296.0
+offset_left = 16.0
 offset_top = 76.0
 offset_right = 840.0
 offset_bottom = 252.0
@@ -108,7 +99,7 @@ mouse_filter = 2
 alignment = 1
 
 [node name="CharacterRow" type="HBoxContainer" parent="UILayer" unique_id=354252149]
-offset_left = 296.0
+offset_left = 16.0
 offset_top = 860.0
 offset_right = 840.0
 offset_bottom = 920.0
@@ -116,7 +107,6 @@ script = ExtResource("4_cp")
 
 [node name="StatusLabel" type="Label" parent="UILayer" unique_id=162691362]
 visible = false
-offset_left = 280.0
 offset_top = 358.0
 offset_right = 856.0
 offset_bottom = 665.0
@@ -125,17 +115,17 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="RestartButton" type="Button" parent="UILayer" unique_id=567740557]
-offset_left = 420.0
+offset_left = 290.0
 offset_top = 928.0
-offset_right = 576.0
+offset_right = 430.0
 offset_bottom = 968.0
 text = "Restart"
 
 [node name="ReturnButton" type="Button" parent="UILayer" unique_id=985228363]
 visible = false
-offset_left = 584.0
+offset_left = 446.0
 offset_top = 928.0
-offset_right = 740.0
+offset_right = 600.0
 offset_bottom = 968.0
 text = "Back to Map"
 

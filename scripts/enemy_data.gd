@@ -3,6 +3,7 @@ class_name EnemyData
 extends Resource
 
 @export var enemy_name: String = "Slime"     # 敎人名稱
+@export var enemy_level: int = 1              # 敎人等級（用於計算經驗掉落）
 @export var max_hp: int = 50                  # 最大血量
 @export var attack_damage: int = 6            # 每次攻擊的傷害
 @export var attack_interval: int = 3          # 每過 N 回合攻擊一次
@@ -12,3 +13,8 @@ extends Resource
 @export var element: Block.Type = Block.Type.GREEN
 ## 掉落表：敵人死亡時依序擲骰每個條目
 @export var loot_table: Array[LootItem] = []
+
+
+## 計算此敵人掉落的經驗值
+func get_exp_drop() -> int:
+	return int(floor(25.0 * pow(enemy_level, 1.2)))

@@ -60,7 +60,7 @@ var _tutorial_manager: _TutorialManager = null
 # ── 戰鬥日誌 ──
 const LOG_PANEL_WIDTH := 272
 const LOG_ENTRY_HEIGHT := 40
-const GAME_X_OFFSET := 280  # 遊戲內容向右偏移量
+const GAME_X_OFFSET := 0  # 遊戲內容向右偏移量（日誌面板已隱藏）
 const GEM_ICON_PATHS := {
 	Block.Type.RED: "res://assets/gems/gem_red.png",
 	Block.Type.BLUE: "res://assets/gems/gem_blue.png",
@@ -90,6 +90,9 @@ var _bgm_preview_tween: Tween = null         # 音量/速度 tween
 
 # ── 戰利品 ───────────────────────────────────────────────────
 var _battle_loot: Dictionary = {}  # 本場戰鬥積累的戰利品; key=ItemDefs.Type, value=int
+var _battle_exp: int = 0           # 本場戰鬥積累的經驗值
+var _defeat_overlay: Control = null  # 敗戰覆蓋層
+var _victory_overlay: Control = null  # 勝利覆蓋層
 const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
 const BGM_PREVIEW_PITCH := 1               # 預覽模式BGM播放速度
 const BGM_PREVIEW_TIME_SCALE := 0.6          # 預覽模式遊戲速度
@@ -136,7 +139,7 @@ func _ready() -> void:
 	_se_freeze = load("res://assets/se/skef_freeze.mp3")
 	_se_impact = load("res://assets/se/skef_atk1_B.mp3")
 
-	_setup_dev_log()
+	#_setup_dev_log()  # 開發日誌已隱藏
 	_update_skill_ui()
 	_setup_fuse_hints()
 	_style_player_hp_label()
@@ -1398,10 +1401,97 @@ func _style_player_hp_label() -> void:
 ## 玩家戰敗
 func _on_player_defeated() -> void:
 	board.is_busy = true
-	status_label.text = "DEFEATED..."
-	status_label.modulate = Color(1, 0.3, 0.3)
-	status_label.visible = true
-	return_button.visible = true
+	# 停止戰鬥 BGM，播放 One More Run
+	if _bgm_player != null and is_instance_valid(_bgm_player):
+		_bgm_player.stop()
+		_bgm_player.queue_free()
+		_bgm_player = null
+	var one_more := AudioStreamPlayer.new()
+	one_more.stream = load("res://assets/music/One More Run.mp3")
+	one_more.autoplay = false
+	add_child(one_more)
+	one_more.play()
+	_bgm_player = one_more
+	_show_defeat_overlay()
+
+
+## 顯示敗戰覆蓋層
+func _show_defeat_overlay() -> void:
+	if _defeat_overlay != null:
+		return
+	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var ui_layer: CanvasLayer = $UILayer
+
+	_defeat_overlay = Control.new()
+	_defeat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui_layer.add_child(_defeat_overlay)
+
+	# 暗色背景（fade-in）
+	var dark_bg := ColorRect.new()
+	dark_bg.color = Color(0.0, 0.0, 0.0, 0.0)
+	dark_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dark_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_defeat_overlay.add_child(dark_bg)
+	var fade_tw := create_tween()
+	fade_tw.tween_property(dark_bg, "color:a", 0.85, 0.3)
+
+	# 中央容器
+	var center := VBoxContainer.new()
+	center.set_anchors_preset(Control.PRESET_CENTER)
+	center.offset_left = -140.0
+	center.offset_top = -80.0
+	center.offset_right = 140.0
+	center.offset_bottom = 80.0
+	center.alignment = BoxContainer.ALIGNMENT_CENTER
+	center.add_theme_constant_override("separation", 32)
+	_defeat_overlay.add_child(center)
+
+	# "DEFEATED" 標題
+	var title := Label.new()
+	title.text = Locale.tr_ui("DEFEATED")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", font)
+	title.add_theme_font_size_override("font_size", 48)
+	title.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	title.add_theme_constant_override("outline_size", 4)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	center.add_child(title)
+
+	# 按鈕列
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 24)
+	center.add_child(btn_row)
+
+	var restart_btn := Button.new()
+	restart_btn.text = Locale.tr_ui("RESTART")
+	restart_btn.custom_minimum_size = Vector2(130, 48)
+	restart_btn.pressed.connect(_on_defeat_restart)
+	btn_row.add_child(restart_btn)
+
+	var return_btn := Button.new()
+	return_btn.text = Locale.tr_ui("RETURN_MAP")
+	return_btn.custom_minimum_size = Vector2(160, 48)
+	return_btn.pressed.connect(_on_return_pressed)
+	btn_row.add_child(return_btn)
+
+
+## 敗戰後重新開始
+func _on_defeat_restart() -> void:
+	if _defeat_overlay != null:
+		_defeat_overlay.queue_free()
+		_defeat_overlay = null
+	_battle_loot.clear()
+	_battle_exp = 0
+	board.is_busy = false
+	board.restart()
+	status_label.visible = false
+	return_button.visible = false
+	battle_manager.setup(current_stage, party)
+	_update_skill_ui()
 
 
 ## 波次轉換中：鎖定棋盤避免玩家在過場期間操作
@@ -1417,6 +1507,9 @@ func _on_round_cleared() -> void:
 
 ## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
 func _on_loot_dropped(enemy_data: EnemyData, results: Array) -> void:
+	# 累計本場經驗值
+	_battle_exp += enemy_data.get_exp_drop()
+
 	# 找出死亡的敵人節點以取得浮動文字位置（若找不到就用螢幕中央）
 	var popup_pos := Vector2(get_viewport().get_visible_rect().size / 2)
 	for enemy in battle_manager.active_enemies:
@@ -1446,20 +1539,101 @@ func _on_battle_won() -> void:
 	for type: ItemDefs.Type in _battle_loot:
 		GameState.add_loot(type, _battle_loot[type])
 
-	# 組合勝利文字（含戰利品摘要）
-	var summary := "VICTORY!"
-	for type: ItemDefs.Type in _battle_loot:
-		var amount: int = _battle_loot[type]
-		summary += "\n+%d %s" % [amount, ItemDefs.get_display_name(type)]
+	# 將結算資料寫入 GameState（結算場景讀取）
+	GameState.last_battle_loot = _battle_loot.duplicate()
+	GameState.last_battle_party = party.duplicate()
+	GameState.last_battle_exp = _battle_exp
 
-	status_label.text = summary
-	status_label.modulate = Color(1, 0.9, 0.2)
-	status_label.visible = true
-	return_button.visible = true
+	_show_victory_overlay()
+
+
+## 顯示勝利覆蓋層（5 秒後或點擊後跳轉結算場景）
+func _show_victory_overlay() -> void:
+	if _victory_overlay != null:
+		return
+	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var ui_layer: CanvasLayer = $UILayer
+
+	_victory_overlay = Control.new()
+	_victory_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui_layer.add_child(_victory_overlay)
+
+	# 暗色背景（fade-in）
+	var dark_bg := ColorRect.new()
+	dark_bg.color = Color(0.0, 0.0, 0.0, 0.0)
+	dark_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dark_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_victory_overlay.add_child(dark_bg)
+	var fade_tw := create_tween()
+	fade_tw.tween_property(dark_bg, "color:a", 0.85, 0.3)
+
+	# "VICTORY!" 標題（bounce 動畫）
+	var title := Label.new()
+	title.text = Locale.tr_ui("VICTORY")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.set_anchors_preset(Control.PRESET_CENTER)
+	title.offset_left = -200.0
+	title.offset_top = -40.0
+	title.offset_right = 200.0
+	title.offset_bottom = 40.0
+	title.add_theme_font_override("font", font)
+	title.add_theme_font_size_override("font_size", 52)
+	title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.2))
+	title.add_theme_constant_override("outline_size", 4)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	title.add_theme_constant_override("shadow_offset_x", 2)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.pivot_offset = Vector2(200, 40)
+	title.scale = Vector2(0.0, 0.0)
+	_victory_overlay.add_child(title)
+
+	# Bounce-in 動畫
+	var bounce_tw := create_tween()
+	bounce_tw.tween_property(title, "scale", Vector2(1.15, 1.15), 0.25) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	bounce_tw.tween_property(title, "scale", Vector2(0.95, 0.95), 0.1)
+	bounce_tw.tween_property(title, "scale", Vector2(1.0, 1.0), 0.1)
+
+	# 點擊任意處或 5 秒後跳轉結算
+	var tap_btn := Button.new()
+	tap_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tap_btn.flat = true
+	tap_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	tap_btn.pressed.connect(_go_to_battle_result)
+	_victory_overlay.add_child(tap_btn)
+
+	get_tree().create_timer(5.0).timeout.connect(_go_to_battle_result)
+
+
+## 跳轉至戰鬥結算場景
+func _go_to_battle_result() -> void:
+	if not is_inside_tree():
+		return
+	# 防止重複觸發
+	if _victory_overlay == null:
+		return
+	var overlay := _victory_overlay
+	_victory_overlay = null
+
+	# 黑幕過渡
+	var black := ColorRect.new()
+	black.color = Color(0.0, 0.0, 0.0, 0.0)
+	black.set_anchors_preset(Control.PRESET_FULL_RECT)
+	black.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(black)
+	var tw := create_tween()
+	tw.tween_property(black, "color:a", 1.0, 0.5)
+	tw.tween_callback(func() -> void:
+		get_tree().change_scene_to_file("res://scenes/battle_result.tscn")
+	)
 
 
 ## 重新開始戰鬥
 func _on_restart_pressed() -> void:
+	_battle_loot.clear()
+	_battle_exp = 0
 	board.is_busy = false
 	board.restart()
 	status_label.visible = false
