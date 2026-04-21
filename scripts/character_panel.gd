@@ -285,6 +285,26 @@ func _build_debug_panel() -> void:
 			_apply_portrait(i, c)
 		)
 
+		# ── 戰鬥對話頭像（Battle Dialog Square）──
+		var dlg_lbl := Label.new()
+		dlg_lbl.text = "  Dialog Square"
+		dlg_lbl.add_theme_font_size_override("font_size", 12)
+		dlg_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+		section.add_child(dlg_lbl)
+
+		_add_slider(section, "Dlg Scale", c.dialog_square_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
+			c.dialog_square_scale = v
+			_refresh_battle_dialog()
+		)
+		_add_slider(section, "Dlg X", c.dialog_square_offset.x, -400, 400, 1.0, func(v: float) -> void:
+			c.dialog_square_offset.x = v
+			_refresh_battle_dialog()
+		)
+		_add_slider(section, "Dlg Y", c.dialog_square_offset.y, -400, 400, 1.0, func(v: float) -> void:
+			c.dialog_square_offset.y = v
+			_refresh_battle_dialog()
+		)
+
 	# 列印按鈕：輸出所有角色數值到控制台
 	var print_btn := Button.new()
 	print_btn.text = "Print values to console"
@@ -293,6 +313,8 @@ func _build_debug_panel() -> void:
 			var cd := _char_data[ci]
 			print("%s  portrait_scale = %.2f  portrait_offset = Vector2(%.1f, %.1f)" % [
 				cd.character_name, cd.portrait_scale, cd.portrait_offset.x, cd.portrait_offset.y])
+			print("%s  dialog_square_scale = %.2f  dialog_square_offset = Vector2(%.1f, %.1f)" % [
+				cd.character_name, cd.dialog_square_scale, cd.dialog_square_offset.x, cd.dialog_square_offset.y])
 	)
 	vbox.add_child(print_btn)
 
@@ -336,3 +358,13 @@ func _apply_portrait(index: int, c: CharacterData) -> void:
 	var portrait: TextureRect = _portraits[index]
 	portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
 	portrait.position = c.portrait_offset
+
+
+## 在從 F9 面板調整 dialog_square_* 後立即讓眼前的戰鬥對話重新套用
+func _refresh_battle_dialog() -> void:
+	var root := get_tree().current_scene
+	if root == null:
+		return
+	for child in root.find_children("*", "Control", true, false):
+		if child.has_method("refresh_dialog_pose"):
+			child.refresh_dialog_pose()

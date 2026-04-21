@@ -20,5 +20,8 @@ const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 ## 教學模式：啟用後使用固定棋盤並觸發教學流程
 @export var is_tutorial: bool = false
 
+## 固定隊伍：若非空，玩家必須使用此隊伍出戰（無法在準備畫面更改）
+@export var set_party: Array[CharacterData] = []
+
 ## 固定棋盤佈局（二維陣列 [x][y] = Block.Type）。空陣列 = 隨機生成。
 @export var fixed_layout: Array = []

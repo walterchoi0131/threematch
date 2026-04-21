@@ -10,6 +10,9 @@ func _ready() -> void:
 	$UILayer/CharactersBtn.text = Locale.tr_ui("CHARACTERS")
 	$UILayer/InventoryBtn.text = Locale.tr_ui("INVENTORY")
 
+	# 播放地圖 BGM（循環，存於 GameState；若已在播放同一首則不重啟）
+	GameState.play_bgm(load("res://assets/music/fez_map.mp3"), true, "map")
+
 
 ## 點擊關卡按鈕時前往準備畫面
 func _on_stage1_pressed() -> void:

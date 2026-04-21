@@ -26,6 +26,7 @@ var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點�
 # ── 選擇模式（主動技能用：懸停預覽十字範圍，點擊確認轉換）──
 var _selection_mode: bool = false           # 是否處於選擇模式
 var _selection_convert_type: Block.Type = Block.Type.RED  # 選擇模式要轉換的目標類型
+var _selection_pattern: String = "cross"    # 選擇模式的預覽形狀："cross" | "fireball"
 var _preview_overlays: Array[ColorRect] = []  # 預覽覆蓋層節點
 var _preview_center: Vector2i = Vector2i(-1, -1)  # 目前預覽的中心格
 
@@ -197,7 +198,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var local_pos := get_local_mouse_position()
 			var gp := world_to_grid(local_pos)
 			if _is_valid(gp) and gp != _preview_center:
-				_update_cross_preview(gp)
+				_update_selection_preview(gp)
 			elif not _is_valid(gp):
 				_clear_preview_overlays()
 				_preview_center = Vector2i(-1, -1)
@@ -205,7 +206,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var local_pos := get_local_mouse_position()
 			var gp := world_to_grid(local_pos)
 			if _is_valid(gp):
-				var positions := _get_cross_positions(gp)
+				var positions := _get_selection_positions(gp)
 				_clear_preview_overlays()
 				_selection_mode = false
 				_preview_center = Vector2i(-1, -1)
@@ -776,6 +777,10 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return [pos]
 		Block.UpperType.SNOWBALL:
 			return _get_surrounding_positions(pos)
+		Block.UpperType.WATER_SLASH_X:
+			return _get_row_positions(pos.y)
+		Block.UpperType.WATER_SLASH_Y:
+			return _get_col_positions(pos.x)
 	return [pos]
 
 
@@ -1008,10 +1013,11 @@ func _get_cross_positions(center: Vector2i) -> Array[Vector2i]:
 	return result
 
 
-## 進入選擇模式（由 main.gd 呼叫，玩家懸停預覽十字，點擊確認轉換）
-func enter_selection_mode(convert_type: Block.Type) -> void:
+## 進入選擇模式（由 main.gd 呼叫，玩家懸停預覽，點擊確認轉換）
+func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross") -> void:
 	_selection_mode = true
 	_selection_convert_type = convert_type
+	_selection_pattern = pattern
 	_preview_center = Vector2i(-1, -1)
 
 
@@ -1024,18 +1030,31 @@ func exit_selection_mode() -> void:
 
 ## 更新十字預覽覆蓋層（黃色半透明方塊顯示在預覽位置上方）
 func _update_cross_preview(center: Vector2i) -> void:
+	_update_selection_preview(center)
+
+
+## 通用選擇預覽（依 _selection_pattern 決定形狀，依 _selection_convert_type 決定顏色）
+func _update_selection_preview(center: Vector2i) -> void:
 	_clear_preview_overlays()
 	_preview_center = center
-	var positions := _get_cross_positions(center)
+	var positions := _get_selection_positions(center)
+	var color: Color = Block.COLORS.get(_selection_convert_type, Color(1.0, 0.92, 0.23))
 	for p in positions:
 		var overlay := ColorRect.new()
-		overlay.color = Color(1.0, 0.92, 0.23, 0.35)
+		overlay.color = Color(color.r, color.g, color.b, 0.35)
 		overlay.size = Vector2(CELL_SIZE, CELL_SIZE)
 		overlay.position = Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE)
 		overlay.z_index = 10
 		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(overlay)
 		_preview_overlays.append(overlay)
+
+
+## 依目前 _selection_pattern 取得選擇範圍位置
+func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
+	if _selection_pattern == "fireball":
+		return _get_area_positions(center)
+	return _get_cross_positions(center)
 
 
 ## 清除所有預覽覆蓋層

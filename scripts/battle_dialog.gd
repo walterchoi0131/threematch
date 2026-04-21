@@ -11,6 +11,8 @@ signal all_lines_finished
 const TYPEWRITER_CPS := 30.0
 const PORTRAIT_SIZE := 80.0
 const PANEL_MARGIN := 16.0
+const NAME_FONT_SIZE := 22
+const TEXT_FONT_SIZE := 20
 
 # 角色名稱（雙語）
 const CHAR_NAMES := {
@@ -34,6 +36,7 @@ const CHAR_NAME_COLORS := {
 # ── 節點 ─────────────────────────────────────────────────────
 var _overlay: ColorRect
 var _panel: PanelContainer
+var _portrait_clip: Control
 var _portrait: TextureRect
 var _name_label: Label
 var _text_label: RichTextLabel
@@ -96,12 +99,17 @@ func _build_ui() -> void:
 	hbox.add_theme_constant_override("separation", 12)
 	_panel.add_child(hbox)
 
-	# 頭像
+	# 頭像裁切容器（固定大小，clip_contents）
+	_portrait_clip = Control.new()
+	_portrait_clip.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	_portrait_clip.clip_contents = true
+	hbox.add_child(_portrait_clip)
+
 	_portrait = TextureRect.new()
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
-	hbox.add_child(_portrait)
+	_portrait.size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	_portrait_clip.add_child(_portrait)
 
 	# 右側文字區
 	var vbox := VBoxContainer.new()
@@ -111,7 +119,7 @@ func _build_ui() -> void:
 
 	# 名稱
 	_name_label = Label.new()
-	_name_label.add_theme_font_size_override("font_size", 18)
+	_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
 	_name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
 	_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	_name_label.add_theme_constant_override("outline_size", 2)
@@ -124,7 +132,7 @@ func _build_ui() -> void:
 	_text_label.scroll_active = false
 	_text_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_text_label.add_theme_font_size_override("normal_font_size", 17)
+	_text_label.add_theme_font_size_override("normal_font_size", TEXT_FONT_SIZE)
 	_text_label.add_theme_color_override("default_color", Color.WHITE)
 	vbox.add_child(_text_label)
 
@@ -165,9 +173,10 @@ func _show_line(line: _DialogLine) -> void:
 	var tex: Texture2D = _load_portrait(char_id, line.emotion)
 	if tex != null:
 		_portrait.texture = tex
-		_portrait.visible = true
+		_portrait_clip.visible = true
+		_apply_dialog_pose(char_id)
 	else:
-		_portrait.visible = false
+		_portrait_clip.visible = false
 
 	# 名稱
 	var locale_node: Node = get_node_or_null("/root/Locale")
@@ -205,6 +214,36 @@ func _finish_typing() -> void:
 		_type_tween.kill()
 	_text_label.visible_ratio = 1.0
 	_typing = false
+
+
+## 依 char_id 查找 GameState.owned_characters、套用 dialog_square_scale/offset
+func _apply_dialog_pose(char_id: String) -> void:
+	var c: CharacterData = _find_character_data(char_id)
+	if c == null:
+		_portrait.scale = Vector2.ONE
+		_portrait.position = Vector2.ZERO
+		return
+	_portrait.scale = Vector2(c.dialog_square_scale, c.dialog_square_scale)
+	_portrait.position = c.dialog_square_offset
+
+
+func _find_character_data(char_id: String) -> CharacterData:
+	var gs: Node = get_node_or_null("/root/GameState")
+	if gs == null:
+		return null
+	var lower := char_id.to_lower()
+	for c: CharacterData in gs.owned_characters:
+		if c.character_name.to_lower() == lower:
+			return c
+	return null
+
+
+## 公開：F9 面板調整 dialog_square_* 後可呼叫本函數立即反映
+func refresh_dialog_pose() -> void:
+	if _line_index < 0 or _line_index >= _lines.size():
+		return
+	var line: _DialogLine = _lines[_line_index]
+	_apply_dialog_pose(line.character_id)
 
 
 func _load_portrait(char_id: String, emotion: String) -> Texture2D:

@@ -87,6 +87,16 @@ static func _ensure_init() -> void:
 		"Snowball",
 		"res://assets/music/IceShatter_2_96x96.png", 49, 1, 49, 3.0, 0.03,
 	)
+	_defs[Block.UpperType.WATER_SLASH_X] = Def.new(
+		Block.Type.BLUE,
+		Color(0.25, 0.60, 1.0),
+		"Water Slash X",
+	)
+	_defs[Block.UpperType.WATER_SLASH_Y] = Def.new(
+		Block.Type.BLUE,
+		Color(0.25, 0.60, 1.0),
+		"Water Slash Y",
+	)
 
 
 ## 取得指定高階寶石的定義。找不到時回傳 null。

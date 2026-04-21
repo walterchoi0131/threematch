@@ -466,6 +466,8 @@ func _show_tap_hint() -> void:
 func _go_to_map() -> void:
 	# 防重複觸發
 	_tap_button.disabled = true
+	# 漸隱勝利音樂（存於 GameState）
+	GameState.fade_out_bgm(0.5)
 	var black := ColorRect.new()
 	black.color = Color(0, 0, 0, 0)
 	black.set_anchors_preset(Control.PRESET_FULL_RECT)

@@ -68,12 +68,14 @@ const GEM_ICON_PATHS := {
 	Block.Type.LIGHT: "res://assets/gems/gem_light.png",
 }
 const UPPER_GEM_ICON_PATHS := {
-	Block.UpperType.FIREBALL: "res://assets/gems/gem_fire_bomb.png",
+	Block.UpperType.FIREBALL: "res://assets/gems/gem_fireball.png",
 	Block.UpperType.FIRE_PILLAR_X: "res://assets/gems/gem_fire_turnado.png",
 	Block.UpperType.FIRE_PILLAR_Y: "res://assets/gems/gem_fire_turnado.png",
 	Block.UpperType.SAINT_CROSS: "res://assets/gems/gem_saint_cross.png",
 	Block.UpperType.LEAF_SHIELD: "res://assets/gems/gem_leafshield.png",
 	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
+	Block.UpperType.WATER_SLASH_X: "res://assets/gems/gem_watersword.png",
+	Block.UpperType.WATER_SLASH_Y: "res://assets/gems/gem_watersword.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -103,6 +105,9 @@ const BGM_FADE_DUR := 0.25                   # 音量/速度漸變時間
 
 ## 初始化：設定關卡、隊伍、連接信號、初始化戰鬥系統
 func _ready() -> void:
+	# 從準備/對話畫面淡入
+	GameState.fade_in_if_pending(0.4)
+
 	current_stage = GameState.selected_stage
 	if current_stage == null:
 		current_stage = preload("res://stages/stage_dev.tres")
@@ -249,11 +254,8 @@ func _play_sfx(stream: AudioStream) -> void:
 ## 播放關卡背景音樂
 func _play_bgm() -> void:
 	if current_stage.bgm != null:
-		var player := AudioStreamPlayer.new()
-		player.stream = current_stage.bgm
-		add_child(player)
-		player.play()
-		_bgm_player = player
+		GameState.crossfade_bgm(current_stage.bgm, true, 0.6, "stage:" + current_stage.stage_name)
+		_bgm_player = GameState.bgm_player
 
 
 ## 長按預覽開始：漸變降低 BGM 音量、播放速度、遊戲速度
@@ -508,7 +510,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	# 先檢查回應技能以決定流程
 	var responses := battle_manager.check_responding_skills(board)
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 
 	if is_fuse:
@@ -617,7 +619,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	battle_manager.turn_gem_blasts = saved_blasts
 	battle_manager.last_blast_positions = saved_positions
 
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 	if not is_fuse:
 		return
@@ -934,6 +936,21 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _sc_count: int = int(battle_manager.turn_gem_blasts.get(_sc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_sc.gem_type, _sc_count, Block.UpperType.SNOWBALL), _sc.gem_type, _sc)
 			await get_tree().create_timer(0.15).timeout
+		"Water Slash":
+			# Place a Water Slash upper gem based on blast direction (row or col)
+			var pos: Vector2i = board.last_tapped_pos
+			var blast_dir: String = board.get_line_direction(battle_manager.last_blast_positions)
+			var slash_type: Block.UpperType
+			if blast_dir == "horizontal":
+				slash_type = Block.UpperType.WATER_SLASH_X
+			else:
+				slash_type = Block.UpperType.WATER_SLASH_Y
+			board.place_upper_gem(pos, slash_type)
+			_play_sfx(_se_freeze)
+			var _wc: CharacterData = party[resp.char_index]
+			var _wc_count: int = int(battle_manager.turn_gem_blasts.get(_wc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_wc.gem_type, _wc_count, slash_type), _wc.gem_type, _wc)
+			await get_tree().create_timer(0.15).timeout
 
 
 # ── upper gem handlers ───────────────────────────────────────────────
@@ -1132,6 +1149,27 @@ func _on_active_skill_activated(char_index: int) -> void:
 			_add_log_entry("攻擊形態：%s→%s" % [_gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
+		"止水明鏡":
+			# 止水明鏡：將棋盤上所有火寶石轉換為水寶石
+			battle_manager.use_active_skill(char_index)
+			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
+			_add_log_entry("止水明鏡：%s→%s" % [_gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			await get_tree().create_timer(0.4).timeout
+			_update_skill_ui()
+		"龍焰領域":
+			# 龍焰領域：進入火焰範圍選擇模式，點擊後將範圍內寶石轉換為火寶石
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.enter_selection_mode(Block.Type.RED, "fireball")
+			var positions: Array = await board.selection_confirmed
+			var converted := 0
+			for pos in positions:
+				var p: Vector2i = pos as Vector2i
+				if board.grid[p.x][p.y] != null and board.grid[p.x][p.y].block_type != Block.Type.RED:
+					board._animate_gem_morph(board.grid[p.x][p.y], Block.Type.RED)
+					converted += 1
+			_add_log_entry("龍焰領域：%d→%s" % [converted, _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
+			await get_tree().create_timer(0.4).timeout
 		"There shall be light":
 			# 光輝降臨：進入選擇模式，懸停預覽十字範圍，點擊確認轉換為光寶石
 			battle_manager.use_active_skill(char_index)
@@ -1401,17 +1439,9 @@ func _style_player_hp_label() -> void:
 ## 玩家戰敗
 func _on_player_defeated() -> void:
 	board.is_busy = true
-	# 停止戰鬥 BGM，播放 One More Run
-	if _bgm_player != null and is_instance_valid(_bgm_player):
-		_bgm_player.stop()
-		_bgm_player.queue_free()
-		_bgm_player = null
-	var one_more := AudioStreamPlayer.new()
-	one_more.stream = load("res://assets/music/One More Run.mp3")
-	one_more.autoplay = false
-	add_child(one_more)
-	one_more.play()
-	_bgm_player = one_more
+	# 交叉淡入 One More Run（存於 GameState）
+	GameState.crossfade_bgm(load("res://assets/music/One More Run.mp3"), false, 0.6, "defeat")
+	_bgm_player = GameState.bgm_player
 	_show_defeat_overlay()
 
 
@@ -1502,7 +1532,68 @@ func _on_round_transitioning() -> void:
 ## 波次清除
 func _on_round_cleared() -> void:
 	round_label.text = "Round: %d" % (battle_manager.current_round + 1)
+	# Round 3（0-indexed = 2）教學：敵人意圖 + 切換目標
+	if current_stage.is_tutorial and battle_manager.current_round == 2 and _battle_dialog != null:
+		_battle_dialog.show_lines(_Stage1Tutorial.make_round3_dialog())
+		await _battle_dialog.all_lines_finished
+	# 最後一波（Boss 波）：切換 BGM + 顯示 Boss 出場演出
+	if battle_manager.current_round == battle_manager.stage_rounds.size() - 1:
+		await _show_boss_intro()
 	board.is_busy = false
+
+
+## Boss 出場演出：切換 BGM 為 fez_boss 循環、顯示 Boss 名稱全螢幕遮罩、淡出後返回
+func _show_boss_intro() -> void:
+	# 交叉淡入 Boss BGM（循環播放，存於 GameState）
+	GameState.crossfade_bgm(load("res://assets/music/fez_boss.mp3"), true, 0.8, "boss")
+	_bgm_player = GameState.bgm_player
+
+	# Boss 警告橫幅文字
+	var boss_name := "BOSS INCOMING"
+
+	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var ui_layer: CanvasLayer = $UILayer
+
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 50
+	ui_layer.add_child(overlay)
+
+	# 半透明黑色背景
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.0, 0.0, 0.0, 0.0)
+	overlay.add_child(bg)
+
+	# Boss 名稱標籤
+	var title_lbl := Label.new()
+	title_lbl.text = boss_name
+	title_lbl.add_theme_font_override("font", font)
+	title_lbl.add_theme_font_size_override("font_size", 64)
+	title_lbl.add_theme_color_override("font_color", Color(0.91, 0.26, 0.21))
+	title_lbl.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
+	title_lbl.add_theme_constant_override("shadow_offset_x", 3)
+	title_lbl.add_theme_constant_override("shadow_offset_y", 3)
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_lbl.modulate.a = 0.0
+	overlay.add_child(title_lbl)
+
+	# Fade in
+	var tw_in := create_tween().set_parallel(true)
+	tw_in.tween_property(bg, "color", Color(0.0, 0.0, 0.0, 0.65), 0.4)
+	tw_in.tween_property(title_lbl, "modulate:a", 1.0, 0.4)
+	await tw_in.finished
+
+	await get_tree().create_timer(1.8).timeout
+
+	# Fade out
+	var tw_out := create_tween().set_parallel(true)
+	tw_out.tween_property(bg, "color", Color(0.0, 0.0, 0.0, 0.0), 0.4)
+	tw_out.tween_property(title_lbl, "modulate:a", 0.0, 0.4)
+	await tw_out.finished
+	overlay.queue_free()
 
 
 ## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
@@ -1535,6 +1626,15 @@ func _on_loot_dropped(enemy_data: EnemyData, results: Array) -> void:
 ## 戰鬥勝利
 func _on_battle_won() -> void:
 	board.is_busy = true
+	# ── 最後一隻敵人死亡 → 立刻交叉淡入勝利音樂（在收尾對話之前）──
+	GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")
+	_bgm_player = GameState.bgm_player
+	# ── 教學：Boss 擊敗後收尾對話（勝利橫幅前）──
+	if current_stage.is_tutorial and _battle_dialog != null:
+		_battle_dialog.show_lines(_Stage1Tutorial.make_victory_dialog())
+		await _battle_dialog.all_lines_finished
+		_battle_dialog.visible = false
+
 	# 將本場戰利品存入 GameState
 	for type: ItemDefs.Type in _battle_loot:
 		GameState.add_loot(type, _battle_loot[type])

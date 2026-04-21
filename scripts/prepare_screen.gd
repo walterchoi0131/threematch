@@ -5,6 +5,8 @@ extends Control
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 const VIEWPORT_W := 856.0
 const VIEWPORT_H := 1024.0
+const CharacterSorter = preload("res://scripts/character_sorter.gd")
+const RosterLayout = preload("res://scripts/roster_layout.gd")
 
 var _font: Font
 var _stage: StageData
@@ -13,6 +15,8 @@ var _stage: StageData
 var _selected_indices: Array[int] = []
 var _card_panels: Array[PanelContainer] = []
 var _card_styles: Array[Dictionary] = []  # [{normal, selected}]
+var _sort_mode: int = CharacterSorter.Mode.LEVEL
+var _roster_grid: Control = null
 
 # ── UI 節點 ──
 var _count_label: Label = null
@@ -50,34 +54,29 @@ func _build_ui() -> void:
 	root.add_theme_constant_override("separation", 6)
 	add_child(root)
 
-	# ── 關卡標題 ──
+	# ── 關卡標題（靠左）──
 	var stage_title := _make_label(Locale.tr_ui(_stage.stage_name), 26, Color(1.0, 0.9, 0.3))
-	stage_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stage_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	root.add_child(stage_title)
 
-	# ── Boss 預覽 + 寶石圓餅（同一列）──
-	var info_row := HBoxContainer.new()
-	info_row.add_theme_constant_override("separation", 16)
-	info_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_child(info_row)
-
-	_build_boss_preview(info_row)
-	_build_pie_section(info_row)
+	# ── Boss 預覽 + 寶石圓餅（合併為同一個全寬度區塊）──
+	_build_info_box(root)
 
 	# ── 已選隊伍欄位 ──
 	_build_slot_section(root)
 
-	# ── 分隔線 ──
-	var sep := HSeparator.new()
-	sep.add_theme_constant_override("separation", 4)
-	root.add_child(sep)
+	# ── 角色選擇標題列：左「角色選擇」、右排序按鈕 ──
+	var sel_header := HBoxContainer.new()
+	sel_header.add_theme_constant_override("separation", 8)
+	root.add_child(sel_header)
 
-	# ── 角色名冊標題 ──
-	var roster_label := _make_label(Locale.tr_ui("ROSTER"), 18, Color(0.8, 0.8, 0.85))
-	roster_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(roster_label)
+	var sel_label := _make_label(Locale.tr_ui("CHAR_SELECTION"), 18, Color(0.85, 0.85, 0.9))
+	sel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sel_header.add_child(sel_label)
 
-	# ── 角色選擇網格（可滾動）──
+	var sort_row: HBoxContainer = CharacterSorter.make_sort_buttons(_sort_mode, _on_sort_changed)
+	sel_header.add_child(sort_row)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -99,47 +98,61 @@ func _build_ui() -> void:
 	btn_row.add_child(cancel_btn)
 
 	_confirm_btn = Button.new()
-	_confirm_btn.text = Locale.tr_ui("CONFIRM")
+	_confirm_btn.text = Locale.tr_ui("EMBARK")
 	_confirm_btn.custom_minimum_size = Vector2(140, 48)
 	_confirm_btn.pressed.connect(_on_confirm)
 	btn_row.add_child(_confirm_btn)
 
-	# 自動選取前 N 個角色
-	var auto_count: int = mini(GameState.owned_characters.size(), GameState.MAX_PARTY_SIZE)
-	for i in auto_count:
-		_toggle_select(i)
+	# 自動選取：關卡指定隊伍則使用之；否則預選前 N 個角色
+	if _stage.set_party.size() > 0:
+		for c: CharacterData in _stage.set_party:
+			var idx: int = GameState.owned_characters.find(c)
+			if idx >= 0 and not _selected_indices.has(idx):
+				_toggle_select(idx)
+		# 將未選中的角色卡片半透明顯示
+		for i in _card_panels.size():
+			if not _selected_indices.has(i):
+				_card_panels[i].modulate = Color(1, 1, 1, 0.35)
+	else:
+		var auto_count: int = mini(GameState.owned_characters.size(), GameState.MAX_PARTY_SIZE)
+		for i in auto_count:
+			_toggle_select(i)
 
 
-# ── Boss 預覽 ─────────────────────────────────────────────────
+# ── Boss + 寶石分佈（合併為單一全寬區塊） ────────────────────
 
-func _build_boss_preview(parent: HBoxContainer) -> void:
-	# 找到最後一波的最後一個敵人（boss）
-	var boss: EnemyData = _get_stage_boss()
-	if boss == null:
-		return
-
-	var boss_box := VBoxContainer.new()
-	boss_box.add_theme_constant_override("separation", 4)
-	boss_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(boss_box)
-
-	var title := _make_label(Locale.tr_ui("STAGE_BOSS"), 18, Color(1.0, 0.5, 0.3))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_box.add_child(title)
-
-	var card := PanelContainer.new()
+func _build_info_box(parent: VBoxContainer) -> void:
+	var box := PanelContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.14, 0.10, 0.18, 1)
 	style.set_border_width_all(2)
 	style.border_color = Color(0.7, 0.35, 0.35, 1)
 	style.set_corner_radius_all(8)
-	style.set_content_margin_all(8)
-	card.add_theme_stylebox_override("panel", style)
-	boss_box.add_child(card)
+	style.set_content_margin_all(10)
+	box.add_theme_stylebox_override("panel", style)
+	parent.add_child(box)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 16)
+	box.add_child(hbox)
+
+	# ── 左側：Boss 資訊 ──
+	_build_boss_content(hbox)
+
+	# ── 右側：寶石圓餅 ──
+	_build_pie_content(hbox)
+
+
+func _build_boss_content(parent: HBoxContainer) -> void:
+	var boss: EnemyData = _get_stage_boss()
+	if boss == null:
+		return
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
-	card.add_child(vbox)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(vbox)
 
 	# Boss 頭像
 	if boss.portrait_texture:
@@ -157,7 +170,6 @@ func _build_boss_preview(parent: HBoxContainer) -> void:
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vbox.add_child(portrait)
 
-	# Boss 名稱 + 等級
 	var boss_name := _make_label(boss.enemy_name, 16, Color(1.0, 0.85, 0.85))
 	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(boss_name)
@@ -172,7 +184,6 @@ func _build_boss_preview(parent: HBoxContainer) -> void:
 	boss_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(boss_stats)
 
-	# 元素圖示 + 波次
 	var bottom_row := HBoxContainer.new()
 	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	bottom_row.add_theme_constant_override("separation", 8)
@@ -201,19 +212,71 @@ func _build_boss_preview(parent: HBoxContainer) -> void:
 	bottom_row.add_child(round_info)
 
 
+func _build_pie_content(parent: HBoxContainer) -> void:
+	var allowed: Array = _stage.allowed_types
+	var count: int = allowed.size()
+	if count == 0:
+		return
+	var ratio: float = 1.0 / float(count)
+
+	const PIE_SIZE: float = 200.0
+	const ICON_SIZE: float = 44.0  # 原本 22 的 2 倍
+	var pie_container := Control.new()
+	pie_container.custom_minimum_size = Vector2(PIE_SIZE, PIE_SIZE)
+	pie_container.clip_contents = true  # 圖示溢出時裁切
+	parent.add_child(pie_container)
+
+	# 半透明切片資料
+	var slices: Array[Dictionary] = []
+	for t in allowed:
+		var color: Color = Block.COLORS.get(t, Color.GRAY)
+		color.a = 0.5
+		slices.append({"ratio": ratio, "color": color})
+
+	var pie := _PieDrawer.new()
+	pie.slices = slices
+	pie.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pie_container.add_child(pie)
+
+	# 在每個切片中心放置半透明、放大的寶石圖示
+	var pie_center: Vector2 = Vector2(PIE_SIZE * 0.5, PIE_SIZE * 0.5)
+	var pie_radius: float = PIE_SIZE * 0.45
+	var icon_radius: float = pie_radius * 0.55
+	var start_angle: float = -PI * 0.5
+	for i in count:
+		var sweep: float = ratio * TAU
+		var mid_angle: float = start_angle + sweep * 0.5
+		var icon_pos: Vector2 = pie_center + Vector2(cos(mid_angle), sin(mid_angle)) * icon_radius
+		var t: int = allowed[i]
+		var gem_tex: Texture2D = Block.GEM_TEXTURES.get(t)
+		if gem_tex:
+			var icon := TextureRect.new()
+			icon.texture = gem_tex
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+			icon.size = Vector2(ICON_SIZE, ICON_SIZE)
+			icon.position = icon_pos - Vector2(ICON_SIZE * 0.5, ICON_SIZE * 0.5)
+			icon.modulate = Color(1, 1, 1, 0.5)
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pie_container.add_child(icon)
+		start_angle += sweep
+
+
 # ── 已選角色欄位 ──────────────────────────────────────────────
 
 func _build_slot_section(parent: VBoxContainer) -> void:
 	var header := HBoxContainer.new()
-	header.alignment = BoxContainer.ALIGNMENT_CENTER
-	header.add_theme_constant_override("separation", 12)
+	header.add_theme_constant_override("separation", 8)
 	parent.add_child(header)
 
-	var slot_title := _make_label(Locale.tr_ui("SELECT_PARTY"), 20, Color(1.0, 0.9, 0.3))
-	header.add_child(slot_title)
+	var party_label := _make_label(Locale.tr_ui("PARTY"), 18, Color(1.0, 0.9, 0.3))
+	party_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(party_label)
 
-	_count_label = _make_label("0 / %d" % GameState.MAX_PARTY_SIZE, 16, Color(0.7, 0.7, 0.7))
-	header.add_child(_count_label)
+	# 保留隱藏的 count_label，避免下游 _refresh_slots 發生 null 存取
+	_count_label = Label.new()
+	_count_label.visible = false
 
 	_slot_row = HBoxContainer.new()
 	_slot_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -235,6 +298,8 @@ func _refresh_slots() -> void:
 			var card: PanelContainer = data.panel
 			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			card.custom_minimum_size = Vector2(0, 60)
+			var idx_in_owned: int = _selected_indices[i]
+			card.gui_input.connect(_on_slot_card_input.bind(idx_in_owned))
 			_slot_row.add_child(card)
 			_slot_cards.append(card)
 		else:
@@ -271,112 +336,21 @@ func _make_empty_battle_slot() -> PanelContainer:
 	return panel
 
 
-# ── 寶石分佈圓餅圖（關卡掉落寶石） ───────────────────────────
-
-func _build_pie_section(parent: HBoxContainer) -> void:
-	var pie_box := VBoxContainer.new()
-	pie_box.add_theme_constant_override("separation", 4)
-	pie_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(pie_box)
-
-	var pie_title := _make_label(Locale.tr_ui("GEM_DISTRIBUTION"), 14, Color(0.7, 0.85, 1.0))
-	pie_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pie_box.add_child(pie_title)
-
-	var pie_row := HBoxContainer.new()
-	pie_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	pie_row.add_theme_constant_override("separation", 12)
-	pie_box.add_child(pie_row)
-
-	# 圓餅容器（含繪製層 + 寶石圖示疊加層）
-	var pie_container := Control.new()
-	pie_container.custom_minimum_size = Vector2(130, 130)
-	pie_row.add_child(pie_container)
-
-	# 建立切片資料
-	var allowed: Array = _stage.allowed_types
-	var count: int = allowed.size()
-	if count == 0:
-		return
-	var ratio: float = 1.0 / float(count)
-
-	var slices: Array[Dictionary] = []
-	for t in allowed:
-		var color: Color = Block.COLORS.get(t, Color.GRAY)
-		slices.append({"ratio": ratio, "color": color})
-
-	# 繪製圓餅底圖
-	var pie := _PieDrawer.new()
-	pie.slices = slices
-	pie.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pie_container.add_child(pie)
-
-	# 在每個切片中心放置寶石圖示
-	var pie_center: Vector2 = Vector2(65, 65)
-	var pie_radius: float = 130.0 * 0.45  # 與 _PieDrawer 一致
-	var icon_radius: float = pie_radius * 0.55
-	var start_angle: float = -PI * 0.5
-	for i in count:
-		var sweep: float = ratio * TAU
-		var mid_angle: float = start_angle + sweep * 0.5
-		var icon_pos: Vector2 = pie_center + Vector2(cos(mid_angle), sin(mid_angle)) * icon_radius
-		var t: int = allowed[i]
-		var gem_tex: Texture2D = Block.GEM_TEXTURES.get(t)
-		if gem_tex:
-			var icon := TextureRect.new()
-			icon.texture = gem_tex
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.custom_minimum_size = Vector2(22, 22)
-			icon.position = icon_pos - Vector2(11, 11)
-			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			pie_container.add_child(icon)
-		start_angle += sweep
-
-	# 圖例
-	var legend := VBoxContainer.new()
-	legend.add_theme_constant_override("separation", 6)
-	pie_row.add_child(legend)
-
-	for t in allowed:
-		var color: Color = Block.COLORS.get(t, Color.GRAY)
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		legend.add_child(row)
-
-		var gem_tex: Texture2D = Block.GEM_TEXTURES.get(t)
-		if gem_tex:
-			var icon := TextureRect.new()
-			icon.texture = gem_tex
-			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.custom_minimum_size = Vector2(20, 20)
-			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			row.add_child(icon)
-		else:
-			var dot := ColorRect.new()
-			dot.custom_minimum_size = Vector2(14, 14)
-			dot.color = color
-			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			row.add_child(dot)
-
-		var pct_text: String = "%d%%" % int(ratio * 100.0)
-		var lbl := _make_label(pct_text, 14, color)
-		row.add_child(lbl)
-
-
 # ── 角色選擇網格 ──────────────────────────────────────────────
 
 func _build_roster_grid(parent: ScrollContainer) -> void:
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(grid)
+	var host := VBoxContainer.new()
+	host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(host)
+	_roster_grid = host
 
 	_card_panels.clear()
 	_card_styles.clear()
+
+	var fixed_set: Dictionary = {}
+	if _is_party_locked():
+		for c: CharacterData in _stage.set_party:
+			fixed_set[c] = true
 
 	for i in GameState.owned_characters.size():
 		var c: CharacterData = GameState.owned_characters[i]
@@ -385,12 +359,53 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.custom_minimum_size = Vector2(0, 60)
 		panel.gui_input.connect(_on_roster_card_input.bind(i))
-		grid.add_child(panel)
 		_card_panels.append(panel)
 		_card_styles.append({
 			"normal": data.style_normal,
 			"selected": data.style_selected,
 		})
+		if fixed_set.has(c):
+			_add_fixed_overlay(panel)
+
+	_apply_sort()
+
+
+func _add_fixed_overlay(panel: PanelContainer) -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(overlay)
+
+	var lbl := Label.new()
+	lbl.text = Locale.tr_ui("FIXED")
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_override("font", _font)
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(lbl)
+
+	var tw := lbl.create_tween().set_loops()
+	tw.tween_property(lbl, "modulate:a", 0.35, 0.7)
+	tw.tween_property(lbl, "modulate:a", 1.0, 0.7)
+
+
+func _on_sort_changed(mode: int) -> void:
+	_sort_mode = mode
+	_apply_sort()
+
+
+func _apply_sort() -> void:
+	if _roster_grid == null:
+		return
+	var entries: Array = []
+	for i in GameState.owned_characters.size():
+		entries.append({"i": i, "c": GameState.owned_characters[i], "card": _card_panels[i]})
+	RosterLayout.apply(_roster_grid, entries, _sort_mode, 4)
 
 
 # ── 選擇邏輯 ──────────────────────────────────────────────────
@@ -398,7 +413,24 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 func _on_roster_card_input(event: InputEvent, index: int) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
+	# 關卡限定隊伍時不允許修改
+	if _is_party_locked():
+		return
 	_toggle_select(index)
+
+
+## 點擊已選欄位的角色：取消選取
+func _on_slot_card_input(event: InputEvent, index: int) -> void:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if _is_party_locked():
+		return
+	if _selected_indices.has(index):
+		_toggle_select(index)
+
+
+func _is_party_locked() -> bool:
+	return _stage != null and _stage.set_party.size() > 0
 
 
 func _toggle_select(index: int) -> void:
@@ -425,10 +457,10 @@ func _on_confirm() -> void:
 		GameState.selected_party.append(GameState.owned_characters[idx])
 
 	# 有對話 → 先進對話場景；否則直接進戰鬥
+	var next_path: String = "res://scenes/main.tscn"
 	if _stage.pre_dialog != null and _stage.pre_dialog.lines.size() > 0:
-		get_tree().change_scene_to_file("res://scenes/dialog_box.tscn")
-	else:
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+		next_path = "res://scenes/dialog_box.tscn"
+	GameState.fade_to_scene(next_path)
 
 
 # ── 工具 ──────────────────────────────────────────────────────

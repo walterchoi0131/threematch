@@ -83,8 +83,14 @@ var _texture_cache: Dictionary = {}  # path -> Texture2D
 func _ready() -> void:
 	_build_ui()
 	_tap_zone.pressed.connect(_advance)
-	# 獨立場景模式：自動讀取 GameState 的對話資料並播放
+	# 從準備畫面淡入
 	var gs: Node = get_node_or_null("/root/GameState")
+	if gs != null:
+		gs.fade_in_if_pending(0.4)
+	# 漸隱前一場景的 BGM（例如地圖音樂）
+	if gs != null:
+		gs.fade_out_bgm(0.4)
+	# 獨立場景模式：自動讀取 GameState 的對話資料並播放
 	if gs != null and gs.selected_stage != null and gs.selected_stage.pre_dialog != null:
 		start(gs.selected_stage.pre_dialog)
 

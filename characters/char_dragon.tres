@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/dragon.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Dragon"
+gem_type = 0
+level = 5
+base_atk = 4
+atk_growth = 0.8
+base_hp = 60
+hp_growth = 9.0
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(0.91, 0.26, 0.21, 1)
+portrait_scale = 1.05
+portrait_offset = Vector2(-79, -90)
+active_skill_name = "龍焰領域"
+active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
+active_skill_cd = 3
+responding_skills = [{
+"name": "Fireball",
+"desc": "Blast 9+ fire gems: create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",
+"threshold": 9,
+"priority": 1,
+"trigger_type": "count",
+"fuse_label": "9"
+}]
