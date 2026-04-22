@@ -15,13 +15,41 @@ var allowed_types: Array[Block.Type] = []  # 允許出現的寶石類型
 var min_match: int = 2        # 最少連接數才可消除
 
 var grid: Array = []          # 二維網格陣列 grid[x][y] = Block 或 null
-var is_busy: bool = false     # 是否正在處理動畫/消除中（防止重複點擊）
+# is_busy 屬性後備欄位（property 用，setter 觸發 drain）
+var _is_busy_back: bool = false
+# is_busy：是否正在處理動畫/消除中（防止重複點擊）
+# 改為 property — falling edge 自動觸發 deferred clicks drain
+var is_busy: bool:
+	get:
+		return _is_busy_back
+	set(v):
+		var was: bool = _is_busy_back
+		_is_busy_back = v
+		if was and not v:
+			call_deferred("_drain_deferred_clicks")
 var score: int = 0            # 當前得分
 var last_tapped_pos: Vector2i = Vector2i(-1, -1)  # 最後一次點擊的網格位置
 var skip_collapse: bool = false   # 融合流程中由 main.gd 設定，跳過自動掉落
 var _fuse_skills: Array[Dictionary] = []  # 融合技能清單 { gem_type, threshold, label, trigger_type }
 var is_fusing: bool = false       # 融合動畫進行中（允許並行點擊下一次融合）
 var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點擊的位置（由 _on_gems_blasted 讀取）
+
+# ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
+# logic_grid[x][y] 儲存 Block.Type（int）或：
+#   LOGIC_UNKNOWN：等待視覺填充隨機顏色（BFS 不會匹配）
+#   LOGIC_UPPER：高階寶石（BFS 不會匹配普通爆破）
+const LOGIC_UNKNOWN := 999
+const LOGIC_UPPER := -1
+var logic_grid: Array = []
+# 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
+var deferred_clicks: Array[Vector2i] = []
+# battle_manager 引用（由 main.gd 透過 setter 注入；用於邏輯敵人狀態查詢）
+var battle_manager_ref: Node = null
+var _draining: bool = false       # 正在 drain queue（避免遞迴）
+# 標記下一次 _handle_click 來自 drain（邏輯狀態已預先套用，跳過再扣血/destroy）
+var _next_click_is_drained: bool = false
+# 由 main.gd 設定：attack worker 仍在處理 queue（影響 upper-gem drain 時機）
+var external_attack_busy: bool = false
 
 # ── 選擇模式（主動技能用：懸停預覽十字範圍，點擊確認轉換）──
 var _selection_mode: bool = false           # 是否處於選擇模式
@@ -109,7 +137,43 @@ func initialize_board() -> void:
 			for y in rows:
 				if y < col.size() and grid[x][y] != null:
 					grid[x][y].set_block_type(col[y])
+	_init_logic_grid_from_visual()
 	_update_fuse_hints()
+
+
+## 從視覺 grid 完整初始化 logic_grid（重建/重置時呼叫）
+func _init_logic_grid_from_visual() -> void:
+	logic_grid.clear()
+	logic_grid.resize(columns)
+	for x in columns:
+		logic_grid[x] = []
+		logic_grid[x].resize(rows)
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b == null:
+				logic_grid[x][y] = LOGIC_UNKNOWN
+			elif b.is_upper_gem():
+				logic_grid[x][y] = LOGIC_UPPER
+			else:
+				logic_grid[x][y] = b.block_type
+
+
+## 從視覺 grid 同步未知（LOGIC_UNKNOWN）的 logic_grid 格子。
+## 在每次視覺 _collapse_and_fill 完成時呼叫，讓邏輯追上視覺隨機填色。
+func _sync_logic_unknowns_from_visual() -> void:
+	for x in columns:
+		for y in rows:
+			if logic_grid[x][y] == LOGIC_UNKNOWN:
+				var b: Block = grid[x][y]
+				if b != null:
+					logic_grid[x][y] = LOGIC_UPPER if b.is_upper_gem() else int(b.block_type)
+
+
+## 完整將 logic_grid 重置為視覺狀態（無 queued click 時的安全點呼叫，例如波次轉換後）
+func resync_logic_from_visual() -> void:
+	if not deferred_clicks.is_empty():
+		return
+	_init_logic_grid_from_visual()
 
 
 ## 隱藏所有寶石（進場動畫用：設為完全透明 + 略微縮小）
@@ -155,6 +219,38 @@ func play_gems_intro() -> void:
 			await get_tree().create_timer(interval).timeout
 	# 等最後一顆完成動畫
 	await get_tree().create_timer(0.63).timeout
+
+
+## 將整個棋盤暗化（同長按預覽用色），用於波次轉場
+## duration: 漸變時間（秒）
+func darken_all_gems(duration: float = 0.4) -> void:
+	if _longpress_dim_tween != null and _longpress_dim_tween.is_valid():
+		_longpress_dim_tween.kill()
+	var dim_color := Color(0.3, 0.3, 0.35, 1.0)
+	_longpress_dim_tween = create_tween().set_parallel(true)
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b != null:
+				_longpress_dim_tween.tween_property(b, "modulate", dim_color, duration) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+## 將整個棋盤淡回正常顏色，並重新顯示融合提示
+## duration: 漸變時間（秒）
+func brighten_all_gems(duration: float = 0.4) -> void:
+	if _longpress_dim_tween != null and _longpress_dim_tween.is_valid():
+		_longpress_dim_tween.kill()
+	var normal_color := Color(1, 1, 1, 1)
+	_longpress_dim_tween = create_tween().set_parallel(true)
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b != null:
+				_longpress_dim_tween.tween_property(b, "modulate", normal_color, duration) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	# 漸變完成後重新刷新融合提示（防止波次轉場期間被覆蓋）
+	_longpress_dim_tween.chain().tween_callback(_update_fuse_hints)
 
 
 ## 在指定格子建立一個新寶石
@@ -249,6 +345,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			var fuse_gp := world_to_grid(fuse_local_pos)
 			if _is_valid(fuse_gp):
 				_try_concurrent_fuse(fuse_gp)
+			return
+		# State/UI 分離：在動畫期間預先 queue 普通爆破點擊
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var queue_local_pos := get_local_mouse_position()
+			var queue_gp := world_to_grid(queue_local_pos)
+			if _is_valid(queue_gp):
+				_try_queue_click(queue_gp)
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var local_pos := get_local_mouse_position()
@@ -264,12 +367,135 @@ func _unhandled_input(event: InputEvent) -> void:
 			_handle_click(gp)
 
 
+# ── 邏輯端 BFS / Queue / Drain（State/UI 分離）────────────────────
+
+## 從起始位置在 logic_grid 上找連通同色普通寶石（與 _find_connected 同 BFS 邏輯，但讀邏輯狀態）
+func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
+	if not _is_valid(start):
+		return []
+	var target: int = logic_grid[start.x][start.y]
+	if target == LOGIC_UNKNOWN or target == LOGIC_UPPER:
+		return []
+	var visited := {}
+	var connected: Array[Vector2i] = []
+	var queue: Array[Vector2i] = [start]
+	while queue.size() > 0:
+		var current: Vector2i = queue.pop_front()
+		if visited.has(current):
+			continue
+		if not _is_valid(current):
+			continue
+		var cur: int = logic_grid[current.x][current.y]
+		if cur != target:
+			continue
+		visited[current] = true
+		connected.append(current)
+		queue.append(Vector2i(current.x + 1, current.y))
+		queue.append(Vector2i(current.x - 1, current.y))
+		queue.append(Vector2i(current.x, current.y + 1))
+		queue.append(Vector2i(current.x, current.y - 1))
+	return connected
+
+
+## 邏輯端 destroy + collapse：消除指定位置，現有寶石下移，頂部標記為 UNKNOWN
+func _logic_destroy_and_collapse(positions: Array[Vector2i]) -> void:
+	for p in positions:
+		logic_grid[p.x][p.y] = LOGIC_UNKNOWN
+	for x in columns:
+		var stack: Array = []
+		for y in rows:
+			if logic_grid[x][y] != LOGIC_UNKNOWN:
+				stack.append(logic_grid[x][y])
+		var stack_idx: int = stack.size() - 1
+		for y in range(rows - 1, -1, -1):
+			if stack_idx >= 0:
+				logic_grid[x][y] = stack[stack_idx]
+				stack_idx -= 1
+			else:
+				logic_grid[x][y] = LOGIC_UNKNOWN
+
+
+## 預測：此次爆破是否會觸發任何融合（回應）技能
+func _logic_would_trigger_fuse(gem_type: int, count: int) -> bool:
+	for skill: Dictionary in _fuse_skills:
+		if int(skill.gem_type) == gem_type and count >= int(skill.threshold):
+			return true
+	return false
+
+
+## 嘗試將點擊放入 deferred queue（is_busy 期間呼叫）。
+func _try_queue_click(pos: Vector2i) -> void:
+	if _selection_mode:
+		return
+	if is_fusing:
+		return
+	if battle_manager_ref == null:
+		return
+	if not battle_manager_ref.logic_can_blast():
+		return
+	if not _is_valid(pos):
+		return
+	if _tutorial_filter.size() > 0 and not _tutorial_filter.has(pos):
+		return
+	# 允許在動畫期間 queue 高階寶石點擊（normal blast → upper blast 路線）
+	var b: Block = grid[pos.x][pos.y]
+	if b != null and b.is_upper_gem():
+		deferred_clicks.append(pos)
+		return
+	var t: int = logic_grid[pos.x][pos.y]
+	if t == LOGIC_UNKNOWN or t == LOGIC_UPPER:
+		return
+	var matches := _find_connected_logic(pos)
+	if matches.size() < min_match:
+		return
+	# 不 queue 會觸發融合的爆破（讓融合管線在 is_busy 結束後正常處理）
+	if _logic_would_trigger_fuse(t, matches.size()):
+		return
+	# 通過驗證 — 即時更新邏輯狀態並 enqueue
+	_logic_destroy_and_collapse(matches)
+	battle_manager_ref.logic_apply_blast(t, matches.size())
+	deferred_clicks.append(pos)
+
+
+## 從 deferred queue 取出下一個點擊並執行（is_busy 變為 false 時自動觸發）
+func _drain_deferred_clicks() -> void:
+	if _draining or is_busy:
+		return
+	if deferred_clicks.is_empty():
+		return
+	if is_fusing or _selection_mode:
+		return
+	# 若下一筆是高階寶石，需等 attack worker 也空閒才 drain（避免敵人攻擊與 upper chain 重疊）
+	var next_pos: Vector2i = deferred_clicks[0]
+	if _is_valid(next_pos):
+		var nb: Block = grid[next_pos.x][next_pos.y]
+		if nb != null and nb.is_upper_gem() and external_attack_busy:
+			return
+	_draining = true
+	var pos: Vector2i = deferred_clicks.pop_front()
+	_draining = false
+	if not _is_valid(pos):
+		return
+	var b: Block = grid[pos.x][pos.y]
+	if b == null:
+		return
+	# 高階寶石仍允許從 queue 觸發（normal → upper 路線）
+	_next_click_is_drained = true
+	_handle_click(pos)
+
+
+## 由 main.gd 在 attack worker 結束時呼叫，嘗試 drain 高階寶石點擊
+func notify_external_attack_busy(busy: bool) -> void:
+	external_attack_busy = busy
+	if not busy and not is_busy:
+		call_deferred("_drain_deferred_clicks")
+
+
 ## 處理寶石點擊事件
 ## 如果是高階寶石 → 觸發特殊爆炸
 ## 如果連接數 >= min_match → 消除並掉落填充
 ## 否則 → 抖動提示無效
-func _handle_click(pos: Vector2i) -> void:
-	# 教學過濾：只允許指定位置
+func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位置
 	if _tutorial_filter.size() > 0 and not _tutorial_filter.has(pos):
 		return
 
@@ -278,10 +504,16 @@ func _handle_click(pos: Vector2i) -> void:
 
 	# 高階寶石 — 特殊點擊（消耗一回合，觸發範圍/橫列爆炸並可連鏈）
 	if block.is_upper_gem():
+		_next_click_is_drained = false
 		is_busy = true
 		await _handle_upper_click(pos)
 		await _collapse_and_fill()
 		# is_busy 由 main.gd _on_upper_blast_completed 在攻擊動畫結束後解除
+		return
+
+	# State/UI 分離：直接點擊也檢查邏輯阻擋（敵人全死 / 即將敵人攻擊）
+	if not _next_click_is_drained and battle_manager_ref != null and not battle_manager_ref.logic_can_blast():
+		_next_click_is_drained = false
 		return
 
 	var matches := _find_connected(pos)
@@ -292,7 +524,16 @@ func _handle_click(pos: Vector2i) -> void:
 			tween.tween_property(block, "position:x", block.position.x + 4, 0.05)
 			tween.tween_property(block, "position:x", block.position.x - 4, 0.05)
 			tween.tween_property(block, "position:x", block.position.x, 0.05)
+		_next_click_is_drained = false
 		return
+
+	# 邏輯狀態同步：若此次點擊不是來自 drain queue，需即時更新邏輯狀態
+	# （drain 來的點擊在 _try_queue_click 已預先套用過邏輯狀態）
+	if not _next_click_is_drained:
+		_logic_destroy_and_collapse(matches)
+		if battle_manager_ref != null and not block.is_upper_gem():
+			battle_manager_ref.logic_apply_blast(int(block.block_type), matches.size())
+	_next_click_is_drained = false
 
 	is_busy = true
 	_destroy_blocks(matches)          # 非阻塞 — 啟動動畫並延遲釋放
@@ -300,7 +541,9 @@ func _handle_click(pos: Vector2i) -> void:
 		# 融合流程 — main.gd 會在放置高階寶石後呼叫 do_collapse()
 		return
 	await _collapse_and_fill()        # 掉落立即開始
-	# is_busy 由 main.gd _on_gems_blasted 在攻擊動畫結束後解除
+	# State/UI 分離：destroy + collapse 完成後立即解鎖，讓下一個 queued click 可開始
+	# （角色攻擊與 VFX 由 main.gd 在 attack queue 中以 fire-and-forget 並行播放）
+	is_busy = false
 
 
 ## 從起始位置開始，找出所有相連的同類型寶石（BFS 洪水填充）
@@ -442,9 +685,11 @@ func _collapse_and_fill() -> void:
 				f.block.fall_to(f.to_pos, dur, 0.0, false)
 
 	if longest_dur == 0.0:
+		_sync_logic_unknowns_from_visual()
 		_update_fuse_hints()
 		return
 	await get_tree().create_timer(longest_dur + Block.BOUNCE_DUR + 0.05).timeout
+	_sync_logic_unknowns_from_visual()
 	_update_fuse_hints()
 
 

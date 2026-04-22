@@ -46,6 +46,11 @@ var _live_chain_count: int = 0            # 目前連鏈計數（對應 upper_ge
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
 var _concurrent_fuses: Array = []        # 並行融合資料 [{ tapped_pos, responses, arrival_msec, gem_type, count, grid_positions }]
 
+# ── 攻擊管線佇列（State/UI 分離：blast 動畫與角色攻擊解耦）──
+# 每個 item: { gem_type, count, global_positions, grid_positions, responses }
+var _attack_queue: Array = []
+var _attack_worker_running: bool = false
+
 # ── VFX 粒子池 ──
 const MAX_VFX_PARTICLES := 16
 var _vfx_pool: Array = []
@@ -123,6 +128,8 @@ func _ready() -> void:
 	board.upper_gem_chain_triggered.connect(_on_upper_gem_chain_triggered)
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
+	# State/UI 分離：board 需引用 battle_manager 以查詢邏輯狀態
+	board.battle_manager_ref = battle_manager
 
 	battle_manager.enemy_container = enemy_container
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
@@ -484,7 +491,6 @@ func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offs
 ## 4. 普通流程：粒子飛向角色卡 → 攻擊動畫 → 回應技能 → 結束回合
 func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array) -> void:
 	_play_sfx(_se_blast)
-	board.is_busy = true  # 鎖定棋盤直到整個攻擊序列結束
 	# 將全局座標轉換為網格座標（用於直線檢測）
 	var grid_positions: Array[Vector2i] = []
 	for gp in global_positions:
@@ -493,6 +499,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	# 高階寶石連鏈爆炸期間跳過攻擊序列（統一在結束時計算傷害）
 	if _is_upper_gem_turn:
+		board.is_busy = true  # 高階寶石路徑保留鎖定
 		battle_manager.record_blast(gem_type, count, grid_positions)
 		# 儲存每種寶石的爆炸位置（用於 VFX 起始點）
 		if not _upper_blast_positions.has(gem_type):
@@ -505,7 +512,11 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 		_handle_concurrent_fuse_blast(gem_type, count, grid_positions, global_positions)
 		return
 
-	# 記錄消除資料以觸發回應技能
+	# 記錄消除資料以觸發回應技能（隔離本筆 blast：暫存/還原 turn_gem_blasts，避免並行 blast 累加導致誤判 fuse）
+	var saved_blasts: Dictionary = battle_manager.turn_gem_blasts.duplicate()
+	var saved_positions: Array[Vector2i] = battle_manager.last_blast_positions.duplicate()
+	battle_manager.turn_gem_blasts = {}
+	battle_manager.last_blast_positions = []
 	battle_manager.record_blast(gem_type, count, grid_positions)
 
 	# 先檢查回應技能以決定流程
@@ -514,21 +525,51 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 
 	if is_fuse:
-		# ── 融合管線（不消耗回合）──
+		# ── 融合管線（不消耗回合，整段保留鎖定）──
+		# 融合路徑保留原 turn_gem_blasts 流程：不還原，由融合管線結束時 reset_blast_data 清除
+		board.is_busy = true
 		await _execute_fuse_pipeline(gem_type, global_positions, responses)
 		return
 
-	# ── 普通攻擊流程（透過通用管線）──
-	var blasted_dict: Dictionary = { gem_type: count }
-	var blast_pos_dict: Dictionary = { gem_type: global_positions }
-	await _process_blast_results(blasted_dict, blast_pos_dict)
+	# 還原 turn_gem_blasts，等到 worker 處理此筆時再 set
+	battle_manager.turn_gem_blasts = saved_blasts
+	battle_manager.last_blast_positions = saved_positions
 
-	# 第3階段：執行非融合的回應技能（如葉風暴）
-	for resp in responses:
-		await _execute_responding_skill(resp)
+	# ── 普通攻擊流程：推入攻擊佇列、啟動 worker（不阻塞下一次 blast）──
+	_attack_queue.append({
+		"gem_type": gem_type,
+		"count": count,
+		"global_positions": global_positions,
+		"grid_positions": grid_positions,
+		"responses": responses,
+	})
+	if not _attack_worker_running:
+		_run_attack_worker()  # fire-and-forget 協程
 
-	# 第4階段：結束回合（敵人行動 + 被動技能 + 解鎖棋盤）
-	await _end_player_turn()
+
+## 攻擊管線 worker：依序處理 _attack_queue 的每筆 blast。
+## 每筆：VFX 飛卡 → 角色攻擊動畫 → 回應技能 → 結束回合（含敵人攻擊）。
+func _run_attack_worker() -> void:
+	_attack_worker_running = true
+	board.notify_external_attack_busy(true)
+	while _attack_queue.size() > 0:
+		var item: Dictionary = _attack_queue.pop_front()
+		# 還原 battle_manager 的 turn-blast 狀態（worker 取出時對應該 blast 的回合）
+		battle_manager.turn_gem_blasts = { item.gem_type: item.count }
+		battle_manager.last_blast_positions = item.grid_positions as Array[Vector2i]
+
+		var blasted_dict: Dictionary = { item.gem_type: item.count }
+		var blast_pos_dict: Dictionary = { item.gem_type: item.global_positions }
+		await _process_blast_results(blasted_dict, blast_pos_dict)
+
+		# 執行非融合的回應技能（如葉風暴）
+		for resp in item.responses:
+			await _execute_responding_skill(resp)
+
+		# 結束此筆 blast 對應的回合（含敵人攻擊）
+		await _end_player_turn()
+	_attack_worker_running = false
+	board.notify_external_attack_busy(false)
 
 
 func _on_score_changed(new_score: int) -> void:
@@ -603,6 +644,12 @@ func _execute_fuse_pipeline(gem_type: Block.Type, global_positions: Array, respo
 	battle_manager.reset_blast_data()
 	_update_skill_ui()
 	if not battle_manager.is_round_transitioning:
+		# State/UI 分離：融合不消耗回合，但 _handle_click 已預先 logic_apply_blast，
+		# 必須以視覺現況重置邏輯狀態，否則後續普通爆破會被誤封鎖
+		board.deferred_clicks.clear()
+		battle_manager.clear_logic_pending_attack()
+		battle_manager.resync_logic_state()
+		board.resync_logic_from_visual()
 		board.is_busy = false
 
 
@@ -653,8 +700,12 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 func _end_player_turn() -> void:
 	battle_manager.finish_turn()
 
-	# 敵人行動前 1 秒延遲
-	if battle_manager.has_enemies_to_attack():
+	# 敵人行動前 1 秒延遲（同時鎖定棋盤直到敵人攻擊完成）
+	var will_attack: bool = battle_manager.has_enemies_to_attack()
+	if will_attack:
+		board.is_busy = true
+		# 敵人攻擊期間暗化棋盤（與長按預覽相同色）
+		board.darken_all_gems(0.3)
 		await get_tree().create_timer(1.0).timeout
 
 	var did_attack: bool = await battle_manager.do_enemy_phase()
@@ -665,6 +716,16 @@ func _end_player_turn() -> void:
 	await _process_turn_start_passives()
 	_update_skill_ui()
 	if not battle_manager.is_round_transitioning:
+		# State/UI 分離：解除邏輯阻擋
+		battle_manager.clear_logic_pending_attack()
+		# 僅當 attack worker 完成且 queue 全空時才安全 resync
+		if board.deferred_clicks.is_empty() and _attack_queue.is_empty():
+			battle_manager.resync_logic_state()
+			board.resync_logic_from_visual()
+		if will_attack:
+			# 敵人攻擊結束 — 棋盤淡回正常顏色
+			board.brighten_all_gems(0.3)
+		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
 		board.is_busy = false
 
 
@@ -1527,6 +1588,8 @@ func _on_defeat_restart() -> void:
 ## 波次轉換中：鎖定棋盤避免玩家在過場期間操作
 func _on_round_transitioning() -> void:
 	board.is_busy = true
+	# 波次轉場：將棋盤暗化（同長按預覽色）
+	board.darken_all_gems(0.4)
 
 
 ## 波次清除
@@ -1539,6 +1602,13 @@ func _on_round_cleared() -> void:
 	# 最後一波（Boss 波）：切換 BGM + 顯示 Boss 出場演出
 	if battle_manager.current_round == battle_manager.stage_rounds.size() - 1:
 		await _show_boss_intro()
+	# State/UI 分離：新一波重置邏輯狀態 + 清空殘留 queue
+	board.deferred_clicks.clear()
+	battle_manager.clear_logic_pending_attack()
+	battle_manager.resync_logic_state()
+	board.resync_logic_from_visual()
+	# 棋盤淡回（融合提示在淡回完成後自動刷新）
+	board.brighten_all_gems(0.5)
 	board.is_busy = false
 
 

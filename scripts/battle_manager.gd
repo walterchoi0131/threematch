@@ -38,6 +38,14 @@ var skill_cooldowns: Dictionary = {}       # char_index -> int (turns remaining)
 var turn_gem_blasts: Dictionary = {}       # Block.Type -> int (gems blasted this turn)
 var last_blast_positions: Array[Vector2i] = []  # positions of the last normal blast (for line detection)
 
+# ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
+# 邏輯敵人 HP — 點擊瞬間預扣，視覺由動畫驅動更新
+var logic_enemy_hp: Dictionary = {}        # Enemy node -> int
+# 邏輯回合計數 — 每次成功 queue 的爆破即遞增
+var logic_turn: int = 0
+# 預測下回合會觸發敵人攻擊（阻擋玩家輸入直到視覺敵人攻擊播完）
+var logic_pending_enemy_attack: bool = false
+
 
 # ── 初始化 ─────────────────────────────────────────────────────
 
@@ -63,6 +71,9 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	last_blast_positions.clear()
 	turn = 0
 	current_round = 0
+	logic_turn = 0
+	logic_pending_enemy_attack = false
+	logic_enemy_hp.clear()
 	_spawn_round(current_round)
 
 
@@ -88,6 +99,8 @@ func _spawn_round(round_idx: int) -> void:
 		enemy.pressed.connect(_on_enemy_pressed)
 		enemy.died.connect(_on_enemy_died)
 		active_enemies.append(enemy)
+		# 同步邏輯敵人 HP
+		logic_enemy_hp[enemy] = enemy.current_hp
 
 	if active_enemies.size() > 0:
 		_set_target(active_enemies[0])
@@ -308,6 +321,82 @@ func apply_player_damage(amount: int) -> void:
 		player_defeated.emit()
 
 
+# ── 邏輯狀態 API（State/UI 分離）─────────────────────────────
+
+## 邏輯側：對指定 gem_type 的爆破預扣敵人 HP 並推進邏輯回合。
+## 由 board.gd 在 click queue 時即時呼叫，模擬未來戰鬥狀態。
+func logic_apply_blast(gem_type: int, count: int) -> void:
+	var target: Enemy = _logic_get_target(gem_type)
+	for c in characters:
+		if c.gem_type != gem_type:
+			continue
+		# Raccoon 自選目標：若無主目標仍可攻擊隨機敵人
+		var hit: Enemy = target
+		if hit == null and c.character_name == "Raccoon":
+			for e in active_enemies:
+				if is_instance_valid(e) and logic_enemy_hp.get(e, 0) > 0:
+					hit = e
+					break
+		if hit == null:
+			continue
+		var base_dmg: int = c.get_atk() * count
+		var mult: float = get_element_multiplier(c.gem_type, hit.data.element)
+		var dmg: int = int(base_dmg * mult)
+		logic_enemy_hp[hit] = max(0, logic_enemy_hp.get(hit, 0) - dmg)
+
+	logic_turn += 1
+	if _has_logic_enemies_to_attack(logic_turn):
+		logic_pending_enemy_attack = true
+
+
+## 取得邏輯側目前主攻擊目標（活著的敵人；優先 targeted_enemy）
+func _logic_get_target(_gem_type: int = -1) -> Enemy:
+	if targeted_enemy != null and is_instance_valid(targeted_enemy) and logic_enemy_hp.get(targeted_enemy, 0) > 0:
+		return targeted_enemy
+	for e in active_enemies:
+		if is_instance_valid(e) and logic_enemy_hp.get(e, 0) > 0:
+			return e
+	return null
+
+
+## 邏輯側：在指定回合是否有敵人會發動攻擊
+func _has_logic_enemies_to_attack(at_turn: int) -> bool:
+	for e in active_enemies:
+		if not is_instance_valid(e):
+			continue
+		if logic_enemy_hp.get(e, 0) <= 0:
+			continue
+		if at_turn % e.data.attack_interval == 0:
+			return true
+	return false
+
+
+## 邏輯側：是否仍可接受新的爆破輸入
+##   false 表示應阻擋輸入：(1) 邏輯敵人全滅 (2) 邏輯預測下回合敵人攻擊
+func logic_can_blast() -> bool:
+	if logic_pending_enemy_attack:
+		return false
+	for e in logic_enemy_hp:
+		if logic_enemy_hp[e] > 0:
+			return true
+	return false
+
+
+## 視覺敵人攻擊播放完成後呼叫，解除邏輯阻擋
+func clear_logic_pending_attack() -> void:
+	logic_pending_enemy_attack = false
+
+
+## 將邏輯狀態重置為與視覺一致（無 queued click 的安全點時呼叫）
+func resync_logic_state() -> void:
+	logic_turn = turn
+	logic_enemy_hp.clear()
+	for e in active_enemies:
+		if is_instance_valid(e):
+			logic_enemy_hp[e] = e.current_hp
+	logic_pending_enemy_attack = false
+
+
 # ── 敎人信號處理 ─────────────────────────────────────────────
 
 ## 玩家點擊敎人時設定為攻擊目標
@@ -325,6 +414,7 @@ func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
 	if not loot_results.is_empty():
 		loot_dropped.emit(dead_enemy.data, loot_results)
 	active_enemies.erase(dead_enemy)
+	logic_enemy_hp.erase(dead_enemy)
 	if targeted_enemy == dead_enemy:
 		targeted_enemy = null
 		if active_enemies.size() > 0:

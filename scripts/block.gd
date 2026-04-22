@@ -341,10 +341,11 @@ func show_fuse_hint(text: String) -> void:
 
 	# 如果尚未閃爍則開始循環閃爍動畫（間隔增加 200%）
 	if _fuse_hint_tween == null or not _fuse_hint_tween.is_valid():
-		_fuse_hint_label.modulate.a = 0.0  # 從全透明開始
+		# 立即半可見，再淡入到全亮，確保連續爆破中也能看見提示
+		_fuse_hint_label.modulate.a = 0.6
 		_fuse_hint_tween = create_tween().set_loops()
-		_fuse_hint_tween.tween_property(_fuse_hint_label, "modulate:a", 1.0, 1.2)
-		_fuse_hint_tween.tween_property(_fuse_hint_label, "modulate:a", 0.3, 1.2)
+		_fuse_hint_tween.tween_property(_fuse_hint_label, "modulate:a", 1.0, 0.45)
+		_fuse_hint_tween.tween_property(_fuse_hint_label, "modulate:a", 0.5, 0.6)
 
 
 ## 隱藏融合提示
