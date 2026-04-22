@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://b0y8qitxtjr74"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://vapew6d0eja7" path="res://assets/boar.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/boar.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -11,6 +11,8 @@ portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_scale = 1.7
 portrait_offset = Vector2(-240, -72)
+square_scale = 1.8
+square_offset = Vector2(-270, -25)
 passive_skill_name = "Drinking"
 passive_skill_desc = "Water gems also heal you for 50% of attack damage."
 active_skill_name = "Attack Form"

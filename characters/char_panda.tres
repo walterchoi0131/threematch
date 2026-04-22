@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://nsa8hgemkahs"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://b2ldvi14lqlks" path="res://assets/panda.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/panda.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -13,6 +13,8 @@ portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.3, 0.69, 0.31, 1)
 portrait_scale = 1.25
 portrait_offset = Vector2(-93, -68)
+square_scale = 1.5
+square_offset = Vector2(-126, -33)
 responding_skills = Array[Dictionary]([{
 "desc": "Blast 4+ leaf gems: create a Leaf Shield gem at tapped cell. Click to heal ATK×5. Absorbs enemy attacks (50% dmg reduction).",
 "fuse_label": "4",

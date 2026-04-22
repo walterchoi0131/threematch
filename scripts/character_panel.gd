@@ -275,14 +275,17 @@ func _build_debug_panel() -> void:
 		_add_slider(section, "Scale", c.portrait_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
 			c.portrait_scale = v
 			_apply_portrait(i, c)
+			_save_character(c)
 		)
 		_add_slider(section, "Offset X", c.portrait_offset.x, -400, 200, 1.0, func(v: float) -> void:
 			c.portrait_offset.x = v
 			_apply_portrait(i, c)
+			_save_character(c)
 		)
 		_add_slider(section, "Offset Y", c.portrait_offset.y, -200, 200, 1.0, func(v: float) -> void:
 			c.portrait_offset.y = v
 			_apply_portrait(i, c)
+			_save_character(c)
 		)
 
 		# ── 戰鬥對話頭像（Battle Dialog Square）──
@@ -295,14 +298,37 @@ func _build_debug_panel() -> void:
 		_add_slider(section, "Dlg Scale", c.dialog_square_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
 			c.dialog_square_scale = v
 			_refresh_battle_dialog()
+			_save_character(c)
 		)
 		_add_slider(section, "Dlg X", c.dialog_square_offset.x, -400, 400, 1.0, func(v: float) -> void:
 			c.dialog_square_offset.x = v
 			_refresh_battle_dialog()
+			_save_character(c)
 		)
 		_add_slider(section, "Dlg Y", c.dialog_square_offset.y, -400, 400, 1.0, func(v: float) -> void:
 			c.dialog_square_offset.y = v
 			_refresh_battle_dialog()
+			_save_character(c)
+		)
+
+		# ── 方形卡片頭像（Square Card —— 角色列表 / 準備畫面）──
+		var sq_lbl := Label.new()
+		sq_lbl.text = "  Square Card"
+		sq_lbl.add_theme_font_size_override("font_size", 12)
+		sq_lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.7))
+		section.add_child(sq_lbl)
+
+		_add_slider(section, "Sq Scale", c.square_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
+			c.square_scale = v
+			_save_character(c)
+		)
+		_add_slider(section, "Sq X", c.square_offset.x, -400, 400, 1.0, func(v: float) -> void:
+			c.square_offset.x = v
+			_save_character(c)
+		)
+		_add_slider(section, "Sq Y", c.square_offset.y, -400, 400, 1.0, func(v: float) -> void:
+			c.square_offset.y = v
+			_save_character(c)
 		)
 
 	# 列印按鈕：輸出所有角色數值到控制台
@@ -315,6 +341,8 @@ func _build_debug_panel() -> void:
 				cd.character_name, cd.portrait_scale, cd.portrait_offset.x, cd.portrait_offset.y])
 			print("%s  dialog_square_scale = %.2f  dialog_square_offset = Vector2(%.1f, %.1f)" % [
 				cd.character_name, cd.dialog_square_scale, cd.dialog_square_offset.x, cd.dialog_square_offset.y])
+			print("%s  square_scale = %.2f  square_offset = Vector2(%.1f, %.1f)" % [
+				cd.character_name, cd.square_scale, cd.square_offset.x, cd.square_offset.y])
 	)
 	vbox.add_child(print_btn)
 
@@ -358,6 +386,15 @@ func _apply_portrait(index: int, c: CharacterData) -> void:
 	var portrait: TextureRect = _portraits[index]
 	portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
 	portrait.position = c.portrait_offset
+
+
+## 即時將 CharacterData 變更寫回對應的 .tres 檔
+func _save_character(c: CharacterData) -> void:
+	if c == null or c.resource_path == "":
+		return
+	var err: int = ResourceSaver.save(c, c.resource_path)
+	if err != OK:
+		push_warning("character_panel: failed to save %s (err=%d)" % [c.resource_path, err])
 
 
 ## 在從 F9 面板調整 dialog_square_* 後立即讓眼前的戰鬥對話重新套用

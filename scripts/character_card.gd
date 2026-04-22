@@ -13,7 +13,7 @@ enum CardSize { SMALL, MEDIUM, LARGE }
 const SIZE_PRESETS: Dictionary = {
 	CardSize.SMALL: {
 		"card": Vector2(110, 160),
-		"portrait": Vector2(100, 80),
+		"portrait": Vector2(100, 100),
 		"name_font": 12,
 		"lv_font": 14,
 		"stat_font": 0,
@@ -23,7 +23,7 @@ const SIZE_PRESETS: Dictionary = {
 	},
 	CardSize.MEDIUM: {
 		"card": Vector2(230, 300),
-		"portrait": Vector2(200, 180),
+		"portrait": Vector2(200, 200),
 		"name_font": 20,
 		"lv_font": 16,
 		"stat_font": 13,
@@ -33,7 +33,7 @@ const SIZE_PRESETS: Dictionary = {
 	},
 	CardSize.LARGE: {
 		"card": Vector2(340, 420),
-		"portrait": Vector2(300, 280),
+		"portrait": Vector2(300, 300),
 		"name_font": 26,
 		"lv_font": 20,
 		"stat_font": 16,
@@ -48,8 +48,23 @@ const SIZE_PRESETS: Dictionary = {
 ## 回傳 Dictionary: {panel, portrait, gem_icon, glow}
 ## portrait 可能為 null（角色無貼圖時）。
 ## 供 CharacterPanel 附加冷卻標籤、放射光芒、點擊事件。
+## 注意：本函數用於「戰鬥中」角色列，非正方形；套用 portrait_scale / portrait_offset。
 static func make_battle(c: CharacterData) -> Dictionary:
-	const GEM_SIZE := 28
+	return _make_battle_like(c, false)
+
+
+## 建立「方形」風格角色卡（無文字，強制正方形）。
+## 用於戰前準備畫面、角色選擇格 — 套用 square_scale / square_offset。
+## 回傳 Dictionary: {panel, portrait, gem_icon, glow}
+static func make_square(c: CharacterData) -> Dictionary:
+	return _make_battle_like(c, true)
+
+
+## 內部：共用建構流程。
+## square=true → AspectRatioContainer 強制正方形 + square_scale/offset
+## square=false → 全矩形裁切 + portrait_scale/offset
+static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
+	var gem_size: int = 56 if square else 28
 	var char_color: Color = c.portrait_color
 
 	var panel := PanelContainer.new()
@@ -69,11 +84,27 @@ static func make_battle(c: CharacterData) -> Dictionary:
 	panel.add_child(glow)
 
 	# 裁切容器（頭像在此層，clip_contents 防止溢出）
-	var clip := Control.new()
-	clip.clip_contents = true
-	clip.set_anchors_preset(Control.PRESET_FULL_RECT)
-	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(clip)
+	var clip: Control
+	if square:
+		# 以 AspectRatioContainer 包裹，讓裁切區永遠呈現正方形
+		var aspect := AspectRatioContainer.new()
+		aspect.ratio = 1.0
+		aspect.alignment_horizontal = AspectRatioContainer.ALIGNMENT_CENTER
+		aspect.alignment_vertical = AspectRatioContainer.ALIGNMENT_CENTER
+		aspect.stretch_mode = AspectRatioContainer.STRETCH_FIT
+		aspect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(aspect)
+		clip = Control.new()
+		clip.clip_contents = true
+		clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		aspect.add_child(clip)
+	else:
+		clip = Control.new()
+		clip.clip_contents = true
+		clip.set_anchors_preset(Control.PRESET_FULL_RECT)
+		clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(clip)
 
 	# 頭像
 	var portrait_ref: TextureRect = null
@@ -86,10 +117,16 @@ static func make_battle(c: CharacterData) -> Dictionary:
 		portrait.custom_minimum_size = Vector2(300, 300)
 		portrait.size = Vector2(300, 300)
 		portrait.pivot_offset = Vector2.ZERO
-		portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
-		portrait.position = c.portrait_offset
+		if square:
+			portrait.scale = Vector2(c.square_scale, c.square_scale)
+			portrait.position = c.square_offset
+		else:
+			portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
+			portrait.position = c.portrait_offset
 		clip.add_child(portrait)
 		portrait_ref = portrait
+		panel.set_meta("_portrait", portrait)
+		panel.set_meta("_is_square", square)
 	else:
 		var portrait := ColorRect.new()
 		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -131,11 +168,11 @@ static func make_battle(c: CharacterData) -> Dictionary:
 	gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gem_icon.pivot_offset = Vector2(GEM_SIZE * 0.5, GEM_SIZE * 0.5)
-	gem_icon.offset_left = -GEM_SIZE * 0.5
-	gem_icon.offset_right = GEM_SIZE * 0.5
-	gem_icon.offset_top = -GEM_SIZE * 0.5
-	gem_icon.offset_bottom = GEM_SIZE * 0.5
+	gem_icon.pivot_offset = Vector2(gem_size * 0.5, gem_size * 0.5)
+	gem_icon.offset_left = -gem_size * 0.5
+	gem_icon.offset_right = gem_size * 0.5
+	gem_icon.offset_top = -gem_size * 0.5
+	gem_icon.offset_bottom = gem_size * 0.5
 	gem_layer.add_child(gem_icon)
 
 	return {
@@ -181,9 +218,10 @@ static func make(c: CharacterData, size: CardSize = CardSize.MEDIUM) -> PanelCon
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.custom_minimum_size = preset.portrait
 		portrait.size = preset.portrait
-		portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
-		portrait.position = c.portrait_offset
+		portrait.scale = Vector2(c.square_scale, c.square_scale)
+		portrait.position = c.square_offset
 		clip.add_child(portrait)
+		panel.set_meta("_portrait", portrait)
 	else:
 		var portrait := ColorRect.new()
 		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -270,10 +308,16 @@ static func make_selectable(c: CharacterData, size: CardSize = CardSize.MEDIUM) 
 
 ## 戰鬥風格角色卡（無文字）+ 可選取邊框。回傳 {panel, style_normal, style_selected}。
 static func make_battle_selectable(c: CharacterData) -> Dictionary:
-	var data: Dictionary = make_battle(c)
-	var panel: PanelContainer = data.panel
+	return _wrap_selectable(make_battle(c), c)
 
-	var char_color: Color = c.portrait_color
+
+## 方形角色卡（無文字、強制正方形）+ 可選取邊框。回傳 {panel, style_normal, style_selected}。
+static func make_square_selectable(c: CharacterData) -> Dictionary:
+	return _wrap_selectable(make_square(c), c)
+
+
+static func _wrap_selectable(data: Dictionary, _c: CharacterData) -> Dictionary:
+	var panel: PanelContainer = data.panel
 
 	var style_normal := StyleBoxFlat.new()
 	style_normal.bg_color = Color(0.08, 0.08, 0.1, 1.0)

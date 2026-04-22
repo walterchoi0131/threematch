@@ -9,10 +9,14 @@ signal all_lines_finished
 
 # ── 設計常數 ──────────────────────────────────────────────────
 const TYPEWRITER_CPS := 30.0
-const PORTRAIT_SIZE := 80.0
+const PORTRAIT_SIZE := 142.0
+const PANEL_TOP := 820.0
+const PANEL_BOTTOM := 1010.0
 const PANEL_MARGIN := 16.0
 const NAME_FONT_SIZE := 22
 const TEXT_FONT_SIZE := 20
+const SKIP_INTERVAL := 0.1
+const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 
 # 角色名稱（雙語）
 const CHAR_NAMES := {
@@ -22,6 +26,8 @@ const CHAR_NAMES := {
 	"raccoon": { "zh": "小浣",       "en": "Raccoon" },
 	"boar":    { "zh": "山豬",       "en": "Boar" },
 	"panda":   { "zh": "熊貓",       "en": "Panda" },
+	"dragon":  { "zh": "小龍",       "en": "Dragon" },
+	"shark":   { "zh": "鯊鯊",       "en": "Shark" },
 }
 
 const CHAR_NAME_COLORS := {
@@ -31,6 +37,8 @@ const CHAR_NAME_COLORS := {
 	"raccoon": Color(0.55, 0.9, 0.5),
 	"boar":    Color(0.45, 0.7, 1.0),
 	"panda":   Color(0.55, 0.9, 0.5),
+	"dragon":  Color(1.0, 0.45, 0.3),
+	"shark":   Color(0.4, 0.85, 1.0),
 }
 
 # ── 節點 ─────────────────────────────────────────────────────
@@ -41,13 +49,16 @@ var _portrait: TextureRect
 var _name_label: Label
 var _text_label: RichTextLabel
 var _tap_zone: Button
+var _skip_btn: Button
 
-# ── 狀態 ─────────────────────────────────────────────────────
+# ── 狀態 ───────────────────────────────────
 var _lines: Array = []
 var _line_index: int = -1
 var _typing: bool = false
 var _type_tween: Tween = null
 var _texture_cache: Dictionary = {}
+var _auto_skipping: bool = false
+var _skip_timer: Timer = null
 
 
 func _ready() -> void:
@@ -63,6 +74,7 @@ func show_lines(lines: Array) -> void:
 	_lines = lines
 	_line_index = -1
 	visible = true
+	_set_auto_skip(false)  # 每次開始重置
 	_advance()
 
 
@@ -79,9 +91,9 @@ func _build_ui() -> void:
 	# 對話面板（定位在畫面底部角色列區域）
 	_panel = PanelContainer.new()
 	_panel.offset_left = 16.0
-	_panel.offset_top = 845.0
+	_panel.offset_top = PANEL_TOP
 	_panel.offset_right = 840.0
-	_panel.offset_bottom = 1010.0
+	_panel.offset_bottom = PANEL_BOTTOM
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.06, 0.12, 0.94)
@@ -107,8 +119,10 @@ func _build_ui() -> void:
 
 	_portrait = TextureRect.new()
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait.size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_portrait.custom_minimum_size = Vector2(300, 300)
+	_portrait.size = Vector2(300, 300)
+	_portrait.pivot_offset = Vector2.ZERO
 	_portrait_clip.add_child(_portrait)
 
 	# 右側文字區
@@ -148,6 +162,43 @@ func _build_ui() -> void:
 	_tap_zone.add_theme_stylebox_override("focus", empty)
 	add_child(_tap_zone)
 
+	# Skip 按鈕（右上角，點擊切換自動推進）
+	_skip_btn = Button.new()
+	_skip_btn.text = Locale.tr_ui("SKIP")
+	_skip_btn.focus_mode = Control.FOCUS_NONE
+	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	var skip_font: Font = load(FONT_PATH)
+	if skip_font != null:
+		_skip_btn.add_theme_font_override("font", skip_font)
+	_skip_btn.add_theme_font_size_override("font_size", 22)
+	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
+	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 0.95, 0.5))
+	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 0.85, 0.3))
+	_skip_btn.add_theme_color_override("font_outline_color", Color.BLACK)
+	_skip_btn.add_theme_constant_override("outline_size", 4)
+	_skip_btn.add_theme_constant_override("shadow_offset_x", 2)
+	_skip_btn.add_theme_constant_override("shadow_offset_y", 2)
+	_skip_btn.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	var btn_empty := StyleBoxEmpty.new()
+	_skip_btn.add_theme_stylebox_override("normal", btn_empty)
+	_skip_btn.add_theme_stylebox_override("hover", btn_empty)
+	_skip_btn.add_theme_stylebox_override("pressed", btn_empty)
+	_skip_btn.add_theme_stylebox_override("focus", btn_empty)
+	_skip_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_skip_btn.offset_left = -110.0
+	_skip_btn.offset_top = PANEL_TOP + 10.0
+	_skip_btn.offset_right = -16.0
+	_skip_btn.offset_bottom = PANEL_TOP + 50.0
+	_skip_btn.pressed.connect(_on_skip_pressed)
+	add_child(_skip_btn)
+
+	# Skip 定時器
+	_skip_timer = Timer.new()
+	_skip_timer.wait_time = SKIP_INTERVAL
+	_skip_timer.one_shot = false
+	_skip_timer.timeout.connect(_advance)
+	add_child(_skip_timer)
+
 
 # ── 對話推進 ─────────────────────────────────────────────────
 
@@ -158,12 +209,35 @@ func _advance() -> void:
 
 	_line_index += 1
 	if _line_index >= _lines.size():
+		_set_auto_skip(false)
 		visible = false
 		all_lines_finished.emit()
 		return
 
 	var line: _DialogLine = _lines[_line_index]
 	_show_line(line)
+
+
+## Skip 按鈕：切換自動推進
+func _on_skip_pressed() -> void:
+	_set_auto_skip(not _auto_skipping)
+	# 即刻推進一次，讓使用者看到效果
+	if _auto_skipping:
+		_advance()
+
+
+func _set_auto_skip(enabled: bool) -> void:
+	_auto_skipping = enabled
+	if _skip_btn != null:
+		_skip_btn.add_theme_color_override(
+			"font_color",
+			Color(1.0, 0.85, 0.3) if enabled else Color.WHITE)
+	if _skip_timer == null:
+		return
+	if enabled:
+		_skip_timer.start(SKIP_INTERVAL)
+	else:
+		_skip_timer.stop()
 
 
 func _show_line(line: _DialogLine) -> void:
@@ -216,15 +290,15 @@ func _finish_typing() -> void:
 	_typing = false
 
 
-## 依 char_id 查找 GameState.owned_characters、套用 dialog_square_scale/offset
+## 依 char_id 查找 GameState.owned_characters、套用 square_scale/offset
 func _apply_dialog_pose(char_id: String) -> void:
 	var c: CharacterData = _find_character_data(char_id)
 	if c == null:
 		_portrait.scale = Vector2.ONE
 		_portrait.position = Vector2.ZERO
 		return
-	_portrait.scale = Vector2(c.dialog_square_scale, c.dialog_square_scale)
-	_portrait.position = c.dialog_square_offset
+	_portrait.scale = Vector2(c.square_scale, c.square_scale)
+	_portrait.position = c.square_offset
 
 
 func _find_character_data(char_id: String) -> CharacterData:

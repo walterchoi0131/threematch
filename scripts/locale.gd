@@ -40,6 +40,7 @@ var _translations: Dictionary = {
 	"SORT_HP": {"zh": "血量", "en": "HP"},
 	"SORT_TYPE": {"zh": "屬性", "en": "Type"},
 	"FIXED": {"zh": "固定", "en": "FIXED"},
+	"SKIP": {"zh": "跳過", "en": "Skip"},
 	"ROSTER": {"zh": "角色名冊", "en": "ROSTER"},
 	"PARTY": {"zh": "隊伍", "en": "Party"},
 	"CHAR_SELECTION": {"zh": "角色選擇", "en": "Characters Selection"},

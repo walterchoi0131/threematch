@@ -5,13 +5,45 @@ extends Node2D
 const CharacterSorter = preload("res://scripts/character_sorter.gd")
 const RosterLayout = preload("res://scripts/roster_layout.gd")
 
-var _sort_mode: int = CharacterSorter.Mode.LEVEL
+var _sort_mode: int = CharacterSorter.Mode.TYPE
 var _roster_host: Control = null
 var _card_panels: Array[PanelContainer] = []   # 對應 owned_characters[i]
+var _debug_panel: Control = null
 
 
 func _ready() -> void:
 	_build_ui()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F9:
+		_toggle_debug_panel()
+
+
+func _toggle_debug_panel() -> void:
+	if _debug_panel != null:
+		_debug_panel.queue_free()
+		_debug_panel = null
+		return
+	var chars: Array = []
+	for c in GameState.owned_characters:
+		chars.append(c)
+	_debug_panel = SquareDebugPanel.build(self, chars, _apply_square_to_card)
+
+
+## 即時更新角色列表畫面中對應角色卡片的頭像 scale/offset
+func _apply_square_to_card(c: CharacterData) -> void:
+	var idx: int = GameState.owned_characters.find(c)
+	if idx < 0 or idx >= _card_panels.size():
+		return
+	var card: PanelContainer = _card_panels[idx]
+	if not card.has_meta("_portrait"):
+		return
+	var p: TextureRect = card.get_meta("_portrait") as TextureRect
+	if p == null:
+		return
+	p.scale = Vector2(c.square_scale, c.square_scale)
+	p.position = c.square_offset
 
 
 func _build_ui() -> void:
@@ -87,7 +119,10 @@ func _build_cards() -> void:
 	_card_panels.clear()
 	for i in GameState.owned_characters.size():
 		var c: CharacterData = GameState.owned_characters[i]
-		var card: PanelContainer = CharacterCard.make(c, CharacterCard.CardSize.SMALL)
+		var data: Dictionary = CharacterCard.make_square(c)
+		var card: PanelContainer = data.panel
+		card.size_flags_horizontal = 0
+		card.custom_minimum_size = Vector2(142, 142)
 		card.gui_input.connect(_on_card_clicked.bind(i))
 		_card_panels.append(card)
 
@@ -101,7 +136,7 @@ func _apply_sort() -> void:
 	var entries: Array = []
 	for i in GameState.owned_characters.size():
 		entries.append({"i": i, "c": GameState.owned_characters[i], "card": _card_panels[i]})
-	RosterLayout.apply(_roster_host, entries, _sort_mode, 4)
+	RosterLayout.apply(_roster_host, entries, _sort_mode, 5)
 
 
 func _on_card_clicked(event: InputEvent, index: int) -> void:

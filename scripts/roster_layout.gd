@@ -18,7 +18,7 @@ const GROUP_ICON_SIZE := 56.0
 ## entries: [{ "i": int, "c": CharacterData, "card": Control }]
 ## sort_mode: CharacterSorter.Mode
 ## columns: 每列卡片數
-static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 4) -> void:
+static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 5) -> void:
 	# 1) 將所有卡片從原父節點移除
 	for e: Dictionary in entries:
 		var card: Control = e.card
@@ -35,6 +35,17 @@ static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 
 	for e: Dictionary in entries:
 		chars.append(e.c)
 	var sorted_idx: Array = CharacterSorterRef.sort_indexed(chars, sort_mode)
+
+	# 4) 將 FIXED 角色穩定地排到最前（不論排序模式）
+	var fixed_first: Array = []
+	var rest: Array = []
+	for entry: Dictionary in sorted_idx:
+		var owned_idx: int = entry.i
+		if entries[owned_idx].get("is_fixed", false):
+			fixed_first.append(entry)
+		else:
+			rest.append(entry)
+	sorted_idx = fixed_first + rest
 
 	if sort_mode == CharacterSorterRef.Mode.TYPE:
 		_build_grouped_layout(host, entries, sorted_idx, columns)
@@ -145,7 +156,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 	var badge := HBoxContainer.new()
 	badge.add_theme_constant_override("separation", 4)
 	badge.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	badge.position = Vector2(6, -26)
+	badge.position = Vector2(6, -44)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(badge)
 
@@ -174,7 +185,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 			icon.texture = tex
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.custom_minimum_size = Vector2(18, 18)
+			icon.custom_minimum_size = Vector2(36, 36)
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			badge.add_child(icon)
 
@@ -183,7 +194,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 	lbl.text = text
 	if font != null:
 		lbl.add_theme_font_override("font", font)
-	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_font_size_override("font_size", 32)
 	lbl.add_theme_color_override("font_color", Color.WHITE)
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	lbl.add_theme_constant_override("outline_size", 5)

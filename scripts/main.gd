@@ -208,16 +208,19 @@ func _play_stage_intro() -> void:
 
 	# 等 0.5 秒後啟動卡片滑入
 	await get_tree().create_timer(0.5).timeout
+
+	# ── 教學模式：等所有卡片動畫完成後再延遲 1 秒才啟動 ──
+	if current_stage.is_tutorial:
+		await character_panel.play_intro_slide()  # 等全部卡片滑入完畢
+		await get_tree().create_timer(1.0).timeout
+		_start_battle_tutorial()
+		return
+
 	character_panel.play_intro_slide()  # fire-and-forget
 
 	# 再等 2.9 秒（黑幕共 3.4 秒）完成後解鎖棋盤
 	await get_tree().create_timer(2.9).timeout
-
-	# ── 教學模式 ──
-	if current_stage.is_tutorial:
-		_start_battle_tutorial()
-	else:
-		board.is_busy = false
+	board.is_busy = false
 
 
 ## 啟動戰鬥教學流程
@@ -261,7 +264,8 @@ func _play_sfx(stream: AudioStream) -> void:
 ## 播放關卡背景音樂
 func _play_bgm() -> void:
 	if current_stage.bgm != null:
-		GameState.crossfade_bgm(current_stage.bgm, true, 0.6, "stage:" + current_stage.stage_name)
+		# 戰鬥 BGM 循環之間插入 1 秒延遲
+		GameState.crossfade_bgm(current_stage.bgm, true, 0.6, "stage:" + current_stage.stage_name, 1.0)
 		_bgm_player = GameState.bgm_player
 
 

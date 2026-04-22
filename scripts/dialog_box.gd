@@ -39,6 +39,10 @@ const TEXT_FONT_SIZE := 20
 # 音樂淡入淡出
 const BGM_FADE_DUR := 0.8
 
+# Skip 自動推進
+const SKIP_INTERVAL := 0.1
+const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+
 # 角色名稱對照表（雙語）
 const CHAR_NAMES := {
 	"husky":   { "zh": "哈士奇老師", "en": "Prof. Husky" },
@@ -47,6 +51,8 @@ const CHAR_NAMES := {
 	"raccoon": { "zh": "小浣",       "en": "Raccoon" },
 	"boar":    { "zh": "山豬",       "en": "Boar" },
 	"panda":   { "zh": "熊貓",       "en": "Panda" },
+	"dragon":  { "zh": "小龍",       "en": "Dragon" },
+	"shark":   { "zh": "鯊鯊",       "en": "Shark" },
 }
 
 # 角色名稱顏色
@@ -57,6 +63,8 @@ const CHAR_NAME_COLORS := {
 	"raccoon": Color(0.55, 0.9, 0.5),
 	"boar":    Color(0.45, 0.7, 1.0),
 	"panda":   Color(0.55, 0.9, 0.5),
+	"dragon":  Color(1.0, 0.45, 0.3),
+	"shark":   Color(0.4, 0.85, 1.0),
 }
 
 # ── 節點引用 ──────────────────────────────────────────────────
@@ -69,6 +77,7 @@ var _text_label: RichTextLabel
 var _tap_zone: Button
 var _dialog_panel: PanelContainer
 var _bgm_player: AudioStreamPlayer
+var _skip_btn: Button
 
 # ── 狀態 ─────────────────────────────────────────────────────
 var _sequence: _DialogSequence
@@ -78,6 +87,8 @@ var _right_char_id: String = ""
 var _typing: bool = false
 var _type_tween: Tween = null
 var _texture_cache: Dictionary = {}  # path -> Texture2D
+var _auto_skipping: bool = false
+var _skip_timer: Timer = null
 
 
 func _ready() -> void:
@@ -103,6 +114,7 @@ func start(sequence: _DialogSequence) -> void:
 	_line_index = -1
 	_left_char_id = ""
 	_right_char_id = ""
+	_set_auto_skip(false)
 	_portrait_left.visible = false
 	_portrait_right.visible = false
 
@@ -228,6 +240,43 @@ func _build_ui() -> void:
 	_tap_zone.add_theme_stylebox_override("focus", empty_style)
 	add_child(_tap_zone)
 
+	# Skip 按鈕（右上角）
+	_skip_btn = Button.new()
+	_skip_btn.text = Locale.tr_ui("SKIP")
+	_skip_btn.focus_mode = Control.FOCUS_NONE
+	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	var skip_font: Font = load(FONT_PATH)
+	if skip_font != null:
+		_skip_btn.add_theme_font_override("font", skip_font)
+	_skip_btn.add_theme_font_size_override("font_size", 22)
+	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
+	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 0.95, 0.5))
+	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 0.85, 0.3))
+	_skip_btn.add_theme_color_override("font_outline_color", Color.BLACK)
+	_skip_btn.add_theme_constant_override("outline_size", 4)
+	_skip_btn.add_theme_constant_override("shadow_offset_x", 2)
+	_skip_btn.add_theme_constant_override("shadow_offset_y", 2)
+	_skip_btn.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	var skip_empty := StyleBoxEmpty.new()
+	_skip_btn.add_theme_stylebox_override("normal", skip_empty)
+	_skip_btn.add_theme_stylebox_override("hover", skip_empty)
+	_skip_btn.add_theme_stylebox_override("pressed", skip_empty)
+	_skip_btn.add_theme_stylebox_override("focus", skip_empty)
+	_skip_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_skip_btn.offset_left = -110.0
+	_skip_btn.offset_top = VIEWPORT_H - PANEL_HEIGHT + 10.0
+	_skip_btn.offset_right = -16.0
+	_skip_btn.offset_bottom = VIEWPORT_H - PANEL_HEIGHT + 50.0
+	_skip_btn.pressed.connect(_on_skip_pressed)
+	add_child(_skip_btn)
+
+	# Skip 定時器
+	_skip_timer = Timer.new()
+	_skip_timer.wait_time = SKIP_INTERVAL
+	_skip_timer.one_shot = false
+	_skip_timer.timeout.connect(_advance)
+	add_child(_skip_timer)
+
 	# BGM 播放器
 	_bgm_player = AudioStreamPlayer.new()
 	_bgm_player.bus = "Master"
@@ -244,11 +293,33 @@ func _advance() -> void:
 
 	_line_index += 1
 	if _line_index >= _sequence.lines.size():
+		_set_auto_skip(false)
 		_finish_dialog()
 		return
 
 	var line: _DialogLine = _sequence.lines[_line_index]
 	_show_line(line)
+
+
+## Skip 按鈕：切換自動推進
+func _on_skip_pressed() -> void:
+	_set_auto_skip(not _auto_skipping)
+	if _auto_skipping:
+		_advance()
+
+
+func _set_auto_skip(enabled: bool) -> void:
+	_auto_skipping = enabled
+	if _skip_btn != null:
+		_skip_btn.add_theme_color_override(
+			"font_color",
+			Color(1.0, 0.85, 0.3) if enabled else Color.WHITE)
+	if _skip_timer == null:
+		return
+	if enabled:
+		_skip_timer.start(SKIP_INTERVAL)
+	else:
+		_skip_timer.stop()
 
 
 func _show_line(line: _DialogLine) -> void:

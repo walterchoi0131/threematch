@@ -38,7 +38,8 @@ func play_bgm(stream: AudioStream, loop: bool = false, id: String = "") -> void:
 	bgm_player.play()
 
 ## 漸隱當前 BGM 並啟動新 BGM 漸入（交叉淡入淡出）
-func crossfade_bgm(stream: AudioStream, loop: bool = false, duration: float = 0.6, id: String = "") -> void:
+## loop_delay > 0 時，循環之間插入指定秒數的延遲（用於戰鬥 BGM）。
+func crossfade_bgm(stream: AudioStream, loop: bool = false, duration: float = 0.6, id: String = "", loop_delay: float = 0.0) -> void:
 	var new_id := id if id != "" else stream.resource_path
 	if _bgm_id != "" and _bgm_id == new_id and bgm_player != null and is_instance_valid(bgm_player) and bgm_player.playing:
 		return
@@ -57,9 +58,12 @@ func crossfade_bgm(stream: AudioStream, loop: bool = false, duration: float = 0.
 		)
 	# 建立新播放器，從靜音開始淡入
 	_bgm_id = new_id
-	bgm_player = _make_bgm_player(stream, loop)
+	bgm_player = _make_bgm_player(stream, loop and loop_delay <= 0.0)
 	bgm_player.volume_db = _BGM_SILENT_VOLUME_DB
 	bgm_player.play()
+	# 手動循環（內建 loop=false），於 finished 後延遲再播
+	if loop and loop_delay > 0.0:
+		_setup_loop_with_delay(bgm_player, loop_delay)
 	_bgm_fade_tween = create_tween()
 	_bgm_fade_tween.tween_property(bgm_player, "volume_db", _BGM_DEFAULT_VOLUME_DB, duration)
 
@@ -149,6 +153,21 @@ func _make_bgm_player(stream: AudioStream, loop: bool) -> AudioStreamPlayer:
 		player.stream = stream
 	add_child(player)
 	return player
+
+
+## 內部：為播放器附加「播完延遲再循環」的行為。
+## 注意：呼叫前 player.stream 應為非 loop 版本。
+func _setup_loop_with_delay(player: AudioStreamPlayer, delay: float) -> void:
+	# 在 player 上記錄狀態，避免重複連接
+	if player.has_meta("_loop_delay_attached"):
+		return
+	player.set_meta("_loop_delay_attached", true)
+	player.finished.connect(func() -> void:
+		# 延遲後若播放器仍是當前的 BGM 才重播
+		await get_tree().create_timer(delay).timeout
+		if is_instance_valid(player) and player == bgm_player:
+			player.play()
+	)
 
 
 ## 新增戰利品到玩家存貨

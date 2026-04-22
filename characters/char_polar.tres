@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CharacterData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
 [ext_resource type="Texture2D" path="res://assets/polar.png" id="2_portrait"]
@@ -7,25 +7,22 @@
 script = ExtResource("1_script")
 character_name = "Polar"
 gem_type = 1
-level = 5
-base_atk = 2
-atk_growth = 0.6
 base_hp = 45
 hp_growth = 7.0
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_scale = 0.85
 portrait_offset = Vector2(-70, -38)
-passive_skill_name = ""
-passive_skill_desc = ""
+square_scale = 1.05
+square_offset = Vector2(-69, -11)
 active_skill_name = "打雪仗"
 active_skill_desc = "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."
 active_skill_cd = 5
-responding_skills = [{
-"name": "Snowball",
+responding_skills = Array[Dictionary]([{
 "desc": "Blast 4+ water gems: create a Snowball gem at tapped cell. Click to blast 8 surrounding gems.",
-"threshold": 4,
+"fuse_label": "4",
+"name": "Snowball",
 "priority": 1,
-"trigger_type": "count",
-"fuse_label": "4"
-}]
+"threshold": 4,
+"trigger_type": "count"
+}])
