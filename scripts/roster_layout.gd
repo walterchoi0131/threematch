@@ -18,7 +18,8 @@ const GROUP_ICON_SIZE := 56.0
 ## entries: [{ "i": int, "c": CharacterData, "card": Control }]
 ## sort_mode: CharacterSorter.Mode
 ## columns: 每列卡片數
-static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 5) -> void:
+## ascending: 是否升冪排序（預設降冪）
+static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 5, ascending: bool = false) -> void:
 	# 1) 將所有卡片從原父節點移除
 	for e: Dictionary in entries:
 		var card: Control = e.card
@@ -34,7 +35,7 @@ static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 
 	var chars: Array = []
 	for e: Dictionary in entries:
 		chars.append(e.c)
-	var sorted_idx: Array = CharacterSorterRef.sort_indexed(chars, sort_mode)
+	var sorted_idx: Array = CharacterSorterRef.sort_indexed(chars, sort_mode, ascending)
 
 	# 4) 將 FIXED 角色穩定地排到最前（不論排序模式）
 	var fixed_first: Array = []

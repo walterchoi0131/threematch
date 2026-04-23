@@ -138,14 +138,13 @@ func _build_exp_section() -> void:
 	exp_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_content.add_child(exp_title)
 
-	var card_row := HBoxContainer.new()
-	card_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	card_row.add_theme_constant_override("separation", 12)
-	_content.add_child(card_row)
+	var list_box := VBoxContainer.new()
+	list_box.add_theme_constant_override("separation", 10)
+	_content.add_child(list_box)
 
 	for c in _party:
 		var card_data: Dictionary = _make_char_card(c)
-		card_row.add_child(card_data.card)
+		list_box.add_child(card_data.card)
 		_char_cards.append(card_data)
 
 
@@ -161,76 +160,88 @@ func _build_tap_hint() -> void:
 # ── 角色卡片 ──────────────────────────────────────────────────
 
 func _make_char_card(c: CharacterData) -> Dictionary:
-	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(110, 160)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.14, 0.22, 1)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.35, 0.4, 0.55, 1)
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_right = 6
-	style.corner_radius_bottom_left = 6
-	card.add_theme_stylebox_override("panel", style)
+	# 一整列為 HBoxContainer：左側方形頭像卡，右側 名字 + Lv + EXP 條
+	const PORTRAIT_SIZE := 96.0
+	var row := PanelContainer.new()
+	row.custom_minimum_size = Vector2(0, PORTRAIT_SIZE + 8)
+	var row_style := StyleBoxFlat.new()
+	row_style.bg_color = Color(0.10, 0.12, 0.18, 1)
+	row_style.set_corner_radius_all(8)
+	row_style.set_content_margin_all(6)
+	row.add_theme_stylebox_override("panel", row_style)
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
-	card.add_child(vbox)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 12)
+	row.add_child(hbox)
 
-	# 頭像
-	if c.portrait_texture:
-		var portrait := TextureRect.new()
-		portrait.texture = c.portrait_texture
-		portrait.custom_minimum_size = Vector2(100, 80)
-		portrait.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vbox.add_child(portrait)
-	else:
-		var portrait := ColorRect.new()
-		portrait.custom_minimum_size = Vector2(100, 80)
-		portrait.color = c.portrait_color
-		vbox.add_child(portrait)
+	# 左側：CharacterCard.make_square 提供裁切 + portrait_scale/offset
+	var built: Dictionary = CharacterCard.make_square(c)
+	var portrait_card: PanelContainer = built.panel
+	portrait_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	portrait_card.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	# 結算畫面不顯示邊框、元素圖示、卡片底色（保留裁切後的角色圖即可）
+	if built.has("gem_icon") and built.gem_icon is Control:
+		(built.gem_icon as Control).visible = false
+	for child in portrait_card.get_children():
+		if child is Panel:
+			(child as Panel).visible = false
+	var transparent_style := StyleBoxEmpty.new()
+	portrait_card.add_theme_stylebox_override("panel", transparent_style)
+	hbox.add_child(portrait_card)
 
-	# 名字
+	# 右側：名字 + Lv + EXP 條
+	var right_box := VBoxContainer.new()
+	right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_box.add_theme_constant_override("separation", 6)
+	hbox.add_child(right_box)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	right_box.add_child(header)
+
 	var name_lbl := Label.new()
 	name_lbl.text = c.character_name
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 12)
+	name_lbl.add_theme_font_override("font", _font)
+	name_lbl.add_theme_font_size_override("font_size", 20)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	name_lbl.add_theme_constant_override("outline_size", 3)
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(name_lbl)
+	header.add_child(name_lbl)
 
-	# 等級標籤
 	var lv_label := Label.new()
 	lv_label.text = "Lv.%d" % c.level
-	lv_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lv_label.add_theme_font_override("font", _font)
-	lv_label.add_theme_font_size_override("font_size", 14)
-	lv_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
+	lv_label.add_theme_font_size_override("font_size", 22)
+	lv_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
+	lv_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	lv_label.add_theme_constant_override("outline_size", 3)
 	lv_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(lv_label)
+	header.add_child(lv_label)
 
 	# EXP 條背景
 	var bar_bg := ColorRect.new()
-	bar_bg.custom_minimum_size = Vector2(100, 8)
+	bar_bg.custom_minimum_size = Vector2(0, 14)
+	bar_bg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_bg.size_flags_vertical = Control.SIZE_SHRINK_END
 	bar_bg.color = Color(0.2, 0.2, 0.25, 1)
-	vbox.add_child(bar_bg)
+	right_box.add_child(bar_bg)
 
-	# EXP 條填充
+	# EXP 條填充（以 scale.x 控制長度）
 	var bar_fill := ColorRect.new()
-	bar_fill.custom_minimum_size = Vector2(100, 8)
+	bar_fill.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bar_fill.color = Color(0.3, 0.75, 1.0)
-	bar_fill.size = Vector2(100, 8)
+	bar_fill.pivot_offset = Vector2.ZERO
 	var exp_ratio: float = float(c.current_exp) / float(maxi(c.exp_to_next_level(), 1))
 	bar_fill.scale.x = clampf(exp_ratio, 0.0, 1.0)
-	bar_fill.position = Vector2.ZERO
+	bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar_bg.add_child(bar_fill)
 
 	return {
-		"card": card,
+		"card": row,
+		"pop_target": portrait_card,
 		"bar_fill": bar_fill,
 		"bar_bg": bar_bg,
 		"lv_label": lv_label,
@@ -384,6 +395,7 @@ func _play_exp_phase() -> void:
 		var bar_fill: ColorRect = info.bar_fill
 		var lv_label: Label = info.lv_label
 		var card: PanelContainer = info.card
+		var pop_target: PanelContainer = info.get("pop_target", card)
 
 		# 記錄動畫前狀態
 		var start_lv: int = c.level
@@ -409,7 +421,7 @@ func _play_exp_phase() -> void:
 					bar_fill.scale.x = 0.0
 					lv_label.text = "Lv.%d" % current_anim_lv
 				)
-				tw.tween_callback(_play_level_up_pop.bind(card, current_anim_lv))
+				tw.tween_callback(_play_level_up_pop.bind(pop_target, current_anim_lv))
 				if lv_idx < levels_gained - 1:
 					tw.tween_property(bar_fill, "scale:x", 1.0, 0.3)
 
@@ -436,7 +448,8 @@ func _finalize_exp_phase() -> void:
 
 
 func _play_level_up_pop(card: PanelContainer, new_lv: int) -> void:
-	# 卡片 bounce
+	# 以中心為錨點 bounce
+	card.pivot_offset = card.size * 0.5
 	var tw := create_tween()
 	tw.tween_property(card, "scale", Vector2(1.12, 1.12), 0.1) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)

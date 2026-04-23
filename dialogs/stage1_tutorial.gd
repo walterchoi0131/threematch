@@ -6,16 +6,17 @@ const _DialogLine := preload("res://scripts/dialog_line.gd")
 
 
 static func make_steps() -> Array:
-	# 綠寶石群位置：(4,5), (5,5), (4,6)
+	# 綠寶石群位置：(4,4), (5,4), (4,5) — L 形 3 顆相連
 	var green_positions: Array[Vector2i] = [
-		Vector2i(4, 5), Vector2i(5, 5), Vector2i(4, 6),
+		Vector2i(4, 4), Vector2i(5, 4), Vector2i(4, 5),
 	]
 
-	# 紅寶石群位置：(0,0)-(2,2) — 3×3 方塊（共 9 顆，觸發火焰炸彈融合）
+	# 紅寶石群位置：col 0 縱向 7 顆 + 底部相連 4 顆，共 11 顆相連的火寶石
 	var red_positions: Array[Vector2i] = [
 		Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2),
-		Vector2i(1, 0), Vector2i(1, 1), Vector2i(1, 2),
-		Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2),
+		Vector2i(0, 3), Vector2i(0, 4), Vector2i(0, 5), Vector2i(0, 6),
+		Vector2i(1, 6), Vector2i(2, 6), Vector2i(2, 5),
+		Vector2i(3, 5), Vector2i(3, 4),
 	]
 
 	return [
@@ -27,7 +28,7 @@ static func make_steps() -> Array:
 					"See those glowing green gems on the board?\nTap any one of them to destroy all connected gems of the same color and launch an attack!"),
 			],
 			"highlight": green_positions,
-			"hand_pos": Vector2i(4, 5),
+			"hand_pos": Vector2i(4, 4),
 			"filter": green_positions,
 			"post_dialog": [
 				_line("husky", "normal",
@@ -35,15 +36,15 @@ static func make_steps() -> Array:
 					"Well done! The more gems you destroy, the more damage you deal."),
 			],
 		},
-		# ── 步驟 2：教融合（9 顆紅寶石 → 火焰炸彈）──
+		# ── 步驟 2：教融合（左側一整列紅寶石 → 火焰炸彈）──
 		{
 			"pre_dialog": [
 				_line("husky", "normal",
-					"看到左上角那一大群紅色寶石了嗎？\n點擊其中一顆——當消除數量夠多，角色會將它們融合成強力的炸彈寶石！",
-					"See that big cluster of red gems in the corner?\nTap any one — when enough gems are destroyed, your character will fuse them into a powerful bomb gem!"),
+					"看到左側那一整排紅色寶石了嗎？\n點擊其中一顆——當消除數量夠多，角色會將它們融合成強力的炸彈寶石！",
+					"See that whole column of red gems on the left?\nTap any one — when enough gems are destroyed, your character will fuse them into a powerful bomb gem!"),
 			],
 			"highlight": red_positions,
-			"hand_pos": Vector2i(1, 1),
+			"hand_pos": Vector2i(0, 3),
 			"filter": red_positions,
 			"post_dialog": [
 				_line("husky", "normal",

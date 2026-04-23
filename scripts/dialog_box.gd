@@ -13,10 +13,10 @@ const VIEWPORT_W := 856.0
 const VIEWPORT_H := 1024.0
 
 # 立繪尺寸與位置
-const PORTRAIT_SCALE := 4.0            # 原始小圖放大倍率
-const PORTRAIT_Y := 200.0              # 立繪頂端 Y（從上往下）
-const LEFT_X := 40.0                   # 左側立繪 X
-const RIGHT_X := 520.0                 # 右側立繪 X
+const PORTRAIT_SCALE := 7.2            # 原始小圖放大倍率（4.0 × 1.8）
+const PORTRAIT_Y := 540.0              # 立繪頂端 Y（往下移：底部約 1/3 被對話框遮住）
+const LEFT_X := 55.0                   # 左側立繪 X (40 + 15)
+const RIGHT_X := 535.0                 # 右側立繪 X (520 + 15)
 const SLIDE_OFFSET := 350.0            # 滑入/滑出偏移量
 
 # 動畫時間
@@ -65,6 +65,11 @@ const CHAR_NAME_COLORS := {
 	"panda":   Color(0.55, 0.9, 0.5),
 	"dragon":  Color(1.0, 0.45, 0.3),
 	"shark":   Color(0.4, 0.85, 1.0),
+}
+
+# 角色 ID → 實際貼圖檔名的別名（保留 char_id 不變的情況下換圖）
+const _CHAR_ID_ALIAS := {
+	"raccoon": "raccoon_baby",
 }
 
 # ── 節點引用 ──────────────────────────────────────────────────
@@ -157,13 +162,18 @@ func _build_ui() -> void:
 	dim_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim_overlay)
 
+	# 立繪尺寸（以放大倍率擴張 rect，避免 squeeze bounce 重設 transform.scale 影響大小）
+	var p_w: float = 300.0 * (PORTRAIT_SCALE / 4.0)
+	var p_h: float = 400.0 * (PORTRAIT_SCALE / 4.0)
+
 	# 左側立繪
 	_portrait_left = TextureRect.new()
 	_portrait_left.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait_left.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait_left.custom_minimum_size = Vector2(300, 400)
-	_portrait_left.size = Vector2(300, 400)
-	_portrait_left.position = Vector2(LEFT_X, PORTRAIT_Y)
+	_portrait_left.custom_minimum_size = Vector2(p_w, p_h)
+	_portrait_left.size = Vector2(p_w, p_h)
+	_portrait_left.position = Vector2(LEFT_X - (p_w - 300.0) * 0.5 - 50.0, PORTRAIT_Y - (p_h - 400.0))
+	_portrait_left.set_meta("home_x", _portrait_left.position.x)
 	_portrait_left.visible = false
 	_portrait_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_portrait_left)
@@ -172,9 +182,10 @@ func _build_ui() -> void:
 	_portrait_right = TextureRect.new()
 	_portrait_right.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait_right.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_portrait_right.custom_minimum_size = Vector2(300, 400)
-	_portrait_right.size = Vector2(300, 400)
-	_portrait_right.position = Vector2(RIGHT_X, PORTRAIT_Y)
+	_portrait_right.custom_minimum_size = Vector2(p_w, p_h)
+	_portrait_right.size = Vector2(p_w, p_h)
+	_portrait_right.position = Vector2(RIGHT_X - (p_w - 300.0) * 0.5 - 30.0, PORTRAIT_Y - (p_h - 400.0))
+	_portrait_right.set_meta("home_x", _portrait_right.position.x)
 	_portrait_right.visible = false
 	_portrait_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_portrait_right)
@@ -465,7 +476,7 @@ func _do_enter(char_id: String, emotion: String, is_left: bool, portrait: Textur
 	portrait.modulate = ACTIVE_COLOR
 
 	# 從螢幕外滑入
-	var target_x: float = LEFT_X if is_left else RIGHT_X
+	var target_x: float = portrait.get_meta("home_x", LEFT_X if is_left else RIGHT_X)
 	var start_x: float = target_x - SLIDE_OFFSET if is_left else target_x + SLIDE_OFFSET
 	portrait.position.x = start_x
 	var tw := create_tween()
@@ -490,7 +501,7 @@ func _do_exit(is_left: bool, portrait: TextureRect) -> void:
 func _do_instant_exit(is_left: bool, portrait: TextureRect) -> void:
 	portrait.visible = false
 	portrait.modulate = ACTIVE_COLOR
-	portrait.position.x = LEFT_X if is_left else RIGHT_X
+	portrait.position.x = portrait.get_meta("home_x", LEFT_X if is_left else RIGHT_X)
 
 
 func _update_portrait_texture(portrait: TextureRect, char_id: String, emotion: String, is_left: bool) -> void:
@@ -502,9 +513,11 @@ func _update_portrait_texture(portrait: TextureRect, char_id: String, emotion: S
 
 
 func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
+	# 角色 ID 別名（例如 raccoon → raccoon_baby）
+	var aliased: String = _CHAR_ID_ALIAS.get(char_id, char_id)
 	# 嘗試情緒差分貼圖
 	if emotion != "normal" and not emotion.is_empty():
-		var emotion_path := "res://assets/characters/%s_%s.png" % [char_id, emotion]
+		var emotion_path := "res://assets/characters/%s_%s.png" % [aliased, emotion]
 		if _texture_cache.has(emotion_path):
 			return _texture_cache[emotion_path]
 		if ResourceLoader.exists(emotion_path):
@@ -513,7 +526,7 @@ func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
 			return tex
 
 	# Fallback: 預設貼圖
-	var default_path := "res://assets/%s.png" % char_id
+	var default_path := "res://assets/%s.png" % aliased
 	if _texture_cache.has(default_path):
 		return _texture_cache[default_path]
 	if ResourceLoader.exists(default_path):

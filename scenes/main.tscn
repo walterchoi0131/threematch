@@ -65,9 +65,10 @@ label_settings = SubResource("LabelSettings_title")
 [node name="PlayerHPBar" type="Control" parent="UILayer" unique_id=186701662]
 layout_mode = 3
 anchors_preset = 0
-offset_top = 770.0
-offset_right = 856.0
-offset_bottom = 794.0
+offset_left = 85.0
+offset_top = 790.0
+offset_right = 771.0
+offset_bottom = 814.0
 
 [node name="BG" type="ColorRect" parent="UILayer/PlayerHPBar" unique_id=2118585609]
 layout_mode = 0
@@ -87,6 +88,7 @@ color = Color(0.87, 0.12, 0.12, 1)
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 12.0
 text = "0 / 0"
 vertical_alignment = 1
 
@@ -100,9 +102,9 @@ alignment = 1
 
 [node name="CharacterRow" type="HBoxContainer" parent="UILayer" unique_id=354252149]
 offset_left = 16.0
-offset_top = 860.0
+offset_top = 824.0
 offset_right = 840.0
-offset_bottom = 920.0
+offset_bottom = 884.0
 script = ExtResource("4_cp")
 
 [node name="StatusLabel" type="Label" parent="UILayer" unique_id=162691362]

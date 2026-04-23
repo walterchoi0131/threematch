@@ -64,8 +64,13 @@ func crossfade_bgm(stream: AudioStream, loop: bool = false, duration: float = 0.
 	# 手動循環（內建 loop=false），於 finished 後延遲再播
 	if loop and loop_delay > 0.0:
 		_setup_loop_with_delay(bgm_player, loop_delay)
-	_bgm_fade_tween = create_tween()
-	_bgm_fade_tween.tween_property(bgm_player, "volume_db", _BGM_DEFAULT_VOLUME_DB, duration)
+	if duration <= 0.0:
+		# duration=0：直接設定為預設音量，不做淡入
+		bgm_player.volume_db = _BGM_DEFAULT_VOLUME_DB
+		_bgm_fade_tween = null
+	else:
+		_bgm_fade_tween = create_tween()
+		_bgm_fade_tween.tween_property(bgm_player, "volume_db", _BGM_DEFAULT_VOLUME_DB, duration)
 
 ## 漸隱並停止當前 BGM
 func fade_out_bgm(duration: float = 0.6) -> void:
@@ -201,6 +206,8 @@ func _ready() -> void:
 	# 設定教學模式與固定棋盤佈局
 	_stage_dev.is_tutorial = true
 	_stage_dev.fixed_layout = _build_stage1_layout()
+	# 第三波（index 2）三隻史萊姆的初始 CD：2, 3, 1
+	_stage_dev.rounds_init_cd = [[], [], [2, 3, 1], []]
 	# 第一關固定隊伍：husky, dragon, shark, raccoon
 	_stage_dev.set_party = [
 		preload("res://characters/char_husky.tres"),
@@ -211,36 +218,33 @@ func _ready() -> void:
 
 
 ## 建構第一關固定棋盤佈局（8×8）
-## 3 色無相鄰重複排列 + 紅色 3×3 在 (0,0)-(2,2) + 綠色群在 (4,5), (5,5), (4,6)
+## 設計：col 0 為一條 7 顆火寶石的縱向火柱（教融合用），中段 (4,4)/(5,4)/(4,5)
+## 為 3 顆綠葉相連（教普攻用）。
 static func _build_stage1_layout() -> Array:
-	# R=0, B=1, G=2, L=6（Light）
+	# R=Fire, B=Water, G=Leaf, L=Gold
 	const R := Block.Type.RED
 	const B := Block.Type.BLUE
-	const L := Block.Type.LIGHT
 	const G := Block.Type.GREEN
-	# 基礎 3 色棋盤模式（避免任何 2+ 相鄰同色）
-	# 行列交替 pattern: (x+y)%3 → R/B/L
+	const L := Block.Type.LIGHT
+	# 依設計圖直接列出每一列（row 0 為最上方）
+	# 已套用使用者修正：col 0 row 3 葉 → 火
+	var rows: Array = [
+		[R, B, B, B, G, G, L, L],  # row 0
+		[R, B, B, L, B, B, B, G],  # row 1
+		[R, L, L, B, B, B, L, G],  # row 2
+		[R, L, L, L, R, L, L, L],  # row 3 (col0 was G, 改為 R)
+		[R, L, G, R, G, G, R, L],  # row 4
+		[R, L, R, R, G, B, R, L],  # row 5
+		[R, R, R, B, L, L, L, L],  # row 6
+		[L, L, L, R, B, L, L, G],  # row 7
+	]
+	# 轉成 layout[x][y]
 	var layout: Array = []
 	layout.resize(8)
 	for x in 8:
 		var col: Array = []
 		col.resize(8)
 		for y in 8:
-			var idx: int = (x + y) % 3
-			match idx:
-				0: col[y] = R
-				1: col[y] = B
-				2: col[y] = L
+			col[y] = rows[y][x]
 		layout[x] = col
-	# 紅色 3×3 方塊（火焰炸彈融合用，共 9 顆）
-	for rx in range(0, 3):
-		for ry in range(0, 3):
-			layout[rx][ry] = R
-	# 隔離紅色方塊（相鄰 RED 改為 BLUE，防止 BFS 擴散）
-	layout[3][0] = B   # (3,0) base=R → B
-	layout[0][3] = B   # (0,3) base=R → B
-	# 放置綠色群
-	layout[4][5] = G
-	layout[5][5] = G
-	layout[4][6] = G
 	return layout

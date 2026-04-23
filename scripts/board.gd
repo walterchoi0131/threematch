@@ -867,6 +867,22 @@ func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = 
 	flash_tween.tween_callback(flash.queue_free)
 
 
+## 偵錯：將棋盤上隨機 N 顆普通寶石轉為火炸彈（FIREBALL）
+func debug_spawn_firebombs(count: int) -> void:
+	var candidates: Array = []
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b != null and not b.is_upper_gem():
+				candidates.append(b)
+	candidates.shuffle()
+	var n: int = mini(count, candidates.size())
+	for i in n:
+		var b: Block = candidates[i]
+		b.set_block_type(Block.Type.RED)
+		b.set_upper_type(Block.UpperType.FIREBALL)
+
+
 ## 處理高階寶石被點擊：根據類型決定爆炸範圍，執行連鏈爆炸
 func _handle_upper_click(pos: Vector2i) -> void:
 	var block: Block = grid[pos.x][pos.y]
@@ -976,18 +992,20 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 
 		# 輪到時消除高階寶石並統計
 		var ub: Block = grid[cp.x][cp.y]
-		if ub != null:
-			# 播放連鏈爆炸 VFX
-			BlastVfx.play(self, ub.global_position, cut)
-			var ub_type: Block.Type = ub.block_type as Block.Type
-			total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + 1
-			gems_blasted.emit(ub_type, 1, [ub.global_position])
-			grid[cp.x][cp.y] = null
-			ub.play_destroy_animation()
-			get_tree().create_timer(0.2).timeout.connect(func() -> void:
-				if is_instance_valid(ub):
-					ub.queue_free()
-			, CONNECT_ONE_SHOT)
+		if ub == null:
+			# 已被同批其他 upper 的遞迴爆炸清掉 → 不計連鎖、不發訊號（避免聲音/計數不同步）
+			continue
+		# 播放連鏈爆炸 VFX
+		BlastVfx.play(self, ub.global_position, cut)
+		var ub_type: Block.Type = ub.block_type as Block.Type
+		total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + 1
+		gems_blasted.emit(ub_type, 1, [ub.global_position])
+		grid[cp.x][cp.y] = null
+		ub.play_destroy_animation()
+		get_tree().create_timer(0.2).timeout.connect(func() -> void:
+			if is_instance_valid(ub):
+				ub.queue_free()
+		, CONNECT_ONE_SHOT)
 
 		# 發出信號讓 main.gd 處理此類型的獨有效果
 		upper_gem_chain_triggered.emit(cut)
@@ -1002,8 +1020,9 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			if _is_valid(pp) and grid[pp.x][pp.y] != null:
 				valid_positions.append(pp)
 
+		# 連鎖計數：每個被觸發的 upper 都計 1 次（與 upper_gem_chain_triggered 訊號次數同步）
+		chain_data[0] += 1
 		if valid_positions.size() > 0:
-			chain_data[0] += 1
 			await _execute_upper_blast_chain(valid_positions, chain_data, total_blasted_by_type)
 
 

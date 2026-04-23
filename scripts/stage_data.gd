@@ -12,6 +12,11 @@ extends Resource
 ## rounds[0] = 第一波，rounds[1] = 第二波，以此類推。
 @export var rounds: Array[Array] = []
 
+## 每個敌人生成時的初始 CD（取代 attack_interval）。
+## 与 rounds 平行的嵌套陣列：rounds_init_cd[round][i] = int。
+## 留空、長度不足或值 ≤ 0 表示使用 EnemyData.attack_interval 預設。
+@export var rounds_init_cd: Array[Array] = []
+
 @export var bgm: AudioStream = null  # 關卡背景音樂
 
 const _DialogSequence := preload("res://scripts/dialog_sequence.gd")

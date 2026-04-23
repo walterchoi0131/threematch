@@ -115,12 +115,14 @@ Main (Node2D)
 | `level` | 等級 |
 | `base_atk / atk_growth` | 基礎攻擊力與每級成長 |
 | `base_hp / hp_growth` | 基礎血量與每級成長 |
+| `base_magic / magic_growth` | 基礎魔力與每級成長（部分主動技以魔力倍率計算傷害） |
 | `passive_skill_name` | 被動技能名稱 |
 | `active_skill_name / active_skill_cd` | 主動技能名稱與冷卻回合數 |
 | `responding_skills` | 回應技能清單（陣列） |
 
 **攻擊力公式**：`ATK = base_atk + floor(level × atk_growth)`
 **血量公式**：`HP = base_hp + floor(level × hp_growth)`
+**魔力公式**：`MAG = base_magic + floor(level × magic_growth)`
 
 ### EnemyData（敵人資料）
 

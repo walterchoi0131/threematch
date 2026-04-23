@@ -86,19 +86,27 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	panel.add_child(cd_lbl)
 	_cd_labels[index] = cd_lbl
 
-	# 放射光芒（加到 gem_icon 作為子節點）
+	# 放射光芒：插入為 gem_icon 的「前一個兄弟」— 與 gem_icon 同在 gem_layer，
+	# 但繪製順序在它之前，因此會出現在元素圖示「下方」、卡片其它內容「上方」。
 	var gem_icon: TextureRect = result.gem_icon
 	var ray := Node2D.new()
 	ray.set_script(load("res://scripts/ray_burst.gd"))
 	ray.position = Vector2(14.0, 14.0)  # gem_size(28) * 0.5
-	ray.z_index = -1
+	ray.z_index = 0
 	ray.visible = false
 	ray.set("outer_radius", 22.0)
 	ray.set("ray_count", 6)
 	ray.set("ray_half_angle", 0.35)
 	var gem_element_color: Color = Block.COLORS.get(c.gem_type, Color.WHITE)
 	ray.set("ray_color", Color(gem_element_color.r, gem_element_color.g, gem_element_color.b, 0.7))
-	gem_icon.add_child(ray)
+	var gem_parent: Node = gem_icon.get_parent()
+	if gem_parent != null:
+		gem_parent.add_child(ray)
+		gem_parent.move_child(ray, gem_icon.get_index())
+		# 讓 ray 也座標到 gem_icon 中心位置
+		ray.position = gem_icon.position + Vector2(14.0, 14.0)
+	else:
+		gem_icon.add_child(ray)
 	_gem_icons[index] = gem_icon
 	_gem_rays[index] = ray
 
@@ -114,16 +122,14 @@ func _on_card_gui_input(event: InputEvent, index: int) -> void:
 
 
 ## 顯示主動技能冷卻數字。turns_left=0 表示已就緒。
+## CD 數字不再顯示在卡片上（僅保留就緒狀態的發光），故 cd_lbl 永遠隱藏。
 func update_cooldown(index: int, turns_left: int) -> void:
 	if not _cd_labels.has(index):
 		return
 	var cd_lbl: Label = _cd_labels[index]
+	cd_lbl.visible = false
 	if turns_left > 0:
-		cd_lbl.text = "CD %d" % turns_left
-		cd_lbl.visible = true
 		_stop_glow(index)
-	else:
-		cd_lbl.visible = false
 
 
 ## 開始卡片發光脈衝（主動技能已就緒）

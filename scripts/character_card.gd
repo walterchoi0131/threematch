@@ -168,11 +168,12 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 	gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 圖示完全置於卡片內部左上角（避免被外部容器裁切）
 	gem_icon.pivot_offset = Vector2(gem_size * 0.5, gem_size * 0.5)
-	gem_icon.offset_left = -gem_size * 0.5
-	gem_icon.offset_right = gem_size * 0.5
-	gem_icon.offset_top = -gem_size * 0.5
-	gem_icon.offset_bottom = gem_size * 0.5
+	gem_icon.offset_left = 0.0
+	gem_icon.offset_right = gem_size
+	gem_icon.offset_top = 0.0
+	gem_icon.offset_bottom = gem_size
 	gem_layer.add_child(gem_icon)
 
 	return {

@@ -11,6 +11,8 @@ extends Resource
 @export var portrait_texture: Texture2D = null  # 敎人頭像貼圖
 ## 元素屬性：RED=火、BLUE=水、GREEN=葉
 @export var element: Block.Type = Block.Type.GREEN
+## 是否為「主要 Boss」：戰鬥場上方會顯示此敵人的 Boss 血條
+@export var is_main_boss: bool = false
 ## 掉落表：敵人死亡時依序擲骰每個條目
 @export var loot_table: Array[LootItem] = []
 

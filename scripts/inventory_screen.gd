@@ -1,5 +1,8 @@
 ## InventoryScreen（背包畫面）— 顯示玩家持有的金幣與物品。
+## 以覆蓋層方式由 map.gd 開啟，關閉時 emit `closed` 訊號。
 extends Control
+
+signal closed
 
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 
@@ -12,8 +15,15 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
+	# 背景：填滿覆蓋層 frame
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0, 0, 0, 0)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(bg)
+
 	# 標題
-	var title := _make_label(Locale.tr_ui("INVENTORY"), 36, Color(1.0, 0.9, 0.2))
+	var title := _make_label(Locale.tr_ui("INVENTORY"), 20, Color(0.85, 0.85, 0.9))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top = 50.0
@@ -139,4 +149,4 @@ func _make_label(text: String, font_size: int, color: Color) -> Label:
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/map.tscn")
+	closed.emit()

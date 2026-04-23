@@ -50,6 +50,48 @@ static func build(parent: Node, characters: Array, on_apply: Callable) -> Contro
 		section.add_child(name_lbl)
 
 		var cap: CharacterData = c
+
+		# ── 一般頭像（Portrait — 戰鬥角色列）──
+		_add_slider(section, "Scale", cap.portrait_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
+			cap.portrait_scale = v
+			_save(cap)
+		)
+		_add_slider(section, "Offset X", cap.portrait_offset.x, -400, 200, 1.0, func(v: float) -> void:
+			cap.portrait_offset.x = v
+			_save(cap)
+		)
+		_add_slider(section, "Offset Y", cap.portrait_offset.y, -200, 200, 1.0, func(v: float) -> void:
+			cap.portrait_offset.y = v
+			_save(cap)
+		)
+
+		# ── 戰鬥對話頭像（Dialog Square）──
+		var dlg_lbl := Label.new()
+		dlg_lbl.text = "  Dialog Square"
+		dlg_lbl.add_theme_font_size_override("font_size", 12)
+		dlg_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+		section.add_child(dlg_lbl)
+
+		_add_slider(section, "Dlg Scale", cap.dialog_square_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
+			cap.dialog_square_scale = v
+			_save(cap)
+		)
+		_add_slider(section, "Dlg X", cap.dialog_square_offset.x, -400, 400, 1.0, func(v: float) -> void:
+			cap.dialog_square_offset.x = v
+			_save(cap)
+		)
+		_add_slider(section, "Dlg Y", cap.dialog_square_offset.y, -400, 400, 1.0, func(v: float) -> void:
+			cap.dialog_square_offset.y = v
+			_save(cap)
+		)
+
+		# ── 方形卡片頭像（Square Card — 角色列表 / 準備畫面）──
+		var sq_lbl := Label.new()
+		sq_lbl.text = "  Square Card"
+		sq_lbl.add_theme_font_size_override("font_size", 12)
+		sq_lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.7))
+		section.add_child(sq_lbl)
+
 		_add_slider(section, "Sq Scale", cap.square_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
 			cap.square_scale = v
 			on_apply.call(cap)
@@ -71,6 +113,10 @@ static func build(parent: Node, characters: Array, on_apply: Callable) -> Contro
 	print_btn.text = "Print values to console"
 	print_btn.pressed.connect(func() -> void:
 		for cd: CharacterData in characters:
+			print("%s  portrait_scale = %.2f  portrait_offset = Vector2(%.1f, %.1f)" % [
+				cd.character_name, cd.portrait_scale, cd.portrait_offset.x, cd.portrait_offset.y])
+			print("%s  dialog_square_scale = %.2f  dialog_square_offset = Vector2(%.1f, %.1f)" % [
+				cd.character_name, cd.dialog_square_scale, cd.dialog_square_offset.x, cd.dialog_square_offset.y])
 			print("%s  square_scale = %.2f  square_offset = Vector2(%.1f, %.1f)" % [
 				cd.character_name, cd.square_scale, cd.square_offset.x, cd.square_offset.y])
 	)

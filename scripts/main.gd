@@ -140,12 +140,15 @@ func _ready() -> void:
 	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
 	battle_manager.loot_dropped.connect(_on_loot_dropped)
+	battle_manager.round_spawned.connect(_on_round_spawned)
 
 	character_panel.setup(party)
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
 	return_button.visible = false
+	_setup_boss_bar()
+	_setup_kill_all_button()
 
 	_se_blast = load("res://assets/se/111.wav")
 	_se_freeze = load("res://assets/se/skef_freeze.mp3")
@@ -264,9 +267,14 @@ func _play_sfx(stream: AudioStream) -> void:
 ## 播放關卡背景音樂
 func _play_bgm() -> void:
 	if current_stage.bgm != null:
-		# 戰鬥 BGM 循環之間插入 1 秒延遲
-		GameState.crossfade_bgm(current_stage.bgm, true, 0.6, "stage:" + current_stage.stage_name, 1.0)
-		_bgm_player = GameState.bgm_player
+		# 進場後延遲 1 秒再啟動，且戰鬥 BGM 循環之間插入 1 秒延遲
+		# 戰鬥 BGM 直接以全音量播放（不淡入），循環之間維持 1 秒間隔
+		var stage_bgm: AudioStream = current_stage.bgm
+		var stage_id: String = "stage:" + current_stage.stage_name
+		get_tree().create_timer(1.0).timeout.connect(func() -> void:
+			GameState.crossfade_bgm(stage_bgm, true, 0.0, stage_id, 1.0)
+			_bgm_player = GameState.bgm_player
+		)
 
 
 ## 長按預覽開始：漸變降低 BGM 音量、播放速度、遊戲速度
@@ -838,8 +846,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 	var mult: float = 1.5 if is_super else 1.0
 	var chain_mult: float = attack.get("chain_mult", 1.0)
 
-	# Raccoon 不需要 target（自行選擇隨機存活敵人），其他角色需要
-	if target == null and char_data.character_name != "Raccoon":
+	if target == null:
 		return
 
 	# 角色卡片向上彈起
@@ -867,53 +874,49 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				battle_manager.apply_heal(heal)
 				character_panel.show_heal_text(char_index, heal)
 			_add_log_entry("%s [b]飲水[/b] [color=#44ff88]+%d[/color]" % [_gem_bbcode(gem_type), heal], gem_type, char_data)
-		"Raccoon":  # 葉屬性 — 每 3 個寶石發射 1 枝箭，每枝隨機攻擊一個存活敵人
-			var arrow_count := ceili(float(gem_count) / 3.0)
-			var arrow_damage := char_data.get_atk() * 3
-			var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
-			# 計算總傷害用於日誌摘要
-			var total_arrow_dmg := 0
-			var any_super := false
-			for arrow_idx in arrow_count:
-				# 發射前即時選擇一個隨機存活敵人
-				var living: Array = []
-				for e in enemy_container.get_children():
-					if is_instance_valid(e) and (e as Enemy).current_hp > 0:
-						living.append(e)
-				if living.is_empty():
-					# 過殺：退而攻擊延遲死亡的敵人
-					for e in enemy_container.get_children():
-						if is_instance_valid(e) and (e as Enemy).defer_death:
-							living.append(e)
-				if living.is_empty():
-					break
-				var arrow_target: Enemy = living[randi() % living.size()]
-				var arrow_mult := battle_manager.get_element_multiplier(char_data.gem_type, arrow_target.data.element)
-				var arrow_final := int(arrow_damage * arrow_mult)
-				var arrow_super := arrow_mult > 1.0
-				if arrow_super:
-					any_super = true
-				total_arrow_dmg += arrow_final
-				var target_pos := arrow_target.get_global_rect().get_center()
-				var bullet := Node2D.new()
-				bullet.set_script(BulletProjectileScript)
-				fx_layer.add_child(bullet)
-				var captured_target := arrow_target
-				var captured_dmg := arrow_final
-				bullet.deduct_hp.connect(func():
-					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
-						captured_target.take_damage(captured_dmg)
-						_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, Block.COLORS[gem_type], true, arrow_super)
-						_play_sfx(_se_impact)
-				, CONNECT_ONE_SHOT)
-				bullet.play(card_center, target_pos)
-				if arrow_idx < arrow_count - 1:
-					await get_tree().create_timer(0.2).timeout
-			# 箭矢摘要日誌
-			var raccoon_mult: float = 1.5 if any_super else 1.0
-			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), total_arrow_dmg, arrow_count, raccoon_mult, chain_mult), gem_type, char_data)
-			# 等待最後一枝箭矢到達
-			await get_tree().create_timer(0.45).timeout
+		## ── 浣熊弓箭攻擊（暫時停用，改走預設攻擊，保留備用）──
+		# "Raccoon":  # 葉屬性 — 每 3 個寶石發射 1 枝箭，每枝隨機攻擊一個存活敵人
+		# 	var arrow_count := ceili(float(gem_count) / 3.0)
+		# 	var arrow_damage := char_data.get_atk() * 3
+		# 	var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
+		# 	var total_arrow_dmg := 0
+		# 	var any_super := false
+		# 	for arrow_idx in arrow_count:
+		# 		var living: Array = []
+		# 		for e in enemy_container.get_children():
+		# 			if is_instance_valid(e) and (e as Enemy).current_hp > 0:
+		# 				living.append(e)
+		# 		if living.is_empty():
+		# 			for e in enemy_container.get_children():
+		# 				if is_instance_valid(e) and (e as Enemy).defer_death:
+		# 					living.append(e)
+		# 		if living.is_empty():
+		# 			break
+		# 		var arrow_target: Enemy = living[randi() % living.size()]
+		# 		var arrow_mult := battle_manager.get_element_multiplier(char_data.gem_type, arrow_target.data.element)
+		# 		var arrow_final := int(arrow_damage * arrow_mult)
+		# 		var arrow_super := arrow_mult > 1.0
+		# 		if arrow_super:
+		# 			any_super = true
+		# 		total_arrow_dmg += arrow_final
+		# 		var target_pos := arrow_target.get_global_rect().get_center()
+		# 		var bullet := Node2D.new()
+		# 		bullet.set_script(BulletProjectileScript)
+		# 		fx_layer.add_child(bullet)
+		# 		var captured_target := arrow_target
+		# 		var captured_dmg := arrow_final
+		# 		bullet.deduct_hp.connect(func():
+		# 			if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
+		# 				captured_target.take_damage(captured_dmg)
+		# 				_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, Block.COLORS[gem_type], true, arrow_super)
+		# 				_play_sfx(_se_impact)
+		# 		, CONNECT_ONE_SHOT)
+		# 		bullet.play(card_center, target_pos)
+		# 		if arrow_idx < arrow_count - 1:
+		# 			await get_tree().create_timer(0.2).timeout
+		# 	var raccoon_mult: float = 1.5 if any_super else 1.0
+		# 	_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), total_arrow_dmg, arrow_count, raccoon_mult, chain_mult), gem_type, char_data)
+		# 	await get_tree().create_timer(0.45).timeout
 		_:  # 預設攻擊：拖尾弧光從角色卡飛向敵人
 			if is_instance_valid(target):
 				var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
@@ -1138,25 +1141,26 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 
 ## 建立或更新連鏈數字標籤，並播放 pop 彈跳動畫
 func _update_chain_label(count: int) -> void:
-	var screen_cx: float = get_viewport_rect().size.x / 2.0
-	var screen_cy: float = get_viewport_rect().size.y / 2.0
-	var base_font_size: int = 60
-	var font_size: int = int(base_font_size * pow(1.1, count - 2))
-	var base_pop_scale: float = 1.4
-	var pop_scale: float = base_pop_scale * pow(1.1, count - 2)
+	# 棋盤左下角座標（fx_layer 為 CanvasLayer，使用螢幕座標）
+	var board_h: float = 8.0 * 64.0
+	var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
+	# 每多一連鎖 +1 fontsize，加成上限 +10
+	var base_font_size: int = 44
+	var font_bonus: int = mini(count - 1, 10)
+	var font_size: int = base_font_size + font_bonus
+	var pop_scale: float = 1.4
 
 	# "Chain" 靜態標籤 — 只建立一次
 	if not is_instance_valid(_live_chain_header):
 		_live_chain_header = Label.new()
 		_live_chain_header.text = "Chain"
-		_live_chain_header.add_theme_font_size_override("font_size", 26)
+		_live_chain_header.add_theme_font_size_override("font_size", 22)
 		_live_chain_header.add_theme_color_override("font_color", Color.WHITE)
 		_live_chain_header.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 		_live_chain_header.add_theme_constant_override("outline_size", 4)
-		_live_chain_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_live_chain_header.custom_minimum_size = Vector2(200, 0)
+		_live_chain_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_live_chain_header.z_index = 100
-		_live_chain_header.position = Vector2(screen_cx - 100.0, screen_cy - 80.0)
+		_live_chain_header.position = bl + Vector2(8.0, -64.0)
 		fx_layer.add_child(_live_chain_header)
 
 	# "×N!" 動態標籤 — 只建立一次，之後只更新內容
@@ -1165,16 +1169,16 @@ func _update_chain_label(count: int) -> void:
 		_live_chain_label.add_theme_color_override("font_color", Color.WHITE)
 		_live_chain_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 		_live_chain_label.add_theme_constant_override("outline_size", 8)
-		_live_chain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_live_chain_label.custom_minimum_size = Vector2(200, 0)
+		_live_chain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_live_chain_label.z_index = 100
-		_live_chain_label.position = Vector2(screen_cx - 100.0, screen_cy - 50.0)
+		_live_chain_label.position = bl + Vector2(8.0, -44.0)
 		fx_layer.add_child(_live_chain_label)
 
 	_live_chain_label.text = "×%d!" % count
 	_live_chain_label.add_theme_font_size_override("font_size", font_size)
 	_live_chain_label.modulate.a = 1.0
-	_live_chain_label.pivot_offset = Vector2(100.0, font_size * 0.55)
+	# 從左下角 pivot 放大（避免向螢幕中央偏移）
+	_live_chain_label.pivot_offset = Vector2(0.0, font_size)
 	_live_chain_label.scale = Vector2(0.5, 0.5)
 
 	var tw := create_tween()
@@ -1669,6 +1673,9 @@ func _show_boss_intro() -> void:
 	await tw_out.finished
 	overlay.queue_free()
 
+	# Boss 橫幅結束後才讓頂部 Boss 條淡入
+	_reveal_boss_bar()
+
 
 ## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
 func _on_loot_dropped(enemy_data: EnemyData, results: Array) -> void:
@@ -1819,3 +1826,201 @@ func _on_restart_pressed() -> void:
 ## 返回地圖
 func _on_return_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/map.tscn")
+
+
+# ── Boss HP 條 + Kill-All 偵錯按鈕 ─────────────────────────────────
+
+const BOSS_BAR_HEIGHT: float = 56.0
+
+var _boss_bar: Control = null
+var _boss_bar_fill: ColorRect = null
+var _boss_bar_bg: ColorRect = null
+var _boss_bar_label: Label = null
+var _boss_bar_icon: TextureRect = null
+var _boss_bar_enemy: Enemy = null
+var _boss_bar_reveal_tween: Tween = null
+var _kill_all_btn: Button = null
+
+
+## 建立位於螢幕頂端的 Boss HP 條（預設隱藏）
+func _setup_boss_bar() -> void:
+	var ui_layer: CanvasLayer = $UILayer
+	_boss_bar = Control.new()
+	_boss_bar.name = "BossBar"
+	_boss_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_boss_bar.offset_left = 16.0
+	_boss_bar.offset_right = -16.0
+	_boss_bar.offset_top = 4.0
+	_boss_bar.offset_bottom = 4.0 + BOSS_BAR_HEIGHT
+	_boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_boss_bar.visible = false
+	ui_layer.add_child(_boss_bar)
+
+	# 元素圖示（左側）
+	_boss_bar_icon = TextureRect.new()
+	_boss_bar_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_boss_bar_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_boss_bar_icon.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	_boss_bar_icon.offset_left = 0.0
+	_boss_bar_icon.offset_right = BOSS_BAR_HEIGHT
+	_boss_bar_icon.offset_top = 0.0
+	_boss_bar_icon.offset_bottom = BOSS_BAR_HEIGHT
+	_boss_bar_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_boss_bar.add_child(_boss_bar_icon)
+
+	# 血條容器
+	var bar := Control.new()
+	bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bar.offset_left = BOSS_BAR_HEIGHT + 8.0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_boss_bar.add_child(bar)
+
+	_boss_bar_bg = ColorRect.new()
+	_boss_bar_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_boss_bar_bg.color = Color(0.15, 0.05, 0.05, 1)
+	_boss_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(_boss_bar_bg)
+
+	_boss_bar_fill = ColorRect.new()
+	_boss_bar_fill.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_boss_bar_fill.color = Color(0.9, 0.15, 0.15, 1)
+	_boss_bar_fill.pivot_offset = Vector2.ZERO
+	_boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(_boss_bar_fill)
+
+	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+
+	_boss_bar_label = Label.new()
+	_boss_bar_label.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_boss_bar_label.offset_left = -160.0
+	_boss_bar_label.offset_right = -8.0
+	_boss_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_boss_bar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_boss_bar_label.add_theme_font_override("font", font)
+	_boss_bar_label.add_theme_font_size_override("font_size", 18)
+	_boss_bar_label.add_theme_color_override("font_color", Color.WHITE)
+	_boss_bar_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_boss_bar_label.add_theme_constant_override("outline_size", 4)
+	_boss_bar_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(_boss_bar_label)
+
+
+## 在 Restart 旁建立「Kill All」偵錯按鈕（隨 Restart 一起永遠可見）
+func _setup_kill_all_button() -> void:
+	var ui_layer: CanvasLayer = $UILayer
+	var restart_btn: Node = ui_layer.get_node_or_null("RestartButton")
+	_kill_all_btn = Button.new()
+	_kill_all_btn.name = "KillAllButton"
+	_kill_all_btn.text = "Kill All"
+	_kill_all_btn.modulate = Color(1.0, 0.6, 0.6)
+	if restart_btn is Button:
+		var rb: Button = restart_btn as Button
+		_kill_all_btn.offset_left = rb.offset_right + 16.0
+		_kill_all_btn.offset_right = _kill_all_btn.offset_left + (rb.offset_right - rb.offset_left)
+		_kill_all_btn.offset_top = rb.offset_top
+		_kill_all_btn.offset_bottom = rb.offset_bottom
+	_kill_all_btn.pressed.connect(_on_kill_all_pressed)
+	ui_layer.add_child(_kill_all_btn)
+
+	# 「Combo Test」按鈕：將隨機 15 顆普通寶石變成火炸彈
+	var combo_btn := Button.new()
+	combo_btn.name = "ComboTestButton"
+	combo_btn.text = "Combo Test"
+	combo_btn.modulate = Color(1.0, 0.85, 0.4)
+	if restart_btn is Button:
+		var rb2: Button = restart_btn as Button
+		var w: float = rb2.offset_right - rb2.offset_left
+		combo_btn.offset_left = _kill_all_btn.offset_right + 16.0
+		combo_btn.offset_right = combo_btn.offset_left + w + 24.0
+		combo_btn.offset_top = rb2.offset_top
+		combo_btn.offset_bottom = rb2.offset_bottom
+	combo_btn.pressed.connect(_on_combo_test_pressed)
+	ui_layer.add_child(combo_btn)
+
+
+## 一波敵人生成完畢 — 評估是否顯示 Boss 條
+func _on_round_spawned(round_idx: int) -> void:
+	var boss: Enemy = battle_manager.get_main_boss_for_round(round_idx)
+	_bind_boss_bar(boss)
+
+
+## 將 Boss 條綁定到指定敵人；傳 null 則隱藏
+func _bind_boss_bar(boss: Enemy) -> void:
+	if _boss_bar == null:
+		return
+	# 解除舊綁定
+	if _boss_bar_enemy != null and is_instance_valid(_boss_bar_enemy):
+		if _boss_bar_enemy.hp_changed.is_connected(_on_boss_hp_changed):
+			_boss_bar_enemy.hp_changed.disconnect(_on_boss_hp_changed)
+		if _boss_bar_enemy.died.is_connected(_on_boss_died):
+			_boss_bar_enemy.died.disconnect(_on_boss_died)
+		_boss_bar_enemy.set_main_boss_mode(false)
+	_boss_bar_enemy = boss
+	if boss == null or not is_instance_valid(boss) or boss.data == null:
+		_boss_bar.visible = false
+		return
+
+	# 套用元素色 + 圖示
+	var elem: int = boss.data.element
+	var elem_color: Color = Block.COLORS.get(elem, Color(0.9, 0.15, 0.15))
+	_boss_bar_fill.color = elem_color
+	_boss_bar_bg.color = Color(elem_color.r * 0.25, elem_color.g * 0.25, elem_color.b * 0.25, 1.0)
+	var tex: Texture2D = Block.GEM_TEXTURES.get(elem)
+	_boss_bar_icon.texture = tex
+	_boss_bar_fill.scale.x = 1.0
+	_boss_bar_label.text = "%d / %d" % [boss.current_hp, boss.data.max_hp]
+	# 預設隗入狀態：隱藏並安置在頂部之上，由 _reveal_boss_bar() 負責漸入
+	_boss_bar.modulate.a = 0.0
+	_boss_bar.offset_top = 4.0 - BOSS_BAR_HEIGHT - 16.0
+	_boss_bar.offset_bottom = _boss_bar.offset_top + BOSS_BAR_HEIGHT
+	_boss_bar.visible = true
+	boss.set_main_boss_mode(true)
+
+	boss.hp_changed.connect(_on_boss_hp_changed)
+	boss.died.connect(_on_boss_died)
+
+
+## 將 Boss 條從頂部漸入到定位（需在 _bind_boss_bar() 後呼叫）
+func _reveal_boss_bar() -> void:
+	if _boss_bar == null or not _boss_bar.visible or _boss_bar_enemy == null:
+		return
+	if _boss_bar_reveal_tween != null and _boss_bar_reveal_tween.is_valid():
+		_boss_bar_reveal_tween.kill()
+	_boss_bar_reveal_tween = create_tween().set_parallel(true)
+	_boss_bar_reveal_tween.tween_property(_boss_bar, "modulate:a", 1.0, 0.4) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_top", 4.0, 0.4) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_bottom", 4.0 + BOSS_BAR_HEIGHT, 0.4) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+func _on_boss_hp_changed(current: int, maximum: int) -> void:
+	if _boss_bar == null or _boss_bar_fill == null:
+		return
+	var ratio: float = float(current) / float(maximum) if maximum > 0 else 0.0
+	var tw := create_tween()
+	tw.tween_property(_boss_bar_fill, "scale:x", ratio, 0.3) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	if _boss_bar_label:
+		_boss_bar_label.text = "%d / %d" % [current, maximum]
+
+
+func _on_boss_died(_e: Enemy) -> void:
+	_bind_boss_bar(null)
+
+
+## 偵錯：將本回合所有存活敵人 HP 扣為 0，沿用既有死亡 → 下一波 / 勝利流程
+func _on_kill_all_pressed() -> void:
+	if battle_manager == null:
+		return
+	var snapshot: Array = battle_manager.active_enemies.duplicate()
+	for e: Enemy in snapshot:
+		if is_instance_valid(e) and e.current_hp > 0:
+			e.take_damage(e.current_hp)
+
+
+## 偵錯：將棋盤上隨機 15 顆普通寶石變成火炸彈
+func _on_combo_test_pressed() -> void:
+	if board != null and board.has_method("debug_spawn_firebombs"):
+		board.debug_spawn_firebombs(15)

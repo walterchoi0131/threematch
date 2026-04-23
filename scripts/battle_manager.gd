@@ -12,6 +12,7 @@ signal turn_changed(turn: int)
 ## Emitted when an enemy attacks; Main handles projectile VFX then calls apply_player_damage.
 signal enemy_attacked(enemy: Enemy, damage: int)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
+signal round_spawned(round_idx: int)  ## 一波敵人已生成完畢
 signal loot_dropped(enemy_data: EnemyData, results: Array)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
 
 # ── references set by Main ────────────────────────────────────────────
@@ -22,6 +23,7 @@ var characters: Array[CharacterData] = []
 
 var current_round: int = 0
 var stage_rounds: Array[Array] = []
+var stage_rounds_init_cd: Array[Array] = []
 
 var active_enemies: Array[Enemy] = []
 var targeted_enemy: Enemy = null
@@ -41,6 +43,8 @@ var last_blast_positions: Array[Vector2i] = []  # positions of the last normal b
 # ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
 # 邏輯敵人 HP — 點擊瞬間預扣，視覺由動畫驅動更新
 var logic_enemy_hp: Dictionary = {}        # Enemy node -> int
+# 邏輯敗人 CD — 與 enemy.turns_until_attack 平行預測
+var logic_enemy_cd: Dictionary = {}        # Enemy node -> int
 # 邏輯回合計數 — 每次成功 queue 的爆破即遞增
 var logic_turn: int = 0
 # 預測下回合會觸發敵人攻擊（阻擋玩家輸入直到視覺敵人攻擊播完）
@@ -53,6 +57,7 @@ var logic_pending_enemy_attack: bool = false
 func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	characters = chars
 	stage_rounds = stage.rounds
+	stage_rounds_init_cd = stage.rounds_init_cd
 
 	# 玩家總血量 = 所有角色的最大 HP 加總
 	player_max_hp = 0
@@ -74,6 +79,7 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	logic_turn = 0
 	logic_pending_enemy_attack = false
 	logic_enemy_hp.clear()
+	logic_enemy_cd.clear()
 	_spawn_round(current_round)
 
 
@@ -92,18 +98,45 @@ func _spawn_round(round_idx: int) -> void:
 		return
 
 	var enemy_list: Array = stage_rounds[round_idx]
-	for ed: EnemyData in enemy_list:
+	var init_cd_list: Array = []
+	if round_idx < stage_rounds_init_cd.size():
+		init_cd_list = stage_rounds_init_cd[round_idx]
+	for i in enemy_list.size():
+		var ed: EnemyData = enemy_list[i]
 		var enemy: Enemy = EnemyScene.instantiate()
 		enemy_container.add_child(enemy)
-		enemy.setup(ed)
+		var init_cd: int = -1
+		if i < init_cd_list.size():
+			init_cd = int(init_cd_list[i])
+		enemy.setup(ed, init_cd)
 		enemy.pressed.connect(_on_enemy_pressed)
 		enemy.died.connect(_on_enemy_died)
 		active_enemies.append(enemy)
-		# 同步邏輯敵人 HP
+		# 同步邏輯敗人 HP 與 CD
 		logic_enemy_hp[enemy] = enemy.current_hp
+		logic_enemy_cd[enemy] = enemy.turns_until_attack
 
 	if active_enemies.size() > 0:
 		_set_target(active_enemies[0])
+	round_spawned.emit(round_idx)
+
+
+## 取得本波的「主要 Boss」敵人節點。
+## 規則：1) 優先返回 data.is_main_boss == true 的敵人；
+## 2) 若該波是最後一波且無人標記，回傳該波最後生成的敵人；
+## 3) 否則回傳 null。
+func get_main_boss_for_round(round_idx: int) -> Enemy:
+	for e: Enemy in active_enemies:
+		if not is_instance_valid(e):
+			continue
+		if e.data != null and e.data.is_main_boss:
+			return e
+	if round_idx == stage_rounds.size() - 1 and active_enemies.size() > 0:
+		# 最後一波 fallback：最後生成的（陣列尾端）視為主要 Boss
+		var last: Enemy = active_enemies[active_enemies.size() - 1]
+		if is_instance_valid(last):
+			return last
+	return null
 
 
 ## 設定攻擊目標敎人
@@ -141,8 +174,7 @@ func get_attack_data(gem_type: Block.Type, count: int) -> Array:
 		var c := characters[i]
 		if c.gem_type != gem_type:
 			continue
-		# Raccoon 自行選目標，即使 target 為 null 也允許攻擊
-		if target == null and c.character_name != "Raccoon":
+		if target == null:
 			continue
 		var base_dmg := c.get_atk() * count
 		var mult := 1.0
@@ -274,20 +306,20 @@ func has_enemies_to_attack() -> bool:
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
-		if turn % enemy.data.attack_interval == 0:
+		if enemy.turns_until_attack <= 0:
 			return true
 	return false
 
 
-## 更新敎人的攻擊倒數顯示
+## 更新敎人的攻擊倒數顯示（每回合 -1，下限 0）
 func _update_enemy_cds() -> void:
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
-		var remainder: int = turn % enemy.data.attack_interval
-		if remainder == 0:
-			continue
-		enemy.update_cd(enemy.data.attack_interval - remainder)
+		var nv: int = enemy.turns_until_attack - 1
+		if nv < 0:
+			nv = 0
+		enemy.update_cd(nv)
 
 
 ## 執行敵人行動階段（交錯攻擊），回傳是否有敵人發動攻擊
@@ -296,11 +328,14 @@ func do_enemy_phase() -> bool:
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
-		if turn % enemy.data.attack_interval == 0:
+		if enemy.turns_until_attack <= 0:
 			attacking.append(enemy)
 	if attacking.is_empty():
 		return false
 	for i in attacking.size():
+		# 重置下一次攻擊 CD（同步邏輯與視覺）
+		attacking[i].turns_until_attack = attacking[i].data.attack_interval
+		logic_enemy_cd[attacking[i]] = attacking[i].data.attack_interval
 		attacking[i].flash_attack()
 		_enemy_attack(attacking[i])
 		if i < attacking.size() - 1:
@@ -330,13 +365,7 @@ func logic_apply_blast(gem_type: int, count: int) -> void:
 	for c in characters:
 		if c.gem_type != gem_type:
 			continue
-		# Raccoon 自選目標：若無主目標仍可攻擊隨機敵人
 		var hit: Enemy = target
-		if hit == null and c.character_name == "Raccoon":
-			for e in active_enemies:
-				if is_instance_valid(e) and logic_enemy_hp.get(e, 0) > 0:
-					hit = e
-					break
 		if hit == null:
 			continue
 		var base_dmg: int = c.get_atk() * count
@@ -345,7 +374,14 @@ func logic_apply_blast(gem_type: int, count: int) -> void:
 		logic_enemy_hp[hit] = max(0, logic_enemy_hp.get(hit, 0) - dmg)
 
 	logic_turn += 1
-	if _has_logic_enemies_to_attack(logic_turn):
+	# 邏輯敗人 CD 同步遞減
+	for e in active_enemies:
+		if not is_instance_valid(e):
+			continue
+		if logic_enemy_hp.get(e, 0) <= 0:
+			continue
+		logic_enemy_cd[e] = int(logic_enemy_cd.get(e, e.turns_until_attack)) - 1
+	if _has_logic_enemies_to_attack():
 		logic_pending_enemy_attack = true
 
 
@@ -359,14 +395,14 @@ func _logic_get_target(_gem_type: int = -1) -> Enemy:
 	return null
 
 
-## 邏輯側：在指定回合是否有敵人會發動攻擊
-func _has_logic_enemies_to_attack(at_turn: int) -> bool:
+## 邏輯側：是否有敵人即將發動攻擊（依 logic_enemy_cd）
+func _has_logic_enemies_to_attack() -> bool:
 	for e in active_enemies:
 		if not is_instance_valid(e):
 			continue
 		if logic_enemy_hp.get(e, 0) <= 0:
 			continue
-		if at_turn % e.data.attack_interval == 0:
+		if int(logic_enemy_cd.get(e, 1)) <= 0:
 			return true
 	return false
 
@@ -391,9 +427,11 @@ func clear_logic_pending_attack() -> void:
 func resync_logic_state() -> void:
 	logic_turn = turn
 	logic_enemy_hp.clear()
+	logic_enemy_cd.clear()
 	for e in active_enemies:
 		if is_instance_valid(e):
 			logic_enemy_hp[e] = e.current_hp
+			logic_enemy_cd[e] = e.turns_until_attack
 	logic_pending_enemy_attack = false
 
 

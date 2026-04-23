@@ -5,6 +5,7 @@ extends Control
 
 signal pressed(enemy: Enemy)  # 被點擊時發出
 signal died(enemy: Enemy)     # 死亡時發出
+signal hp_changed(current: int, maximum: int)  # 血量變動時發出（含初始與受傷）
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
@@ -24,12 +25,22 @@ var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 
 
 ## 初始化敎人資料
-func setup(enemy_data: EnemyData) -> void:
+func setup(enemy_data: EnemyData, init_cd: int = -1) -> void:
 	data = enemy_data
 	current_hp = data.max_hp
-	turns_until_attack = data.attack_interval
+	turns_until_attack = init_cd if init_cd > 0 else data.attack_interval
 	refresh_ui()
 	_style_hp_label()
+	hp_changed.emit(current_hp, data.max_hp)
+
+
+## 隱藏／顯示敵人腳下的 HP 條（當該敵人由頂部 Boss 條顯示時）
+func set_main_boss_mode(active: bool) -> void:
+	if not is_node_ready():
+		await ready
+	var hp_row: Node = $VBox/HPRow
+	if hp_row is Control:
+		(hp_row as Control).visible = not active
 
 
 ## 更新 UI 顯示（頭像、血條、目標標記等）
@@ -69,10 +80,10 @@ func flash_attack() -> void:
 		return
 	intent_label.text = "⚔ %d ATTACK!" % [data.attack_damage]
 	intent_label.modulate = Color(1.0, 0.15, 0.15)
-	# 閃光後重置顯示
+	# 閃光後刷新顯示（turns_until_attack 已由 battle_manager 重置為 attack_interval）
 	get_tree().create_timer(0.5).timeout.connect(func() -> void:
 		if is_instance_valid(self) and intent_label:
-			update_cd(data.attack_interval)
+			_refresh_intent()
 	, CONNECT_ONE_SHOT)
 
 
@@ -171,6 +182,7 @@ func _stop_spin() -> void:
 ## 受到傷害：扣血、更新血條、播放受傷閃爍、檢查死亡
 func take_damage(amount: int) -> void:
 	current_hp = max(0, current_hp - amount)
+	hp_changed.emit(current_hp, data.max_hp)
 	if hp_bar_label:
 		hp_bar_label.text = "%d" % current_hp
 	if hp_bar_fill:

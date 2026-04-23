@@ -14,7 +14,7 @@ portrait_color = Color(0.3, 0.69, 0.31, 1)
 portrait_scale = 1.25
 portrait_offset = Vector2(-93, -68)
 square_scale = 1.5
-square_offset = Vector2(-126, -33)
+square_offset = Vector2(-126, -31)
 responding_skills = Array[Dictionary]([{
 "desc": "Blast 4+ leaf gems: create a Leaf Shield gem at tapped cell. Click to heal ATK×5. Absorbs enemy attacks (50% dmg reduction).",
 "fuse_label": "4",

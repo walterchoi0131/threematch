@@ -100,6 +100,12 @@ func _build_ui() -> void:
 	hp_lbl.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
 	stats_box.add_child(hp_lbl)
 
+	var mag_lbl := Label.new()
+	mag_lbl.text = "MAG  %d" % _char.get_magic()
+	mag_lbl.add_theme_font_size_override("font_size", 22)
+	mag_lbl.add_theme_color_override("font_color", Color(0.55, 0.65, 1.0))
+	stats_box.add_child(mag_lbl)
+
 	# ── Separator ──
 	var sep2 := HSeparator.new()
 	sep2.custom_minimum_size = Vector2(0, 8)

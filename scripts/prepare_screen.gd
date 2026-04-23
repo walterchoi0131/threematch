@@ -1,6 +1,8 @@
 ## PrepareScreen（戰前準備畫面）— 選擇隊伍、預覽 Boss、檢視關卡寶石分佈。
-## 取代原本 map.gd 的 inline picker overlay。
+## 以覆蓋層方式由 map.gd 開啟，關閉時 emit `closed` 訊號。
 extends Control
+
+signal closed
 
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 const VIEWPORT_W := 856.0
@@ -16,6 +18,7 @@ var _selected_indices: Array[int] = []
 var _card_panels: Array[PanelContainer] = []
 var _card_styles: Array[Dictionary] = []  # [{normal, selected}]
 var _sort_mode: int = CharacterSorter.Mode.TYPE
+var _sort_ascending: bool = true   # TYPE 預設升冪
 var _roster_grid: Control = null
 
 # ── UI 節點 ──
@@ -30,7 +33,7 @@ func _ready() -> void:
 	_font = load(FONT_PATH)
 	_stage = GameState.selected_stage
 	if _stage == null:
-		get_tree().change_scene_to_file("res://scenes/map.tscn")
+		closed.emit()
 		return
 	_build_ui()
 
@@ -78,7 +81,7 @@ func _apply_to_panel(card: Control, c: CharacterData) -> void:
 func _build_ui() -> void:
 	# 背景
 	var bg := ColorRect.new()
-	bg.color = Color(0.07, 0.07, 0.12, 1)
+	bg.color = Color(0, 0, 0, 0)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -101,9 +104,6 @@ func _build_ui() -> void:
 	# ── Boss 預覽 + 寶石圓餅（合併為同一個全寬度區塊）──
 	_build_info_box(root)
 
-	# ── 已選隊伍欄位 ──
-	_build_slot_section(root)
-
 	# ── 角色選擇標題列：左「角色選擇」、右排序按鈕 ──
 	var sel_header := HBoxContainer.new()
 	sel_header.add_theme_constant_override("separation", 8)
@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	sel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sel_header.add_child(sel_label)
 
-	var sort_row: HBoxContainer = CharacterSorter.make_sort_buttons(_sort_mode, _on_sort_changed)
+	var sort_row: HBoxContainer = CharacterSorter.make_sort_buttons(_sort_mode, _on_sort_changed, _sort_ascending)
 	sel_header.add_child(sort_row)
 
 	var scroll := ScrollContainer.new()
@@ -122,6 +122,9 @@ func _build_ui() -> void:
 	root.add_child(scroll)
 
 	_build_roster_grid(scroll)
+
+	# ── 已選隊伍欄位（位於角色選擇下方）──
+	_build_slot_section(root)
 
 	# ── 底部按鈕列 ──
 	var btn_row := HBoxContainer.new()
@@ -133,12 +136,14 @@ func _build_ui() -> void:
 	var cancel_btn := Button.new()
 	cancel_btn.text = Locale.tr_ui("CANCEL")
 	cancel_btn.custom_minimum_size = Vector2(140, 48)
+	_apply_solid_button_style(cancel_btn, Color(0.35, 0.32, 0.40))
 	cancel_btn.pressed.connect(_on_cancel)
 	btn_row.add_child(cancel_btn)
 
 	_confirm_btn = Button.new()
 	_confirm_btn.text = Locale.tr_ui("EMBARK")
 	_confirm_btn.custom_minimum_size = Vector2(140, 48)
+	_apply_solid_button_style(_confirm_btn, Color(0.85, 0.55, 0.20))
 	_confirm_btn.pressed.connect(_on_confirm)
 	btn_row.add_child(_confirm_btn)
 
@@ -193,26 +198,20 @@ func _build_boss_content(parent: HBoxContainer) -> void:
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(vbox)
 
-	# Boss 頭像
-	if boss.portrait_texture:
-		var portrait := TextureRect.new()
-		portrait.texture = boss.portrait_texture
-		portrait.custom_minimum_size = Vector2(160, 160)
-		portrait.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		portrait.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vbox.add_child(portrait)
-	else:
-		var portrait := ColorRect.new()
-		portrait.custom_minimum_size = Vector2(160, 160)
-		portrait.color = boss.portrait_color
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vbox.add_child(portrait)
+	# 標題：BOSS
+	var boss_title := _make_label(Locale.tr_ui("BOSS"), 20, Color(0.85, 0.85, 0.9))
+	boss_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	vbox.add_child(boss_title)
 
-	# 元素圖示 + Lv（同一列，置中）
+	# Boss 頭像 — 套用與角色相同的「方形卡片」風格
+	var boss_card: PanelContainer = _make_boss_square_card(boss)
+	boss_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	boss_card.custom_minimum_size = Vector2(160, 160)
+	vbox.add_child(boss_card)
+
+	# 元素圖示 + Lv（同一列，靠左對齊）
 	var bottom_row := HBoxContainer.new()
-	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	bottom_row.add_theme_constant_override("separation", 8)
 	vbox.add_child(bottom_row)
 
@@ -233,8 +232,96 @@ func _build_boss_content(parent: HBoxContainer) -> void:
 		gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_row.add_child(gem)
 
-	var lv_lbl := _make_label("Lv.%d" % boss.enemy_level, 27, Color(1.0, 0.85, 0.85))
+	var lv_lbl := _make_label("Lv.%d" % boss.enemy_level, 20, Color(0.85, 0.85, 0.9))
 	bottom_row.add_child(lv_lbl)
+
+
+## 以「正方形角色卡」風格建立 Boss 預覽卡片（仿 CharacterCard.make_square）。
+func _make_boss_square_card(boss: EnemyData) -> PanelContainer:
+	var char_color: Color = Block.COLORS.get(boss.element, boss.portrait_color)
+
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.08, 0.08, 0.1, 1.0)
+	bg_style.set_corner_radius_all(10)
+	bg_style.set_content_margin_all(0)
+	panel.add_theme_stylebox_override("panel", bg_style)
+
+	# AspectRatio 強制正方形 + 裁切
+	var aspect := AspectRatioContainer.new()
+	aspect.ratio = 1.0
+	aspect.alignment_horizontal = AspectRatioContainer.ALIGNMENT_CENTER
+	aspect.alignment_vertical = AspectRatioContainer.ALIGNMENT_CENTER
+	aspect.stretch_mode = AspectRatioContainer.STRETCH_FIT
+	aspect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	aspect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(aspect)
+	var clip := Control.new()
+	clip.clip_contents = true
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	aspect.add_child(clip)
+
+	# 頭像
+	if boss.portrait_texture:
+		var portrait := TextureRect.new()
+		portrait.texture = boss.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		clip.add_child(portrait)
+	else:
+		var portrait_rect := ColorRect.new()
+		portrait_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portrait_rect.color = boss.portrait_color
+		portrait_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clip.add_child(portrait_rect)
+
+	# 雙層彩色邊框
+	var inner_border := Panel.new()
+	inner_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var inner_style := StyleBoxFlat.new()
+	inner_style.draw_center = false
+	inner_style.border_color = char_color
+	inner_style.set_border_width_all(4)
+	inner_style.set_corner_radius_all(10)
+	inner_border.add_theme_stylebox_override("panel", inner_style)
+	panel.add_child(inner_border)
+
+	var outer_border := Panel.new()
+	outer_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var outer_style := StyleBoxFlat.new()
+	outer_style.draw_center = false
+	outer_style.border_color = char_color.darkened(0.35)
+	outer_style.set_border_width_all(2)
+	outer_style.set_corner_radius_all(10)
+	outer_border.add_theme_stylebox_override("panel", outer_style)
+	panel.add_child(outer_border)
+
+	# 元素寶石圖示（左上角，溢出顯示）
+	var gem_layer := Control.new()
+	gem_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gem_layer.clip_contents = false
+	panel.add_child(gem_layer)
+
+	const GEM_SIZE: int = 56
+	var gem_icon := TextureRect.new()
+	var gem_tex: Texture2D = Block.GEM_TEXTURES.get(boss.element)
+	if gem_tex:
+		gem_icon.texture = gem_tex
+	gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gem_icon.pivot_offset = Vector2(GEM_SIZE * 0.5, GEM_SIZE * 0.5)
+	gem_icon.offset_left = 0.0
+	gem_icon.offset_right = GEM_SIZE
+	gem_icon.offset_top = 0.0
+	gem_icon.offset_bottom = GEM_SIZE
+	gem_layer.add_child(gem_icon)
+
+	return panel
 
 
 func _build_pie_content(parent: HBoxContainer) -> void:
@@ -246,10 +333,20 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 
 	const PIE_SIZE: float = 200.0
 	const ICON_SIZE: float = 88.0  # 元素圖示（再次放大）
+
+	# 包一層 VBox 以容納標題 + 圓餅
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	parent.add_child(vbox)
+
+	var pie_title := _make_label(Locale.tr_ui("ELEMENT_DISTRIBUTION"), 20, Color(0.85, 0.85, 0.9))
+	pie_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	vbox.add_child(pie_title)
+
 	var pie_container := Control.new()
 	pie_container.custom_minimum_size = Vector2(PIE_SIZE, PIE_SIZE)
 	pie_container.clip_contents = true  # 圖示溢出時裁切
-	parent.add_child(pie_container)
+	vbox.add_child(pie_container)
 
 	# 背景切片
 	var slices: Array[Dictionary] = []
@@ -360,8 +457,8 @@ func _make_empty_battle_slot() -> PanelContainer:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_override("font", _font)
-	lbl.add_theme_font_size_override("font_size", 22)
-	lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
+	lbl.add_theme_font_size_override("font_size", 20)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(lbl)
@@ -402,6 +499,29 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 	_apply_sort()
 
 
+## 套用「實心」按鈕樣式（不透明背景）— 確保按鈕在覆蓋層上仍清晰可見。
+func _apply_solid_button_style(btn: Button, base_color: Color) -> void:
+	for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		var c: Color = base_color
+		if state == "hover":
+			c = base_color.lightened(0.10)
+		elif state == "pressed":
+			c = base_color.darkened(0.15)
+		elif state == "disabled":
+			c = base_color.darkened(0.30)
+		c.a = 1.0
+		sb.bg_color = c
+		sb.set_corner_radius_all(6)
+		sb.set_border_width_all(2)
+		sb.border_color = base_color.darkened(0.4)
+		sb.set_content_margin_all(8)
+		btn.add_theme_stylebox_override(state, sb)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	btn.add_theme_color_override("font_pressed_color", Color.WHITE)
+
+
 func _add_fixed_overlay(panel: PanelContainer) -> void:
 	var overlay := Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -412,11 +532,15 @@ func _add_fixed_overlay(panel: PanelContainer) -> void:
 	lbl.text = Locale.tr_ui("FIXED")
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_override("font", _font)
-	lbl.add_theme_font_size_override("font_size", 22)
+	# 仿粗體：用 FontVariation 增加筆畫粗細
+	var bold_font := FontVariation.new()
+	bold_font.base_font = _font
+	bold_font.variation_embolden = 1.0
+	lbl.add_theme_font_override("font", bold_font)
+	lbl.add_theme_font_size_override("font_size", 40)
 	lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.add_theme_constant_override("outline_size", 6)
 	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(lbl)
@@ -426,8 +550,9 @@ func _add_fixed_overlay(panel: PanelContainer) -> void:
 	tw.tween_property(lbl, "modulate:a", 1.0, 0.7)
 
 
-func _on_sort_changed(mode: int) -> void:
+func _on_sort_changed(mode: int, ascending: bool) -> void:
 	_sort_mode = mode
+	_sort_ascending = ascending
 	_apply_sort()
 
 
@@ -447,7 +572,7 @@ func _apply_sort() -> void:
 			"card": _card_panels[i],
 			"is_fixed": fixed_set.has(ch),
 		})
-	RosterLayout.apply(_roster_grid, entries, _sort_mode, 5)
+	RosterLayout.apply(_roster_grid, entries, _sort_mode, 5, _sort_ascending)
 
 
 # ── 選擇邏輯 ──────────────────────────────────────────────────
@@ -488,7 +613,7 @@ func _toggle_select(index: int) -> void:
 
 
 func _on_cancel() -> void:
-	get_tree().change_scene_to_file("res://scenes/map.tscn")
+	closed.emit()
 
 
 func _on_confirm() -> void:
@@ -526,12 +651,13 @@ func _make_label(text: String, size: int, color: Color) -> Label:
 	return lbl
 
 
-func _make_header_label(text: String, color: Color) -> Label:
+## 統一表頭樣式：font_size=20、color=(0.85,0.85,0.9)；color 參數保留仅為相容。
+func _make_header_label(text: String, _color: Color = Color(0.85, 0.85, 0.9)) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.add_theme_font_override("font", _font)
-	lbl.add_theme_font_size_override("font_size", 22)
-	lbl.add_theme_color_override("font_color", color)
+	lbl.add_theme_font_size_override("font_size", 20)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	lbl.add_theme_constant_override("outline_size", 4)
 	lbl.add_theme_constant_override("shadow_offset_x", 2)

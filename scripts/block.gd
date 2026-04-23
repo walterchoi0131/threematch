@@ -169,6 +169,8 @@ func _update_upper_overlay() -> void:
 			upper_base_color = COLORS[Type.GREEN]
 		UpperType.SNOWBALL:
 			upper_base_color = COLORS[Type.BLUE]
+		UpperType.WATER_SLASH_X, UpperType.WATER_SLASH_Y:
+			upper_base_color = COLORS[Type.BLUE]
 		_:
 			upper_base_color = COLORS[Type.RED]
 	if visual:
@@ -200,6 +202,8 @@ func _update_upper_overlay() -> void:
 		UpperType.LEAF_SHIELD:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.SNOWBALL:
+			burst_color = Color(0.35, 0.65, 1.0, 0.60)
+		UpperType.WATER_SLASH_X, UpperType.WATER_SLASH_Y:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙
