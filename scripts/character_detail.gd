@@ -1,6 +1,10 @@
 ## CharacterDetail（角色詳細畫面）— 顯示單一角色的完整資訊。
 ## 包括頭像、名稱、等級、攻擊/血量、各類技能等。
+## 可以 「全畫面」（current_scene）或 「覆蓋層」（被他人隱式實例化）兩種模式開啟，
+## 後者用於詳細畫面返回時保留 characters_screen 的捲動⼏排序狀態。
 extends Node2D
+
+signal closed
 
 var _char: CharacterData  # 要顯示的角色資料
 
@@ -8,7 +12,10 @@ var _char: CharacterData  # 要顯示的角色資料
 func _ready() -> void:
 	_char = GameState.detail_character
 	if _char == null:
-		get_tree().change_scene_to_file("res://scenes/characters.tscn")
+		if get_tree().current_scene == self:
+			get_tree().change_scene_to_file("res://scenes/characters.tscn")
+		else:
+			closed.emit()
 		return
 	_build_ui()
 
@@ -23,6 +30,8 @@ func _build_ui() -> void:
 	add_child(bg)
 
 	var layer := CanvasLayer.new()
+	# 確保以覆蓋層形式開啟時，UI 會在 map.gd 建立的 layer=50 覆蓋層之上
+	layer.layer = 70
 	add_child(layer)
 
 	var scroll := ScrollContainer.new()
@@ -197,4 +206,7 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/characters.tscn")
+	if get_tree().current_scene == self:
+		get_tree().change_scene_to_file("res://scenes/characters.tscn")
+	else:
+		closed.emit()

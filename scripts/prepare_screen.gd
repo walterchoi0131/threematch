@@ -17,6 +17,7 @@ var _stage: StageData
 var _selected_indices: Array[int] = []
 var _card_panels: Array[PanelContainer] = []
 var _card_styles: Array[Dictionary] = []  # [{normal, selected}]
+var _card_lv_labels: Array[Label] = []    # 每張 roster 卡片的 Lv. 標籤（TYPE 排序時顯示）
 var _sort_mode: int = CharacterSorter.Mode.TYPE
 var _sort_ascending: bool = true   # TYPE 預設升冪
 var _roster_grid: Control = null
@@ -209,7 +210,7 @@ func _build_boss_content(parent: HBoxContainer) -> void:
 	boss_card.custom_minimum_size = Vector2(160, 160)
 	vbox.add_child(boss_card)
 
-	# 元素圖示 + Lv（同一列，靠左對齊）
+	# 元素圖示（Lv 已移至 boss_card 左下徽章）
 	var bottom_row := HBoxContainer.new()
 	bottom_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	bottom_row.add_theme_constant_override("separation", 8)
@@ -231,9 +232,6 @@ func _build_boss_content(parent: HBoxContainer) -> void:
 		gem.color = elem_color
 		gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bottom_row.add_child(gem)
-
-	var lv_lbl := _make_label("Lv.%d" % boss.enemy_level, 20, Color(0.85, 0.85, 0.9))
-	bottom_row.add_child(lv_lbl)
 
 
 ## 以「正方形角色卡」風格建立 Boss 預覽卡片（仿 CharacterCard.make_square）。
@@ -320,6 +318,26 @@ func _make_boss_square_card(boss: EnemyData) -> PanelContainer:
 	gem_icon.offset_top = 0.0
 	gem_icon.offset_bottom = GEM_SIZE
 	gem_layer.add_child(gem_icon)
+
+	# Lv. 徽章（左下角，加入 gem_layer 而非直接加入 PanelContainer，才能正確定位）
+	var boss_lv_font: Font = load(FONT_PATH)
+	var boss_lv_label := Label.new()
+	boss_lv_label.text = "Lv.%d" % boss.enemy_level
+	if boss_lv_font != null:
+		boss_lv_label.add_theme_font_override("font", boss_lv_font)
+	boss_lv_label.add_theme_font_size_override("font_size", 32)
+	boss_lv_label.add_theme_color_override("font_color", Color.WHITE)
+	boss_lv_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	boss_lv_label.add_theme_constant_override("outline_size", 5)
+	boss_lv_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_lv_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	boss_lv_label.grow_horizontal = Control.GROW_DIRECTION_END
+	boss_lv_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	boss_lv_label.offset_left = 4.0
+	boss_lv_label.offset_top = -44.0
+	boss_lv_label.offset_right = 4.0
+	boss_lv_label.offset_bottom = 0.0
+	gem_layer.add_child(boss_lv_label)
 
 	return panel
 
@@ -427,6 +445,10 @@ func _refresh_slots() -> void:
 			var card: PanelContainer = data.panel
 			card.size_flags_horizontal = 0
 			card.custom_minimum_size = Vector2(142, 142)
+			# 隊伍欄位永遠顯示 Lv.
+			var slot_lv: Label = data.get("lv_label")
+			if slot_lv != null:
+				slot_lv.visible = true
 			var idx_in_owned: int = _selected_indices[i]
 			card.gui_input.connect(_on_slot_card_input.bind(idx_in_owned))
 			_slot_row.add_child(card)
@@ -475,6 +497,7 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 
 	_card_panels.clear()
 	_card_styles.clear()
+	_card_lv_labels.clear()
 
 	var fixed_set: Dictionary = {}
 	if _is_party_locked():
@@ -493,10 +516,19 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 			"normal": data.style_normal,
 			"selected": data.style_selected,
 		})
+		_card_lv_labels.append(data.get("lv_label"))
 		if fixed_set.has(c):
 			_add_fixed_overlay(panel)
 
+	_update_lv_labels_visibility()
 	_apply_sort()
+
+
+func _update_lv_labels_visibility() -> void:
+	var show: bool = _sort_mode == CharacterSorter.Mode.TYPE
+	for lbl: Label in _card_lv_labels:
+		if lbl != null:
+			lbl.visible = show
 
 
 ## 套用「實心」按鈕樣式（不透明背景）— 確保按鈕在覆蓋層上仍清晰可見。
@@ -553,6 +585,7 @@ func _add_fixed_overlay(panel: PanelContainer) -> void:
 func _on_sort_changed(mode: int, ascending: bool) -> void:
 	_sort_mode = mode
 	_sort_ascending = ascending
+	_update_lv_labels_visibility()
 	_apply_sort()
 
 

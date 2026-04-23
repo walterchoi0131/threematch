@@ -12,6 +12,7 @@ var _sort_mode: int = CharacterSorter.Mode.TYPE
 var _sort_ascending: bool = true   # TYPE 預設升冪
 var _roster_host: Control = null
 var _card_panels: Array[PanelContainer] = []   # 對應 owned_characters[i]
+var _card_lv_labels: Array[Label] = []         # 每張卡片的 Lv. 標籤（TYPE 排序時顯示）
 var _debug_panel: Control = null
 
 
@@ -113,6 +114,7 @@ func _build_ui() -> void:
 
 func _build_cards() -> void:
 	_card_panels.clear()
+	_card_lv_labels.clear()
 	for i in GameState.owned_characters.size():
 		var c: CharacterData = GameState.owned_characters[i]
 		var data: Dictionary = CharacterCard.make_square(c)
@@ -121,11 +123,21 @@ func _build_cards() -> void:
 		card.custom_minimum_size = Vector2(142, 142)
 		card.gui_input.connect(_on_card_clicked.bind(i))
 		_card_panels.append(card)
+		_card_lv_labels.append(data.get("lv_label"))
+	_update_lv_labels_visibility()
+
+
+func _update_lv_labels_visibility() -> void:
+	var show: bool = _sort_mode == CharacterSorter.Mode.TYPE
+	for lbl: Label in _card_lv_labels:
+		if lbl != null:
+			lbl.visible = show
 
 
 func _on_sort_changed(mode: int, ascending: bool) -> void:
 	_sort_mode = mode
 	_sort_ascending = ascending
+	_update_lv_labels_visibility()
 	_apply_sort()
 
 
@@ -139,7 +151,30 @@ func _apply_sort() -> void:
 func _on_card_clicked(event: InputEvent, index: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		GameState.detail_character = GameState.owned_characters[index]
-		get_tree().change_scene_to_file("res://scenes/character_detail.tscn")
+		_open_detail_overlay()
+
+
+## 以覆蓋層形式開啟角色詳細畫面，返回時保留本畫面所有狀態（捲動、排序）。
+func _open_detail_overlay() -> void:
+	var detail_wrap := CanvasLayer.new()
+	detail_wrap.layer = 60
+	# 掛在 current_scene（通常是 map）底下，確保覆蓋於 map 自身的 overlay（layer=50）之上
+	var host: Node = get_tree().current_scene
+	if host == null:
+		host = self
+	host.add_child(detail_wrap)
+
+	# 背景 dim，吞下點擊以免穿透到底層
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	detail_wrap.add_child(dim)
+
+	var detail_scene: PackedScene = load("res://scenes/character_detail.tscn")
+	var detail: Node = detail_scene.instantiate()
+	detail.closed.connect(detail_wrap.queue_free)
+	detail_wrap.add_child(detail)
 
 
 func _on_back_pressed() -> void:

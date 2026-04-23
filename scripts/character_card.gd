@@ -176,11 +176,36 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 	gem_icon.offset_bottom = gem_size
 	gem_layer.add_child(gem_icon)
 
+	# Lv. 標籤（方形卡片專用，預設隱藏；由呼叫端依排序模式切換 visible）
+	# 樣式與 roster_layout 的 LEVEL 排序徽章一致：RussoOne 32px、白字黑描邊 5、置於左下 (6, -44)
+	var lv_label: Label = null
+	if square:
+		var lv_font: Font = load(FONT_PATH)
+		lv_label = Label.new()
+		lv_label.text = "Lv.%d" % c.level
+		if lv_font != null:
+			lv_label.add_theme_font_override("font", lv_font)
+		lv_label.add_theme_font_size_override("font_size", 32)
+		lv_label.add_theme_color_override("font_color", Color.WHITE)
+		lv_label.add_theme_color_override("font_outline_color", Color.BLACK)
+		lv_label.add_theme_constant_override("outline_size", 5)
+		lv_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lv_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		lv_label.grow_horizontal = Control.GROW_DIRECTION_END
+		lv_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		lv_label.offset_left = 4.0
+		lv_label.offset_top = -44.0
+		lv_label.offset_right = 4.0
+		lv_label.offset_bottom = 0.0
+		lv_label.visible = false
+		gem_layer.add_child(lv_label)
+
 	return {
 		"panel": panel,
 		"portrait": portrait_ref,
 		"gem_icon": gem_icon,
 		"glow": glow,
+		"lv_label": lv_label,
 	}
 
 
@@ -338,6 +363,7 @@ static func _wrap_selectable(data: Dictionary, _c: CharacterData) -> Dictionary:
 		"panel": panel,
 		"style_normal": style_normal,
 		"style_selected": style_selected,
+		"lv_label": data.get("lv_label"),
 	}
 
 
