@@ -980,20 +980,26 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 				b.queue_free()
 	, CONNECT_ONE_SHOT)
 
-	await get_tree().create_timer(0.15).timeout
+	# 本批有真正消除才需要等待視覺節奏；空批（被前面的連鎖清光了）直接 0 等待
+	if to_destroy.size() > 0:
+		await get_tree().create_timer(0.15).timeout
 
 	# 處理連鏈的高階寶石：輪到時消除，執行與點擊相同的爆炸行為
 	for chained in chained_uppers:
 		var cp: Vector2i = chained.pos
 		var cut: Block.UpperType = chained.upper_type as Block.UpperType
 
-		# 等待連鏈間隔
-		await get_tree().create_timer(chain_blast_interval).timeout
-
-		# 輪到時消除高階寶石並統計
+		# 先檢查目標是否還活著 — 若已被同批其他 upper 的遞迴爆炸清掉，直接跳過（不計連鎖、不等待）
 		var ub: Block = grid[cp.x][cp.y]
 		if ub == null:
-			# 已被同批其他 upper 的遞迴爆炸清掉 → 不計連鎖、不發訊號（避免聲音/計數不同步）
+			continue
+
+		# 等待連鏈間隔（固定節奏，僅在還有實際爆炸時花費）
+		await get_tree().create_timer(chain_blast_interval).timeout
+
+		# 二次檢查（等待期間可能被其他遞迴清掉）
+		ub = grid[cp.x][cp.y]
+		if ub == null:
 			continue
 		# 播放連鏈爆炸 VFX
 		BlastVfx.play(self, ub.global_position, cut)

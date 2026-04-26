@@ -60,35 +60,40 @@ corner_radius_bottom_left = 8
 [node name="Map" type="Node2D" unique_id=1793995455]
 script = ExtResource("1_script")
 
-[node name="Background" type="ColorRect" parent="." unique_id=2015089920]
-offset_right = 856.0
-offset_bottom = 1024.0
+[node name="BgLayer" type="CanvasLayer" parent="." unique_id=2015089921]
+layer = -1
+
+[node name="Background" type="ColorRect" parent="BgLayer" unique_id=2015089920]
+anchor_right = 1.0
+anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.09, 0.09, 0.14, 1)
 
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=973985963]
 
 [node name="Title" type="Label" parent="UILayer" unique_id=391827912]
+anchor_right = 1.0
 offset_top = 90.0
-offset_right = 856.0
 offset_bottom = 150.0
 text = "STAGE SELECT"
 label_settings = SubResource("LS_title")
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="UILayer" unique_id=413468933]
+anchor_right = 1.0
 offset_top = 155.0
-offset_right = 856.0
 offset_bottom = 185.0
 text = "Choose your battle"
 label_settings = SubResource("LS_sub")
 horizontal_alignment = 1
 
 [node name="StageList" type="VBoxContainer" parent="UILayer" unique_id=156770520]
-offset_left = 140.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
 offset_top = 210.0
-offset_right = 716.0
-offset_bottom = 800.0
+offset_right = -60.0
+offset_bottom = -260.0
 theme_override_constants/separation = 16
 
 [node name="Stage1" type="Button" parent="UILayer/StageList" unique_id=706642258]
@@ -114,18 +119,24 @@ disabled = true
 text = "Stage 3  —  🔒 Coming Soon"
 
 [node name="CharactersBtn" type="Button" parent="UILayer" unique_id=394326070]
-offset_left = 140.0
-offset_top = 870.0
-offset_right = 716.0
-offset_bottom = 930.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
+offset_top = -210.0
+offset_right = -60.0
+offset_bottom = -150.0
 theme_override_styles/normal = SubResource("SBF_char")
 text = "Characters"
 
 [node name="InventoryBtn" type="Button" parent="UILayer"]
-offset_left = 140.0
-offset_top = 940.0
-offset_right = 716.0
-offset_bottom = 1000.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
+offset_top = -140.0
+offset_right = -60.0
+offset_bottom = -80.0
 theme_override_styles/normal = SubResource("SBF_inv")
 text = "Inventory"
 

@@ -69,5 +69,6 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("sapphire_loot")])
 script = ExtResource("1_script")
 stage_name = "Dev Stage"
 allowed_types = Array[int]([0, 1, 2, 6])
+background = 1
 rounds = Array[Array]([[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]])
 bgm = ExtResource("1_lvgyu")

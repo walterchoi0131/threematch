@@ -84,3 +84,66 @@ static func make_sort_buttons(initial_mode: int, on_changed: Callable, initial_a
 
 	refresh_labels.call()
 	return row
+
+
+## 建立「下拉式」排序選擇器：單一按鈕，點擊彈出選單。
+## 行為：點選與當前相同模式 → 切換升降冪；點選不同模式 → 切到該模式並重設預設冪。
+static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_ascending: bool = false) -> Button:
+	var entries: Array = [
+		{"k": "SORT_LEVEL", "m": Mode.LEVEL},
+		{"k": "SORT_ATK", "m": Mode.ATK},
+		{"k": "SORT_HP", "m": Mode.HP},
+		{"k": "SORT_MAGIC", "m": Mode.MAGIC},
+		{"k": "SORT_TYPE", "m": Mode.TYPE},
+	]
+	var state: Dictionary = {"mode": initial_mode, "asc": initial_ascending}
+
+	var btn := Button.new()
+	btn.toggle_mode = false
+	btn.custom_minimum_size = Vector2(120, 32)
+	btn.focus_mode = Control.FOCUS_NONE
+
+	# 深色圓角按鈕樣式（仿圖示風格）
+	for st: String in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		var base := Color(0.12, 0.10, 0.16, 0.95)
+		if st == "hover":
+			base = base.lightened(0.1)
+		elif st == "pressed":
+			base = base.darkened(0.15)
+		sb.bg_color = base
+		sb.set_corner_radius_all(10)
+		sb.set_border_width_all(2)
+		sb.border_color = Color(0.45, 0.35, 0.55, 0.95)
+		sb.set_content_margin_all(8)
+		btn.add_theme_stylebox_override(st, sb)
+	btn.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+
+	var popup := PopupMenu.new()
+	btn.add_child(popup)
+	for entry: Dictionary in entries:
+		popup.add_item(Locale.tr_ui(entry.k), entry.m)
+
+	var refresh := func() -> void:
+		for entry: Dictionary in entries:
+			if entry.m == state.mode:
+				btn.text = "%s %s" % [Locale.tr_ui(entry.k), "▲" if state.asc else "▼"]
+				break
+
+	btn.pressed.connect(func() -> void:
+		var pos: Vector2 = btn.get_screen_position() + Vector2(0.0, btn.size.y)
+		popup.position = Vector2i(pos)
+		popup.popup()
+	)
+	popup.id_pressed.connect(func(id: int) -> void:
+		if state.mode == id:
+			state.asc = not state.asc
+		else:
+			state.mode = id
+			state.asc = (id == Mode.TYPE)
+		refresh.call()
+		on_changed.call(state.mode, state.asc)
+	)
+	refresh.call()
+	return btn

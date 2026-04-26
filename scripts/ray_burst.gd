@@ -11,8 +11,9 @@ var ray_color := Color(1.0, 0.90, 0.35, 0.82)
 
 
 func _process(delta: float) -> void:
+	# 旋轉是 Node2D transform，會自動套用到已快取的 draw commands。
+	# 不需要 queue_redraw（_draw 內容固定，每幀重畫等於 64 顆 × 40 polygon = 嚴重 overdraw）。
 	rotation += rotation_speed * delta
-	queue_redraw()
 
 
 func _draw() -> void:

@@ -5,9 +5,6 @@ extends Node2D
 
 const BlastVFXScene := preload("res://assets/BinbunVFX/loot_effects/effects/floating/loot_vfx_epic.tscn")
 
-const SCREEN_W := 856.0
-const SCREEN_H := 1024.0
-
 signal released  ## 飛行結束、可被池回收時發出
 
 var is_available := true
@@ -21,7 +18,7 @@ var _tween: Tween
 
 ## 建立 SubViewport / Camera / Environment（只在池初始化時呼叫一次）
 func setup() -> void:
-	var rect_size := Vector2(SCREEN_W, SCREEN_H)
+	var rect_size: Vector2 = ViewportUtils.get_size()
 	position = Vector2.ZERO
 
 	_container = SubViewportContainer.new()
@@ -77,20 +74,21 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 	_container.visible = true
 
 	# ── 2D 像素 → 3D 座標 ──
+	var screen: Vector2 = ViewportUtils.get_size()
 	var cam_distance := 3.0
 	var fov_rad: float = deg_to_rad(_camera.fov)
 	var half_h_3d: float = cam_distance * tan(fov_rad * 0.5)
-	var aspect: float = SCREEN_W / SCREEN_H
+	var aspect: float = screen.x / screen.y
 	var half_w_3d: float = half_h_3d * aspect
 
 	var from_3d := Vector3(
-		(from.x / SCREEN_W - 0.5) * 2.0 * half_w_3d,
-		-(from.y / SCREEN_H - 0.5) * 2.0 * half_h_3d,
+		(from.x / screen.x - 0.5) * 2.0 * half_w_3d,
+		-(from.y / screen.y - 0.5) * 2.0 * half_h_3d,
 		0.0
 	)
 	var to_3d := Vector3(
-		(to.x / SCREEN_W - 0.5) * 2.0 * half_w_3d,
-		-(to.y / SCREEN_H - 0.5) * 2.0 * half_h_3d,
+		(to.x / screen.x - 0.5) * 2.0 * half_w_3d,
+		-(to.y / screen.y - 0.5) * 2.0 * half_h_3d,
 		0.0
 	)
 

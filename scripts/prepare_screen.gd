@@ -5,8 +5,6 @@ extends Control
 signal closed
 
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
-const VIEWPORT_W := 856.0
-const VIEWPORT_H := 1024.0
 const CharacterSorter = preload("res://scripts/character_sorter.gd")
 const RosterLayout = preload("res://scripts/roster_layout.gd")
 
@@ -23,11 +21,14 @@ var _sort_ascending: bool = true   # TYPE 預設升冪
 var _roster_grid: Control = null
 
 # ── UI 節點 ──
-var _count_label: Label = null
 var _confirm_btn: Button = null
-var _slot_row: HBoxContainer = null       # 已選角色欄位
-var _slot_cards: Array[Control] = []      # 欄位中的角色卡 / 空位
+var _team_summary: VBoxContainer = null   # 頂部隊伍縮圖列
+var _team_summary_cards: Array[Control] = []
 var _debug_panel: Control = null
+
+# ── 卡片尺寸 ──
+var _card_size: float = 100.0  # 單張方形卡边長 = vp.x / 7
+const SUMMARY_CARD_RATIO: float = 0.85  # 頂部隊伍卡相對 roster 卡的縮放
 
 
 func _ready() -> void:
@@ -61,10 +62,10 @@ func _apply_square_to_cards(c: CharacterData) -> void:
 	var idx: int = GameState.owned_characters.find(c)
 	if idx >= 0 and idx < _card_panels.size():
 		_apply_to_panel(_card_panels[idx], c)
-	# 已選隊伍欄位 — 任何顯示此角色的 slot 卡片
+	# 隊伍縮圖 — 任何顯示此角色的 slot 卡片
 	for i in _selected_indices.size():
-		if _selected_indices[i] == idx and i < _slot_cards.size():
-			_apply_to_panel(_slot_cards[i] as Control, c)
+		if _selected_indices[i] == idx and i < _team_summary_cards.size():
+			_apply_to_panel(_team_summary_cards[i] as Control, c)
 
 
 func _apply_to_panel(card: Control, c: CharacterData) -> void:
@@ -80,6 +81,9 @@ func _apply_to_panel(card: Control, c: CharacterData) -> void:
 # ── UI 建構 ──────────────────────────────────────────────────
 
 func _build_ui() -> void:
+	# 計算卡片尺寸：1/7 viewport 寬度
+	_card_size = ViewportUtils.get_size().x / 7.0
+
 	# 背景
 	var bg := ColorRect.new()
 	bg.color = Color(0, 0, 0, 0)
@@ -90,11 +94,11 @@ func _build_ui() -> void:
 	# 全螢幕垂直排列容器
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.offset_left = 24.0
+	root.offset_left = 16.0
 	root.offset_top = 12.0
-	root.offset_right = -24.0
+	root.offset_right = -16.0
 	root.offset_bottom = -12.0
-	root.add_theme_constant_override("separation", 6)
+	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
 	# ── 關卡標題（靠左）──
@@ -102,8 +106,8 @@ func _build_ui() -> void:
 	stage_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	root.add_child(stage_title)
 
-	# ── Boss 預覽 + 寶石圓餅（合併為同一個全寬度區塊）──
-	_build_info_box(root)
+	# ── 頂部三欄：隊伍縮圖 | 元素分佈 | BOSS ──
+	_build_top_row(root)
 
 	# ── 角色選擇標題列：左「角色選擇」、右排序按鈕 ──
 	var sel_header := HBoxContainer.new()
@@ -114,7 +118,7 @@ func _build_ui() -> void:
 	sel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sel_header.add_child(sel_label)
 
-	var sort_row: HBoxContainer = CharacterSorter.make_sort_buttons(_sort_mode, _on_sort_changed, _sort_ascending)
+	var sort_row: Button = CharacterSorter.make_sort_dropdown(_sort_mode, _on_sort_changed, _sort_ascending)
 	sel_header.add_child(sort_row)
 
 	var scroll := ScrollContainer.new()
@@ -123,9 +127,6 @@ func _build_ui() -> void:
 	root.add_child(scroll)
 
 	_build_roster_grid(scroll)
-
-	# ── 已選隊伍欄位（位於角色選擇下方）──
-	_build_slot_section(root)
 
 	# ── 底部按鈕列 ──
 	var btn_row := HBoxContainer.new()
@@ -164,9 +165,9 @@ func _build_ui() -> void:
 			_toggle_select(i)
 
 
-# ── Boss + 寶石分佈（合併為單一全寬區塊） ────────────────────
+# ── 頂部三欄：我的隊伍 | 元素分佈 | BOSS ────────────────────
 
-func _build_info_box(parent: VBoxContainer) -> void:
+func _build_top_row(parent: VBoxContainer) -> void:
 	var box := PanelContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style := StyleBoxFlat.new()
@@ -179,14 +180,197 @@ func _build_info_box(parent: VBoxContainer) -> void:
 	parent.add_child(box)
 
 	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 16)
+	hbox.add_theme_constant_override("separation", 12)
 	box.add_child(hbox)
 
-	# ── 左側：Boss 資訊 ──
+	# 左：我的隊伍（4 張小卡片）
+	_build_team_summary(hbox)
+	# 中：元素分佈圓餅
+	_build_pie_content(hbox)
+	# 右：Boss
 	_build_boss_content(hbox)
 
-	# ── 右側：寶石圓餅 ──
-	_build_pie_content(hbox)
+
+# ── 左欄：我的隊伍縮圖 ───────────────────────────────────────
+
+func _build_team_summary(parent: HBoxContainer) -> void:
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(vbox)
+
+	var title := _make_label(Locale.tr_ui("PARTY"), 20, Color(0.85, 0.85, 0.9))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	vbox.add_child(title)
+
+	_team_summary = VBoxContainer.new()
+	_team_summary.add_theme_constant_override("separation", 4)
+	_team_summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_team_summary)
+
+	_refresh_team_summary()
+
+
+func _refresh_team_summary() -> void:
+	if _team_summary == null:
+		return
+	for child in _team_summary.get_children():
+		child.queue_free()
+	_team_summary_cards.clear()
+
+	var row_h: float = _card_size * SUMMARY_CARD_RATIO * 0.5
+	for i in GameState.MAX_PARTY_SIZE:
+		var row: PanelContainer = PanelContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.custom_minimum_size = Vector2(0, row_h)
+		var hbox: HBoxContainer = HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 8)
+		row.add_child(hbox)
+
+		if i < _selected_indices.size():
+			var c: CharacterData = GameState.owned_characters[_selected_indices[i]]
+			var elem_color: Color = Block.COLORS.get(c.gem_type, c.portrait_color)
+			row.add_theme_stylebox_override("panel", _make_team_row_style(elem_color))
+
+			# 左：純頭像（無邊框、無元素圖示），套用 square_scale / square_offset
+			var portrait_card: Control = _make_team_portrait(c, row_h)
+			var idx_in_owned: int = _selected_indices[i]
+			portrait_card.gui_input.connect(_on_team_card_input.bind(idx_in_owned))
+			hbox.add_child(portrait_card)
+
+			# 右：名稱（上）+ 元素圖示與 Lv（下）
+			var info_v := VBoxContainer.new()
+			info_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info_v.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			info_v.alignment = BoxContainer.ALIGNMENT_CENTER
+			info_v.add_theme_constant_override("separation", 2)
+			hbox.add_child(info_v)
+
+			var name_lbl := _make_label(Locale.tr_ui(c.character_name), 18, Color.WHITE)
+			name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+			name_lbl.add_theme_constant_override("outline_size", 4)
+			info_v.add_child(name_lbl)
+
+			var meta_h := HBoxContainer.new()
+			meta_h.add_theme_constant_override("separation", 4)
+			info_v.add_child(meta_h)
+
+			var elem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type)
+			if elem_tex:
+				var gem := TextureRect.new()
+				gem.texture = elem_tex
+				gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				gem.custom_minimum_size = Vector2(20, 20)
+				gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				meta_h.add_child(gem)
+
+			var lv_lbl := _make_label("Lv.%d" % c.level, 16, Color(1.0, 0.95, 0.7))
+			lv_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+			lv_lbl.add_theme_constant_override("outline_size", 3)
+			meta_h.add_child(lv_lbl)
+
+			_team_summary_cards.append(portrait_card)
+		else:
+			row.add_theme_stylebox_override("panel", _make_empty_team_row_style())
+			var slot: Control = _make_empty_summary_slot(row_h)
+			hbox.add_child(slot)
+			_team_summary_cards.append(slot)
+
+		_team_summary.add_child(row)
+
+	if _confirm_btn:
+		_confirm_btn.disabled = _selected_indices.is_empty()
+
+
+## 建立隊伍欄列左側純頭像：無邊框，套用 square_scale / square_offset，固定方形大小。
+func _make_team_portrait(c: CharacterData, s: float) -> Control:
+	var clip := Control.new()
+	clip.custom_minimum_size = Vector2(s, s)
+	clip.size_flags_horizontal = 0
+	clip.clip_contents = true
+	clip.mouse_filter = Control.MOUSE_FILTER_STOP
+	if c.portrait_texture:
+		var portrait := TextureRect.new()
+		portrait.texture = c.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait.custom_minimum_size = Vector2(300, 300)
+		portrait.size = Vector2(300, 300)
+		portrait.pivot_offset = Vector2.ZERO
+		portrait.scale = Vector2(c.square_scale, c.square_scale)
+		portrait.position = c.square_offset
+		clip.add_child(portrait)
+		clip.set_meta("_portrait", portrait)
+		clip.set_meta("_is_square", true)
+	else:
+		var rect := ColorRect.new()
+		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		rect.color = c.portrait_color
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clip.add_child(rect)
+	return clip
+
+
+## 為隊伍欄列產生「左色 → 右透明」的水平漸層 StyleBox。
+func _make_team_row_style(elem: Color) -> StyleBoxTexture:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(elem.r, elem.g, elem.b, 0.85))
+	grad.set_color(1, Color(elem.r, elem.g, elem.b, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill = GradientTexture2D.FILL_LINEAR
+	tex.fill_from = Vector2(0, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = 256
+	tex.height = 8
+	var sb := StyleBoxTexture.new()
+	sb.texture = tex
+	sb.set_content_margin_all(4)
+	return sb
+
+
+func _make_empty_team_row_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.08, 0.12, 0.4)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(4)
+	return sb
+
+
+func _make_empty_summary_slot(s: float) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = 0
+	panel.custom_minimum_size = Vector2(s, s)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.08, 0.12, 0.6)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.25, 0.25, 0.35, 0.5)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(0)
+	panel.add_theme_stylebox_override("panel", style)
+	var lbl := Label.new()
+	lbl.text = "+"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if _font != null:
+		lbl.add_theme_font_override("font", _font)
+	lbl.add_theme_font_size_override("font_size", 28)
+	lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(lbl)
+	return panel
+
+
+func _on_team_card_input(event: InputEvent, idx_in_owned: int) -> void:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if _is_party_locked():
+		return
+	if _selected_indices.has(idx_in_owned):
+		_toggle_select(idx_in_owned)
 
 
 func _build_boss_content(parent: HBoxContainer) -> void:
@@ -196,42 +380,21 @@ func _build_boss_content(parent: HBoxContainer) -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_horizontal = Control.SIZE_SHRINK_END
+	vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
 	parent.add_child(vbox)
 
-	# 標題：BOSS
+	# 標題：BOSS（靠右）
 	var boss_title := _make_label(Locale.tr_ui("BOSS"), 20, Color(0.85, 0.85, 0.9))
-	boss_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	boss_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	boss_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(boss_title)
 
-	# Boss 頭像 — 套用與角色相同的「方形卡片」風格
+	# Boss 頭像 — 套用與角色相同的「方形卡片」風格（靠右）
 	var boss_card: PanelContainer = _make_boss_square_card(boss)
-	boss_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	boss_card.custom_minimum_size = Vector2(160, 160)
+	boss_card.size_flags_horizontal = Control.SIZE_SHRINK_END
+	boss_card.custom_minimum_size = Vector2(120, 120)
 	vbox.add_child(boss_card)
-
-	# 元素圖示（Lv 已移至 boss_card 左下徽章）
-	var bottom_row := HBoxContainer.new()
-	bottom_row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	bottom_row.add_theme_constant_override("separation", 8)
-	vbox.add_child(bottom_row)
-
-	var elem_tex: Texture2D = Block.GEM_TEXTURES.get(boss.element)
-	if elem_tex:
-		var gem := TextureRect.new()
-		gem.texture = elem_tex
-		gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		gem.custom_minimum_size = Vector2(32, 32)
-		gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bottom_row.add_child(gem)
-	else:
-		var elem_color: Color = Block.COLORS.get(boss.element, Color.WHITE)
-		var gem := ColorRect.new()
-		gem.custom_minimum_size = Vector2(32, 32)
-		gem.color = elem_color
-		gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bottom_row.add_child(gem)
 
 
 ## 以「正方形角色卡」風格建立 Boss 預覽卡片（仿 CharacterCard.make_square）。
@@ -298,28 +461,13 @@ func _make_boss_square_card(boss: EnemyData) -> PanelContainer:
 	outer_border.add_theme_stylebox_override("panel", outer_style)
 	panel.add_child(outer_border)
 
-	# 元素寶石圖示（左上角，溢出顯示）
+	# 元素寶石圖示已移除（Boss 不顯示元素圖示）；保留 gem_layer 作為 Lv 徽章定位容器
 	var gem_layer := Control.new()
 	gem_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	gem_layer.clip_contents = false
 	panel.add_child(gem_layer)
 
-	const GEM_SIZE: int = 56
-	var gem_icon := TextureRect.new()
-	var gem_tex: Texture2D = Block.GEM_TEXTURES.get(boss.element)
-	if gem_tex:
-		gem_icon.texture = gem_tex
-	gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gem_icon.pivot_offset = Vector2(GEM_SIZE * 0.5, GEM_SIZE * 0.5)
-	gem_icon.offset_left = 0.0
-	gem_icon.offset_right = GEM_SIZE
-	gem_icon.offset_top = 0.0
-	gem_icon.offset_bottom = GEM_SIZE
-	gem_layer.add_child(gem_icon)
-
-	# Lv. 徽章（左下角，加入 gem_layer 而非直接加入 PanelContainer，才能正確定位）
+	# Lv. 徽章（左下角）
 	var boss_lv_font: Font = load(FONT_PATH)
 	var boss_lv_label := Label.new()
 	boss_lv_label.text = "Lv.%d" % boss.enemy_level
@@ -349,8 +497,8 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 		return
 	var ratio: float = 1.0 / float(count)
 
-	const PIE_SIZE: float = 200.0
-	const ICON_SIZE: float = 88.0  # 元素圖示（再次放大）
+	const PIE_SIZE: float = 140.0
+	const ICON_SIZE: float = 56.0  # 元素圖示
 
 	# 包一層 VBox 以容納標題 + 圓餅
 	var vbox := VBoxContainer.new()
@@ -411,80 +559,7 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 
 
 # ── 已選角色欄位 ──────────────────────────────────────────────
-
-func _build_slot_section(parent: VBoxContainer) -> void:
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	parent.add_child(header)
-
-	var party_label := _make_header_label(Locale.tr_ui("PARTY"), Color(1.0, 0.9, 0.3))
-	party_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(party_label)
-
-	# 保留隱藏的 count_label，避免下游 _refresh_slots 發生 null 存取
-	_count_label = Label.new()
-	_count_label.visible = false
-
-	_slot_row = HBoxContainer.new()
-	_slot_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_slot_row.add_theme_constant_override("separation", 8)
-	parent.add_child(_slot_row)
-
-	_refresh_slots()
-
-
-func _refresh_slots() -> void:
-	for child in _slot_row.get_children():
-		child.queue_free()
-	_slot_cards.clear()
-
-	for i in GameState.MAX_PARTY_SIZE:
-		if i < _selected_indices.size():
-			var c: CharacterData = GameState.owned_characters[_selected_indices[i]]
-			var data: Dictionary = CharacterCard.make_square(c)
-			var card: PanelContainer = data.panel
-			card.size_flags_horizontal = 0
-			card.custom_minimum_size = Vector2(142, 142)
-			# 隊伍欄位永遠顯示 Lv.
-			var slot_lv: Label = data.get("lv_label")
-			if slot_lv != null:
-				slot_lv.visible = true
-			var idx_in_owned: int = _selected_indices[i]
-			card.gui_input.connect(_on_slot_card_input.bind(idx_in_owned))
-			_slot_row.add_child(card)
-			_slot_cards.append(card)
-		else:
-			var empty := _make_empty_battle_slot()
-			_slot_row.add_child(empty)
-			_slot_cards.append(empty)
-
-	_count_label.text = "%d / %d" % [_selected_indices.size(), GameState.MAX_PARTY_SIZE]
-	if _confirm_btn:
-		_confirm_btn.disabled = _selected_indices.is_empty()
-
-
-func _make_empty_battle_slot() -> PanelContainer:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = 0
-	panel.custom_minimum_size = Vector2(142, 142)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.12, 0.6)
-	style.set_border_width_all(2)
-	style.border_color = Color(0.25, 0.25, 0.35, 0.5)
-	style.set_corner_radius_all(10)
-	style.set_content_margin_all(0)
-	panel.add_theme_stylebox_override("panel", style)
-	var lbl := Label.new()
-	lbl.text = "?"
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_override("font", _font)
-	lbl.add_theme_font_size_override("font_size", 20)
-	lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
-	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(lbl)
-	return panel
+# 隊伍選取現以頂部隊伍縮圖取代，不再需要底部 slot section。
 
 
 # ── 角色選擇網格 ──────────────────────────────────────────────
@@ -509,7 +584,7 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 		var data: Dictionary = CharacterCard.make_square_selectable(c)
 		var panel: PanelContainer = data.panel
 		panel.size_flags_horizontal = 0
-		panel.custom_minimum_size = Vector2(142, 142)
+		panel.custom_minimum_size = Vector2(_card_size, _card_size)
 		panel.gui_input.connect(_on_roster_card_input.bind(i))
 		_card_panels.append(panel)
 		_card_styles.append({
@@ -605,7 +680,7 @@ func _apply_sort() -> void:
 			"card": _card_panels[i],
 			"is_fixed": fixed_set.has(ch),
 		})
-	RosterLayout.apply(_roster_grid, entries, _sort_mode, 5, _sort_ascending)
+	RosterLayout.apply(_roster_grid, entries, _sort_mode, 6, _sort_ascending)
 
 
 # ── 選擇邏輯 ──────────────────────────────────────────────────
@@ -619,7 +694,7 @@ func _on_roster_card_input(event: InputEvent, index: int) -> void:
 	_toggle_select(index)
 
 
-## 點擊已選欄位的角色：取消選取
+## 點擊已選欄位的角色：取消選取（仍供其他路徑使用；頂部隊伍縮圖以 _on_team_card_input 處理）
 func _on_slot_card_input(event: InputEvent, index: int) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
@@ -642,7 +717,7 @@ func _toggle_select(index: int) -> void:
 			return
 		_selected_indices.append(index)
 		_card_panels[index].add_theme_stylebox_override("panel", _card_styles[index].selected)
-	_refresh_slots()
+	_refresh_team_summary()
 
 
 func _on_cancel() -> void:

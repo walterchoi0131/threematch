@@ -10,7 +10,7 @@ const ATK_ICON_PATH := "res://assets/slash.png"
 
 const GROUP_BG_ALPHA := 0.25
 const GROUP_ICON_ALPHA := 0.5
-const GROUP_ICON_SIZE := 56.0
+const GROUP_ICON_SIZE := 28.0
 
 
 ## 套用排序到容器。
@@ -157,7 +157,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 	var badge := HBoxContainer.new()
 	badge.add_theme_constant_override("separation", 4)
 	badge.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	badge.position = Vector2(6, -44)
+	badge.position = Vector2(3, -22)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(badge)
 
@@ -186,7 +186,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 			icon.texture = tex
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon.custom_minimum_size = Vector2(36, 36)
+			icon.custom_minimum_size = Vector2(18, 18)
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			badge.add_child(icon)
 
@@ -195,9 +195,9 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 	lbl.text = text
 	if font != null:
 		lbl.add_theme_font_override("font", font)
-	lbl.add_theme_font_size_override("font_size", 32)
+	lbl.add_theme_font_size_override("font_size", 16)
 	lbl.add_theme_color_override("font_color", Color.WHITE)
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 5)
+	lbl.add_theme_constant_override("outline_size", 3)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.add_child(lbl)

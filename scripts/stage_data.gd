@@ -2,6 +2,17 @@
 class_name StageData
 extends Resource
 
+## 關卡背景圖片列舉
+enum Background {
+	NONE = 0,
+	BREEZE = 1,
+}
+
+## 背景圖片路徑對應表
+const BACKGROUND_PATHS: Dictionary = {
+	Background.BREEZE: "res://assets/background/breeze.jpg",
+}
+
 @export var stage_name: String = "Stage 1"  # 關卡名稱
 @export var allowed_types: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE, Block.Type.GREEN]  # 允許的寶石類型
 @export var min_match: int = 2   # 最少連接數才可消除
@@ -17,6 +28,7 @@ extends Resource
 ## 留空、長度不足或值 ≤ 0 表示使用 EnemyData.attack_interval 預設。
 @export var rounds_init_cd: Array[Array] = []
 
+@export var background: Background = Background.NONE  # 關卡背景圖片
 @export var bgm: AudioStream = null  # 關卡背景音樂
 
 const _DialogSequence := preload("res://scripts/dialog_sequence.gd")

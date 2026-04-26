@@ -12,10 +12,12 @@ static func build(parent: Node, characters: Array, on_apply: Callable) -> Contro
 	var panel := PanelContainer.new()
 	panel.z_index = 100
 	parent.add_child(panel)
-	panel.offset_left = 4
+	panel.offset_left = -274
 	panel.offset_top = 4
-	panel.offset_right = 274
+	panel.offset_right = -4
 	panel.offset_bottom = 600
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
 
 	var bg := StyleBoxFlat.new()
 	bg.bg_color = Color(0.05, 0.05, 0.08, 0.92)

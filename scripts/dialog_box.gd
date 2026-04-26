@@ -9,15 +9,12 @@ const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 signal dialog_finished
 
 # ── 設計常數 ──────────────────────────────────────────────────
-const VIEWPORT_W := 856.0
-const VIEWPORT_H := 1024.0
-
-# 立繪尺寸與位置
+# 立繪比例與位置（相對於 viewport 尺寸）
 const PORTRAIT_SCALE := 7.2            # 原始小圖放大倍率（4.0 × 1.8）
-const PORTRAIT_Y := 540.0              # 立繪頂端 Y（往下移：底部約 1/3 被對話框遮住）
-const LEFT_X := 55.0                   # 左側立繪 X (40 + 15)
-const RIGHT_X := 535.0                 # 右側立繪 X (520 + 15)
-const SLIDE_OFFSET := 350.0            # 滑入/滑出偏移量
+const PORTRAIT_Y_RATIO := 0.527        # 立繪頂端 Y / viewport_h
+const LEFT_X_RATIO := 0.064            # 左側立繪 X / viewport_w
+const RIGHT_X_RATIO := 0.625           # 右側立繪 X / viewport_w
+const SLIDE_OFFSET_RATIO := 0.41       # 滑入/滑出偏移量 / viewport_w
 
 # 動畫時間
 const SLIDE_IN_DUR := 0.35
@@ -149,8 +146,7 @@ func _build_ui() -> void:
 	_bg_rect = TextureRect.new()
 	_bg_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_bg_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_bg_rect.custom_minimum_size = Vector2(VIEWPORT_W, VIEWPORT_H)
-	_bg_rect.size = Vector2(VIEWPORT_W, VIEWPORT_H)
+	_bg_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_bg_rect.visible = false
 	_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_rect)
@@ -165,6 +161,10 @@ func _build_ui() -> void:
 	# 立繪尺寸（以放大倍率擴張 rect，避免 squeeze bounce 重設 transform.scale 影響大小）
 	var p_w: float = 300.0 * (PORTRAIT_SCALE / 4.0)
 	var p_h: float = 400.0 * (PORTRAIT_SCALE / 4.0)
+	var vp: Vector2 = ViewportUtils.get_size()
+	var left_x: float = vp.x * LEFT_X_RATIO
+	var right_x: float = vp.x * RIGHT_X_RATIO
+	var portrait_y: float = vp.y * PORTRAIT_Y_RATIO
 
 	# 左側立繪
 	_portrait_left = TextureRect.new()
@@ -172,7 +172,7 @@ func _build_ui() -> void:
 	_portrait_left.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_portrait_left.custom_minimum_size = Vector2(p_w, p_h)
 	_portrait_left.size = Vector2(p_w, p_h)
-	_portrait_left.position = Vector2(LEFT_X - (p_w - 300.0) * 0.5 - 50.0, PORTRAIT_Y - (p_h - 400.0))
+	_portrait_left.position = Vector2(left_x - (p_w - 300.0) * 0.5 - 50.0, portrait_y - (p_h - 400.0))
 	_portrait_left.set_meta("home_x", _portrait_left.position.x)
 	_portrait_left.visible = false
 	_portrait_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -184,16 +184,19 @@ func _build_ui() -> void:
 	_portrait_right.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_portrait_right.custom_minimum_size = Vector2(p_w, p_h)
 	_portrait_right.size = Vector2(p_w, p_h)
-	_portrait_right.position = Vector2(RIGHT_X - (p_w - 300.0) * 0.5 - 30.0, PORTRAIT_Y - (p_h - 400.0))
+	_portrait_right.position = Vector2(right_x - (p_w - 300.0) * 0.5 - 30.0, portrait_y - (p_h - 400.0))
 	_portrait_right.set_meta("home_x", _portrait_right.position.x)
 	_portrait_right.visible = false
 	_portrait_right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_portrait_right)
 
-	# 對話框面板
+	# 對話框面板（底部全寬，靠 anchor 自動延展）
 	_dialog_panel = PanelContainer.new()
-	_dialog_panel.position = Vector2(0, VIEWPORT_H - PANEL_HEIGHT)
-	_dialog_panel.size = Vector2(VIEWPORT_W, PANEL_HEIGHT)
+	_dialog_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_dialog_panel.offset_top = -PANEL_HEIGHT
+	_dialog_panel.offset_bottom = 0.0
+	_dialog_panel.offset_left = 0.0
+	_dialog_panel.offset_right = 0.0
 	_dialog_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var panel_style := StyleBoxFlat.new()
@@ -212,6 +215,11 @@ func _build_ui() -> void:
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dialog_panel.add_child(vbox)
 
+	# 角色名稱列：左為名稱，右為 Skip 按鈕
+	var name_row := HBoxContainer.new()
+	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(name_row)
+
 	# 角色名稱
 	_name_label = Label.new()
 	_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
@@ -219,7 +227,26 @@ func _build_ui() -> void:
 	_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	_name_label.add_theme_constant_override("outline_size", 3)
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(_name_label)
+	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(_name_label)
+
+	# Skip 按鈕（與名稱同一列、靠右）— 文字風格與對話內文一致
+	_skip_btn = Button.new()
+	_skip_btn.text = Locale.tr_ui("SKIP")
+	_skip_btn.focus_mode = Control.FOCUS_NONE
+	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_skip_btn.add_theme_font_size_override("font_size", TEXT_FONT_SIZE)
+	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
+	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 1.0, 1.0, 0.7))
+	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 1.0, 1.0, 0.5))
+	var skip_empty := StyleBoxEmpty.new()
+	_skip_btn.add_theme_stylebox_override("normal", skip_empty)
+	_skip_btn.add_theme_stylebox_override("hover", skip_empty)
+	_skip_btn.add_theme_stylebox_override("pressed", skip_empty)
+	_skip_btn.add_theme_stylebox_override("focus", skip_empty)
+	_skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_skip_btn.pressed.connect(_on_skip_pressed)
+	name_row.add_child(_skip_btn)
 
 	# 間隔
 	var spacer := Control.new()
@@ -232,7 +259,7 @@ func _build_ui() -> void:
 	_text_label.bbcode_enabled = true
 	_text_label.fit_content = true
 	_text_label.scroll_active = false
-	_text_label.custom_minimum_size = Vector2(VIEWPORT_W - PANEL_MARGIN * 2, 0)
+	_text_label.custom_minimum_size = Vector2(vp.x - PANEL_MARGIN * 2, 0)
 	_text_label.add_theme_font_size_override("normal_font_size", TEXT_FONT_SIZE)
 	_text_label.add_theme_color_override("default_color", Color.WHITE)
 	_text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -251,35 +278,8 @@ func _build_ui() -> void:
 	_tap_zone.add_theme_stylebox_override("focus", empty_style)
 	add_child(_tap_zone)
 
-	# Skip 按鈕（右上角）
-	_skip_btn = Button.new()
-	_skip_btn.text = Locale.tr_ui("SKIP")
-	_skip_btn.focus_mode = Control.FOCUS_NONE
-	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	var skip_font: Font = load(FONT_PATH)
-	if skip_font != null:
-		_skip_btn.add_theme_font_override("font", skip_font)
-	_skip_btn.add_theme_font_size_override("font_size", 22)
-	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
-	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 0.95, 0.5))
-	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 0.85, 0.3))
-	_skip_btn.add_theme_color_override("font_outline_color", Color.BLACK)
-	_skip_btn.add_theme_constant_override("outline_size", 4)
-	_skip_btn.add_theme_constant_override("shadow_offset_x", 2)
-	_skip_btn.add_theme_constant_override("shadow_offset_y", 2)
-	_skip_btn.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	var skip_empty := StyleBoxEmpty.new()
-	_skip_btn.add_theme_stylebox_override("normal", skip_empty)
-	_skip_btn.add_theme_stylebox_override("hover", skip_empty)
-	_skip_btn.add_theme_stylebox_override("pressed", skip_empty)
-	_skip_btn.add_theme_stylebox_override("focus", skip_empty)
-	_skip_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_skip_btn.offset_left = -110.0
-	_skip_btn.offset_top = VIEWPORT_H - PANEL_HEIGHT + 10.0
-	_skip_btn.offset_right = -16.0
-	_skip_btn.offset_bottom = VIEWPORT_H - PANEL_HEIGHT + 50.0
-	_skip_btn.pressed.connect(_on_skip_pressed)
-	add_child(_skip_btn)
+	# 確保對話面板（含 Skip 按鈕）在 tap_zone 之上接收點擊
+	_dialog_panel.move_to_front()
 
 	# Skip 定時器
 	_skip_timer = Timer.new()
@@ -476,8 +476,11 @@ func _do_enter(char_id: String, emotion: String, is_left: bool, portrait: Textur
 	portrait.modulate = ACTIVE_COLOR
 
 	# 從螢幕外滑入
-	var target_x: float = portrait.get_meta("home_x", LEFT_X if is_left else RIGHT_X)
-	var start_x: float = target_x - SLIDE_OFFSET if is_left else target_x + SLIDE_OFFSET
+	var vp: Vector2 = ViewportUtils.get_size()
+	var fallback_x: float = vp.x * (LEFT_X_RATIO if is_left else RIGHT_X_RATIO)
+	var slide_offset: float = vp.x * SLIDE_OFFSET_RATIO
+	var target_x: float = portrait.get_meta("home_x", fallback_x)
+	var start_x: float = target_x - slide_offset if is_left else target_x + slide_offset
 	portrait.position.x = start_x
 	var tw := create_tween()
 	tw.tween_property(portrait, "position:x", target_x, SLIDE_IN_DUR) \
@@ -487,7 +490,8 @@ func _do_enter(char_id: String, emotion: String, is_left: bool, portrait: Textur
 func _do_exit(is_left: bool, portrait: TextureRect) -> void:
 	if not portrait.visible:
 		return
-	var target_x: float = portrait.position.x - SLIDE_OFFSET if is_left else portrait.position.x + SLIDE_OFFSET
+	var slide_offset: float = ViewportUtils.get_size().x * SLIDE_OFFSET_RATIO
+	var target_x: float = portrait.position.x - slide_offset if is_left else portrait.position.x + slide_offset
 	var tw := create_tween()
 	tw.tween_property(portrait, "position:x", target_x, SLIDE_OUT_DUR) \
 		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -501,7 +505,8 @@ func _do_exit(is_left: bool, portrait: TextureRect) -> void:
 func _do_instant_exit(is_left: bool, portrait: TextureRect) -> void:
 	portrait.visible = false
 	portrait.modulate = ACTIVE_COLOR
-	portrait.position.x = portrait.get_meta("home_x", LEFT_X if is_left else RIGHT_X)
+	var fallback_x: float = ViewportUtils.get_size().x * (LEFT_X_RATIO if is_left else RIGHT_X_RATIO)
+	portrait.position.x = portrait.get_meta("home_x", fallback_x)
 
 
 func _update_portrait_texture(portrait: TextureRect, char_id: String, emotion: String, is_left: bool) -> void:

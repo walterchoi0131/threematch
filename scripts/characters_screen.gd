@@ -14,6 +14,7 @@ var _roster_host: Control = null
 var _card_panels: Array[PanelContainer] = []   # 對應 owned_characters[i]
 var _card_lv_labels: Array[Label] = []         # 每張卡片的 Lv. 標籤（TYPE 排序時顯示）
 var _debug_panel: Control = null
+var _card_size: float = 100.0  # 1/7 viewport 寬度
 
 
 func _ready() -> void:
@@ -81,7 +82,7 @@ func _build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
-	var sort_row: HBoxContainer = CharacterSorter.make_sort_buttons(_sort_mode, _on_sort_changed, _sort_ascending)
+	var sort_row: Button = CharacterSorter.make_sort_dropdown(_sort_mode, _on_sort_changed, _sort_ascending)
 	header.add_child(sort_row)
 
 	# Scroll container + host（RosterLayout 清空並重建內部佈局）
@@ -113,6 +114,7 @@ func _build_ui() -> void:
 
 
 func _build_cards() -> void:
+	_card_size = ViewportUtils.get_size().x / 7.0
 	_card_panels.clear()
 	_card_lv_labels.clear()
 	for i in GameState.owned_characters.size():
@@ -120,7 +122,7 @@ func _build_cards() -> void:
 		var data: Dictionary = CharacterCard.make_square(c)
 		var card: PanelContainer = data.panel
 		card.size_flags_horizontal = 0
-		card.custom_minimum_size = Vector2(142, 142)
+		card.custom_minimum_size = Vector2(_card_size, _card_size)
 		card.gui_input.connect(_on_card_clicked.bind(i))
 		_card_panels.append(card)
 		_card_lv_labels.append(data.get("lv_label"))
@@ -145,7 +147,7 @@ func _apply_sort() -> void:
 	var entries: Array = []
 	for i in GameState.owned_characters.size():
 		entries.append({"i": i, "c": GameState.owned_characters[i], "card": _card_panels[i]})
-	RosterLayout.apply(_roster_host, entries, _sort_mode, 5, _sort_ascending)
+	RosterLayout.apply(_roster_host, entries, _sort_mode, 6, _sort_ascending)
 
 
 func _on_card_clicked(event: InputEvent, index: int) -> void:

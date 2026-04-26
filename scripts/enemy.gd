@@ -13,13 +13,12 @@ var is_targeted: bool = false     # 是否被玩家選中為目標
 var turns_until_attack: int = 0   # 距離下次攻擊的剩餘回合數
 var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻怪的過殺機制）
 
-@onready var intent_label: Label = $VBox/IntentLabel       # 攻擊意圖標籤
+@onready var intent_label: Label = $VBox/IntentRow/IntentBG/IntentLabel       # 攻擊意圖標籤
 @onready var portrait: TextureRect = $VBox/Portrait         # 敎人頭像
 @onready var target_indicator: Label = $TargetMarker        # 目標指示器
-@onready var hp_bar_fill: ColorRect = $VBox/HPRow/HPBar/Fill      # 血條填充
-@onready var hp_bar_bg: ColorRect = $VBox/HPRow/HPBar/BG          # 血條背景
+@onready var hp_bar_fill: TextureRect = $VBox/HPRow/HPBar/Fill    # 血條填充（垂直漸層）
+@onready var hp_bar_bg: ColorRect = $VBox/HPRow/HPBar/BG          # 血條背景（黑底）
 @onready var hp_bar_label: Label = $VBox/HPRow/HPBar/HPLabel      # 血量數字
-var _elem_icon: TextureRect = null                           # 元素圖示
 
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 
@@ -121,15 +120,29 @@ func _position_target_marker() -> void:
 	target_indicator.pivot_offset = Vector2(marker_w * 0.5, marker_h * 0.5)
 
 
-## 根據元素屬性設定血條顏色
+## 根據元素屬性設定血條顏色（黑底 + 元素色垂直漸層）
 func _apply_element_color() -> void:
 	if data == null:
 		return
 	var elem_color: Color = Block.COLORS.get(data.element, Color(0.9, 0.15, 0.15))
 	if hp_bar_fill:
-		hp_bar_fill.color = elem_color
+		hp_bar_fill.texture = make_hp_gradient(elem_color)
 	if hp_bar_bg:
-		hp_bar_bg.color = Color(elem_color.r * 0.3, elem_color.g * 0.3, elem_color.b * 0.3, 1.0)
+		hp_bar_bg.color = Color(0, 0, 0, 1)
+
+
+## 建立 HP 條的垂直漸層紋理（上：元素色，下：較暗版本）
+static func make_hp_gradient(elem_color: Color) -> GradientTexture2D:
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 1.0])
+	grad.colors = PackedColorArray([elem_color, elem_color.darkened(0.55)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill_from = Vector2(0.5, 0.0)
+	tex.fill_to = Vector2(0.5, 1.0)
+	tex.width = 8
+	tex.height = 32
+	return tex
 
 
 ## 為血量數字套用 Russo One 字型＋元素色描邊
@@ -144,18 +157,6 @@ func _style_hp_label() -> void:
 	var outline_color: Color = Block.FUSE_HINT_OUTLINE_COLORS.get(data.element, elem_color.darkened(0.4))
 	hp_bar_label.add_theme_color_override("font_outline_color", outline_color)
 	hp_bar_label.add_theme_constant_override("outline_size", 6)
-	# 元素圖示放在血條左側（HPRow 的第一個子節點）
-	var tex: Texture2D = Block.GEM_TEXTURES.get(data.element)
-	if tex and _elem_icon == null:
-		_elem_icon = TextureRect.new()
-		_elem_icon.texture = tex
-		_elem_icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-		_elem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		_elem_icon.custom_minimum_size = Vector2(20, 20)
-		_elem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var hp_row: HBoxContainer = $VBox/HPRow
-		hp_row.add_child(_elem_icon)
-		hp_row.move_child(_elem_icon, 0)  # 放在血條左側
 
 
 ## 開始目標指示器的旋轉動畫（硬幣翻轉效果）

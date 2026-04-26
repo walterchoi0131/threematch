@@ -10,8 +10,10 @@ signal all_lines_finished
 # ── 設計常數 ──────────────────────────────────────────────────
 const TYPEWRITER_CPS := 30.0
 const PORTRAIT_SIZE := 142.0
-const PANEL_TOP := 820.0
-const PANEL_BOTTOM := 1010.0
+# 面板錨定在螢幕底部：距底部 BOTTOM_GAP 像素，高度 PANEL_HEIGHT
+const PANEL_HEIGHT := 190.0
+const PANEL_BOTTOM_GAP := 14.0
+const PANEL_SIDE_MARGIN := 16.0
 const PANEL_MARGIN := 16.0
 const NAME_FONT_SIZE := 22
 const TEXT_FONT_SIZE := 20
@@ -88,12 +90,13 @@ func _build_ui() -> void:
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_overlay)
 
-	# 對話面板（定位在畫面底部角色列區域）
+	# 對話面板（錨定在螢幕底部角色列區域，靠 anchor 自動延展）
 	_panel = PanelContainer.new()
-	_panel.offset_left = 16.0
-	_panel.offset_top = PANEL_TOP
-	_panel.offset_right = 840.0
-	_panel.offset_bottom = PANEL_BOTTOM
+	_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_panel.offset_left = PANEL_SIDE_MARGIN
+	_panel.offset_right = -PANEL_SIDE_MARGIN
+	_panel.offset_top = -(PANEL_HEIGHT + PANEL_BOTTOM_GAP)
+	_panel.offset_bottom = -PANEL_BOTTOM_GAP
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.06, 0.12, 0.94)
@@ -131,13 +134,36 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 4)
 	hbox.add_child(vbox)
 
+	# 名稱列：左為名稱、右為 Skip 按鈕
+	var name_row := HBoxContainer.new()
+	vbox.add_child(name_row)
+
 	# 名稱
 	_name_label = Label.new()
 	_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
 	_name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
 	_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	_name_label.add_theme_constant_override("outline_size", 2)
-	vbox.add_child(_name_label)
+	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(_name_label)
+
+	# Skip 按鈕（與名稱同一列、靠右）— 點擊切換自動推進
+	_skip_btn = Button.new()
+	_skip_btn.text = Locale.tr_ui("SKIP")
+	_skip_btn.focus_mode = Control.FOCUS_NONE
+	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_skip_btn.add_theme_font_size_override("font_size", TEXT_FONT_SIZE)
+	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
+	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 1.0, 1.0, 0.7))
+	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 1.0, 1.0, 0.5))
+	var btn_empty := StyleBoxEmpty.new()
+	_skip_btn.add_theme_stylebox_override("normal", btn_empty)
+	_skip_btn.add_theme_stylebox_override("hover", btn_empty)
+	_skip_btn.add_theme_stylebox_override("pressed", btn_empty)
+	_skip_btn.add_theme_stylebox_override("focus", btn_empty)
+	_skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_skip_btn.pressed.connect(_on_skip_pressed)
+	name_row.add_child(_skip_btn)
 
 	# 對話文字
 	_text_label = RichTextLabel.new()
@@ -162,35 +188,8 @@ func _build_ui() -> void:
 	_tap_zone.add_theme_stylebox_override("focus", empty)
 	add_child(_tap_zone)
 
-	# Skip 按鈕（右上角，點擊切換自動推進）
-	_skip_btn = Button.new()
-	_skip_btn.text = Locale.tr_ui("SKIP")
-	_skip_btn.focus_mode = Control.FOCUS_NONE
-	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	var skip_font: Font = load(FONT_PATH)
-	if skip_font != null:
-		_skip_btn.add_theme_font_override("font", skip_font)
-	_skip_btn.add_theme_font_size_override("font_size", 22)
-	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
-	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 0.95, 0.5))
-	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 0.85, 0.3))
-	_skip_btn.add_theme_color_override("font_outline_color", Color.BLACK)
-	_skip_btn.add_theme_constant_override("outline_size", 4)
-	_skip_btn.add_theme_constant_override("shadow_offset_x", 2)
-	_skip_btn.add_theme_constant_override("shadow_offset_y", 2)
-	_skip_btn.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	var btn_empty := StyleBoxEmpty.new()
-	_skip_btn.add_theme_stylebox_override("normal", btn_empty)
-	_skip_btn.add_theme_stylebox_override("hover", btn_empty)
-	_skip_btn.add_theme_stylebox_override("pressed", btn_empty)
-	_skip_btn.add_theme_stylebox_override("focus", btn_empty)
-	_skip_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_skip_btn.offset_left = -110.0
-	_skip_btn.offset_top = PANEL_TOP + 10.0
-	_skip_btn.offset_right = -16.0
-	_skip_btn.offset_bottom = PANEL_TOP + 50.0
-	_skip_btn.pressed.connect(_on_skip_pressed)
-	add_child(_skip_btn)
+	# 確保對話面板（含 Skip 按鈕）在 tap_zone 之上接收點擊
+	_panel.move_to_front()
 
 	# Skip 定時器
 	_skip_timer = Timer.new()

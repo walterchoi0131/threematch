@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const GemParticleScript := preload("res://scripts/gem_particle.gd")
@@ -23,6 +23,7 @@ const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 @onready var character_panel: HBoxContainer = $UILayer/CharacterRow
 @onready var status_label: Label = $UILayer/StatusLabel
 @onready var return_button: Button = $UILayer/ReturnButton
+@onready var _battle_bg_rect: TextureRect = $BattleBackground
 
 # ── game data ─────────────────────────────────────────────────────────
 const CHAR_BOAR := preload("res://characters/char_boar.tres")
@@ -160,7 +161,78 @@ func _ready() -> void:
 	_style_player_hp_label()
 	_play_bgm()
 
+	_apply_stage_background()
+	_layout_board()
+	ViewportUtils.viewport_changed.connect(_on_viewport_changed)
+	_apply_safe_area()
+
 	_play_stage_intro()
+
+
+## 套用關卡背景圖片（NONE 則隱藏）。
+func _apply_stage_background() -> void:
+	if current_stage == null or current_stage.background == StageData.Background.NONE:
+		_battle_bg_rect.visible = false
+		return
+	var path: String = StageData.BACKGROUND_PATHS.get(current_stage.background, "")
+	if path.is_empty():
+		_battle_bg_rect.visible = false
+		return
+	_battle_bg_rect.texture = load(path)
+	_battle_bg_rect.visible = true
+
+
+## 依當前 viewport 大小縮放與置中棋盤。
+func _layout_board() -> void:
+	var vp: Vector2 = ViewportUtils.get_size()
+	var board_pixel: float = 8.0 * 64.0
+	# 棋盤左右各保留 16px 邊距；最多放大到讓棋盤填滿可用寬度
+	var max_w: float = vp.x - 32.0
+	var s: float = max(0.1, max_w / board_pixel)
+	board.scale = Vector2(s, s)
+	board.position = Vector2((vp.x - board_pixel * s) * 0.5, vp.y * 0.22)
+	# 背景圖片：從畫面最頂端延伸到棋盤頂端（cover fit）
+	_battle_bg_rect.position = Vector2(0.0, 0.0)
+	_battle_bg_rect.size = Vector2(vp.x, board.position.y)
+
+
+## Viewport 改變時重排棋盤與 UI。
+func _on_viewport_changed(_size: Vector2) -> void:
+	_layout_board()
+	_apply_safe_area()
+	# 重新放置 chain header（若已建立）
+	if is_instance_valid(_live_chain_header) and is_instance_valid(_live_chain_label):
+		var board_h: float = 8.0 * 64.0 * board.scale.y
+		var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
+		_live_chain_header.position = bl + Vector2(8.0, -64.0)
+		_live_chain_label.position = bl + Vector2(8.0, -44.0)
+
+
+
+func _apply_safe_area() -> void:
+	var insets: Vector4 = ViewportUtils.get_safe_insets()
+	var top_inset: float = insets.x
+	var bottom_inset: float = insets.z
+	var top_bar: Control = $UILayer/TopBar
+	if top_bar:
+		top_bar.offset_top = top_inset
+		top_bar.offset_bottom = top_inset + 40.0
+	var char_row: Control = character_panel
+	if char_row:
+		char_row.offset_top = -200.0 - bottom_inset
+		char_row.offset_bottom = -140.0 - bottom_inset
+	var hp_bar: Control = $UILayer/PlayerHPBar
+	if hp_bar:
+		hp_bar.offset_top = -234.0 - bottom_inset
+		hp_bar.offset_bottom = -210.0 - bottom_inset
+	var restart_btn: Control = $UILayer/RestartButton
+	if restart_btn:
+		restart_btn.offset_top = -96.0 - bottom_inset
+		restart_btn.offset_bottom = -56.0 - bottom_inset
+	var ret_btn: Control = $UILayer/ReturnButton
+	if ret_btn:
+		ret_btn.offset_top = -96.0 - bottom_inset
+		ret_btn.offset_bottom = -56.0 - bottom_inset
 
 
 ## 設定融合提示：從隊伍角色中收集融合技能並傳遞給棋盤
@@ -253,15 +325,27 @@ func _on_tutorial_finished() -> void:
 
 # ── BGM ───────────────────────────────────────────────────────
 
-## 播放一次性音效
-func _play_sfx(stream: AudioStream) -> void:
+## 播放一次性音效（volume_scale 為線性倍率，1.0 = 原音量）
+func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> void:
 	if stream == null:
 		return
 	var player := AudioStreamPlayer.new()
 	player.stream = stream
+	if volume_scale > 0.0 and not is_equal_approx(volume_scale, 1.0):
+		player.volume_db = linear_to_db(volume_scale)
 	player.finished.connect(player.queue_free)
 	add_child(player)
 	player.play()
+
+
+## 依連鎖數播放對應音階：chain 2 → match_xylophone_2，... chain 10+ → match_xylophone_10_MAX
+func _play_chain_sfx(chain_count: int) -> void:
+	var idx: int = clampi(chain_count, 2, 10)
+	var path: String = "res://assets/se/match_xylophone_%d_MAX.wav" % idx if idx == 10 else "res://assets/se/match_xylophone_%d.wav" % idx
+	if not ResourceLoader.exists(path):
+		return
+	var stream: AudioStream = load(path)
+	_play_sfx(stream, 1.8)
 
 
 ## 播放關卡背景音樂
@@ -502,7 +586,7 @@ func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offs
 ## 3. 融合流程：粒子飛向點擊位置 → 放置高階寶石 → 掉落填充
 ## 4. 普通流程：粒子飛向角色卡 → 攻擊動畫 → 回應技能 → 結束回合
 func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array) -> void:
-	_play_sfx(_se_blast)
+	_play_sfx(_se_blast, 0.8)
 	# 將全局座標轉換為網格座標（用於直線檢測）
 	var grid_positions: Array[Vector2i] = []
 	for gp in global_positions:
@@ -1043,6 +1127,7 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 	_live_chain_count += 1
 	if _live_chain_count >= 2:
 		_update_chain_label(_live_chain_count)
+		_play_chain_sfx(_live_chain_count)
 	match upper_type:
 		Block.UpperType.LEAF_SHIELD:
 			# 葉盾：治療 Panda ATK × 5
@@ -1141,12 +1226,12 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 
 ## 建立或更新連鏈數字標籤，並播放 pop 彈跳動畫
 func _update_chain_label(count: int) -> void:
-	# 棋盤左下角座標（fx_layer 為 CanvasLayer，使用螢幕座標）
-	var board_h: float = 8.0 * 64.0
+	# 棋盤左下角座標（fx_layer 為 CanvasLayer，使用螢幕座標；考量 board.scale）
+	var board_h: float = 8.0 * 64.0 * board.scale.y
 	var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
-	# 每多一連鎖 +1 fontsize，加成上限 +10
+	# 每多一連鎖 +5 fontsize，加成上限 +50
 	var base_font_size: int = 44
-	var font_bonus: int = mini(count - 1, 10)
+	var font_bonus: int = mini((count - 1) * 5, 50)
 	var font_size: int = base_font_size + font_bonus
 	var pop_scale: float = 1.4
 
@@ -1833,10 +1918,9 @@ func _on_return_pressed() -> void:
 const BOSS_BAR_HEIGHT: float = 56.0
 
 var _boss_bar: Control = null
-var _boss_bar_fill: ColorRect = null
+var _boss_bar_fill: TextureRect = null
 var _boss_bar_bg: ColorRect = null
 var _boss_bar_label: Label = null
-var _boss_bar_icon: TextureRect = null
 var _boss_bar_enemy: Enemy = null
 var _boss_bar_reveal_tween: Tween = null
 var _kill_all_btn: Button = null
@@ -1856,34 +1940,26 @@ func _setup_boss_bar() -> void:
 	_boss_bar.visible = false
 	ui_layer.add_child(_boss_bar)
 
-	# 元素圖示（左側）
-	_boss_bar_icon = TextureRect.new()
-	_boss_bar_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_boss_bar_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_boss_bar_icon.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	_boss_bar_icon.offset_left = 0.0
-	_boss_bar_icon.offset_right = BOSS_BAR_HEIGHT
-	_boss_bar_icon.offset_top = 0.0
-	_boss_bar_icon.offset_bottom = BOSS_BAR_HEIGHT
-	_boss_bar_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_boss_bar.add_child(_boss_bar_icon)
-
-	# 血條容器
+	# 血條容器（占滿整條，不再預留元素圖示位置）
 	var bar := Control.new()
 	bar.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bar.offset_left = BOSS_BAR_HEIGHT + 8.0
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_boss_bar.add_child(bar)
 
 	_boss_bar_bg = ColorRect.new()
 	_boss_bar_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_boss_bar_bg.color = Color(0.15, 0.05, 0.05, 1)
+	_boss_bar_bg.color = Color(0, 0, 0, 1)
 	_boss_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_bg)
 
-	_boss_bar_fill = ColorRect.new()
+	_boss_bar_fill = TextureRect.new()
 	_boss_bar_fill.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_boss_bar_fill.color = Color(0.9, 0.15, 0.15, 1)
+	_boss_bar_fill.offset_left = 3.0
+	_boss_bar_fill.offset_top = 3.0
+	_boss_bar_fill.offset_right = -3.0
+	_boss_bar_fill.offset_bottom = -3.0
+	_boss_bar_fill.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_boss_bar_fill.stretch_mode = TextureRect.STRETCH_SCALE
 	_boss_bar_fill.pivot_offset = Vector2.ZERO
 	_boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_fill)
@@ -1905,35 +1981,49 @@ func _setup_boss_bar() -> void:
 	bar.add_child(_boss_bar_label)
 
 
-## 在 Restart 旁建立「Kill All」偵錯按鈕（隨 Restart 一起永遠可見）
+## 在 Restart 右側建立「Kill All」「Combo Test」偵錯按鈕，三顆水平排成一列
 func _setup_kill_all_button() -> void:
 	var ui_layer: CanvasLayer = $UILayer
 	var restart_btn: Node = ui_layer.get_node_or_null("RestartButton")
+
+	# 三顆按鈕同寬 (140px)，間距 8px，整組以 anchor 0.5 置中：
+	#   Restart: -226 to -86
+	#   Kill All: -78 to +62
+	#   Combo Test: +70 to +210
+	var top_off: float = -96.0
+	var bot_off: float = -56.0
+	if restart_btn is Button:
+		var rb: Button = restart_btn as Button
+		top_off = rb.offset_top
+		bot_off = rb.offset_bottom
+
 	_kill_all_btn = Button.new()
 	_kill_all_btn.name = "KillAllButton"
 	_kill_all_btn.text = "Kill All"
 	_kill_all_btn.modulate = Color(1.0, 0.6, 0.6)
-	if restart_btn is Button:
-		var rb: Button = restart_btn as Button
-		_kill_all_btn.offset_left = rb.offset_right + 16.0
-		_kill_all_btn.offset_right = _kill_all_btn.offset_left + (rb.offset_right - rb.offset_left)
-		_kill_all_btn.offset_top = rb.offset_top
-		_kill_all_btn.offset_bottom = rb.offset_bottom
+	_kill_all_btn.anchor_left = 0.5
+	_kill_all_btn.anchor_top = 1.0
+	_kill_all_btn.anchor_right = 0.5
+	_kill_all_btn.anchor_bottom = 1.0
+	_kill_all_btn.offset_left = -78.0
+	_kill_all_btn.offset_right = 62.0
+	_kill_all_btn.offset_top = top_off
+	_kill_all_btn.offset_bottom = bot_off
 	_kill_all_btn.pressed.connect(_on_kill_all_pressed)
 	ui_layer.add_child(_kill_all_btn)
 
-	# 「Combo Test」按鈕：將隨機 15 顆普通寶石變成火炸彈
 	var combo_btn := Button.new()
 	combo_btn.name = "ComboTestButton"
 	combo_btn.text = "Combo Test"
 	combo_btn.modulate = Color(1.0, 0.85, 0.4)
-	if restart_btn is Button:
-		var rb2: Button = restart_btn as Button
-		var w: float = rb2.offset_right - rb2.offset_left
-		combo_btn.offset_left = _kill_all_btn.offset_right + 16.0
-		combo_btn.offset_right = combo_btn.offset_left + w + 24.0
-		combo_btn.offset_top = rb2.offset_top
-		combo_btn.offset_bottom = rb2.offset_bottom
+	combo_btn.anchor_left = 0.5
+	combo_btn.anchor_top = 1.0
+	combo_btn.anchor_right = 0.5
+	combo_btn.anchor_bottom = 1.0
+	combo_btn.offset_left = 70.0
+	combo_btn.offset_right = 210.0
+	combo_btn.offset_top = top_off
+	combo_btn.offset_bottom = bot_off
 	combo_btn.pressed.connect(_on_combo_test_pressed)
 	ui_layer.add_child(combo_btn)
 
@@ -1960,13 +2050,11 @@ func _bind_boss_bar(boss: Enemy) -> void:
 		_boss_bar.visible = false
 		return
 
-	# 套用元素色 + 圖示
+	# 套用元素色垂直漸層（上：元素色，下：較暗），背景依舊為黑
 	var elem: int = boss.data.element
 	var elem_color: Color = Block.COLORS.get(elem, Color(0.9, 0.15, 0.15))
-	_boss_bar_fill.color = elem_color
-	_boss_bar_bg.color = Color(elem_color.r * 0.25, elem_color.g * 0.25, elem_color.b * 0.25, 1.0)
-	var tex: Texture2D = Block.GEM_TEXTURES.get(elem)
-	_boss_bar_icon.texture = tex
+	_boss_bar_fill.texture = Enemy.make_hp_gradient(elem_color)
+	_boss_bar_bg.color = Color(0, 0, 0, 1)
 	_boss_bar_fill.scale.x = 1.0
 	_boss_bar_label.text = "%d / %d" % [boss.current_hp, boss.data.max_hp]
 	# 預設隗入狀態：隱藏並安置在頂部之上，由 _reveal_boss_bar() 負責漸入

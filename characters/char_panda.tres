@@ -11,10 +11,11 @@ base_hp = 48
 hp_growth = 7.0
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.3, 0.69, 0.31, 1)
-portrait_scale = 1.25
-portrait_offset = Vector2(-93, -68)
-square_scale = 1.5
-square_offset = Vector2(-126, -31)
+portrait_scale = 1.05
+portrait_offset = Vector2(-94, -68)
+dialog_square_offset = Vector2(-1, 0)
+square_scale = 1.35
+square_offset = Vector2(-126, -32)
 responding_skills = Array[Dictionary]([{
 "desc": "Blast 4+ leaf gems: create a Leaf Shield gem at tapped cell. Click to heal ATK×5. Absorbs enemy attacks (50% dmg reduction).",
 "fuse_label": "4",

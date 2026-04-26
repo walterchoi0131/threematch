@@ -64,7 +64,7 @@ static func make_square(c: CharacterData) -> Dictionary:
 ## square=true → AspectRatioContainer 強制正方形 + square_scale/offset
 ## square=false → 全矩形裁切 + portrait_scale/offset
 static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
-	var gem_size: int = 56 if square else 28
+	var gem_size: int = 28 if square else 28
 	var char_color: Color = c.portrait_color
 
 	var panel := PanelContainer.new()
@@ -185,16 +185,16 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 		lv_label.text = "Lv.%d" % c.level
 		if lv_font != null:
 			lv_label.add_theme_font_override("font", lv_font)
-		lv_label.add_theme_font_size_override("font_size", 32)
+		lv_label.add_theme_font_size_override("font_size", 16)
 		lv_label.add_theme_color_override("font_color", Color.WHITE)
 		lv_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		lv_label.add_theme_constant_override("outline_size", 5)
+		lv_label.add_theme_constant_override("outline_size", 3)
 		lv_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lv_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		lv_label.grow_horizontal = Control.GROW_DIRECTION_END
 		lv_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 		lv_label.offset_left = 4.0
-		lv_label.offset_top = -44.0
+		lv_label.offset_top = -22.0
 		lv_label.offset_right = 4.0
 		lv_label.offset_bottom = 0.0
 		lv_label.visible = false
