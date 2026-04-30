@@ -52,6 +52,7 @@ var _translations: Dictionary = {
 	"PARTY": {"zh": "隊伍", "en": "Party"},
 	"CHAR_SELECTION": {"zh": "角色選擇", "en": "Characters Selection"},
 	"STAGE_SELECT": {"zh": "關卡選擇", "en": "STAGE SELECT"},
+	"MAP": {"zh": "地圖", "en": "Map"},
 	"Dev Stage": {"zh": "實戰訓教", "en": "Stage 1 — Slay the Slimes"},
 }
 

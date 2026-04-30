@@ -13,6 +13,19 @@ var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 var gold: int = 0                      # 玩家持有金幣
 var inventory: Dictionary = {}         # 玩家物品庫存，key = ItemDefs.Type，value = int
 
+## 已通關的關卡 id 集合（例如 "1-1"）。用於世界地圖解鎖。
+var cleared_stages: Dictionary = {}    # key = stage_id (String), value = true
+
+## 標記指定 stage_id 為已通關
+func mark_stage_cleared(stage_id: String) -> void:
+	if stage_id == "":
+		return
+	cleared_stages[stage_id] = true
+
+## 是否已通關
+func is_stage_cleared(stage_id: String) -> bool:
+	return stage_id != "" and cleared_stages.has(stage_id)
+
 # ── 戰鬥結算暫存（戰鬥勝利後寫入，結算場景讀取） ──
 var last_battle_loot: Dictionary = {}              # key=ItemDefs.Type, value=int
 var last_battle_party: Array[CharacterData] = []   # 出戰角色（結算用）

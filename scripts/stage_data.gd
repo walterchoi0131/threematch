@@ -13,6 +13,10 @@ const BACKGROUND_PATHS: Dictionary = {
 	Background.BREEZE: "res://assets/background/breeze.jpg",
 }
 
+## 關卡編號（Chapter-Stage 格式，例如 "1-1"）。用於存檔與解鎖判定。
+@export var stage_id: String = ""
+## 前置關卡 id：必須先通關此關卡才會解鎖本關。空字串 = 無前置（一律可玩）。
+@export var prerequisite_stage_id: String = ""
 @export var stage_name: String = "Stage 1"  # 關卡名稱
 @export var allowed_types: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE, Block.Type.GREEN]  # 允許的寶石類型
 @export var min_match: int = 2   # 最少連接數才可消除

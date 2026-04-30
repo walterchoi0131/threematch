@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://dyafoiu2m3dke"]
+[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://b5xw1nv2s4tg2"]
 
 [ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
 [ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
@@ -9,59 +9,50 @@
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")
-amount_min = 10
-amount_max = 20
+amount_min = 15
+amount_max = 28
 
-[sub_resource type="Resource" id="slime_1"]
+[sub_resource type="Resource" id="slime_a1"]
 script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 80
-attack_damage = 12
-attack_interval = 3
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_2"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 90
-attack_damage = 14
-attack_interval = 3
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_3"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 90
-attack_damage = 14
-attack_interval = 3
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_4"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 100
-attack_damage = 14
+enemy_level = 4
+max_hp = 110
+attack_damage = 16
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
-[sub_resource type="Resource" id="slime_5"]
+[sub_resource type="Resource" id="slime_a2"]
 script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 100
-attack_damage = 14
+enemy_level = 4
+max_hp = 110
+attack_damage = 16
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
-[sub_resource type="Resource" id="slime_6"]
+[sub_resource type="Resource" id="slime_b1"]
 script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 100
-attack_damage = 14
+enemy_level = 4
+max_hp = 130
+attack_damage = 18
+attack_interval = 2
+portrait_texture = ExtResource("3_slimetex")
+loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+
+[sub_resource type="Resource" id="slime_b2"]
+script = ExtResource("2_enemy")
+enemy_level = 4
+max_hp = 130
+attack_damage = 18
+attack_interval = 2
+portrait_texture = ExtResource("3_slimetex")
+loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+
+[sub_resource type="Resource" id="slime_b3"]
+script = ExtResource("2_enemy")
+enemy_level = 4
+max_hp = 130
+attack_damage = 18
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
@@ -69,14 +60,14 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="sapphire_loot"]
 script = ExtResource("5_loot")
 item_type = 1
-drop_chance = 0.7
+drop_chance = 0.85
 
 [sub_resource type="Resource" id="slime_boss"]
 script = ExtResource("2_enemy")
-enemy_name = "Slime Boss"
-enemy_level = 4
-max_hp = 400
-attack_damage = 35
+enemy_name = "Greater Slime"
+enemy_level = 5
+max_hp = 520
+attack_damage = 42
 attack_interval = 1
 portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_texture = ExtResource("4_blueslime")
@@ -86,9 +77,10 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("sapphire_loot")])
 
 [resource]
 script = ExtResource("1_script")
-stage_id = "1-1"
-stage_name = "Stage 1-1"
+stage_id = "1-2"
+prerequisite_stage_id = "1-1"
+stage_name = "Stage 1-2"
 allowed_types = Array[int]([0, 1, 2, 6])
 background = 1
-rounds = Array[Array]([[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]])
+rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
 bgm = ExtResource("1_lvgyu")

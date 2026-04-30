@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://b8t3xq4mn5lvr"]
+
+[ext_resource type="Script" path="res://scripts/stage_button.gd" id="1_script"]
+
+[node name="StageButton" type="Control"]
+custom_minimum_size = Vector2(120, 120)
+offset_right = 120.0
+offset_bottom = 120.0
+mouse_filter = 1
+script = ExtResource("1_script")

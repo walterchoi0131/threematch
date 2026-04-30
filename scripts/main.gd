@@ -1805,6 +1805,10 @@ func _on_battle_won() -> void:
 	for type: ItemDefs.Type in _battle_loot:
 		GameState.add_loot(type, _battle_loot[type])
 
+	# 標記關卡通關（用於世界地圖解鎖）
+	if current_stage != null:
+		GameState.mark_stage_cleared(current_stage.stage_id)
+
 	# 將結算資料寫入 GameState（結算場景讀取）
 	GameState.last_battle_loot = _battle_loot.duplicate()
 	GameState.last_battle_party = party.duplicate()
