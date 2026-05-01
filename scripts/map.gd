@@ -14,6 +14,8 @@ enum Page { CHARACTERS, MAP, INVENTORY }
 
 var _overlay_layer: CanvasLayer = null
 var _stage_buttons: Array[StageButton] = []
+var _path_layer: Control = null
+var _debug_panel: Control = null
 
 @onready var _pages_root: Control = $UILayer/Pages
 @onready var _map_page: Control = $UILayer/Pages/MapPage
@@ -34,6 +36,7 @@ func _ready() -> void:
 	_collect_stage_buttons(_map_page)
 	for sb in _stage_buttons:
 		sb.stage_pressed.connect(_on_stage_button_pressed)
+	_setup_path_layer()
 
 	# 懶載入 Characters / Inventory 子畫面到對應分頁
 	_ensure_subpage(_characters_page, CharactersScene)
@@ -42,7 +45,7 @@ func _ready() -> void:
 	_show_page(Page.MAP)
 	_refresh_stage_buttons()
 
-	GameState.play_bgm(load("res://assets/music/fez_map.mp3"), true, "map")
+	GameState.play_bgm(load("res://assets/music/mhr_quest.mp3"), true, "map")
 	get_viewport().size_changed.connect(_on_viewport_resized)
 
 
@@ -101,6 +104,22 @@ func _refresh_stage_buttons() -> void:
 			break
 	for sb in _stage_buttons:
 		sb.set_latest(sb == latest)
+	if _path_layer != null:
+		_path_layer.queue_redraw()
+
+
+# ── 世界地圖路徑連線（Stage 之間的道路 UI）────────────────────
+
+func _setup_path_layer() -> void:
+	_path_layer = Control.new()
+	_path_layer.name = "PathLayer"
+	_path_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_path_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_path_layer.set_script(preload("res://scripts/map_path_layer.gd"))
+	_map_page.add_child(_path_layer)
+	_map_page.move_child(_path_layer, 0)
+	_path_layer.set("stage_buttons", _stage_buttons)
+	_path_layer.queue_redraw()
 
 
 # ── 關卡按鈕 → 戰前準備覆蓋層 ─────────────────────────────────
@@ -132,7 +151,7 @@ func _open_overlay(scene: PackedScene) -> void:
 
 	var dim := ColorRect.new()
 	dim.name = "Dim"
-	dim.color = Color(0, 0, 0, 0.5)
+	dim.color = Color(0, 0, 0, 0.0)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	backdrop.add_child(dim)
 
@@ -222,3 +241,28 @@ func _play_overlay_close(layer: CanvasLayer, frame: Control, backdrop: Control) 
 	tw.tween_property(frame, "modulate:a", 0.0, 0.25)
 	tw.tween_property(backdrop, "modulate:a", 0.0, 0.25)
 	tw.chain().tween_callback(layer.queue_free)
+
+
+# ── F9 Debug Panel ──────────────────────────────────────────
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F9:
+		_toggle_debug_panel()
+
+
+func _toggle_debug_panel() -> void:
+	if _debug_panel != null and is_instance_valid(_debug_panel):
+		_debug_panel.queue_free()
+		_debug_panel = null
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 64
+	add_child(layer)
+	_debug_panel = MapDebugPanel.build(layer, func() -> void:
+		_refresh_stage_buttons()
+	)
+	# 關閉時連同 CanvasLayer 一起移除
+	_debug_panel.tree_exited.connect(func() -> void:
+		if is_instance_valid(layer):
+			layer.queue_free()
+	)

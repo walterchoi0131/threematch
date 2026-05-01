@@ -617,7 +617,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	# 先檢查回應技能以決定流程
 	var responses := battle_manager.check_responding_skills(board)
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 
 	if is_fuse:
@@ -762,7 +762,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	battle_manager.turn_gem_blasts = saved_blasts
 	battle_manager.last_blast_positions = saved_positions
 
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 	if not is_fuse:
 		return
@@ -796,6 +796,9 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 func _end_player_turn() -> void:
 	battle_manager.finish_turn()
 
+	# 召喚物每回合行動：豪豬攻擊 / 烏龜回血
+	await _resolve_persistent_upper_gems()
+
 	# 敵人行動前 1 秒延遲（同時鎖定棋盤直到敵人攻擊完成）
 	var will_attack: bool = battle_manager.has_enemies_to_attack()
 	if will_attack:
@@ -823,6 +826,106 @@ func _end_player_turn() -> void:
 			board.brighten_all_gems(0.3)
 		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
 		board.is_busy = false
+
+
+# ── 持久化召喚物：每回合行動 ───────────────────────────────────
+
+const PORCUPINE_POWER: float = 0.5  # 豪豬攻擊：全隊魔力 × 0.5
+const TURTLE_POWER: float = 0.8     # 烏龜回血：全隊魔力 × 0.8
+
+
+## 在玩家回合結束、敵人行動之前：讓所有場上的召喚物（豪豬/烏龜）行動一次。
+func _resolve_persistent_upper_gems() -> void:
+	var porcupines: Array[Vector2i] = board.find_upper_gems(Block.UpperType.PORCUPINE)
+	var turtles: Array[Vector2i] = board.find_upper_gems(Block.UpperType.TURTLE)
+	if porcupines.is_empty() and turtles.is_empty():
+		return
+
+	# 計算全隊魔力總和
+	var party_magic_sum: int = 0
+	for c: CharacterData in party:
+		if c != null:
+			party_magic_sum += c.get_magic()
+	if party_magic_sum <= 0:
+		return
+
+	# 找出綠屬性角色（僅用於記錄；豪豬/烏龜的 VFX 直接從寶石位置出發，不經過角色卡）
+	var green_idx: int = -1
+	for i in party.size():
+		var cd: CharacterData = party[i]
+		if cd != null and cd.gem_type == Block.Type.GREEN:
+			green_idx = i
+			break
+	var green_color: Color = Block.COLORS[Block.Type.GREEN]
+
+	# ── 豪豬：粒子直接從寶石位置 → 敵人，飛抵時造成傷害 ──
+	if not porcupines.is_empty():
+		var dmg: int = int(party_magic_sum * PORCUPINE_POWER)
+		if dmg > 0:
+			# 收集所有豪豬攻擊指令
+			var porc_attacks: Array = []
+			for pos: Vector2i in porcupines:
+				var target: Enemy = null
+				for e: Enemy in battle_manager.active_enemies:
+					if is_instance_valid(e) and e.current_hp > 0:
+						target = e
+						break
+				if target == null:
+					break
+				porc_attacks.append({"pos": pos, "target": target})
+
+			# 啟用延遲死亡（過殺機制，與標準攻擊管線一致）
+			for enemy in battle_manager.active_enemies:
+				if is_instance_valid(enemy):
+					enemy.defer_death = true
+
+			# 為每隻豪豬發射綠色軌跡投射物：寶石位置 → 敵人
+			for i in porc_attacks.size():
+				var atk: Dictionary = porc_attacks[i]
+				if not is_instance_valid(atk.target):
+					continue
+				var from_pos: Vector2 = board.to_global(board.grid_to_world(atk.pos))
+				var target_pos: Vector2 = atk.target.get_global_rect().get_center()
+				var trail := Node2D.new()
+				trail.set_script(TrailProjectileScript)
+				fx_layer.add_child(trail)
+				var captured_target: Enemy = atk.target
+				var captured_dmg: int = dmg
+				trail.deduct_hp.connect(func():
+					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
+						captured_target.take_damage(captured_dmg)
+						_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, green_color, true, false)
+					_play_sfx(_se_impact)
+				, CONNECT_ONE_SHOT)
+				trail.launch(from_pos, target_pos, green_color, 0.5)
+				_add_log_entry("[b]%s[/b] %s ⚔ %d" % [Locale.tr_ui("Porcupine"), _gem_bbcode(Block.Type.GREEN), dmg], Block.Type.GREEN, null)
+				if i < porc_attacks.size() - 1:
+					await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
+
+			# 等待最後一發投射物落地
+			if not porc_attacks.is_empty():
+				await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+
+			# 結算延遲死亡
+			for enemy in battle_manager.active_enemies.duplicate():
+				if is_instance_valid(enemy):
+					enemy.defer_death = false
+					if enemy.current_hp <= 0:
+						enemy.finalize_death()
+
+	# ── 烏龜：直接回血，不需飛行 VFX（在寶石位置顯示 +HP 數字）──
+	if not turtles.is_empty():
+		var heal: int = int(party_magic_sum * TURTLE_POWER)
+		if heal > 0:
+			for pos: Vector2i in turtles:
+				battle_manager.apply_heal(heal)
+				if green_idx >= 0:
+					character_panel.show_heal_text(green_idx, heal)
+				else:
+					var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
+					_spawn_damage_number(from_pos, heal, Color(0.5, 1.0, 0.5), true, false)
+				_add_log_entry("[b]%s[/b] %s +%d HP" % [Locale.tr_ui("Turtle"), _gem_bbcode(Block.Type.GREEN), heal], Block.Type.GREEN, null)
+				await get_tree().create_timer(0.15).timeout
 
 
 # ── 通用消除處理管線 ─────────────────────────────────────────────
@@ -1102,6 +1205,24 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _wc: CharacterData = party[resp.char_index]
 			var _wc_count: int = int(battle_manager.turn_gem_blasts.get(_wc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_wc.gem_type, _wc_count, slash_type), _wc.gem_type, _wc)
+			await get_tree().create_timer(0.15).timeout
+		"Porcupine":
+			# 召喚豪豬：每回合攻擊敵人
+			var pos: Vector2i = board.last_tapped_pos
+			board.place_upper_gem(pos, Block.UpperType.PORCUPINE, Block.Type.GREEN)
+			_play_sfx(_se_freeze)
+			var _pc2: CharacterData = party[resp.char_index]
+			var _pc2_count: int = int(battle_manager.turn_gem_blasts.get(_pc2.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_pc2.gem_type, _pc2_count, Block.UpperType.PORCUPINE), _pc2.gem_type, _pc2)
+			await get_tree().create_timer(0.15).timeout
+		"Turtle":
+			# 召喚烏龜：每回合回復玩家 HP
+			var pos: Vector2i = board.last_tapped_pos
+			board.place_upper_gem(pos, Block.UpperType.TURTLE, Block.Type.GREEN)
+			_play_sfx(_se_freeze)
+			var _tc: CharacterData = party[resp.char_index]
+			var _tc_count: int = int(battle_manager.turn_gem_blasts.get(_tc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_tc.gem_type, _tc_count, Block.UpperType.TURTLE), _tc.gem_type, _tc)
 			await get_tree().create_timer(0.15).timeout
 
 
@@ -1559,10 +1680,13 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 func _on_player_hp_changed(current: int, maximum: int) -> void:
 	player_hp_label.text = "%d" % current
 	var ratio: float = float(current) / float(maximum) if maximum > 0 else 0.0
+	var current_ratio: float = player_hp_fill.scale.x
 	var hp_tween := create_tween()
 	hp_tween.tween_property(player_hp_fill, "scale:x", ratio, 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	# 受傷時顯示白色預覽傷害條
+	if ratio < current_ratio:
+		_play_hp_damage_preview(player_hp_fill, current_ratio, ratio)
 	# 治療時閃綠，受傷時閃紅
-	var current_ratio: float = player_hp_fill.scale.x
 	if ratio > current_ratio:
 		var heal_tween := create_tween()
 		heal_tween.tween_property(player_hp_fill, "color", Color(0.2, 0.9, 0.3), 0.1)
@@ -1596,6 +1720,9 @@ func _on_player_defeated() -> void:
 	# 交叉淡入 One More Run（存於 GameState）
 	GameState.crossfade_bgm(load("res://assets/music/One More Run.mp3"), false, 0.6, "defeat")
 	_bgm_player = GameState.bgm_player
+	# 寶石散落動畫
+	if board.has_method("play_lose_animation"):
+		await board.play_lose_animation()
 	_show_defeat_overlay()
 
 
@@ -1608,16 +1735,19 @@ func _show_defeat_overlay() -> void:
 
 	_defeat_overlay = Control.new()
 	_defeat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_defeat_overlay.modulate = Color(1, 1, 1, 0)
 	ui_layer.add_child(_defeat_overlay)
 
-	# 暗色背景（fade-in）
+	# 暗色背景（fade-in，慢速）
 	var dark_bg := ColorRect.new()
 	dark_bg.color = Color(0.0, 0.0, 0.0, 0.0)
 	dark_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dark_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	_defeat_overlay.add_child(dark_bg)
-	var fade_tw := create_tween()
-	fade_tw.tween_property(dark_bg, "color:a", 0.85, 0.3)
+	var fade_tw := create_tween().set_parallel(true)
+	fade_tw.tween_property(dark_bg, "color:a", 0.85, 1.2) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	fade_tw.tween_property(_defeat_overlay, "modulate:a", 1.0, 1.2)
 
 	# 中央容器
 	var center := VBoxContainer.new()
@@ -1663,19 +1793,10 @@ func _show_defeat_overlay() -> void:
 	btn_row.add_child(return_btn)
 
 
-## 敗戰後重新開始
+## 敗戰後重新開始（透過淡黑→重載場景→淡入，徹底切回關卡 BGM 與對話狀態）
 func _on_defeat_restart() -> void:
-	if _defeat_overlay != null:
-		_defeat_overlay.queue_free()
-		_defeat_overlay = null
-	_battle_loot.clear()
-	_battle_exp = 0
-	board.is_busy = false
-	board.restart()
-	status_label.visible = false
-	return_button.visible = false
-	battle_manager.setup(current_stage, party)
-	_update_skill_ui()
+	GameState.fade_out_bgm(0.3)
+	GameState.fade_to_scene("res://scenes/main.tscn", 0.4)
 
 
 ## 波次轉換中：鎖定棋盤避免玩家在過場期間操作
@@ -1900,16 +2021,10 @@ func _go_to_battle_result() -> void:
 	)
 
 
-## 重新開始戰鬥
+## 重新開始戰鬥（透過淡黑→重載場景→淡入，徹底切回關卡 BGM）
 func _on_restart_pressed() -> void:
-	_battle_loot.clear()
-	_battle_exp = 0
-	board.is_busy = false
-	board.restart()
-	status_label.visible = false
-	return_button.visible = false
-	battle_manager.setup(current_stage, party)
-	_update_skill_ui()
+	GameState.fade_out_bgm(0.3)
+	GameState.fade_to_scene("res://scenes/main.tscn", 0.4)
 
 
 ## 返回地圖
@@ -2091,9 +2206,13 @@ func _on_boss_hp_changed(current: int, maximum: int) -> void:
 	if _boss_bar == null or _boss_bar_fill == null:
 		return
 	var ratio: float = float(current) / float(maximum) if maximum > 0 else 0.0
+	var prev_ratio: float = _boss_bar_fill.scale.x
 	var tw := create_tween()
 	tw.tween_property(_boss_bar_fill, "scale:x", ratio, 0.3) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	if ratio < prev_ratio:
+		# 預覽條與 boss bar fill 對齊
+		_play_hp_damage_preview(_boss_bar_fill, prev_ratio, ratio)
 	if _boss_bar_label:
 		_boss_bar_label.text = "%d / %d" % [current, maximum]
 
@@ -2116,3 +2235,8 @@ func _on_kill_all_pressed() -> void:
 func _on_combo_test_pressed() -> void:
 	if board != null and board.has_method("debug_spawn_firebombs"):
 		board.debug_spawn_firebombs(15)
+
+
+## HP 條傷害預覽白條：與 Fill 對齊（同 padding），停留 0.45s 後右邊崩興至新 HP 邊界
+func _play_hp_damage_preview(fill: Control, prev_ratio: float, new_ratio: float) -> void:
+	HpDamagePreview.show(fill, prev_ratio, new_ratio)

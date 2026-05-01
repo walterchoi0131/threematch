@@ -56,10 +56,10 @@ func _build_ui() -> void:
 	# 卡片溢出容許（roster grid 內的元素圖示可能溢出卡片邊界）
 	clip_contents = false
 
-	# 背景：填滿覆蓋層 frame
+	# 背景：填滿覆蓋層 frame，深藍不透明（與 inventory 一致）
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0, 0, 0, 0)
+	bg.color = Color(0.12, 0.14, 0.22, 1)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
 
@@ -91,7 +91,7 @@ func _build_ui() -> void:
 	scroll.offset_left = 48.0
 	scroll.offset_right = -48.0
 	scroll.offset_top = 70.0
-	scroll.offset_bottom = -68.0
+	scroll.offset_bottom = -16.0
 	add_child(scroll)
 
 	_roster_host = VBoxContainer.new()
@@ -100,17 +100,6 @@ func _build_ui() -> void:
 
 	_build_cards()
 	_apply_sort()
-
-	# Back button
-	var back_btn := Button.new()
-	back_btn.text = Locale.tr_ui("BACK_SHORT")
-	back_btn.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	back_btn.offset_left = 320.0
-	back_btn.offset_right = -320.0
-	back_btn.offset_top = -56.0
-	back_btn.offset_bottom = -12.0
-	back_btn.pressed.connect(_on_back_pressed)
-	add_child(back_btn)
 
 
 func _build_cards() -> void:

@@ -21,7 +21,8 @@ var _play_seq: int = 0  # 自增序號 — 回收時讓舊協程提早結束
 
 
 ## 在 parent 節點上的 global_pos 位置播放爆炸 VFX。
-static func play(parent: Node, global_pos: Vector2, ut: Block.UpperType) -> void:
+## rotation：將 sprite 旋轉的弳度（0 = 不旋轉）。
+static func play(parent: Node, global_pos: Vector2, ut: Block.UpperType, rotation: float = 0.0) -> void:
 	var def: UpperGemDefs.Def = UpperGemDefs.get_def(ut)
 	if def == null or def.blast_vfx_path.is_empty() or def.blast_vfx_frames <= 0:
 		return
@@ -30,7 +31,8 @@ static func play(parent: Node, global_pos: Vector2, ut: Block.UpperType) -> void
 	if tex == null:
 		return
 
-	var path: String = def.blast_vfx_path
+	# 將起始幀納入快取鍵，避免同一張 sprite sheet 被不同裁切覆蓋
+	var path: String = "%s#%d:%d" % [def.blast_vfx_path, def.blast_vfx_start_frame, def.blast_vfx_frames]
 	var pool: Array = _active_by_path.get(path, []) as Array
 
 	var node: BlastVfx
@@ -50,6 +52,8 @@ static func play(parent: Node, global_pos: Vector2, ut: Block.UpperType) -> void
 		parent.add_child(node)
 
 	node.global_position = global_pos
+	if node._sprite != null:
+		node._sprite.rotation = rotation
 	pool.append(node)
 	node._restart()
 
@@ -61,11 +65,13 @@ static func _create_node(parent: Node, path: String, tex: Texture2D, def: UpperG
 		var cols: int = def.blast_vfx_cols
 		var rows: int = def.blast_vfx_rows
 		var total: int = def.blast_vfx_frames
+		var start_f: int = def.blast_vfx_start_frame
 		var fw: float = float(tex.get_width()) / cols
 		var fh: float = float(tex.get_height()) / rows
 		for i in total:
-			var col: int = i % cols
-			var row: int = i / cols
+			var idx: int = i + start_f
+			var col: int = idx % cols
+			var row: int = idx / cols
 			var atlas := AtlasTexture.new()
 			atlas.atlas = tex
 			atlas.region = Rect2(col * fw, row * fh, fw, fh)

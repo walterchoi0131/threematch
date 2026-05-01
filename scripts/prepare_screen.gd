@@ -84,11 +84,26 @@ func _build_ui() -> void:
 	# 計算卡片尺寸：1/7 viewport 寬度
 	_card_size = ViewportUtils.get_size().x / 7.0
 
-	# 背景
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0)
+	# 背景：黑色垂直漸層 —— 中間 90% 不透明、上下 80%
+	var bg := TextureRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	grad.colors = PackedColorArray([
+		Color(0, 0, 0, 0.8),
+		Color(0, 0, 0, 0.9),
+		Color(0, 0, 0, 0.8),
+	])
+	var grad_tex := GradientTexture2D.new()
+	grad_tex.gradient = grad
+	grad_tex.fill_from = Vector2(0, 0)
+	grad_tex.fill_to = Vector2(0, 1)
+	grad_tex.width = 4
+	grad_tex.height = 256
+	bg.texture = grad_tex
 	add_child(bg)
 
 	# 全螢幕垂直排列容器
@@ -183,12 +198,28 @@ func _build_top_row(parent: VBoxContainer) -> void:
 	hbox.add_theme_constant_override("separation", 12)
 	box.add_child(hbox)
 
+	# 三欄等寬：使用三個 EXPAND_FILL 容器，各自 stretch_ratio = 1
+	var team_col := _make_top_column()
+	hbox.add_child(team_col)
+	var pie_col := _make_top_column()
+	hbox.add_child(pie_col)
+	var boss_col := _make_top_column()
+	hbox.add_child(boss_col)
+
 	# 左：我的隊伍（4 張小卡片）
-	_build_team_summary(hbox)
+	_build_team_summary(team_col)
 	# 中：元素分佈圓餅
-	_build_pie_content(hbox)
+	_build_pie_content(pie_col)
 	# 右：Boss
-	_build_boss_content(hbox)
+	_build_boss_content(boss_col)
+
+
+func _make_top_column() -> HBoxContainer:
+	var col := HBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_stretch_ratio = 1.0
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	return col
 
 
 # ── 左欄：我的隊伍縮圖 ───────────────────────────────────────
@@ -197,6 +228,7 @@ func _build_team_summary(parent: HBoxContainer) -> void:
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(vbox)
 
 	var title := _make_label(Locale.tr_ui("PARTY"), 20, Color(0.85, 0.85, 0.9))
@@ -223,8 +255,10 @@ func _refresh_team_summary() -> void:
 		var row: PanelContainer = PanelContainer.new()
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.custom_minimum_size = Vector2(0, row_h)
+		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		var hbox: HBoxContainer = HBoxContainer.new()
 		hbox.add_theme_constant_override("separation", 8)
+		hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(hbox)
 
 		if i < _selected_indices.size():
@@ -234,8 +268,10 @@ func _refresh_team_summary() -> void:
 
 			# 左：純頭像（無邊框、無元素圖示），套用 square_scale / square_offset
 			var portrait_card: Control = _make_team_portrait(c, row_h)
+			portrait_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var idx_in_owned: int = _selected_indices[i]
-			portrait_card.gui_input.connect(_on_team_card_input.bind(idx_in_owned))
+			# 整列點擊均可移除（連到 row 而非 portrait_card）
+			row.gui_input.connect(_on_team_card_input.bind(idx_in_owned))
 			hbox.add_child(portrait_card)
 
 			# 右：名稱（上）+ 元素圖示與 Lv（下）
@@ -275,6 +311,19 @@ func _refresh_team_summary() -> void:
 			row.add_theme_stylebox_override("panel", _make_empty_team_row_style())
 			var slot: Control = _make_empty_summary_slot(row_h)
 			hbox.add_child(slot)
+			# 「選擇隊員」閃爍提示
+			var hint_lbl := _make_label(Locale.tr_ui("SELECT_PARTY"), 18, Color(1.0, 0.95, 0.5))
+			hint_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+			hint_lbl.add_theme_constant_override("outline_size", 4)
+			hint_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			hint_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			hint_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			hbox.add_child(hint_lbl)
+			var blink_tw: Tween = create_tween().set_loops()
+			blink_tw.tween_property(hint_lbl, "modulate:a", 0.25, 0.6) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+			blink_tw.tween_property(hint_lbl, "modulate:a", 1.0, 0.6) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 			_team_summary_cards.append(slot)
 
 		_team_summary.add_child(row)
@@ -380,7 +429,7 @@ func _build_boss_content(parent: HBoxContainer) -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
-	vbox.size_flags_horizontal = Control.SIZE_SHRINK_END
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
 	parent.add_child(vbox)
 
@@ -500,18 +549,26 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 	const PIE_SIZE: float = 140.0
 	const ICON_SIZE: float = 56.0  # 元素圖示
 
+	# 用 CenterContainer 將 vbox 在 pie_col 內水平置中
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(center)
+
 	# 包一層 VBox 以容納標題 + 圓餅
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
-	parent.add_child(vbox)
+	center.add_child(vbox)
 
 	var pie_title := _make_label(Locale.tr_ui("ELEMENT_DISTRIBUTION"), 20, Color(0.85, 0.85, 0.9))
-	pie_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	pie_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pie_title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(pie_title)
 
 	var pie_container := Control.new()
 	pie_container.custom_minimum_size = Vector2(PIE_SIZE, PIE_SIZE)
 	pie_container.clip_contents = true  # 圖示溢出時裁切
+	pie_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	vbox.add_child(pie_container)
 
 	# 背景切片

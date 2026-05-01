@@ -435,6 +435,9 @@ func _play_exp_phase() -> void:
 				_advance_phase()
 		)
 
+	# 經驗已套用到 CharacterData，立即存檔以持久化等級/經驗
+	GameState.save_game()
+
 
 func _finalize_exp_phase() -> void:
 	# 跳過時：確保所有角色都已加完經驗（可能已在 _play_exp_phase 中加過）

@@ -5,7 +5,7 @@ extends Node2D
 
 # ── 寶石類型列舉 ──
 enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y, PORCUPINE, TURTLE }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬、豪豬、琉龜
 
 const TYPE_COUNT := 7  # 寶石類型總數
 
@@ -49,6 +49,8 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.SNOWBALL: preload("res://assets/gems/gem_snowball.png"),
 	UpperType.WATER_SLASH_X: preload("res://assets/gems/gem_watersword.png"),
 	UpperType.WATER_SLASH_Y: preload("res://assets/gems/gem_watersword.png"),
+	UpperType.PORCUPINE: preload("res://assets/gems/arrowpig.png"),
+	UpperType.TURTLE: preload("res://assets/gems/turtle.png"),
 }
 
 # 消除動畫精靈圖表（3 列 × 3 行 = 9 幀）
@@ -165,7 +167,7 @@ func _update_upper_overlay() -> void:
 	match upper_type:
 		UpperType.SAINT_CROSS:
 			upper_base_color = COLORS[Type.LIGHT]
-		UpperType.LEAF_SHIELD:
+		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE:
 			upper_base_color = COLORS[Type.GREEN]
 		UpperType.SNOWBALL:
 			upper_base_color = COLORS[Type.BLUE]
@@ -200,6 +202,8 @@ func _update_upper_overlay() -> void:
 		UpperType.SAINT_CROSS:
 			burst_color = Color(1.0, 0.95, 0.40, 0.60)
 		UpperType.LEAF_SHIELD:
+			burst_color = Color(0.40, 0.90, 0.35, 0.60)
+		UpperType.PORCUPINE, UpperType.TURTLE:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.SNOWBALL:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)

@@ -1,7 +1,7 @@
-[gd_scene load_steps=8 format=3 uid="uid://cskg2v302miqv"]
+[gd_scene format=3 uid="uid://cskg2v302miqv"]
 
 [ext_resource type="Script" uid="uid://xo704l56k5e4" path="res://scripts/map.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/background/worldmap.png" id="2_worldmap"]
+[ext_resource type="Texture2D" uid="uid://b565j307xwlbt" path="res://assets/background/worldmap.png" id="2_worldmap"]
 [ext_resource type="PackedScene" uid="uid://b8t3xq4mn5lvr" path="res://scenes/stage_button.tscn" id="3_stagebtn"]
 [ext_resource type="Resource" uid="uid://dyafoiu2m3dke" path="res://stages/stage_dev.tres" id="4_stage_1_1"]
 [ext_resource type="Resource" uid="uid://b5xw1nv2s4tg2" path="res://stages/stage_1_2.tres" id="5_stage_1_2"]
@@ -19,6 +19,7 @@ script = ExtResource("1_script")
 layer = -1
 
 [node name="Background" type="TextureRect" parent="BgLayer" unique_id=2015089920]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
@@ -28,97 +29,103 @@ stretch_mode = 6
 
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=973985963]
 
-[node name="Pages" type="Control" parent="UILayer"]
+[node name="Pages" type="Control" parent="UILayer" unique_id=2099124605]
+layout_mode = 3
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_bottom = -110.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 1
 
-[node name="MapPage" type="Control" parent="UILayer/Pages"]
+[node name="MapPage" type="Control" parent="UILayer/Pages" unique_id=944089655]
+anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 1
 
-[node name="Title" type="Label" parent="UILayer/Pages/MapPage"]
-anchor_right = 1.0
-offset_top = 28.0
-offset_bottom = 70.0
-theme_override_font_sizes/font_size = 32
-theme_override_colors/font_color = Color(1, 0.92, 0.35, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 6
-text = "World Map"
-horizontal_alignment = 1
-
-[node name="Stage1_1" parent="UILayer/Pages/MapPage" instance=ExtResource("3_stagebtn")]
+[node name="Stage1_1" parent="UILayer/Pages/MapPage" unique_id=204662907 instance=ExtResource("3_stagebtn")]
+anchors_preset = 0
 offset_left = 230.0
 offset_top = 520.0
 offset_right = 350.0
 offset_bottom = 640.0
 stage = ExtResource("4_stage_1_1")
 
-[node name="Stage1_2" parent="UILayer/Pages/MapPage" instance=ExtResource("3_stagebtn")]
+[node name="Stage1_2" parent="UILayer/Pages/MapPage" unique_id=936576380 instance=ExtResource("3_stagebtn")]
+anchors_preset = 0
 offset_left = 430.0
 offset_top = 440.0
 offset_right = 550.0
 offset_bottom = 560.0
 stage = ExtResource("5_stage_1_2")
 
-[node name="Stage1_3" parent="UILayer/Pages/MapPage" instance=ExtResource("3_stagebtn")]
-offset_left = 630.0
-offset_top = 360.0
-offset_right = 750.0
-offset_bottom = 480.0
+[node name="Stage1_3" parent="UILayer/Pages/MapPage" unique_id=579701151 instance=ExtResource("3_stagebtn")]
+anchors_preset = 0
+offset_left = 519.0
+offset_top = 717.0
+offset_right = 639.0
+offset_bottom = 837.0
 stage = ExtResource("6_stage_1_3")
 
-[node name="CharactersPage" type="Control" parent="UILayer/Pages"]
+[node name="CharactersPage" type="Control" parent="UILayer/Pages" unique_id=1542128791]
 visible = false
+anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 1
 
-[node name="CharactersBg" type="ColorRect" parent="UILayer/Pages/CharactersPage"]
+[node name="CharactersBg" type="ColorRect" parent="UILayer/Pages/CharactersPage" unique_id=696437410]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.55)
 mouse_filter = 2
+color = Color(0, 0, 0, 0.55)
 
-[node name="InventoryPage" type="Control" parent="UILayer/Pages"]
+[node name="InventoryPage" type="Control" parent="UILayer/Pages" unique_id=2113682435]
 visible = false
+anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 1
 
-[node name="InventoryBg" type="ColorRect" parent="UILayer/Pages/InventoryPage"]
+[node name="InventoryBg" type="ColorRect" parent="UILayer/Pages/InventoryPage" unique_id=1523498955]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.55)
 mouse_filter = 2
+color = Color(0, 0, 0, 0.55)
 
-[node name="BottomNav" type="PanelContainer" parent="UILayer"]
+[node name="BottomNav" type="PanelContainer" parent="UILayer" unique_id=1668054623]
+anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = -110.0
 theme_override_styles/panel = SubResource("SBF_nav")
 
-[node name="HBox" type="HBoxContainer" parent="UILayer/BottomNav"]
+[node name="HBox" type="HBoxContainer" parent="UILayer/BottomNav" unique_id=771203318]
+layout_mode = 2
 theme_override_constants/separation = 0
 
-[node name="CharactersTab" type="Button" parent="UILayer/BottomNav/HBox"]
+[node name="CharactersTab" type="Button" parent="UILayer/BottomNav/HBox" unique_id=1939474261]
 custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 20
 text = "Characters"
 
-[node name="MapTab" type="Button" parent="UILayer/BottomNav/HBox"]
+[node name="MapTab" type="Button" parent="UILayer/BottomNav/HBox" unique_id=1704756273]
 custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 20
 text = "Map"
 
-[node name="InventoryTab" type="Button" parent="UILayer/BottomNav/HBox"]
+[node name="InventoryTab" type="Button" parent="UILayer/BottomNav/HBox" unique_id=2031125533]
 custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 20
 text = "Inventory"

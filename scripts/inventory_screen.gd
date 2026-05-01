@@ -15,10 +15,10 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	# 背景：填滿覆蓋層 frame
+	# 背景：填滿覆蓋層 frame，深藍不透明
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0, 0, 0, 0)
+	bg.color = Color(0.12, 0.14, 0.22, 1)
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg)
 
@@ -60,7 +60,7 @@ func _build_ui() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.offset_top = 190.0
-	scroll.offset_bottom = -80.0
+	scroll.offset_bottom = -16.0
 	scroll.offset_left = 48.0
 	scroll.offset_right = -48.0
 	add_child(scroll)
@@ -86,17 +86,6 @@ func _build_ui() -> void:
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(empty_lbl)
-
-	# 返回按鈕
-	var back_btn := Button.new()
-	back_btn.text = Locale.tr_ui("BACK_MAP")
-	back_btn.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	back_btn.offset_top = -60.0
-	back_btn.offset_bottom = -16.0
-	back_btn.offset_left = 160.0
-	back_btn.offset_right = -160.0
-	back_btn.pressed.connect(_on_back_pressed)
-	add_child(back_btn)
 
 
 func _make_item_card(type: ItemDefs.Type, amount: int) -> PanelContainer:

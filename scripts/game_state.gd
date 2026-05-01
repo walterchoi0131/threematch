@@ -3,6 +3,8 @@
 extends Node
 
 const MAX_PARTY_SIZE := 4  # 隊伍最大人數
+const SAVE_PATH := "user://save.json"
+const SAVE_VERSION := 1
 
 var selected_stage: StageData = null           # 當前選擇的關卡
 var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
@@ -21,6 +23,7 @@ func mark_stage_cleared(stage_id: String) -> void:
 	if stage_id == "":
 		return
 	cleared_stages[stage_id] = true
+	save_game()
 
 ## 是否已通關
 func is_stage_cleared(stage_id: String) -> bool:
@@ -195,6 +198,7 @@ func add_loot(type: ItemDefs.Type, amount: int) -> void:
 	else:
 		var current: int = inventory.get(type, 0)
 		inventory[type] = current + amount
+	save_game()
 
 
 func _ready() -> void:
@@ -228,6 +232,133 @@ func _ready() -> void:
 		preload("res://characters/char_shark.tres"),
 		preload("res://characters/char_raccoon.tres"),
 	]
+
+	# 嘗試載入持久化存檔（覆寫 owned_characters / inventory / gold / cleared_stages）
+	load_game()
+
+
+# ── 持久化存檔 ───────────────────────────────────────────────
+
+## 將目前持久狀態寫入 user://save.json
+func save_game() -> void:
+	var data: Dictionary = _serialize()
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f == null:
+		push_warning("GameState: cannot open save file for writing: %s" % SAVE_PATH)
+		return
+	f.store_string(JSON.stringify(data, "\t"))
+	f.close()
+
+
+## 從 user://save.json 讀取存檔；不存在或失敗回傳 false。
+func load_game() -> bool:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return false
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return false
+	var text: String = f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(text)
+	if not (parsed is Dictionary):
+		push_warning("GameState: save file is not a valid JSON object")
+		return false
+	var d: Dictionary = parsed
+	var ver: int = int(d.get("version", 0))
+	if ver != SAVE_VERSION:
+		push_warning("GameState: save version %d is not supported (expect %d); ignoring" % [ver, SAVE_VERSION])
+		return false
+	_deserialize(d)
+	return true
+
+
+## 刪除存檔並將 in-memory 狀態重置為初始值（不立即重新存檔）。
+func clear_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+		# 上述對 user:// 路徑可能無效；改用 DirAccess.open("user://") 後 remove
+		var dir := DirAccess.open("user://")
+		if dir != null and dir.file_exists("save.json"):
+			dir.remove("save.json")
+	# 重置記憶體中的持久狀態
+	cleared_stages.clear()
+	inventory.clear()
+	gold = 0
+	owned_characters = [
+		preload("res://characters/char_boar.tres"),
+		preload("res://characters/char_raccoon.tres"),
+		preload("res://characters/char_fox.tres"),
+		preload("res://characters/char_husky.tres"),
+		preload("res://characters/char_panda.tres"),
+		preload("res://characters/char_polar.tres"),
+		preload("res://characters/char_shark.tres"),
+		preload("res://characters/char_dragon.tres"),
+	]
+	# 將每個角色的等級/經驗重置為預設值（避免快取中的舊值殘留）
+	for c: CharacterData in owned_characters:
+		if c != null:
+			c.level = 5
+			c.current_exp = 0
+
+
+func _serialize() -> Dictionary:
+	var char_entries: Array = []
+	for c: CharacterData in owned_characters:
+		if c != null and c.resource_path != "":
+			char_entries.append({
+				"path": c.resource_path,
+				"level": c.level,
+				"exp": c.current_exp,
+			})
+	var inv: Dictionary = {}
+	for k in inventory.keys():
+		inv[str(int(k))] = int(inventory[k])
+	return {
+		"version": SAVE_VERSION,
+		"gold": gold,
+		"owned_characters": char_entries,
+		"inventory": inv,
+		"cleared_stages": cleared_stages.keys(),
+	}
+
+
+func _deserialize(d: Dictionary) -> void:
+	gold = int(d.get("gold", 0))
+
+	var loaded_chars: Array[CharacterData] = []
+	for entry in d.get("owned_characters", []):
+		var path: String = ""
+		var lvl: int = -1
+		var xp: int = -1
+		if entry is Dictionary:
+			path = str(entry.get("path", ""))
+			lvl = int(entry.get("level", -1))
+			xp = int(entry.get("exp", -1))
+		else:
+			path = str(entry)
+		if path == "":
+			continue
+		var res: Resource = load(path)
+		if res is CharacterData:
+			var cd: CharacterData = res
+			if lvl > 0:
+				cd.level = lvl
+			if xp >= 0:
+				cd.current_exp = xp
+			loaded_chars.append(cd)
+		else:
+			push_warning("GameState: cannot load CharacterData at %s" % path)
+	if loaded_chars.size() > 0:
+		owned_characters = loaded_chars
+
+	inventory.clear()
+	var inv: Dictionary = d.get("inventory", {})
+	for k in inv.keys():
+		inventory[int(k)] = int(inv[k])
+
+	cleared_stages.clear()
+	for sid in d.get("cleared_stages", []):
+		cleared_stages[str(sid)] = true
 
 
 ## 建構第一關固定棋盤佈局（8×8）

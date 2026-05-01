@@ -182,14 +182,17 @@ func _stop_spin() -> void:
 
 ## 受到傷害：扣血、更新血條、播放受傷閃爍、檢查死亡
 func take_damage(amount: int) -> void:
+	var prev_hp: int = current_hp
 	current_hp = max(0, current_hp - amount)
 	hp_changed.emit(current_hp, data.max_hp)
 	if hp_bar_label:
 		hp_bar_label.text = "%d" % current_hp
 	if hp_bar_fill:
+		var prev_ratio: float = float(prev_hp) / float(data.max_hp) if data.max_hp > 0 else 0.0
 		var target_ratio: float = float(current_hp) / float(data.max_hp) if data.max_hp > 0 else 0.0
 		var bar_tween := create_tween()
 		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		_play_hp_damage_preview(prev_ratio, target_ratio)
 
 	# 整個敎人閃紅提示受傷
 	var blink := create_tween()
@@ -228,3 +231,8 @@ func _play_death_animation() -> void:
 func _on_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		pressed.emit(self)
+
+
+## HP 條傷害預覽白條：與內層 Fill 對齊（同 padding），停留 0.45s 後右邊崩往新 HP 邊界
+func _play_hp_damage_preview(prev_ratio: float, new_ratio: float) -> void:
+	HpDamagePreview.show(hp_bar_fill, prev_ratio, new_ratio)

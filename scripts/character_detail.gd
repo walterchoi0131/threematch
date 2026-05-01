@@ -397,11 +397,19 @@ func _build_skills_section(parent: VBoxContainer, _card_w: float) -> void:
 		var sdesc: String = skill.get("desc", "")
 		if sname == "":
 			continue
+		# 查找本地化名稱與描述（以 sname 為鍵，沒找到則使用原始字串）
+		var display_name: String = Locale.tr_ui(sname)
+		if display_name == sname or display_name == "":
+			display_name = sname
+		var desc_key: String = sname + " DESC"
+		var display_desc: String = Locale.tr_ui(desc_key)
+		if display_desc == desc_key:
+			display_desc = sdesc
 		var upper_type: int = _resolve_responding_upper(sname)
 		var gem_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
 		var fuse_label: String = str(skill.get("fuse_label", skill.get("threshold", "")))
 		var pattern: Array = _blast_pattern_for(upper_type)
-		_add_skill_entry(parent, Locale.tr_ui("RESPONDING"), sname, sdesc, 0, gem_tex, fuse_label, pattern)
+		_add_skill_entry(parent, Locale.tr_ui("RESPONDING"), display_name, display_desc, 0, gem_tex, fuse_label, pattern)
 
 
 ## 由回應技能名稱對應到 UpperType（無對應時回傳 -1）。
@@ -414,6 +422,8 @@ func _resolve_responding_upper(skill_name: String) -> int:
 		"Saint Cross": Block.UpperType.SAINT_CROSS,
 		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 		"Snowball": Block.UpperType.SNOWBALL,
+		"Porcupine": Block.UpperType.PORCUPINE,
+		"Turtle": Block.UpperType.TURTLE,
 	}
 	return NAME_TO_UPPER.get(skill_name, -1)
 
@@ -449,6 +459,9 @@ func _blast_pattern_for(upper_type: int) -> Array:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
+		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
+			# 只爆自身（中心格）
+			return [Vector2i(2, 2)]
 	return []
 
 
@@ -534,13 +547,29 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 # ── 技能條輔助元件 ─────────────────────────────────────────
 
 func _make_gem_box(elem_color: Color, tex: Texture2D, gem_size: float) -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
 	var gem := TextureRect.new()
 	gem.texture = tex
 	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	gem.custom_minimum_size = Vector2(gem_size, gem_size)
-	gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	return gem
+	gem.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(gem)
+
+	# 與「合成提示」/「爆發範圍」一致的下方標題
+	var caption := Label.new()
+	caption.text = Locale.tr_ui("UPPER_GEM")
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 11)
+	caption.add_theme_color_override("font_color", Color(0.85, 0.85, 0.95))
+	v.add_child(caption)
+
+	# 避免未使用警告（保留參數以維持簽名一致）
+	var _ec := elem_color
+	return v
 
 
 func _make_arrow_label() -> Label:

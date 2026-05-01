@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://cg35t6dcq4fk4"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/panda.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://b2ldvi14lqlks" path="res://assets/panda.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -11,8 +11,8 @@ base_hp = 48
 hp_growth = 7.0
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.3, 0.69, 0.31, 1)
-portrait_scale = 1.05
-portrait_offset = Vector2(-94, -68)
+portrait_scale = 1.2000000000000002
+portrait_offset = Vector2(-83, -61)
 dialog_square_offset = Vector2(-1, 0)
 square_scale = 1.35
 square_offset = Vector2(-126, -32)

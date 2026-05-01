@@ -707,6 +707,57 @@ func restart() -> void:
 	is_busy = false
 
 
+## 失敗動畫：寶石全部以拋物線（小幅上拋→落下）散開並旋轉淡出。
+## 旋轉與位置同時開始（並行）。鎖定 is_busy 並 await 動畫完成。
+func play_lose_animation() -> void:
+	is_busy = true
+	deferred_clicks.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var max_total: float = 0.0
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null:
+				continue
+			var delay: float = rng.randf_range(0.0, 0.25)
+			var jump_h: float = rng.randf_range(40.0, 110.0)
+			var dx: float = rng.randf_range(-220.0, 220.0)
+			var fall_dy: float = rng.randf_range(700.0, 1000.0)
+			var spin: float = rng.randf_range(-PI * 1.6, PI * 1.6)
+			var up_dur: float = 0.22
+			var down_dur: float = 0.85
+			var total_dur: float = up_dur + down_dur
+			var start_pos: Vector2 = block.position
+			block.z_index = 50
+			# 旋轉：與位置動畫同時開始（並行，貫穿整段）
+			var spin_tw := create_tween()
+			spin_tw.tween_interval(delay)
+			spin_tw.tween_property(block, "rotation", spin, total_dur)
+			# X 方向：與位置同時開始，整段時間內線性飄移
+			var x_tw := create_tween()
+			x_tw.tween_interval(delay)
+			x_tw.tween_property(block, "position:x", start_pos.x + dx, total_dur) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			# Y 方向：拋物線 — 先上拋（短）再落下（長）
+			var y_tw := create_tween()
+			y_tw.tween_interval(delay)
+			y_tw.tween_property(block, "position:y", start_pos.y - jump_h, up_dur) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			y_tw.tween_property(block, "position:y", start_pos.y + fall_dy, down_dur) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			# 淡出：在落下後段才開始
+			var fade_tw := create_tween()
+			fade_tw.tween_interval(delay + total_dur - 0.45)
+			fade_tw.tween_property(block, "modulate:a", 0.0, 0.45)
+			var total: float = delay + total_dur
+			if total > max_total:
+				max_total = total
+	if max_total <= 0.0:
+		max_total = 0.4
+	await get_tree().create_timer(max_total + 0.05).timeout
+
+
 ## 將 [count] 個寶石轉換為 [to_type] 類型。
 ## 優先從 [priority_types] 中選取，不足時從其他類型補充。
 ## 播放縮小→替換→放大 的變身動畫。返回被轉換的位置。
@@ -901,7 +952,7 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	upper_gem_chain_triggered.emit(ut)
 
 	# 播放爆炸 VFX（fire-and-forget）
-	BlastVfx.play(self, block.global_position, ut)
+	_play_blast_vfx_for(pos, ut, block.global_position)
 
 	# 先消除被點擊的高階寶石本身（立即播放動畫）
 	var bt: Block.Type = block.block_type as Block.Type
@@ -1002,7 +1053,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		if ub == null:
 			continue
 		# 播放連鏈爆炸 VFX
-		BlastVfx.play(self, ub.global_position, cut)
+		_play_blast_vfx_for(cp, cut, ub.global_position)
 		var ub_type: Block.Type = ub.block_type as Block.Type
 		total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + 1
 		gems_blasted.emit(ub_type, 1, [ub.global_position])
@@ -1030,6 +1081,25 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		chain_data[0] += 1
 		if valid_positions.size() > 0:
 			await _execute_upper_blast_chain(valid_positions, chain_data, total_blasted_by_type)
+
+
+## 播放高階寶石爆炸 VFX：水劍會在每個受影響格子各播放一次（X 旋轉 90°）；
+## 其他類型則維持單點播放於中心。
+func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_global: Vector2) -> void:
+	if ut == Block.UpperType.WATER_SLASH_X or ut == Block.UpperType.WATER_SLASH_Y:
+		var rot: float = (PI * 0.5) if ut == Block.UpperType.WATER_SLASH_X else 0.0
+		var positions: Array[Vector2i] = _get_blast_positions_for_upper(center_pos, ut)
+		for p in positions:
+			var gp: Vector2 = center_global
+			if p.x >= 0 and p.x < grid.size() and p.y >= 0 and p.y < grid[p.x].size():
+				var b: Block = grid[p.x][p.y]
+				if b != null:
+					gp = b.global_position
+				else:
+					gp = center_global + Vector2(p - center_pos) * float(CELL_SIZE)
+			BlastVfx.play(self, gp, ut, rot)
+		return
+	BlastVfx.play(self, center_global, ut)
 
 
 ## 根據高階寶石類型取得爆炸範圍（點擊與連鏈共用）

@@ -16,3 +16,18 @@ portrait_offset = Vector2(-34, -51)
 dialog_square_offset = Vector2(-9, 0)
 square_scale = 0.85
 square_offset = Vector2(-83, -25)
+responding_skills = Array[Dictionary]([{
+"desc": "Blast 5+ leaf gems: summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
+"fuse_label": "5",
+"name": "Turtle",
+"priority": 2,
+"threshold": 5,
+"trigger_type": "count"
+}, {
+"desc": "Blast 9+ leaf gems: summon a Porcupine gem at tapped cell. Self-blast only. Attacks first enemy for ΣTeamMagic × 0.5 each turn.",
+"fuse_label": "9",
+"name": "Porcupine",
+"priority": 1,
+"threshold": 9,
+"trigger_type": "count"
+}])
