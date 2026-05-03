@@ -15,6 +15,15 @@ var _gem_icons: Dictionary = {}        # 角色索引 -> TextureRect（元素寶
 var _gem_rays: Dictionary = {}         # 角色索引 -> Node2D（技能就緒放射光芒）
 var _debug_panel: Control = null       # 即時調整面板
 
+# 長按觸發（Flutter 風格：按住期間計時，達到閾值立即觸發，不等放手）
+const LONG_PRESS_THRESHOLD: float = 0.5  # 秒
+var _pressing_index: int = -1            # 目前按住的卡片索引（-1 表示無）
+var _press_start_time: float = 0.0       # 按下時間
+var _long_press_fired: bool = false      # 是否已觸發長按（防止 release 時重複觸發）
+var _popup_layer: CanvasLayer = null     # 長按彈出的覆蓋面板
+var _popup_dim: ColorRect = null         # 暗化背景（淡入淡出用）
+var _popup_panel: Control = null         # 中央面板（淡入淡出用）
+
 
 ## 初始化角色面板：為每個角色建立卡片
 func setup(characters: Array[CharacterData]) -> void:
@@ -116,9 +125,272 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	return panel
 
 
+## _process：Flutter 風格長按 — 按住期間每幀檢查，達閾值立即觸發（不等放手）。
+func _process(_delta: float) -> void:
+	if _pressing_index < 0 or _long_press_fired:
+		return
+	var held: float = (Time.get_ticks_msec() / 1000.0) - _press_start_time
+	if held >= LONG_PRESS_THRESHOLD:
+		_long_press_fired = true
+		_show_char_popup(_pressing_index)
+
+
 func _on_card_gui_input(event: InputEvent, index: int) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		active_skill_activated.emit(index)
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	var mb := event as InputEventMouseButton
+	if mb.pressed:
+		# 如果彈出面板開著，任何按下都關閉它
+		if _popup_layer != null:
+			_close_char_popup()
+			return
+		_pressing_index = index
+		_press_start_time = Time.get_ticks_msec() / 1000.0
+		_long_press_fired = false
+	else:
+		var was_long := _long_press_fired
+		_pressing_index = -1
+		_long_press_fired = false
+		if not was_long:
+			active_skill_activated.emit(index)
+
+
+## 長按觸發 → 彈出角色資訊浮窗（自製，非 character_detail）。
+func _show_char_popup(index: int) -> void:
+	if _popup_layer != null or index < 0 or index >= _char_data.size():
+		return
+	var c: CharacterData = _char_data[index]
+	if c == null:
+		return
+
+	_popup_layer = CanvasLayer.new()
+	_popup_layer.layer = 82
+	var host: Node = get_tree().current_scene
+	if host == null:
+		host = self
+	host.add_child(_popup_layer)
+
+	# 暗化底層
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	# 點擊任意處關閉
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			_close_char_popup()
+	)
+	_popup_layer.add_child(dim)
+
+	# 中央圓角面板
+	const PANEL_W: float = 480.0
+	const IMG_SIZE: float = 300.0 * 4.0
+	const HEADER_H: float = 130.0
+	var panel := PanelContainer.new()
+	panel.anchor_left   = 0.5
+	panel.anchor_right  = 0.5
+	panel.anchor_top    = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left   = -PANEL_W * 0.5
+	panel.offset_right  =  PANEL_W * 0.5
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.clip_contents = true
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.10, 0.12, 0.18, 0.97)
+	bg.set_border_width_all(2)
+	bg.border_color = Color(0.85, 0.72, 0.30)
+	bg.set_corner_radius_all(14)
+	bg.set_content_margin_all(0)
+	panel.add_theme_stylebox_override("panel", bg)
+	_popup_layer.add_child(panel)
+	_popup_dim = dim
+	_popup_panel = panel
+
+	# ── 主佈局 VBox ──
+	var vbox_main := VBoxContainer.new()
+	vbox_main.add_theme_constant_override("separation", 0)
+	vbox_main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_child(vbox_main)
+
+	# ── 頭部：角色圖 (絕對定位) + 名字/Lv ──
+	var header := Control.new()
+	header.custom_minimum_size = Vector2(PANEL_W, HEADER_H)
+	header.clip_contents = true
+	vbox_main.add_child(header)
+
+	# 角色圖：絕對定位，右上角，4× 尺寸，向下溢出
+	if c.portrait_texture != null:
+		var portrait := TextureRect.new()
+		portrait.texture = c.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait.anchor_left   = 0.0
+		portrait.anchor_top    = 1.0
+		portrait.anchor_right  = 0.0
+		portrait.anchor_bottom = 1.0
+		portrait.grow_horizontal = Control.GROW_DIRECTION_END
+		portrait.grow_vertical   = Control.GROW_DIRECTION_BEGIN
+		portrait.offset_left   = 0.0       + c.rectangular_offset.x
+		portrait.offset_top    = -IMG_SIZE + c.rectangular_offset.y
+		portrait.offset_right  = IMG_SIZE  + c.rectangular_offset.x
+		portrait.offset_bottom = 0.0       + c.rectangular_offset.y
+		portrait.pivot_offset  = Vector2(0, IMG_SIZE)
+		portrait.scale = Vector2(c.rectangular_scale, c.rectangular_scale)
+		header.add_child(portrait)
+
+	# 名字 + Lv（右側對齊）
+	var info_vbox := VBoxContainer.new()
+	info_vbox.anchor_left   = 0.0
+	info_vbox.anchor_top    = 0.0
+	info_vbox.anchor_right  = 1.0
+	info_vbox.anchor_bottom = 1.0
+	info_vbox.offset_left   = 12.0
+	info_vbox.offset_top    = 0.0
+	info_vbox.offset_right  = -12.0
+	info_vbox.offset_bottom = 0.0
+	info_vbox.add_theme_constant_override("separation", 6)
+	info_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	info_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(info_vbox)
+
+	var name_lbl := Label.new()
+	name_lbl.text = c.character_name
+	name_lbl.add_theme_font_size_override("font_size", 24)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	name_lbl.add_theme_constant_override("outline_size", 4)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(name_lbl)
+
+	var lv_row := HBoxContainer.new()
+	lv_row.add_theme_constant_override("separation", 4)
+	lv_row.alignment = BoxContainer.ALIGNMENT_END
+	lv_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lv_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(lv_row)
+
+	var elem_icon := TextureRect.new()
+	elem_icon.texture = Block.GEM_TEXTURES.get(c.gem_type, null)
+	elem_icon.custom_minimum_size = Vector2(13, 13)
+	elem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	elem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lv_row.add_child(elem_icon)
+
+	var lv_lbl := Label.new()
+	lv_lbl.text = "Lv. %d" % c.level
+	lv_lbl.add_theme_font_size_override("font_size", 20)
+	lv_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
+	lv_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lv_lbl.add_theme_constant_override("outline_size", 3)
+	lv_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lv_row.add_child(lv_lbl)
+
+	# ── 技能區 ──
+	var skills_scroll := ScrollContainer.new()
+	skills_scroll.custom_minimum_size = Vector2(PANEL_W, 280)
+	skills_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	vbox_main.add_child(skills_scroll)
+
+	var skills_vbox := VBoxContainer.new()
+	skills_vbox.add_theme_constant_override("separation", 8)
+	skills_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var skills_margin := MarginContainer.new()
+	skills_margin.add_theme_constant_override("margin_left", 16)
+	skills_margin.add_theme_constant_override("margin_right", 16)
+	skills_margin.add_theme_constant_override("margin_top", 12)
+	skills_margin.add_theme_constant_override("margin_bottom", 12)
+	skills_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skills_scroll.add_child(skills_margin)
+	skills_margin.add_child(skills_vbox)
+
+	_add_popup_skill(skills_vbox, Locale.tr_ui("PASSIVE"), c.passive_skill_name, c.passive_skill_desc, null)
+	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"),  c.active_skill_name,  c.active_skill_desc,  null)
+
+	var elem_color: Color = Block.COLORS.get(c.gem_type, Color(0.4, 0.6, 1.0))
+	var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type, null)
+	for sk: Dictionary in c.responding_skills:
+		var sk_name: String = sk.get("name", "")
+		var sk_desc: String = sk.get("desc", "")
+		var fuse_label: String = str(sk.get("fuse_label", sk.get("threshold", "")))
+		if sk_name == "":
+			continue
+		var upper_type: int = FuseTutorialCanvas.NAME_TO_UPPER.get(sk_name, -1)
+		var upper_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
+		var pattern: Array = FuseTutorialCanvas._blast_pattern_for(upper_type)
+		var chain: Control = FuseTutorialCanvas._make_skill_chain(fuse_label, base_gem_tex, upper_tex, pattern, elem_color)
+		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), sk_name, sk_desc, chain)
+
+	# ── 淡入動畫 ──
+	dim.modulate.a = 0.0
+	panel.modulate.a = 0.0
+	panel.scale = Vector2(0.88, 0.88)
+	# 等 layout 計算完再設 pivot 到中心
+	panel.resized.connect(func() -> void:
+		panel.pivot_offset = panel.size * 0.5
+	, CONNECT_ONE_SHOT)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(dim,   "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, "scale", Vector2.ONE, 0.20) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+
+func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, desc: String, fuse_chain: Control) -> void:
+	if skill_name == "":
+		return
+	var entry := VBoxContainer.new()
+	entry.add_theme_constant_override("separation", 4)
+	parent.add_child(entry)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	entry.add_child(row)
+
+	var tag_lbl := Label.new()
+	tag_lbl.text = "[%s]" % tag
+	tag_lbl.add_theme_font_size_override("font_size", 13)
+	tag_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
+	tag_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tag_lbl)
+
+	var nm := Label.new()
+	nm.text = skill_name
+	nm.add_theme_font_size_override("font_size", 16)
+	nm.add_theme_color_override("font_color", Color.WHITE)
+	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(nm)
+
+	if desc != "":
+		var dl := Label.new()
+		dl.text = desc
+		dl.add_theme_font_size_override("font_size", 13)
+		dl.add_theme_color_override("font_color", Color(0.75, 0.75, 0.82))
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		entry.add_child(dl)
+
+	if fuse_chain != null:
+		entry.add_child(fuse_chain)
+
+
+func _close_char_popup() -> void:
+	if _popup_layer == null:
+		return
+	# 將 layer 移交局部變數，防止淡出期間重複觸發
+	var layer := _popup_layer
+	_popup_layer = null
+	_popup_dim = null
+	_popup_panel = null
+	_pressing_index = -1
+	_long_press_fired = false
+	# 淡出動畫，完成後釋放
+	var tw := create_tween().set_parallel(true)
+	for child in layer.get_children():
+		tw.tween_property(child, "modulate:a", 0.0, 0.14).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(layer.queue_free)
 
 
 ## 顯示主動技能冷卻數字。turns_left=0 表示已就緒。

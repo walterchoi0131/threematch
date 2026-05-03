@@ -21,7 +21,7 @@ static func show(fill: Control, prev_ratio: float, new_ratio: float) -> void:
 	if old != null:
 		old.queue_free()
 
-	var pad_l: float = max(0.0, fill.offset_left)
+	var pad_l: float = max(0.0, fill.offset_left) 
 	var pad_r: float = max(0.0, -fill.offset_right)
 
 	var preview := ColorRect.new()

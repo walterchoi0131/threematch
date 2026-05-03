@@ -160,34 +160,61 @@ func _build_tap_hint() -> void:
 # ── 角色卡片 ──────────────────────────────────────────────────
 
 func _make_char_card(c: CharacterData) -> Dictionary:
-	# 一整列為 HBoxContainer：左側方形頭像卡，右側 名字 + Lv + EXP 條
-	const PORTRAIT_SIZE := 96.0
+	# 一整列為 HBoxContainer：左側矩形頭像（絕對定位底-左，可上/右溢出），右側 名字 + Lv + EXP 條
+	const ROW_HEIGHT := 96.0
+	const PORTRAIT_W := 96.0
 	var row := PanelContainer.new()
-	row.custom_minimum_size = Vector2(0, PORTRAIT_SIZE + 8)
+	row.custom_minimum_size = Vector2(0, ROW_HEIGHT + 8)
 	var row_style := StyleBoxFlat.new()
 	row_style.bg_color = Color(0.10, 0.12, 0.18, 1)
 	row_style.set_corner_radius_all(8)
 	row_style.set_content_margin_all(6)
 	row.add_theme_stylebox_override("panel", row_style)
+	row.clip_contents = true
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 12)
 	row.add_child(hbox)
 
-	# 左側：CharacterCard.make_square 提供裁切 + portrait_scale/offset
-	var built: Dictionary = CharacterCard.make_square(c)
-	var portrait_card: PanelContainer = built.panel
-	portrait_card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	portrait_card.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
-	# 結算畫面不顯示邊框、元素圖示、卡片底色（保留裁切後的角色圖即可）
-	if built.has("gem_icon") and built.gem_icon is Control:
-		(built.gem_icon as Control).visible = false
-	for child in portrait_card.get_children():
-		if child is Panel:
-			(child as Panel).visible = false
-	var transparent_style := StyleBoxEmpty.new()
-	portrait_card.add_theme_stylebox_override("panel", transparent_style)
-	hbox.add_child(portrait_card)
+	# 左側：佔位控件（寬度保留 PORTRAIT_W 讓右側文字不從最左邊開始）
+	var placeholder := Control.new()
+	placeholder.custom_minimum_size = Vector2(PORTRAIT_W, ROW_HEIGHT)
+	placeholder.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	placeholder.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(placeholder)
+
+	# 角色圖 overlay：plain Control，PanelContainer 會把它 fit 到全 row 大小，
+	# 但不會干涉其子節點的 anchor/offset
+	var portrait_overlay := Control.new()
+	portrait_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.add_child(portrait_overlay)
+
+	var portrait_ref: TextureRect = null
+	if c.portrait_texture != null:
+		const IMG_SIZE: float = 300.0 * 4.0     # 1200×1200
+		var portrait := TextureRect.new()
+		portrait.texture = c.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 錨定到 overlay 的左下角
+		portrait.anchor_left   = 0.0
+		portrait.anchor_top    = 1.0
+		portrait.anchor_right  = 0.0
+		portrait.anchor_bottom = 1.0
+		portrait.grow_horizontal = Control.GROW_DIRECTION_END
+		portrait.grow_vertical   = Control.GROW_DIRECTION_BEGIN
+		portrait.pivot_offset  = Vector2(0, IMG_SIZE)
+		portrait.scale         = Vector2(c.rectangular_scale, c.rectangular_scale)
+		portrait.offset_left   = 0.0       + c.rectangular_offset.x
+		portrait.offset_top    = -IMG_SIZE + c.rectangular_offset.y
+		portrait.offset_right  = IMG_SIZE  + c.rectangular_offset.x
+		portrait.offset_bottom = 0.0       + c.rectangular_offset.y
+		portrait_overlay.add_child(portrait)
+		row.set_meta("_portrait", portrait)
+		portrait_ref = portrait
 
 	# 右側：名字 + Lv + EXP 條
 	var right_box := VBoxContainer.new()
@@ -241,7 +268,7 @@ func _make_char_card(c: CharacterData) -> Dictionary:
 
 	return {
 		"card": row,
-		"pop_target": portrait_card,
+		"pop_target": row,
 		"bar_fill": bar_fill,
 		"bar_bg": bar_bg,
 		"lv_label": lv_label,
@@ -451,13 +478,6 @@ func _finalize_exp_phase() -> void:
 
 
 func _play_level_up_pop(card: PanelContainer, new_lv: int) -> void:
-	# 以中心為錨點 bounce
-	card.pivot_offset = card.size * 0.5
-	var tw := create_tween()
-	tw.tween_property(card, "scale", Vector2(1.12, 1.12), 0.1) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	tw.tween_property(card, "scale", Vector2(1.0, 1.0), 0.1)
-
 	# "Lv UP!" 浮動文字
 	var pop := _make_styled_label(Locale.tr_ui("LV_UP"), 22, Color(1.0, 0.9, 0.2))
 	pop.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -494,6 +514,150 @@ func _go_to_map() -> void:
 	tw.tween_callback(func() -> void:
 		get_tree().change_scene_to_file("res://scenes/map.tscn")
 	)
+
+
+# ── F9 角色矩形偏移 Debug 面板 ────────────────────────────────
+
+var _debug_panel: Control = null
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F9:
+		_toggle_debug_panel()
+
+
+func _toggle_debug_panel() -> void:
+	if _debug_panel != null and is_instance_valid(_debug_panel):
+		_debug_panel.queue_free()
+		_debug_panel = null
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 64
+	add_child(layer)
+	_debug_panel = _build_rect_debug_panel(layer)
+	_debug_panel.tree_exited.connect(func() -> void:
+		if is_instance_valid(layer):
+			layer.queue_free()
+	)
+
+
+func _build_rect_debug_panel(parent: Node) -> Control:
+	var panel := PanelContainer.new()
+	panel.z_index = 100
+	parent.add_child(panel)
+	panel.offset_left = -300
+	panel.offset_top = 4
+	panel.offset_right = -4
+	panel.offset_bottom = 700
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.05, 0.05, 0.08, 0.92)
+	bg.set_border_width_all(1)
+	bg.border_color = Color(0.4, 0.4, 0.5, 0.8)
+	bg.set_corner_radius_all(6)
+	bg.set_content_margin_all(6)
+	panel.add_theme_stylebox_override("panel", bg)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Rectangular Debug (F9 close)"
+	title.add_theme_font_size_override("font_size", 14)
+	vbox.add_child(title)
+
+	for info: Dictionary in _char_cards:
+		var c: CharacterData = info.char_data
+		var row_ctrl: Control = info.get("pop_target", null) as Control
+		var section := VBoxContainer.new()
+		vbox.add_child(section)
+
+		var name_lbl := Label.new()
+		name_lbl.text = "── %s ──" % c.character_name
+		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+		section.add_child(name_lbl)
+
+		var cap: CharacterData = c
+		var cap_row: Control = row_ctrl
+		_add_dbg_slider(section, "Scale", cap.rectangular_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
+			cap.rectangular_scale = v
+			_apply_portrait_transform(cap_row, cap)
+			_save_char(cap)
+		)
+		_add_dbg_slider(section, "Off X", cap.rectangular_offset.x, -800, 800, 1.0, func(v: float) -> void:
+			cap.rectangular_offset.x = v
+			_apply_portrait_transform(cap_row, cap)
+			_save_char(cap)
+		)
+		_add_dbg_slider(section, "Off Y", cap.rectangular_offset.y, -800, 800, 1.0, func(v: float) -> void:
+			cap.rectangular_offset.y = v
+			_apply_portrait_transform(cap_row, cap)
+			_save_char(cap)
+		)
+
+	return panel
+
+
+func _add_dbg_slider(parent: Control, label_text: String, initial: float, min_val: float, max_val: float, step_val: float, on_changed: Callable) -> void:
+	var hbox := HBoxContainer.new()
+	parent.add_child(hbox)
+
+	var lbl := Label.new()
+	lbl.text = label_text
+	lbl.custom_minimum_size = Vector2(50, 0)
+	lbl.add_theme_font_size_override("font_size", 12)
+	hbox.add_child(lbl)
+
+	var slider := HSlider.new()
+	slider.min_value = min_val
+	slider.max_value = max_val
+	slider.step = step_val
+	slider.value = initial
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.custom_minimum_size = Vector2(100, 0)
+	hbox.add_child(slider)
+
+	var val_lbl := Label.new()
+	val_lbl.text = "%.2f" % initial
+	val_lbl.custom_minimum_size = Vector2(50, 0)
+	val_lbl.add_theme_font_size_override("font_size", 12)
+	hbox.add_child(val_lbl)
+
+	slider.value_changed.connect(func(v: float) -> void:
+		val_lbl.text = "%.2f" % v
+		on_changed.call(v)
+	)
+
+
+## 將 rectangular_scale/offset 重新套用到以 row.set_meta("_portrait") 儲存的 TextureRect。
+static func _apply_portrait_transform(row: Control, c: CharacterData) -> void:
+	if row == null or not row.has_meta("_portrait"):
+		return
+	var portrait: TextureRect = row.get_meta("_portrait") as TextureRect
+	if portrait == null:
+		return
+	const IMG_SIZE: float = 300.0 * 4.0
+	portrait.scale = Vector2(c.rectangular_scale, c.rectangular_scale)
+	portrait.offset_left   = 0.0       + c.rectangular_offset.x
+	portrait.offset_top    = -IMG_SIZE + c.rectangular_offset.y
+	portrait.offset_right  = IMG_SIZE  + c.rectangular_offset.x
+	portrait.offset_bottom = 0.0       + c.rectangular_offset.y
+
+
+static func _save_char(c: CharacterData) -> void:
+	if c == null or c.resource_path == "":
+		return
+	var err: int = ResourceSaver.save(c, c.resource_path)
+	if err != OK:
+		push_warning("battle_result: failed to save %s (err=%d)" % [c.resource_path, err])
 
 
 # ── 工具函式 ──────────────────────────────────────────────────

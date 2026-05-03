@@ -7,6 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Raccoon"
 gem_type = 2
+level = 13
 base_hp = 40
 hp_growth = 6.0
 portrait_texture = ExtResource("2_portrait")
@@ -16,6 +17,8 @@ portrait_offset = Vector2(-34, -51)
 dialog_square_offset = Vector2(-9, 0)
 square_scale = 0.85
 square_offset = Vector2(-83, -25)
+rectangular_scale = 0.4
+rectangular_offset = Vector2(-160, 270)
 responding_skills = Array[Dictionary]([{
 "desc": "Blast 5+ leaf gems: summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
 "fuse_label": "5",

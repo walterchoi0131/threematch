@@ -39,13 +39,21 @@ func _draw() -> void:
 			connects = derived.get(sb.stage.stage_id, [])
 		if connects.is_empty():
 			continue
-		var from_center: Vector2 = sb.position + sb.size * 0.5
+		var from_center: Vector2 = sb.position + _anchor_offset(sb)
 		for next_id: String in connects:
 			var nb: Node = by_id.get(next_id, null)
 			if nb == null or not nb.visible:
 				continue
-			var to_center: Vector2 = nb.position + nb.size * 0.5
+			var to_center: Vector2 = nb.position + _anchor_offset(nb)
 			var color: Color = Color(1, 1, 1, 0.95)
 			# 黑色描邊讓線條在底圖上更清楚
 			draw_line(from_center, to_center, Color(0, 0, 0, 0.6), PATH_WIDTH + 4.0, true)
 			draw_line(from_center, to_center, color, PATH_WIDTH, true)
+
+
+## 取得 StageButton 的橢圓中心（本地座標）；若按鈕有提供 get_anchor_center 則優先採用，
+## 否則退回 size * 0.5。
+func _anchor_offset(sb: Node) -> Vector2:
+	if sb.has_method("get_anchor_center"):
+		return sb.call("get_anchor_center")
+	return (sb as Control).size * 0.5

@@ -60,6 +60,88 @@ static func make_square(c: CharacterData) -> Dictionary:
 	return _make_battle_like(c, true)
 
 
+## 建立「矩形列」風格角色卡（無文字、無強制比例、無方形裁切）。
+## 圖像錨定於底部 + 左側（即底邊與左邊裁切，頂部和右側不裁切，可溢出）。
+## 套用 rectangular_scale / rectangular_offset。
+## 回傳 Dictionary: {panel, portrait, gem_icon, glow}
+static func make_rectangular(c: CharacterData) -> Dictionary:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# 透明背景（呼叫端可覆蓋）
+	var bg_style := StyleBoxEmpty.new()
+	panel.add_theme_stylebox_override("panel", bg_style)
+
+	# 發光層（最底）
+	var glow := ColorRect.new()
+	glow.color = Color(1.0, 0.9, 0.2, 0.0)
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.add_child(glow)
+
+	# 裁切容器：clip_contents 讓底部 + 左側 + 右側裁切；只有頂部允許溢出。
+	# 作法：clip Control 與 panel 同寬同底，但向上延伸 9999px，因此頂部超出 panel 的部分
+	# 仍在 clip 區域內，可正常繪製；左/右/底邊則由 clip 的邊界裁切。
+	var clip := Control.new()
+	clip.clip_contents = true
+	clip.set_anchors_preset(Control.PRESET_FULL_RECT)
+	clip.offset_top = -9999.0
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(clip)
+
+	var portrait_ref: TextureRect = null
+	if c.portrait_texture:
+		var portrait := TextureRect.new()
+		portrait.texture = c.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 預設大小：300×300，呼叫端可調整 scale/offset
+		portrait.custom_minimum_size = Vector2(300, 300)
+		portrait.size = Vector2(300, 300)
+		# 錨定底-左：圖像左下角對齊容器左下角，上方/右方任意溢出（裁切只會在 clip 邊界發生）
+		portrait.anchor_left = 0.0
+		portrait.anchor_top = 1.0
+		portrait.anchor_right = 0.0
+		portrait.anchor_bottom = 1.0
+		portrait.grow_horizontal = Control.GROW_DIRECTION_END
+		portrait.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		portrait.offset_left = 0.0
+		portrait.offset_top = -300.0
+		portrait.offset_right = 300.0
+		portrait.offset_bottom = 0.0
+		portrait.pivot_offset = Vector2(0, 300)  # 以左下為錨點縮放
+		portrait.scale = Vector2(c.rectangular_scale, c.rectangular_scale)
+		portrait.position += c.rectangular_offset
+		clip.add_child(portrait)
+		portrait_ref = portrait
+		panel.set_meta("_portrait", portrait)
+		panel.set_meta("_is_rectangular", true)
+
+	return {
+		"panel": panel,
+		"portrait": portrait_ref,
+		"gem_icon": null,
+		"glow": glow,
+		"lv_label": null,
+	}
+
+
+## 將既有以 make_rectangular 建立的 panel 重新套用 rectangular_scale/offset（F9 即時編輯用）。
+static func apply_rectangular(panel: PanelContainer, c: CharacterData) -> void:
+	if panel == null or not panel.has_meta("_portrait"):
+		return
+	var portrait: TextureRect = panel.get_meta("_portrait") as TextureRect
+	if portrait == null:
+		return
+	portrait.scale = Vector2(c.rectangular_scale, c.rectangular_scale)
+	portrait.offset_left = 0.0
+	portrait.offset_top = -300.0
+	portrait.offset_right = 300.0
+	portrait.offset_bottom = 0.0
+	portrait.position = c.rectangular_offset
+
+
 ## 內部：共用建構流程。
 ## square=true → AspectRatioContainer 強制正方形 + square_scale/offset
 ## square=false → 全矩形裁切 + portrait_scale/offset

@@ -3,9 +3,10 @@
 extends RefCounted
 
 const _DialogLine := preload("res://scripts/dialog_line.gd")
+const _FuseTutorialCanvas := preload("res://dialogs/fuse_tutorial_canvas.gd")
 
 
-static func make_steps() -> Array:
+static func make_steps(party: Array = []) -> Array:
 	# 綠寶石群位置：(4,4), (5,4), (4,5) — L 形 3 顆相連
 	var green_positions: Array[Vector2i] = [
 		Vector2i(4, 4), Vector2i(5, 4), Vector2i(4, 5),
@@ -54,6 +55,8 @@ static func make_steps() -> Array:
 					"每位角色都有獨特的融合技能，\n試著不同組合來打造你的隊伍吧！",
 					"Every character has a unique fusion style.\nTry different combinations to build your team!"),
 			],
+			"post_canvas_fn": func(parent: Node, on_close: Callable) -> void:
+				_FuseTutorialCanvas.build(parent, party, on_close),
 		},
 	]
 

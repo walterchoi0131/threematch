@@ -7,6 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Husky"
 gem_type = 6
+level = 12
 base_hp = 55
 hp_growth = 9.0
 portrait_texture = ExtResource("2_portrait")
@@ -17,6 +18,8 @@ dialog_square_scale = 1.85
 dialog_square_offset = Vector2(-12, -82)
 square_scale = 1.7000000000000002
 square_offset = Vector2(-185, -36)
+rectangular_scale = 0.55
+rectangular_offset = Vector2(-220, 500)
 active_skill_name = "There shall be light"
 active_skill_desc = "Enter selection mode: hover to preview a cross shape, click to convert those gems into light gems. CD: 3 turns."
 active_skill_cd = 3

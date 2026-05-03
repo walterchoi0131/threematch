@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_script")
 character_name = "Dragon"
+level = 6
 base_atk = 4
 atk_growth = 0.8
 base_hp = 60
@@ -15,6 +16,7 @@ portrait_offset = Vector2(-69, -80)
 dialog_square_scale = 3.4
 dialog_square_offset = Vector2(-282, -3)
 square_offset = Vector2(-112, -47)
+rectangular_offset = Vector2(-125, 0)
 active_skill_name = "龍焰領域"
 active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
 active_skill_cd = 3

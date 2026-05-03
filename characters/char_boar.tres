@@ -7,6 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Boar"
 gem_type = 1
+level = 12
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_scale = 1.4500000000000002
@@ -14,6 +15,8 @@ portrait_offset = Vector2(-164, -57)
 dialog_square_scale = 0.9
 square_scale = 1.55
 square_offset = Vector2(-234, -32)
+rectangular_scale = 0.65
+rectangular_offset = Vector2(-410, 560)
 passive_skill_name = "Drinking"
 passive_skill_desc = "Water gems also heal you for 50% of attack damage."
 active_skill_name = "Attack Form"

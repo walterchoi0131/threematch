@@ -311,7 +311,7 @@ func _start_battle_tutorial() -> void:
 	_tutorial_manager.setup(board, _battle_dialog)
 	_tutorial_manager.tutorial_finished.connect(_on_tutorial_finished)
 
-	var steps: Array = _Stage1Tutorial.make_steps()
+	var steps: Array = _Stage1Tutorial.make_steps(party)
 	_tutorial_manager.start(steps)
 
 
@@ -835,6 +835,8 @@ const TURTLE_POWER: float = 0.8     # 烏龜回血：全隊魔力 × 0.8
 
 
 ## 在玩家回合結束、敵人行動之前：讓所有場上的召喚物（豪豬/烏龜）行動一次。
+## 計算階段：board.is_busy=true（已由呼叫端保證）；棋盤其他寶石變暗，僅豪豬/烏龜保持亮度。
+## 然後依序對每隻召喚物播放 bounce 動畫並執行其攻擊/回血。
 func _resolve_persistent_upper_gems() -> void:
 	var porcupines: Array[Vector2i] = board.find_upper_gems(Block.UpperType.PORCUPINE)
 	var turtles: Array[Vector2i] = board.find_upper_gems(Block.UpperType.TURTLE)
@@ -858,13 +860,25 @@ func _resolve_persistent_upper_gems() -> void:
 			break
 	var green_color: Color = Block.COLORS[Block.Type.GREEN]
 
-	# ── 豪豬：粒子直接從寶石位置 → 敵人，飛抵時造成傷害 ──
+	# ── 計算階段：將其他寶石變暗，凸顯豪豬/烏龜 ──
+	var summon_set: Dictionary = {}
+	for p: Vector2i in porcupines:
+		summon_set[p] = true
+	for p: Vector2i in turtles:
+		summon_set[p] = true
+	_dim_board_except(summon_set)
+
+	# ── 豪豬：每隻 bounce 後直接從寶石位置 → 敵人 ──
 	if not porcupines.is_empty():
 		var dmg: int = int(party_magic_sum * PORCUPINE_POWER)
 		if dmg > 0:
-			# 收集所有豪豬攻擊指令
-			var porc_attacks: Array = []
-			for pos: Vector2i in porcupines:
+			# 啟用延遲死亡（過殺機制）
+			for enemy in battle_manager.active_enemies:
+				if is_instance_valid(enemy):
+					enemy.defer_death = true
+
+			for i in porcupines.size():
+				var pos: Vector2i = porcupines[i]
 				var target: Enemy = null
 				for e: Enemy in battle_manager.active_enemies:
 					if is_instance_valid(e) and e.current_hp > 0:
@@ -872,24 +886,16 @@ func _resolve_persistent_upper_gems() -> void:
 						break
 				if target == null:
 					break
-				porc_attacks.append({"pos": pos, "target": target})
+				# Bounce 動畫
+				_bounce_block_at(pos)
+				await get_tree().create_timer(0.18).timeout
 
-			# 啟用延遲死亡（過殺機制，與標準攻擊管線一致）
-			for enemy in battle_manager.active_enemies:
-				if is_instance_valid(enemy):
-					enemy.defer_death = true
-
-			# 為每隻豪豬發射綠色軌跡投射物：寶石位置 → 敵人
-			for i in porc_attacks.size():
-				var atk: Dictionary = porc_attacks[i]
-				if not is_instance_valid(atk.target):
-					continue
-				var from_pos: Vector2 = board.to_global(board.grid_to_world(atk.pos))
-				var target_pos: Vector2 = atk.target.get_global_rect().get_center()
+				var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
+				var target_pos: Vector2 = target.get_global_rect().get_center()
 				var trail := Node2D.new()
 				trail.set_script(TrailProjectileScript)
 				fx_layer.add_child(trail)
-				var captured_target: Enemy = atk.target
+				var captured_target: Enemy = target
 				var captured_dmg: int = dmg
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
@@ -899,12 +905,11 @@ func _resolve_persistent_upper_gems() -> void:
 				, CONNECT_ONE_SHOT)
 				trail.launch(from_pos, target_pos, green_color, 0.5)
 				_add_log_entry("[b]%s[/b] %s ⚔ %d" % [Locale.tr_ui("Porcupine"), _gem_bbcode(Block.Type.GREEN), dmg], Block.Type.GREEN, null)
-				if i < porc_attacks.size() - 1:
+				if i < porcupines.size() - 1:
 					await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
 
 			# 等待最後一發投射物落地
-			if not porc_attacks.is_empty():
-				await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+			await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
 
 			# 結算延遲死亡
 			for enemy in battle_manager.active_enemies.duplicate():
@@ -913,19 +918,65 @@ func _resolve_persistent_upper_gems() -> void:
 					if enemy.current_hp <= 0:
 						enemy.finalize_death()
 
-	# ── 烏龜：直接回血，不需飛行 VFX（在寶石位置顯示 +HP 數字）──
+	# ── 烏龜：bounce + 從烏龜寶石彈出 +HP 數字 + 直接回血 ──
 	if not turtles.is_empty():
 		var heal: int = int(party_magic_sum * TURTLE_POWER)
 		if heal > 0:
-			for pos: Vector2i in turtles:
+			for i in turtles.size():
+				var pos: Vector2i = turtles[i]
+				_bounce_block_at(pos)
+				await get_tree().create_timer(0.18).timeout
+
 				battle_manager.apply_heal(heal)
-				if green_idx >= 0:
-					character_panel.show_heal_text(green_idx, heal)
-				else:
-					var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
-					_spawn_damage_number(from_pos, heal, Color(0.5, 1.0, 0.5), true, false)
+				# 從烏龜寶石位置彈出 +HP 數字
+				var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
+				_spawn_damage_number(from_pos, heal, Color(0.5, 1.0, 0.5), true, false)
 				_add_log_entry("[b]%s[/b] %s +%d HP" % [Locale.tr_ui("Turtle"), _gem_bbcode(Block.Type.GREEN), heal], Block.Type.GREEN, null)
-				await get_tree().create_timer(0.15).timeout
+				if i < turtles.size() - 1:
+					await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
+
+	# ── 計算階段結束：恢復棋盤亮度 ──
+	_undim_board()
+
+
+## 將棋盤上不在 keep_set（Vector2i → bool）內的寶石變暗。
+func _dim_board_except(keep_set: Dictionary) -> void:
+	for x in board.columns:
+		for y in board.rows:
+			var b: Block = board.grid[x][y]
+			if b == null:
+				continue
+			if keep_set.has(Vector2i(x, y)):
+				var tw_keep := create_tween()
+				tw_keep.tween_property(b, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.15)
+				continue
+			var tw := create_tween()
+			tw.tween_property(b, "modulate", Color(0.35, 0.35, 0.40, 1.0), 0.15)
+
+
+func _undim_board() -> void:
+	for x in board.columns:
+		for y in board.rows:
+			var b: Block = board.grid[x][y]
+			if b == null:
+				continue
+			var tw := create_tween()
+			tw.tween_property(b, "modulate", Color.WHITE, 0.15)
+
+
+## 對指定位置的 Block 播放 bounce（放大→回原大小）動畫。
+func _bounce_block_at(pos: Vector2i) -> void:
+	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
+		return
+	var b: Block = board.grid[pos.x][pos.y]
+	if b == null:
+		return
+	var orig_scale: Vector2 = Vector2.ONE
+	var tw := create_tween()
+	tw.tween_property(b, "scale", orig_scale * 1.35, 0.10) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(b, "scale", orig_scale, 0.12) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
 
 
 # ── 通用消除處理管線 ─────────────────────────────────────────────

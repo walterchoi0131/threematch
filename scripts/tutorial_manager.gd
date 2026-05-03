@@ -95,6 +95,16 @@ func _run_step(step: Dictionary) -> void:
 		_dialog.show_lines(post_dialog)
 		await _dialog.all_lines_finished
 
+	# ── 後續覆蓋面板（例如融合提示卡）──
+	var post_canvas_fn: Callable = step.get("post_canvas_fn", Callable())
+	if post_canvas_fn.is_valid():
+		var done := {"closed": false}
+		var on_close := func() -> void:
+			done.closed = true
+		post_canvas_fn.call(self, on_close)
+		while not done.closed:
+			await get_tree().process_frame
+
 	# 進入下一步
 	_advance_step()
 

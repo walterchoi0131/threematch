@@ -115,11 +115,12 @@ func _build() -> void:
 	_label_bg.name = "CaptionBG"
 	_label_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_label_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	# 仿戰鬥場景敵人意圖：兩端透明、中央深色（加深至 0.78 以在彩色地圖上更清楚）
 	var grad := Gradient.new()
 	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
 	grad.colors = PackedColorArray([
 		Color(0, 0, 0, 0),
-		Color(0, 0, 0, 0.5),
+		Color(0, 0, 0, 0.78),
 		Color(0, 0, 0, 0),
 	])
 	var grad_tex := GradientTexture2D.new()
@@ -186,6 +187,9 @@ func _build() -> void:
 	_marker.visible = false
 	add_child(_marker)
 
+	# 初始化完成後立即套用正確的位置與尺寸
+	_layout()
+
 
 func _layout() -> void:
 	var oval_h: float = button_size.y * OVAL_HEIGHT_RATIO
@@ -230,6 +234,12 @@ func _layout() -> void:
 ## 由父層 (map.gd) 在解鎖狀態變動時呼叫，重新整理可見性與標記
 func refresh_state() -> void:
 	_refresh()
+
+
+## 回傳橢圓中心在本地座標中的位置（供地圖路徑層對齊用）。
+func get_anchor_center() -> Vector2:
+	var oval_h: float = button_size.y * OVAL_HEIGHT_RATIO
+	return Vector2(button_size.x * 0.5, oval_h * 0.5)
 
 
 func _refresh() -> void:
