@@ -289,15 +289,15 @@ func _finish_typing() -> void:
 	_typing = false
 
 
-## 依 char_id 查找 GameState.owned_characters、套用 square_scale/offset
+## 依 char_id 查找 GameState.owned_characters、套用 dialog_square_scale/offset
 func _apply_dialog_pose(char_id: String) -> void:
 	var c: CharacterData = _find_character_data(char_id)
 	if c == null:
 		_portrait.scale = Vector2.ONE
 		_portrait.position = Vector2.ZERO
 		return
-	_portrait.scale = Vector2(c.square_scale, c.square_scale)
-	_portrait.position = c.square_offset
+	_portrait.scale = Vector2(c.dialog_square_scale, c.dialog_square_scale)
+	_portrait.position = c.dialog_square_offset
 
 
 func _find_character_data(char_id: String) -> CharacterData:

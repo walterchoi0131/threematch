@@ -16,6 +16,7 @@ var _overlay_layer: CanvasLayer = null
 var _stage_buttons: Array[StageButton] = []
 var _path_layer: Control = null
 var _debug_panel: Control = null
+var _portrait_debug_layer: CanvasLayer = null
 
 @onready var _pages_root: Control = $UILayer/Pages
 @onready var _map_page: Control = $UILayer/Pages/MapPage
@@ -47,6 +48,7 @@ func _ready() -> void:
 
 	GameState.play_bgm(load("res://assets/music/mhr_quest.mp3"), true, "map")
 	get_viewport().size_changed.connect(_on_viewport_resized)
+	_build_portrait_debug_btn()
 
 
 func _collect_stage_buttons(node: Node) -> void:
@@ -266,3 +268,54 @@ func _toggle_debug_panel() -> void:
 		if is_instance_valid(layer):
 			layer.queue_free()
 	)
+
+
+# ── Portrait Debug 浮動按鈕 ─────────────────────────────────
+
+func _build_portrait_debug_btn() -> void:
+	_portrait_debug_layer = CanvasLayer.new()
+	_portrait_debug_layer.layer = 12
+	add_child(_portrait_debug_layer)
+
+	var btn := Button.new()
+	btn.text = "🖼"
+	btn.add_theme_font_size_override("font_size", 26)
+	btn.custom_minimum_size = Vector2(54, 54)
+	btn.tooltip_text = "Portrait Debug"
+
+	var sbox := StyleBoxFlat.new()
+	sbox.bg_color = Color(0.12, 0.14, 0.22, 0.90)
+	sbox.set_border_width_all(2)
+	sbox.border_color = Color(0.55, 0.55, 0.72, 1.0)
+	sbox.set_corner_radius_all(27)
+	btn.add_theme_stylebox_override("normal",  sbox)
+	btn.add_theme_stylebox_override("hover",   sbox)
+	btn.add_theme_stylebox_override("pressed", sbox)
+	btn.add_theme_stylebox_override("focus",   sbox)
+
+	# 右下角、底部導覽列上方
+	btn.anchor_left   = 1.0; btn.anchor_right  = 1.0
+	btn.anchor_top    = 1.0; btn.anchor_bottom = 1.0
+	btn.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	btn.grow_vertical   = Control.GROW_DIRECTION_BEGIN
+	btn.offset_left   = -76.0
+	btn.offset_top    = -190.0
+	btn.offset_right  = -22.0
+	btn.offset_bottom = -136.0
+
+	btn.pressed.connect(_open_portrait_debug)
+	_portrait_debug_layer.add_child(btn)
+
+
+func _open_portrait_debug() -> void:
+	if _portrait_debug_layer == null:
+		return
+	# 只允許一個
+	for child in _portrait_debug_layer.get_children():
+		if child.get_script() != null and \
+				child.get_script().resource_path == "res://scripts/portrait_debug_screen.gd":
+			return
+	var screen: Control = load("res://scripts/portrait_debug_screen.gd").new() as Control
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	screen.tree_exiting.connect(func() -> void: pass)  # 保留佔位
+	_portrait_debug_layer.add_child(screen)
