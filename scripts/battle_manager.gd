@@ -24,6 +24,7 @@ var characters: Array[CharacterData] = []
 var current_round: int = 0
 var stage_rounds: Array[Array] = []
 var stage_rounds_init_cd: Array[Array] = []
+var stage_mode: int = 0  # StageData.Mode（0 = NORMAL, 1 = ESCAPE）
 
 var active_enemies: Array[Enemy] = []
 var targeted_enemy: Enemy = null
@@ -58,6 +59,7 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	characters = chars
 	stage_rounds = stage.rounds
 	stage_rounds_init_cd = stage.rounds_init_cd
+	stage_mode = stage.mode
 
 	# 玩家總血量 = 所有角色的最大 HP 加總
 	player_max_hp = 0
@@ -80,6 +82,9 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	logic_pending_enemy_attack = false
 	logic_enemy_hp.clear()
 	logic_enemy_cd.clear()
+	# ESCAPE 模式：不生成敵人，勝負由 main.gd 透過 refill 計數判定
+	if stage_mode == StageData.Mode.ESCAPE:
+		return
 	_spawn_round(current_round)
 
 
@@ -412,6 +417,9 @@ func _has_logic_enemies_to_attack() -> bool:
 func logic_can_blast() -> bool:
 	if logic_pending_enemy_attack:
 		return false
+	# 逃脫模式（無敵人）：永遠允許輸入
+	if stage_mode == StageData.Mode.ESCAPE:
+		return true
 	for e in logic_enemy_hp:
 		if logic_enemy_hp[e] > 0:
 			return true

@@ -19,6 +19,9 @@ square_scale = 0.85
 square_offset = Vector2(-83, -25)
 rectangular_scale = 0.4
 rectangular_offset = Vector2(-160, 270)
+active_skill_name = "生息.強"
+active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/融合時計為 5 顆）。CD：6 回合。"
+active_skill_cd = 6
 responding_skills = Array[Dictionary]([{
 "desc": "Blast 5+ leaf gems: summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
 "fuse_label": "5",

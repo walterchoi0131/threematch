@@ -81,6 +81,7 @@ signal upper_gem_chain_triggered(upper_type: Block.UpperType)  # 連鎖中特殊
 signal selection_confirmed(positions: Array)  # 選擇模式確認時發出
 signal blast_preview_entered()               # 長按預覽開始時發出
 signal blast_preview_exited()                # 長按預覽結束時發出
+signal gems_refilled(count: int)             # 從天空填充新寶石時發出（count = 本批新生成數量）
 
 
 ## 初始化：讀取關卡資料並建立棋盤
@@ -262,11 +263,25 @@ func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_
 	block.position = start_pos if use_start_pos else grid_to_world(Vector2i(x, y))
 	add_child(block)
 	grid[x][y] = block
+	# 關卡 1-4：火屬性寶石自動掛載 BURNING 額外效果（含初始填充與天空補充）
+	if stage != null and stage.stage_id == "1-4" and block.block_type == Block.Type.RED:
+		block.add_extra(Block.ExtraEffect.BURNING)
 	return block
 
 
 ## 隨機選擇一個允許的寶石類型
 func _random_type() -> int:
+	# 關卡 1-4：固定 60% 火 / 10% 水 / 10% 葉 / 20% 光
+	if stage != null and stage.stage_id == "1-4":
+		var r: int = randi() % 100
+		if r < 60:
+			return Block.Type.RED
+		elif r < 70:
+			return Block.Type.BLUE
+		elif r < 80:
+			return Block.Type.GREEN
+		else:
+			return Block.Type.LIGHT
 	return allowed_types[randi() % allowed_types.size()]
 
 
@@ -589,16 +604,18 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 	var gem_type: Block.Type = grid[positions[0].x][positions[0].y].block_type
 	var blocks: Array = []
 	var blast_positions: Array = []
+	var effective_count: int = 0  # X5 等額外效果加成後的數量
 	for pos in positions:
 		var block: Block = grid[pos.x][pos.y]
 		if block:
 			blast_positions.append(block.global_position)
+			effective_count += block.get_blast_value()
 			grid[pos.x][pos.y] = null
 			blocks.append(block)
 
 	score += positions.size() * 10
 	score_changed.emit(score)
-	gems_blasted.emit(gem_type, positions.size(), blast_positions)
+	gems_blasted.emit(gem_type, effective_count, blast_positions)
 
 	for block in blocks:
 		block.play_destroy_animation()
@@ -648,6 +665,7 @@ func _collapse_and_fill() -> void:
 
 	# ── 第二階段：建立新寶石並以 FALL_SPEED 速度動畫掉落 ───
 	var longest_dur := 0.0
+	var total_new_count := 0  # 本次掉落新生成寶石總數（用於 gems_refilled 信號）
 
 	for x in columns:
 		var col_falls: Array = columns_data[x]
@@ -681,6 +699,7 @@ func _collapse_and_fill() -> void:
 				var block := _create_block(f.gx, f.gy, from_pos, true)
 				block.modulate.a = 0.0
 				block.fall_to(f.to_pos, dur, 0.0, true)
+				total_new_count += 1
 			else:
 				f.block.fall_to(f.to_pos, dur, 0.0, false)
 
@@ -688,6 +707,8 @@ func _collapse_and_fill() -> void:
 		_sync_logic_unknowns_from_visual()
 		_update_fuse_hints()
 		return
+	if total_new_count > 0:
+		gems_refilled.emit(total_new_count)
 	await get_tree().create_timer(longest_dur + Block.BOUNCE_DUR + 0.05).timeout
 	_sync_logic_unknowns_from_visual()
 	_update_fuse_hints()
@@ -851,13 +872,16 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 
 		# 按類型分組，發出信號
 		var by_type: Dictionary = {}
+		var count_by_type: Dictionary = {}
 		for p in valid:
 			var b: Block = grid[p.x][p.y]
 			var bt: Block.Type = b.block_type as Block.Type
 			if not by_type.has(bt):
 				by_type[bt] = []
 			by_type[bt].append(b.global_position)
-			blasted_by_type[bt] = blasted_by_type.get(bt, 0) + 1
+			var bv: int = b.get_blast_value()
+			count_by_type[bt] = count_by_type.get(bt, 0) + bv
+			blasted_by_type[bt] = blasted_by_type.get(bt, 0) + bv
 
 		# 消除此行寶石
 		var blocks_to_free: Array = []
@@ -873,7 +897,7 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 
 		for bt in by_type:
 			var gpos: Array = by_type[bt]
-			gems_blasted.emit(bt as Block.Type, gpos.size(), gpos)
+			gems_blasted.emit(bt as Block.Type, count_by_type[bt] as int, gpos)
 
 		# 延遲釋放節點
 		var captured_blocks := blocks_to_free.duplicate()
@@ -956,8 +980,9 @@ func _handle_upper_click(pos: Vector2i) -> void:
 
 	# 先消除被點擊的高階寶石本身（立即播放動畫）
 	var bt: Block.Type = block.block_type as Block.Type
-	total_blasted_by_type[bt] = 1
-	gems_blasted.emit(bt, 1, [block.global_position])
+	var bv: int = block.get_blast_value()
+	total_blasted_by_type[bt] = bv
+	gems_blasted.emit(bt, bv, [block.global_position])
 	grid[pos.x][pos.y] = null
 	block.play_destroy_animation()
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
@@ -994,6 +1019,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 
 	# 統計各類型被爆破的寶石數量
 	var blast_positions_by_type: Dictionary = {}  # type -> Array of global positions
+	var blast_count_by_type: Dictionary = {}  # type -> 加成後的數量
 	for p in to_destroy:
 		var b: Block = grid[p.x][p.y]
 		if b == null:
@@ -1003,8 +1029,10 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			blast_positions_by_type[bt] = []
 		blast_positions_by_type[bt].append(b.global_position)
 
-		# 累加到總計
-		total_blasted_by_type[bt] = total_blasted_by_type.get(bt, 0) + 1
+		# 累加到總計（X5 額外效果加成）
+		var bv: int = b.get_blast_value()
+		blast_count_by_type[bt] = blast_count_by_type.get(bt, 0) + bv
+		total_blasted_by_type[bt] = total_blasted_by_type.get(bt, 0) + bv
 
 	# 消除普通寶石（高階寶石保留在棋盤上）
 	var blocks_to_free: Array = []
@@ -1022,7 +1050,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 	# 為每種類型發出 gems_blasted 信號（用於攻擊計算）
 	for bt in blast_positions_by_type:
 		var gpos: Array = blast_positions_by_type[bt]
-		gems_blasted.emit(bt as Block.Type, gpos.size(), gpos)
+		gems_blasted.emit(bt as Block.Type, blast_count_by_type[bt] as int, gpos)
 
 	# 動畫結束後釋放節點
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
@@ -1055,8 +1083,9 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		# 播放連鏈爆炸 VFX
 		_play_blast_vfx_for(cp, cut, ub.global_position)
 		var ub_type: Block.Type = ub.block_type as Block.Type
-		total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + 1
-		gems_blasted.emit(ub_type, 1, [ub.global_position])
+		var ub_bv: int = ub.get_blast_value()
+		total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + ub_bv
+		gems_blasted.emit(ub_type, ub_bv, [ub.global_position])
 		grid[cp.x][cp.y] = null
 		ub.play_destroy_animation()
 		get_tree().create_timer(0.2).timeout.connect(func() -> void:
@@ -1378,7 +1407,16 @@ func _update_selection_preview(center: Vector2i) -> void:
 	_clear_preview_overlays()
 	_preview_center = center
 	var positions := _get_selection_positions(center)
-	var color: Color = Block.COLORS.get(_selection_convert_type, Color(1.0, 0.92, 0.23))
+	# 單格選擇（生息）：預覽顏色來自被點選寶石的元素
+	var color: Color
+	if _selection_pattern == "single":
+		var hov: Block = grid[center.x][center.y] if _is_valid(center) else null
+		if hov != null:
+			color = Block.COLORS.get(hov.block_type, Color(1.0, 0.92, 0.23))
+		else:
+			color = Color(1.0, 0.92, 0.23)
+	else:
+		color = Block.COLORS.get(_selection_convert_type, Color(1.0, 0.92, 0.23))
 	for p in positions:
 		var overlay := ColorRect.new()
 		overlay.color = Color(color.r, color.g, color.b, 0.35)
@@ -1394,6 +1432,11 @@ func _update_selection_preview(center: Vector2i) -> void:
 func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
 	if _selection_pattern == "fireball":
 		return _get_area_positions(center)
+	if _selection_pattern == "single":
+		var result: Array[Vector2i] = []
+		if _is_valid(center):
+			result.append(center)
+		return result
 	return _get_cross_positions(center)
 
 
@@ -1471,11 +1514,18 @@ func _update_fuse_hints() -> void:
 				if already_hinted:
 					continue
 
+				# 計算群組的有效爆炸值（X5 寶石計為 5）
+				var effective_count := 0
+				for gp2 in group:
+					var gb: Block = grid[gp2.x][gp2.y]
+					if gb != null:
+						effective_count += gb.get_blast_value()
+
 				# 檢查此群組是否符合融合條件
 				var qualifies := false
 				match trigger_type:
 					"count":
-						qualifies = group.size() >= threshold
+						qualifies = effective_count >= threshold
 					"line":
 						qualifies = group.size() >= threshold and has_line_match(group, threshold)
 
@@ -1895,3 +1945,45 @@ func _hide_blast_preview() -> void:
 	)
 
 	blast_preview_exited.emit()
+
+
+## 統計棋盤上具有 BURNING 額外效果的寶石數量
+func count_burning_gems() -> int:
+	var n: int = 0
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b != null and b.has_extra(Block.ExtraEffect.BURNING):
+				n += 1
+	return n
+
+
+## 回傳所有帶有 BURNING 效果的寶石位置列表
+func get_burning_gem_positions() -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b != null and b.has_extra(Block.ExtraEffect.BURNING):
+				result.append(Vector2i(x, y))
+	return result
+
+
+## 暗化除指定位置外的所有寶石，高亮指定位置
+func darken_except(positions: Array[Vector2i], duration: float = 0.25) -> void:
+	var bright_set: Dictionary = {}
+	for p in positions:
+		bright_set[p] = true
+	if _longpress_dim_tween != null and _longpress_dim_tween.is_valid():
+		_longpress_dim_tween.kill()
+	var dim_color := Color(0.3, 0.3, 0.35, 1.0)
+	var bright_color := Color(1.0, 1.0, 1.0, 1.0)
+	_longpress_dim_tween = create_tween().set_parallel(true)
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b == null:
+				continue
+			var target: Color = bright_color if bright_set.has(Vector2i(x, y)) else dim_color
+			_longpress_dim_tween.tween_property(b, "modulate", target, duration) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)

@@ -8,6 +8,14 @@ enum Background {
 	BREEZE = 1,
 }
 
+## 關卡模式列舉
+##  NORMAL — 一般戰鬥（依 rounds 出怪）
+##  ESCAPE — 逃脫模式：無敵人，玩家須消除/補充指定數量寶石以勝利
+enum Mode {
+	NORMAL = 0,
+	ESCAPE = 1,
+}
+
 ## 背景圖片路徑對應表
 const BACKGROUND_PATHS: Dictionary = {
 	Background.BREEZE: "res://assets/background/breeze.jpg",
@@ -36,6 +44,11 @@ const BACKGROUND_PATHS: Dictionary = {
 
 @export var background: Background = Background.NONE  # 關卡背景圖片
 @export var bgm: AudioStream = null  # 關卡背景音樂
+
+## 關卡模式（NORMAL = 一般戰鬥；ESCAPE = 逃脫模式）
+@export var mode: Mode = Mode.NORMAL
+## 逃脫模式所需累計補充寶石數量（達成 → 勝利）
+@export var escape_refill_target: int = 0
 
 const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 @export var pre_dialog: _DialogSequence = null  # 戰鬥前 AVG 對話（可選）

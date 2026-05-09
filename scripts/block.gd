@@ -7,6 +7,11 @@ extends Node2D
 enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光
 enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y, PORCUPINE, TURTLE }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬、豪豬、琉龜
 
+# 額外效果（可同時掛載多個於單一寶石上）
+# X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
+# BURNING：每回合結束扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
+enum ExtraEffect { X5, BURNING }
+
 const TYPE_COUNT := 7  # 寶石類型總數
 
 # 每種類型對應的顏色
@@ -88,6 +93,11 @@ var block_type = Type.RED              # 目前的寶石類型
 var upper_type: UpperType = UpperType.NONE  # 高階寶石類型（無 = 普通寶石）
 var grid_pos := Vector2i.ZERO          # 在棋盤網格中的座標 (x, y)
 
+# 額外效果列表（儲存 ExtraEffect 列舉值，避免 typed enum array 的型別推論問題）
+var extra_effects: Array[int] = []
+var _x5_badge: Label = null            # X5 標記（右上角紅色 "x5"）
+var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
+
 @onready var visual: ColorRect = $Visual        # 背景色塊
 @onready var icon_label: Label = $Visual/Icon   # 圖示文字標籤
 @onready var gem_sprite: Sprite2D = $GemSprite  # 寶石精靈圖
@@ -110,14 +120,98 @@ func is_upper_gem() -> bool:
 ## 設定高階寶石類型並更新外觀
 func set_upper_type(ut: UpperType) -> void:
 	upper_type = ut
+	# 融合為高階寶石時清除所有額外效果（X5 不繼承）
+	if ut != UpperType.NONE:
+		clear_extras()
 	update_visual()
 
 
 ## 設定基礎寶石類型並更新外觀
 func set_block_type(type) -> void:
+	var prev = block_type
 	block_type = type
+	# 不再為火屬性 → 自動移除 BURNING
+	if prev == Type.RED and type != Type.RED and has_extra(ExtraEffect.BURNING):
+		remove_extra(ExtraEffect.BURNING)
 	if visual:
 		update_visual()
+
+
+# ── 額外效果 API ─────────────────────────────────────────────
+func has_extra(effect: int) -> bool:
+	return extra_effects.has(effect)
+
+
+func add_extra(effect: int) -> void:
+	if extra_effects.has(effect):
+		return
+	extra_effects.append(effect)
+	_refresh_extra_visuals()
+
+
+func remove_extra(effect: int) -> void:
+	if not extra_effects.has(effect):
+		return
+	extra_effects.erase(effect)
+	_refresh_extra_visuals()
+
+
+func clear_extras() -> void:
+	if extra_effects.is_empty():
+		return
+	extra_effects.clear()
+	_refresh_extra_visuals()
+
+
+## 取得這顆寶石被消除/連鎖/融合時計算的數量（X5 → 5，否則 1）
+func get_blast_value() -> int:
+	return 5 if has_extra(ExtraEffect.X5) else 1
+
+
+## 重建額外效果的視覺節點
+func _refresh_extra_visuals() -> void:
+	# X5 徽章
+	if has_extra(ExtraEffect.X5):
+		if _x5_badge == null:
+			_x5_badge = Label.new()
+			_x5_badge.text = "x5"
+			_x5_badge.add_theme_font_size_override("font_size", 18)
+			_x5_badge.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+			_x5_badge.add_theme_color_override("font_outline_color", Color(0.85, 0.05, 0.05, 1))
+			_x5_badge.add_theme_constant_override("outline_size", 4)
+			_x5_badge.position = Vector2(8, -28)
+			_x5_badge.z_index = 20
+			_x5_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(_x5_badge)
+		_x5_badge.visible = true
+	elif _x5_badge != null:
+		_x5_badge.visible = false
+
+	# BURNING 火焰動畫覆蓋層
+	if has_extra(ExtraEffect.BURNING):
+		if _burn_anim == null:
+			var tex: Texture2D = load("res://assets/animation/burning.png")
+			var frames := SpriteFrames.new()
+			frames.add_animation("burn")
+			frames.set_animation_loop("burn", true)
+			frames.set_animation_speed("burn", 12.0)
+			for i in 8:
+				var atlas := AtlasTexture.new()
+				atlas.atlas = tex
+				var frame_w: float = tex.get_width() / 8.0
+				var frame_h: float = tex.get_height()
+				atlas.region = Rect2(i * frame_w, 0, frame_w, frame_h)
+				frames.add_frame("burn", atlas)
+			_burn_anim = AnimatedSprite2D.new()
+			_burn_anim.sprite_frames = frames
+			_burn_anim.modulate = Color(1.0, 1.0, 1.0, 0.5)
+			_burn_anim.scale = Vector2(2.5, 2.5)
+			_burn_anim.z_index = 3
+			add_child(_burn_anim)
+			_burn_anim.play("burn")
+		_burn_anim.visible = true
+	elif _burn_anim != null:
+		_burn_anim.visible = false
 
 
 ## 更新寶石的視覺外觀（背景色、圖示、貼圖、高階覆蓋層）

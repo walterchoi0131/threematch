@@ -6,6 +6,8 @@ const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
+const MeteorVFXScript := preload("res://scripts/meteor_vfx.gd")
+const RACOON_PAW_TEX := preload("res://assets/racoon_paw.png")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -24,6 +26,12 @@ const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 @onready var status_label: Label = $UILayer/StatusLabel
 @onready var return_button: Button = $UILayer/ReturnButton
 @onready var _battle_bg_rect: TextureRect = $BattleBackground
+@onready var _escape_refill_label: Label = $UILayer/EscapeRefillLabel
+
+# ── 逃脫模式狀態 ─────────────────────────────────────────────
+var _escape_mode: bool = false
+var _escape_refill_remaining: int = 0
+var _escape_won: bool = false
 
 # ── game data ─────────────────────────────────────────────────────────
 const CHAR_BOAR := preload("res://characters/char_boar.tres")
@@ -129,6 +137,7 @@ func _ready() -> void:
 	board.upper_gem_chain_triggered.connect(_on_upper_gem_chain_triggered)
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
+	board.gems_refilled.connect(_on_gems_refilled)
 	# State/UI 分離：board 需引用 battle_manager 以查詢邏輯狀態
 	board.battle_manager_ref = battle_manager
 
@@ -150,6 +159,7 @@ func _ready() -> void:
 	return_button.visible = false
 	_setup_boss_bar()
 	_setup_kill_all_button()
+	_setup_escape_hud()
 
 	_se_blast = load("res://assets/se/111.wav")
 	_se_freeze = load("res://assets/se/skef_freeze.mp3")
@@ -578,6 +588,46 @@ func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offs
 	dn.show_number(pos, amount, color, random_x_offset, is_super)
 
 
+## 浣熊掌印 tap 動畫：在 center_p 上方放置 racoon_paw，按壓並彈起，同時寶石縮放回彈
+func _play_racoon_paw_tap(center_p: Vector2i, center_block: Block) -> void:
+	var paw := Sprite2D.new()
+	paw.texture = RACOON_PAW_TEX
+	# 指尖在圖片左上角 → centered=false 並用負 offset 將指尖對齊寶石中心
+	paw.centered = false
+	var tex_size: Vector2 = RACOON_PAW_TEX.get_size()
+	# 指尖位置（相對於圖片左上角）約在 (10%, 10%) 處
+	var fingertip_offset: Vector2 = Vector2(-tex_size.x * 0.10, -tex_size.y * 0.10)
+	paw.position = board.grid_to_world(center_p) + fingertip_offset
+	paw.z_index = 50
+	# 縮小 8 倍
+	var base_scale: float = 1.0 / 8.0
+	var press_scale: Vector2 = Vector2(0.9, 0.9) * base_scale
+	var start_scale: Vector2 = Vector2(1.6, 1.6) * base_scale
+	var lift_scale: Vector2 = Vector2(1.4, 1.4) * base_scale
+	paw.scale = start_scale
+	paw.modulate.a = 0.0
+	board.add_child(paw)
+
+	var press_tw := create_tween().set_parallel(true)
+	press_tw.tween_property(paw, "scale", press_scale, 0.18) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	press_tw.tween_property(paw, "modulate:a", 1.0, 0.10)
+	if is_instance_valid(center_block):
+		press_tw.tween_property(center_block, "scale", Vector2(0.7, 0.7), 0.18) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	await press_tw.finished
+
+	var lift_tw := create_tween().set_parallel(true)
+	lift_tw.tween_property(paw, "scale", lift_scale, 0.14) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	lift_tw.tween_property(paw, "modulate:a", 0.0, 0.14)
+	if is_instance_valid(center_block):
+		lift_tw.tween_property(center_block, "scale", Vector2.ONE, 0.14) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	await lift_tw.finished
+	paw.queue_free()
+
+
 # ── 棋盤回呼 ─────────────────────────────────────────────────
 
 ## 寶石消除後的主要處理流程：
@@ -813,6 +863,8 @@ func _end_player_turn() -> void:
 		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
 
 	await _process_turn_start_passives()
+	# 燃燒傷害：每顆 BURNING 寶石每回合扣 1% 玩家最大 HP（敵人行動之後結算）
+	await _apply_burning_tick()
 	_update_skill_ui()
 	if not battle_manager.is_round_transitioning:
 		# State/UI 分離：解除邏輯阻擋
@@ -1340,12 +1392,26 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 				husky_index = i
 				break
 		var base_atk := husky_data.get_atk() if husky_data != null else 5
-		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult * _pending_saint_cross_count)
-		# 對所有存活敵人造成傷害
+		# 聖十字傷害 ×0.4（原 50 → 20，整體調降 60%）
+		var holy_damage := int(total_enemy_gems * 20 * base_atk * chain_mult * _pending_saint_cross_count)
+		# 啟用延遲死亡：聖十字殺敵時不立即死亡，讓後續 VFX/攻擊仍有目標
+		for enemy in battle_manager.active_enemies:
+			if is_instance_valid(enemy):
+				enemy.defer_death = true
+		# 對所有存活敵人造成傷害 + 斬擊 VFX（slash.png）
 		for enemy in battle_manager.active_enemies:
 			if is_instance_valid(enemy) and enemy.current_hp > 0:
+				var enemy_center: Vector2 = enemy.get_global_rect().get_center()
+				# 斬擊 VFX（純視覺，傷害已由 take_damage 處理）
+				var slash := Node2D.new()
+				slash.set_script(SlashEffectScript)
+				fx_layer.add_child(slash)
+				slash.deduct_hp.connect(func() -> void:
+					_play_sfx(_se_impact)
+				, CONNECT_ONE_SHOT)
+				slash.play(enemy_center)  # fire-and-forget
 				enemy.take_damage(holy_damage)
-				_spawn_damage_number(enemy.get_global_rect().get_center(), holy_damage, Block.COLORS[Block.Type.LIGHT], true)
+				_spawn_damage_number(enemy_center, holy_damage, Block.COLORS[Block.Type.LIGHT], true)
 				await get_tree().create_timer(0.15).timeout
 		# 回復 20% 最大血量（每個聖十字各回復一次）
 		var heal_amount := int(floor(battle_manager.player_max_hp * 0.2)) * _pending_saint_cross_count
@@ -1374,6 +1440,13 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 
 	if not vfx_blasted.is_empty():
 		await _process_blast_results(vfx_blasted, vfx_positions, _chain_atk_bonus)
+	elif had_saint_cross:
+		# 沒有後續 VFX 攻擊：手動結算聖十字延遲死亡的敵人
+		for enemy in battle_manager.active_enemies.duplicate():
+			if is_instance_valid(enemy):
+				enemy.defer_death = false
+				if enemy.current_hp <= 0:
+					enemy.finalize_death()
 
 	# 連鏈標籤淡出
 	if is_instance_valid(_live_chain_label):
@@ -1483,11 +1556,24 @@ func _on_active_skill_activated(char_index: int) -> void:
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
 		"龍焰領域":
-			# 龍焰領域：進入火焰範圍選擇模式，點擊後將範圍內寶石轉換為火寶石
+			# 龍焰領域：進入火焰範圍選擇模式，點擊後播放隕石動畫，落地時將範圍內寶石轉換為火寶石
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
 			board.enter_selection_mode(Block.Type.RED, "fireball")
 			var positions: Array = await board.selection_confirmed
+			# 計算落地中心（被選範圍的平均位置，轉為全域螢幕座標）
+			if positions.size() > 0:
+				var avg: Vector2 = Vector2.ZERO
+				for pos in positions:
+					var gp: Vector2i = pos as Vector2i
+					avg += board.grid_to_world(gp)
+				avg /= float(positions.size())
+				var target_screen: Vector2 = board.to_global(avg)
+				var meteor: Node2D = Node2D.new()
+				meteor.set_script(MeteorVFXScript)
+				fx_layer.add_child(meteor)
+				await meteor.play(target_screen)
+				_play_sfx(_se_impact)
 			var converted := 0
 			for pos in positions:
 				var p: Vector2i = pos as Vector2i
@@ -1511,6 +1597,40 @@ func _on_active_skill_activated(char_index: int) -> void:
 					board._animate_gem_morph(board.grid[p.x][p.y], Block.Type.LIGHT)
 					converted += 1
 			_add_log_entry("光輝降臨：%d→%s" % [converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
+			await get_tree().create_timer(0.4).timeout
+		"生息", "生息.強":
+			# 生息：選一顆寶石，將其上下左右四鄰轉換為相同元素
+			# 生息.強：再額外將被點擊的寶石加上 X5 額外效果
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.enter_selection_mode(Block.Type.RED, "single")  # convert_type 在 single 模式下未使用
+			var sel_positions: Array = await board.selection_confirmed
+			if sel_positions.is_empty():
+				return
+			var center_p: Vector2i = sel_positions[0] as Vector2i
+			var center_block: Block = board.grid[center_p.x][center_p.y]
+			if center_block == null:
+				return
+			var target_element: Block.Type = center_block.block_type as Block.Type
+			# 浣熊掌印 tap 動畫：落下 → 按壓（寶石縮小）→ 抬起淡出（寶石回彈）
+			await _play_racoon_paw_tap(center_p, center_block)
+			var converted := 0
+			for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var np: Vector2i = center_p + dir
+				if not board._is_valid(np):
+					continue
+				var nb: Block = board.grid[np.x][np.y]
+				if nb == null or nb.is_upper_gem():
+					continue
+				if nb.block_type == target_element:
+					continue
+				board._animate_gem_morph(nb, target_element)
+				converted += 1
+			# 生息.強 加 X5 標記到中心寶石（高階寶石跳過）
+			if c.active_skill_name == "生息.強" and not center_block.is_upper_gem():
+				center_block.add_extra(Block.ExtraEffect.X5)
+			var skill_label: String = c.active_skill_name
+			_add_log_entry("%s：%d→%s" % [skill_label, converted, _gem_bbcode(target_element)], target_element, c)
 			await get_tree().create_timer(0.4).timeout
 		"爆炸":
 			# 爆炸：由上到下逐行消除所有寶石，VFX 飛向角色卡 → 攻擊，然後填充
@@ -1959,6 +2079,74 @@ func _on_loot_dropped(enemy_data: EnemyData, results: Array) -> void:
 		dn.set_script(DamageNumberScript)
 		fx_layer.add_child(dn)
 		dn.show_text(popup_pos, label_text, color)
+
+
+## 設定逃脫模式 HUD：依關卡 mode 顯示/隱藏「Left to refill」計數
+func _setup_escape_hud() -> void:
+	_escape_mode = current_stage != null and current_stage.mode == StageData.Mode.ESCAPE
+	_escape_won = false
+	if _escape_mode:
+		_escape_refill_remaining = current_stage.escape_refill_target
+		_escape_refill_label.visible = true
+		_update_escape_refill_label()
+	else:
+		_escape_refill_remaining = 0
+		_escape_refill_label.visible = false
+
+
+func _update_escape_refill_label() -> void:
+	_escape_refill_label.text = "Left to refill: %d" % maxi(_escape_refill_remaining, 0)
+
+
+## board.gems_refilled 處理：累計已補充寶石數量；達標時觸發逃脫勝利
+func _on_gems_refilled(count: int) -> void:
+	if not _escape_mode or _escape_won:
+		return
+	_escape_refill_remaining = maxi(_escape_refill_remaining - count, 0)
+	_update_escape_refill_label()
+	if _escape_refill_remaining <= 0:
+		_escape_won = true
+		battle_manager.battle_won.emit()
+
+
+## 燃燒額外效果結算：每顆 BURNING 寶石扣玩家最大 HP 的 1%
+func _apply_burning_tick() -> void:
+	if board == null:
+		return
+	var burn_positions: Array[Vector2i] = board.get_burning_gem_positions()
+	var n: int = burn_positions.size()
+	if n <= 0:
+		return
+	var per_gem: int = maxi(int(floor(battle_manager.player_max_hp * 0.01)), 1)
+	var total: int = per_gem * n
+
+	# ── 視覺演出階段 ──────────────────────────────────────────
+	# 1) 暗化棋盤，只留燃燒寶石
+	board.darken_except(burn_positions, 0.25)
+	await get_tree().create_timer(0.3).timeout
+
+	# 2) 播放打擊音效
+	var strike_stream: AudioStream = load("res://assets/se/skef_atk6.mp3")
+	_play_sfx(strike_stream, 1.2)
+
+	# 3) 每顆燃燒寶石播放彈跳 pop 動畫
+	for p in burn_positions:
+		var b: Block = board.grid[p.x][p.y]
+		if b == null or not is_instance_valid(b):
+			continue
+		var tw: Tween = b.create_tween()
+		tw.tween_property(b, "scale", Vector2(1.35, 1.35), 0.08).set_ease(Tween.EASE_OUT)
+		tw.tween_property(b, "scale", Vector2(1.0, 1.0), 0.12).set_ease(Tween.EASE_IN)
+
+	await get_tree().create_timer(0.25).timeout
+
+	# 4) 扣血
+	battle_manager.apply_player_damage(total)
+	_add_log_entry("燃燒：%d 顆 %s 寶石，扣 %d HP" % [n, _gem_bbcode(Block.Type.RED), total], Block.Type.RED, null)
+
+	# 5) 還原棋盤亮度
+	await get_tree().create_timer(0.15).timeout
+	board.brighten_all_gems(0.25)
 
 
 ## 戰鬥勝利
