@@ -228,7 +228,7 @@ func _make_char_card(c: CharacterData) -> Dictionary:
 	right_box.add_child(header)
 
 	var name_lbl := Label.new()
-	name_lbl.text = c.character_name
+	name_lbl.text = Locale.tr_ui(c.character_name)
 	name_lbl.add_theme_font_override("font", _font)
 	name_lbl.add_theme_font_size_override("font_size", 20)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)

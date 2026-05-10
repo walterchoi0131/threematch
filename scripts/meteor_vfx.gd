@@ -1,8 +1,9 @@
 ## MeteorVFX（隕石特效）— 從天空（西南方向）落向棋盤的 3D 火球。
 ## 使用 SubViewport 渲染 fireball.gltf。落地時發出 landed 信號並自我釋放。
+class_name MeteorVFX
 extends Node2D
 
-const FIREBALL_PATH := "res://assets/3d/fireball.gltf"
+const FIREBALL_PATH := "res://assets/3d/fireball_vfx/scene.gltf"
 
 signal landed  ## 隕石落地時發出
 
@@ -72,8 +73,8 @@ func play(at_screen: Vector2) -> void:
 		-(at_screen.y / screen.y - 0.5) * 2.0 * half_h_3d,
 		0.0
 	)
-	# 起始位置：高空 + 西方 + 南方（朝向相機，+Z）
-	var start_3d: Vector3 = target_3d + Vector3(-1.4, 1.8, 1.2)
+	# 起始位置：高空 + 西方 + 南方（朝向相機，+Z）；再乘 1.3 讓隕石飛得更遠
+	var start_3d: Vector3 = target_3d + Vector3(-2.37, 3.04, 2.03)
 
 	# 嘗試載入 GLTF；失敗時 fallback 到發光球體（確保畫面一定有東西）
 	var loaded_ok: bool = false
@@ -81,7 +82,7 @@ func play(at_screen: Vector2) -> void:
 		var FireballScene: PackedScene = load(FIREBALL_PATH)
 		if FireballScene != null:
 			_model = FireballScene.instantiate()
-			_model.scale = Vector3(0.6, 0.6, 0.6)
+			_model.scale = Vector3(0.3, 0.3, 0.3)
 			loaded_ok = true
 		else:
 			push_warning("MeteorVFX: fireball.gltf load() returned null; using fallback sphere.")
@@ -92,8 +93,8 @@ func play(at_screen: Vector2) -> void:
 		_model = Node3D.new()
 		var mesh_inst := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
-		sphere.radius = 0.3
-		sphere.height = 0.6
+		sphere.radius = 0.15
+		sphere.height = 0.3
 		mesh_inst.mesh = sphere
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color(1.0, 0.5, 0.1)
@@ -114,10 +115,37 @@ func play(at_screen: Vector2) -> void:
 
 	await _tween.finished
 
-	# 落地閃光：模型快速放大後消失
-	var flash_tw := create_tween().set_parallel(true)
-	flash_tw.tween_property(_model, "scale", Vector3(1.6, 1.6, 1.6), 0.15) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	# 落地：發出信號、橙色碎片、淡出
 	landed.emit()
-	await flash_tw.finished
+	_spawn_landing_debris(at_screen)
+	var fade_tw := create_tween()
+	fade_tw.tween_property(_container, "modulate:a", 0.0, 0.18) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	await fade_tw.finished
 	queue_free()
+
+
+## 落地時在 fx_layer 撒出橙色碎片
+func _spawn_landing_debris(at_screen: Vector2) -> void:
+	var parent: Node = get_parent()
+	if parent == null:
+		return
+	const DEBRIS_COUNT := 12
+	for i in DEBRIS_COUNT:
+		var d := ColorRect.new()
+		var r: float = randf_range(4.0, 9.0)
+		d.size = Vector2(r, r)
+		d.color = Color(randf_range(0.9, 1.0), randf_range(0.35, 0.65), 0.05, 1.0)
+		d.z_index = 25
+		d.position = at_screen - Vector2(r * 0.5, r * 0.5)
+		parent.add_child(d)
+		var angle: float = TAU * float(i) / float(DEBRIS_COUNT) + randf_range(-0.3, 0.3)
+		var dist: float = randf_range(35.0, 110.0)
+		var end_pos: Vector2 = at_screen + Vector2(cos(angle), sin(angle)) * dist - Vector2(r * 0.5, r * 0.5)
+		var duration: float = randf_range(0.35, 0.6)
+		var tw: Tween = d.create_tween().set_parallel(true)
+		tw.tween_property(d, "position", end_pos, duration) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(d, "modulate:a", 0.0, duration) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.finished.connect(d.queue_free)

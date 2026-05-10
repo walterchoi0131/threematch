@@ -18,6 +18,28 @@ var inventory: Dictionary = {}         # 玩家物品庫存，key = ItemDefs.Typ
 ## 已通關的關卡 id 集合（例如 "1-1"）。用於世界地圖解鎖。
 var cleared_stages: Dictionary = {}    # key = stage_id (String), value = true
 
+## 上次出戰使用的隊伍（CharacterData resource_path 陣列）。
+## 關卡如未設定 fixed party（set_party），準備畫面預選此隊伍。
+var last_used_party_paths: Array[String] = []
+
+## 取得上次使用的隊伍 CharacterData 陣列（只含現持有者）
+func get_last_used_party() -> Array[CharacterData]:
+	var result: Array[CharacterData] = []
+	for p in last_used_party_paths:
+		for c: CharacterData in owned_characters:
+			if c != null and c.resource_path == p:
+				result.append(c)
+				break
+	return result
+
+## 記錄本場出戰隊伍（由 main 在勝利且無 fixed party 時呼叫）
+func set_last_used_party(chars: Array[CharacterData]) -> void:
+	last_used_party_paths.clear()
+	for c in chars:
+		if c != null and c.resource_path != "":
+			last_used_party_paths.append(c.resource_path)
+	save_game()
+
 ## 標記指定 stage_id 為已通關
 func mark_stage_cleared(stage_id: String) -> void:
 	if stage_id == "":
@@ -225,12 +247,12 @@ func _ready() -> void:
 	_stage_dev.fixed_layout = _build_stage1_layout()
 	# 第三波（index 2）三隻史萊姆的初始 CD：2, 3, 1
 	_stage_dev.rounds_init_cd = [[], [], [2, 3, 1], []]
-	# 第一關固定隊伍：husky, dragon, shark, raccoon
+	# 第一關固定隊伍：husky, dragon, shark, panda
 	_stage_dev.set_party = [
 		preload("res://characters/char_husky.tres"),
 		preload("res://characters/char_dragon.tres"),
 		preload("res://characters/char_shark.tres"),
-		preload("res://characters/char_raccoon.tres"),
+		preload("res://characters/char_panda.tres"),
 	]
 
 	# 嘗試載入持久化存檔（覆寫 owned_characters / inventory / gold / cleared_stages）
@@ -319,6 +341,7 @@ func _serialize() -> Dictionary:
 		"owned_characters": char_entries,
 		"inventory": inv,
 		"cleared_stages": cleared_stages.keys(),
+		"last_used_party": Array(last_used_party_paths),
 	}
 
 
@@ -359,6 +382,12 @@ func _deserialize(d: Dictionary) -> void:
 	cleared_stages.clear()
 	for sid in d.get("cleared_stages", []):
 		cleared_stages[str(sid)] = true
+
+	last_used_party_paths.clear()
+	for p in d.get("last_used_party", []):
+		var s := str(p)
+		if s != "":
+			last_used_party_paths.append(s)
 
 
 ## 建構第一關固定棋盤佈局（8×8）

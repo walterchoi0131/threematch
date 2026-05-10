@@ -82,6 +82,7 @@ signal selection_confirmed(positions: Array)  # 選擇模式確認時發出
 signal blast_preview_entered()               # 長按預覽開始時發出
 signal blast_preview_exited()                # 長按預覽結束時發出
 signal gems_refilled(count: int)             # 從天空填充新寶石時發出（count = 本批新生成數量）
+signal meteor_requested(global_pos: Vector2)  # FIREBALL 高階寶石引爆時發出（main 處理 3D 隕石 VFX）
 
 
 ## 初始化：讀取關卡資料並建立棋盤
@@ -831,7 +832,61 @@ func convert_all_of_type(from_type: Block.Type, to_type: Block.Type) -> int:
 	return count
 
 
-## 寶石變身動畫：縮小 → 替換類型 → 放大 → 更新融合提示
+## 沉默地消除棋盤上所有指定類型的寶石並填充新寶石。
+## 不發出 gems_blasted（不觸發攻擊），不調用 record_blast。
+## 回傳被消除的有效爆炸值總和（X5 寶石計為 5）。
+func blast_all_of_type(type: Block.Type) -> int:
+	is_busy = true
+	var positions: Array[Vector2i] = []
+	var blocks: Array = []
+	var effective_count: int = 0
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b != null and b.block_type == type and not b.is_upper_gem():
+				positions.append(Vector2i(x, y))
+				blocks.append(b)
+				effective_count += b.get_blast_value()
+				grid[x][y] = null
+	if blocks.is_empty():
+		is_busy = false
+		return 0
+
+	for b in blocks:
+		b.play_destroy_animation()
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		for b in blocks:
+			if is_instance_valid(b):
+				b.queue_free()
+	, CONNECT_ONE_SHOT)
+
+	await get_tree().create_timer(0.25).timeout
+	await _collapse_and_fill()
+	is_busy = false
+	return effective_count
+
+
+## 公開的「融合/變身」闃光+彈跳動畫—可被任何「變成其它寶石」的流程調用
+func play_fuse_animation(block: Block) -> void:
+	if block == null or not is_instance_valid(block):
+		return
+	block.scale = Vector2(1.0, 1.0)
+	var tween := create_tween()
+	tween.tween_property(block, "scale", Vector2(1.4, 1.4), 0.2).set_ease(Tween.EASE_OUT)
+	tween.tween_property(block, "scale", Vector2(1.0, 1.0), 0.2).set_trans(Tween.TRANS_BACK)
+	var flash := ColorRect.new()
+	flash.color = Color(1, 1, 1, 0.85)
+	flash.size = Vector2(CELL_SIZE, CELL_SIZE)
+	flash.position = Vector2(-CELL_SIZE * 0.5, -CELL_SIZE * 0.5)
+	flash.z_index = 10
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	block.add_child(flash)
+	var flash_tw := create_tween()
+	flash_tw.tween_property(flash, "color:a", 0.0, 0.2).set_ease(Tween.EASE_IN)
+	flash_tw.tween_callback(flash.queue_free)
+
+
+## 寶石變身動畫：縮小 → 替換類型 → 放大 + 融合闃光/彈跳 → 更新融合提示
 func _animate_gem_morph(block: Block, new_type: Block.Type) -> void:
 	var tween := create_tween()
 	# 縮小
@@ -841,10 +896,13 @@ func _animate_gem_morph(block: Block, new_type: Block.Type) -> void:
 	tween.tween_callback(func() -> void:
 		block.set_block_type(new_type)
 	)
-	# 放大回原始尺寸
-	tween.tween_property(block, "scale", Vector2(1.0, 1.0), 0.15) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	# 動畫完成後更新融合提示
+	# 套用統一的「融合」闃光與彈跳動畫（play_fuse_animation 已在同一 scope 內定義）
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(block):
+			play_fuse_animation(block)
+	)
+	# 動畫完成後更新融合提示（等 fuse 動畫大致結束）
+	tween.tween_interval(0.42)
 	tween.tween_callback(_update_fuse_hints)
 
 
@@ -924,22 +982,8 @@ func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = 
 
 	# 設定高階類型（替換普通寶石外觀為火焰貼圖 + 紅色底色）
 	block.set_upper_type(ut)
-	# 放大彈跳效果表示融合完成 + 白色閃光覆蓋層
-	var tween := create_tween()
-	tween.tween_property(block, "scale", Vector2(1.4, 1.4), 0.2).set_ease(Tween.EASE_OUT)
-	tween.tween_property(block, "scale", Vector2(1.0, 1.0), 0.2).set_trans(Tween.TRANS_BACK)
-
-	# 白色閃光覆蓋層：從白色淡出至透明
-	var flash := ColorRect.new()
-	flash.color = Color(1, 1, 1, 0.85)
-	flash.size = Vector2(CELL_SIZE, CELL_SIZE)
-	flash.position = Vector2(-CELL_SIZE * 0.5, -CELL_SIZE * 0.5)
-	flash.z_index = 10
-	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	block.add_child(flash)
-	var flash_tween := create_tween()
-	flash_tween.tween_property(flash, "color:a", 0.0, 0.2).set_ease(Tween.EASE_IN)
-	flash_tween.tween_callback(flash.queue_free)
+	# 統一「融合閃光 + 彈跳」動畫
+	play_fuse_animation(block)
 
 
 ## 偵錯：將棋盤上隨機 N 顆普通寶石轉為火炸彈（FIREBALL）
@@ -962,6 +1006,11 @@ func debug_spawn_firebombs(count: int) -> void:
 func _handle_upper_click(pos: Vector2i) -> void:
 	var block: Block = grid[pos.x][pos.y]
 	var ut: Block.UpperType = block.upper_type
+
+	# 水劍專用連鎖序列：不走一般 upper-gem chain 路徑
+	if ut == Block.UpperType.WATER_SLASH_X or ut == Block.UpperType.WATER_SLASH_Y:
+		await _handle_water_sword_sequence(pos)
+		return
 
 	# 根據高階類型決定爆炸位置（使用共用函式）
 	var positions: Array[Vector2i] = _get_blast_positions_for_upper(pos, ut)
@@ -1080,6 +1129,12 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		ub = grid[cp.x][cp.y]
 		if ub == null:
 			continue
+
+		# 水劍：交由專用連鎖序列處理（與點擊同樣規則，且不允許其他 upper 插入）
+		if cut == Block.UpperType.WATER_SLASH_X or cut == Block.UpperType.WATER_SLASH_Y:
+			await _handle_water_sword_sequence(cp, chain_data, total_blasted_by_type, false)
+			continue
+
 		# 播放連鏈爆炸 VFX
 		_play_blast_vfx_for(cp, cut, ub.global_position)
 		var ub_type: Block.Type = ub.block_type as Block.Type
@@ -1110,6 +1165,245 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		chain_data[0] += 1
 		if valid_positions.size() > 0:
 			await _execute_upper_blast_chain(valid_positions, chain_data, total_blasted_by_type)
+
+
+## ── 水劍專用連鎖序列 ───────────────────────────────────────────
+## 點擊任意水劍時呼叫；自動連鎖棋盤上「所有」水劍，期間不允許其它高階寶石的 chain 插入。
+## 規則：
+##   - 1 把水劍：直接縱向 column 爆破。
+##   - N 把水劍：以「貪心找最遠」順序排序；每相鄰兩把間以直線連起並爆破線上所有寶石；
+##              最後一把水劍另做一次縱向 column 爆破。
+## 可重複呼叫於：
+##   - 初始點擊（_handle_upper_click）：chain_data=null時自動創建，并發出 upper_gem_clicked / upper_blast_completed
+##   - 連鎖觸發（_execute_upper_blast_chain）：傳入 chain_data 與 total_blasted_by_type，不重複發出外部訊號
+func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], total_blasted_by_type: Dictionary = {}, is_initial: bool = true) -> void:
+	var start_block: Block = grid[start_pos.x][start_pos.y]
+	if start_block == null:
+		return
+	var ut: Block.UpperType = start_block.upper_type
+
+	if is_initial:
+		chain_data.clear()
+		chain_data.append(0)
+		total_blasted_by_type.clear()
+		upper_gem_clicked.emit()
+
+	# 收集所有水劍位置（含起始）
+	var swords: Array[Vector2i] = [start_pos]
+	for p in find_upper_gems(Block.UpperType.WATER_SLASH_X):
+		if p != start_pos:
+			swords.append(p)
+	for p in find_upper_gems(Block.UpperType.WATER_SLASH_Y):
+		if p != start_pos:
+			swords.append(p)
+
+	# 貪心建構連鎖順序：每次選距上一把最遠的水劍
+	var order: Array[Vector2i] = [start_pos]
+	var remaining: Array[Vector2i] = []
+	for s in swords:
+		if s != start_pos:
+			remaining.append(s)
+	while not remaining.is_empty():
+		var cur: Vector2i = order[order.size() - 1]
+		var best_idx: int = 0
+		var best_d: float = -1.0
+		for i in remaining.size():
+			var diff: Vector2 = Vector2(remaining[i] - cur)
+			var d: float = diff.length_squared()
+			if d > best_d:
+				best_d = d
+				best_idx = i
+		order.append(remaining[best_idx])
+		remaining.remove_at(best_idx)
+
+	# 被跳過的其它 upper 寶石 — 收集到佇列，水劍連鎖全部跱完後逐一觸發
+	var deferred_uppers: Array = []  # Array of {"pos": Vector2i, "upper_type": UpperType}
+	var deferred_seen: Dictionary = {}
+
+	for i in order.size():
+		var sword_pos: Vector2i = order[i]
+		chain_data[0] += 1
+		upper_gem_chain_triggered.emit(ut)
+
+		# 決定本段要爆破的格子
+		var cells: Array[Vector2i]
+		var beam_start: Vector2
+		var beam_end: Vector2
+		if i < order.size() - 1:
+			cells = _line_cells_between(sword_pos, order[i + 1])
+			beam_start = to_global(grid_to_world(sword_pos))
+			beam_end = to_global(grid_to_world(order[i + 1]))
+		else:
+			cells = _get_col_positions(sword_pos.x)
+			# 縱向欄位：由欄底到欄頂（修改方向：原本是從 0 到 rows-1）
+			beam_start = to_global(grid_to_world(Vector2i(sword_pos.x, rows - 1)))
+			beam_end = to_global(grid_to_world(Vector2i(sword_pos.x, 0)))
+
+		# 播放連接起點與終點的射線 VFX（取代原本每格一次的爆破精靈）
+		_play_water_chain_beam(beam_start, beam_end)
+
+		# 銷毀格子上的寶石（其他高階寶石不觸發其爆破，避免 chain 插入；
+		#  唯一例外：水劍本身仍被消耗）
+		var blast_pos_by_type: Dictionary = {}
+		var blast_count_by_type: Dictionary = {}
+		var blocks_to_free: Array = []
+		for c in cells:
+			if not _is_valid(c):
+				continue
+			var b: Block = grid[c.x][c.y]
+			if b == null:
+				continue
+			var is_other_upper: bool = b.is_upper_gem() \
+				and b.upper_type != Block.UpperType.WATER_SLASH_X \
+				and b.upper_type != Block.UpperType.WATER_SLASH_Y
+			if is_other_upper:
+				# 不立即觸發以避免 chain 插入；收集到佇列在水劍序列完成後逐一觸發
+				var key: int = c.x * 1000 + c.y
+				if not deferred_seen.has(key):
+					deferred_seen[key] = true
+					deferred_uppers.append({"pos": c, "upper_type": b.upper_type})
+				continue
+			var bt: Block.Type = b.block_type as Block.Type
+			var bv: int = b.get_blast_value()
+			if not blast_pos_by_type.has(bt):
+				blast_pos_by_type[bt] = []
+			(blast_pos_by_type[bt] as Array).append(b.global_position)
+			blast_count_by_type[bt] = blast_count_by_type.get(bt, 0) + bv
+			total_blasted_by_type[bt] = total_blasted_by_type.get(bt, 0) + bv
+			grid[c.x][c.y] = null
+			blocks_to_free.append(b)
+			b.play_destroy_animation()
+
+		score += blocks_to_free.size() * 10
+		score_changed.emit(score)
+
+		for bt in blast_pos_by_type:
+			gems_blasted.emit(bt as Block.Type, blast_count_by_type[bt] as int, blast_pos_by_type[bt])
+
+		get_tree().create_timer(0.2).timeout.connect(func() -> void:
+			for b in blocks_to_free:
+				if is_instance_valid(b):
+					b.queue_free()
+		, CONNECT_ONE_SHOT)
+
+		if blocks_to_free.size() > 0:
+			await get_tree().create_timer(maxf(chain_blast_interval, 0.02)).timeout
+
+	# 水劍序列全部跱完 → 處理路線上被「跳過」的其他高階寶石（順序觸發，允許递迴連鎖）
+	for entry in deferred_uppers:
+		var dp: Vector2i = entry["pos"]
+		var dut: Block.UpperType = entry["upper_type"] as Block.UpperType
+		# 重新驗證目標仍在且仍是同類 upper
+		if not _is_valid(dp):
+			continue
+		var dub: Block = grid[dp.x][dp.y]
+		if dub == null or not dub.is_upper_gem() or dub.upper_type != dut:
+			continue
+
+		await get_tree().create_timer(maxf(chain_blast_interval, 0.02)).timeout
+		# 再次驗證
+		dub = grid[dp.x][dp.y]
+		if dub == null:
+			continue
+
+		# 交由連鎖路徑處理（由「逘一觸發」路徑代勞）
+		chain_data[0] += 1
+		upper_gem_chain_triggered.emit(dut)
+		_play_blast_vfx_for(dp, dut, dub.global_position)
+
+		var dub_type: Block.Type = dub.block_type as Block.Type
+		var dub_bv: int = dub.get_blast_value()
+		total_blasted_by_type[dub_type] = total_blasted_by_type.get(dub_type, 0) + dub_bv
+		gems_blasted.emit(dub_type, dub_bv, [dub.global_position])
+		grid[dp.x][dp.y] = null
+		dub.play_destroy_animation()
+		get_tree().create_timer(0.2).timeout.connect(func() -> void:
+			if is_instance_valid(dub):
+				dub.queue_free()
+		, CONNECT_ONE_SHOT)
+
+		# 水劍：交給水劍序列（不應發生—所有水劍已在上輪被處理）
+		if dut == Block.UpperType.WATER_SLASH_X or dut == Block.UpperType.WATER_SLASH_Y:
+			await _handle_water_sword_sequence(dp, chain_data, total_blasted_by_type, false)
+			continue
+
+		# 其他 upper：取其爆炸範圍並走常規連鎖递迴
+		var d_positions: Array[Vector2i] = _get_blast_positions_for_upper(dp, dut)
+		d_positions.erase(dp)
+		var d_valid: Array[Vector2i] = []
+		for pp in d_positions:
+			if _is_valid(pp) and grid[pp.x][pp.y] != null:
+				d_valid.append(pp)
+		if d_valid.size() > 0:
+			await _execute_upper_blast_chain(d_valid, chain_data, total_blasted_by_type)
+
+	if is_initial:
+		upper_blast_completed.emit(chain_data[0], total_blasted_by_type, ut)
+
+
+## 水劍連鎖射線動畫：projetilNew.png 為 1×6 縱向精靈表（上到下 6 幀）
+## 每幀中：左邊為起點、右邊為終點 → 以 Sprite2D 拉伸與旋轉連接兩點
+func _play_water_chain_beam(start_global: Vector2, end_global: Vector2) -> void:
+	var tex: Texture2D = load("res://assets/animation/projetilNew.png")
+	if tex == null:
+		return
+	var sprite := Sprite2D.new()
+	sprite.texture = tex
+	sprite.hframes = 1
+	sprite.vframes = 7
+	sprite.frame = 0
+	sprite.centered = false
+	var frame_w: float = float(tex.get_width())
+	var frame_h: float = float(tex.get_height()) / 7.0
+	# 以「左邊中點」為錨點：offset 推到負半幀高讓垂直上下居中
+	sprite.offset = Vector2(0.0, -frame_h * 0.5)
+	var diff: Vector2 = end_global - start_global
+	var dist: float = diff.length()
+	var scale_x: float = (dist / frame_w) if frame_w > 0.0 else 1.0
+	sprite.scale = Vector2(scale_x, 1.0)
+	sprite.rotation = diff.angle()
+	sprite.z_index = 25
+	add_child(sprite)
+	sprite.global_position = start_global
+
+	# 播放 6 幀動畫— 總長 ≈ chain_blast_interval（最低 0.18s）
+	var total: float = maxf(chain_blast_interval, 0.18)
+	var frame_dur: float = total / 7.0
+	var anim_tw := create_tween()
+	for f in 7:
+		anim_tw.tween_callback(func() -> void:
+			if is_instance_valid(sprite):
+				sprite.frame = f
+		)
+		anim_tw.tween_interval(frame_dur)
+	anim_tw.tween_callback(func() -> void:
+		if is_instance_valid(sprite):
+			sprite.queue_free()
+	)
+
+
+## Bresenham：回傳兩個格子之間（含端點）的所有經過格子
+func _line_cells_between(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var dx: int = absi(b.x - a.x)
+	var dy: int = absi(b.y - a.y)
+	var sx: int = 1 if a.x < b.x else -1
+	var sy: int = 1 if a.y < b.y else -1
+	var err: int = dx - dy
+	var x: int = a.x
+	var y: int = a.y
+	while true:
+		cells.append(Vector2i(x, y))
+		if x == b.x and y == b.y:
+			break
+		var e2: int = 2 * err
+		if e2 > -dy:
+			err -= dy
+			x += sx
+		if e2 < dx:
+			err += dx
+			y += sy
+	return cells
 
 
 ## 播放高階寶石爆炸 VFX：水劍會在每個受影響格子各播放一次（X 旋轉 90°）；

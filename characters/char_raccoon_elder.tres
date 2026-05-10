@@ -21,6 +21,6 @@ square_scale = 0.85
 square_offset = Vector2(-83, -25)
 rectangular_scale = 0.4
 rectangular_offset = Vector2(-160, 270)
-active_skill_name = "生息"
+active_skill_name = "Resurgence"
 active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素。CD：4 回合。"
 active_skill_cd = 4

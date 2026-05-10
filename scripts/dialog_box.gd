@@ -40,18 +40,6 @@ const BGM_FADE_DUR := 0.8
 const SKIP_INTERVAL := 0.1
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 
-# 角色名稱對照表（雙語）
-const CHAR_NAMES := {
-	"husky":   { "zh": "哈士奇老師", "en": "Prof. Husky" },
-	"fox":     { "zh": "小狐",       "en": "Fox" },
-	"polar":   { "zh": "白熊",       "en": "Polar" },
-	"raccoon": { "zh": "小浣",       "en": "Raccoon" },
-	"boar":    { "zh": "山豬",       "en": "Boar" },
-	"panda":   { "zh": "熊貓",       "en": "Panda" },
-	"dragon":  { "zh": "小龍",       "en": "Dragon" },
-	"shark":   { "zh": "鯊鯊",       "en": "Shark" },
-}
-
 # 角色名稱顏色
 const CHAR_NAME_COLORS := {
 	"husky":   Color(1.0, 0.92, 0.5),
@@ -381,10 +369,7 @@ func _show_line(line: _DialogLine) -> void:
 			_play_squeeze_bounce(portrait)
 
 		# ── 名稱 ──
-		var locale_node: Node = get_node_or_null("/root/Locale")
-		var cur_locale: String = locale_node.current_locale if locale_node != null else "zh"
-		var name_entry: Dictionary = CHAR_NAMES.get(char_id, {})
-		_name_label.text = name_entry.get(cur_locale, char_id.capitalize())
+		_name_label.text = Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
 		var name_color: Color = CHAR_NAME_COLORS.get(char_id, Color(1.0, 0.92, 0.5))
 		_name_label.add_theme_color_override("font_color", name_color)
 

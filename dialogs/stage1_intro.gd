@@ -1,4 +1,4 @@
-## Stage 1 序章對話資料 — 元素學院開學，Husky 教學，Dragon / Shark / Raccoon 互動。
+## Stage 1 序章對話資料 — 元素學院開學，Husky 教學，Dragon / Shark / Panda 互動。
 ## 用法：preload("res://dialogs/stage1_intro.gd").make()
 class_name Stage1Intro
 extends RefCounted
@@ -33,9 +33,9 @@ static func make() -> _DialogSequence:
 		_line("shark", "normal", "right", "enter",
 			"……那是你個人的事。別打斷上課。",
 			"...That's your own business. Don't interrupt the lesson."),
-		_line("raccoon", "normal", "right", "none",
-			"（小聲）鯊鯊說話好嚇人⋯⋯",
-			"(quietly) Shark is kind of scary..."),
+		_line("panda", "normal", "right", "none",
+			"鯊鯊只是說話直接一點嘛～其實他是為了讓大家認真上課哦。",
+			"Shark just sounds blunt—he only says it because he wants everyone to take class seriously."),
 		_line("husky", "normal", "left", "none",
 			"元素之間存在相剋關係。火焚草、草吸水、水滅火。記住這些，戰場上會救你一命。",
 			"Elements counter each other — Fire burns Leaf, Leaf absorbs Water, Water douses Fire. Remember this."),
@@ -48,9 +48,9 @@ static func make() -> _DialogSequence:
 		_line("dragon", "normal", "right", "none",
 			"啊！？",
 			"Huh?!"),
-		_line("raccoon", "normal", "right", "none",
-			"⋯⋯火焚草，所以火剋草，老師剛才說了。",
-			"...Fire burns Leaf, so Fire beats Leaf. The professor just said that."),
+		_line("panda", "normal", "right", "none",
+			"老師剛才說過哦～火焚草，所以火剛草。小龍一定是太興奮了，下次慎慎來就可以了。",
+			"Professor said it just now—fire burns leaf, so fire beats leaf. Dragon was just too excited; take it slow next time and you'll get it."),
 		_line("dragon", "normal", "right", "none",
 			"喔喔喔！！對！！我早就知道了！！",
 			"Ohhhh!! Right!! I knew that all along!!"),
@@ -66,9 +66,9 @@ static func make() -> _DialogSequence:
 		_line("shark", "normal", "right", "none",
 			"……目前沒有已知的剋制元素。這不等於「最強」，只是尚未解明。",
 			"...There is currently no known counter element. That does not mean 'strongest.' It means unexplained."),
-		_line("raccoon", "normal", "right", "none",
-			"⋯⋯為什麼老師的表情變奇怪了⋯⋯都不說話⋯⋯",
-			"...Why does the professor's expression look strange all of a sudden... he's not saying anything..."),
+		_line("panda", "normal", "right", "none",
+			"老師的表情⋯⋯看起來有點難過。是不是勾起了什麼難過的回憶呢？",
+			"Professor's expression... looks a little sad. Did something painful come back to him?"),
 		_line("husky", "normal", "left", "none",
 			"⋯⋯",
 			"..."),
@@ -87,9 +87,9 @@ static func make() -> _DialogSequence:
 		_line("shark", "normal", "right", "none",
 			"……先等隊形好嗎。",
 			"...Can you wait for formation first?"),
-		_line("raccoon", "normal", "right", "none",
-			"我⋯⋯我跟在後面就好⋯⋯",
-			"I'll... I'll just stay in the back..."),
+		_line("panda", "normal", "right", "none",
+			"我跟在大家身後好好支援，請放心快去吧～",
+			"I'll stay close behind and keep you all supported—go on, don't worry about me."),
 
 	]
 	return seq

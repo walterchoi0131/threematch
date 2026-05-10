@@ -339,7 +339,7 @@ static func make(c: CharacterData, size: CardSize = CardSize.MEDIUM) -> PanelCon
 
 	# 名字
 	var name_lbl := Label.new()
-	name_lbl.text = c.character_name
+	name_lbl.text = Locale.tr_ui(c.character_name)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.add_theme_font_override("font", font)
 	name_lbl.add_theme_font_size_override("font_size", preset.name_font)

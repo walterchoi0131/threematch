@@ -8,7 +8,8 @@ var _cards: Array[Control] = []        # 角色卡片陣列
 var _card_orig_y: Dictionary = {}      # 角色卡片原始 Y 座標
 var _glow_tweens: Dictionary = {}      # 角色索引 -> 發光動畫
 var _glow_panels: Dictionary = {}      # 角色索引 -> 發光覆蓋層
-var _cd_labels: Dictionary = {}        # 角色索引 -> 冷卻標籤
+var _cd_labels: Dictionary = {}        # 角色索引 -> 冷卻數字標籤（左上角，覆蓋元素圖示）
+var _prev_cd: Dictionary = {}          # 角色索引 -> int，上一次 CD 值（用於偵測遞減 -> pop 動畫）
 var _char_data: Array[CharacterData] = []  # 角色資料陣列
 var _portraits: Dictionary = {}        # 角色索引 -> TextureRect（用於即時調整）
 var _gem_icons: Dictionary = {}        # 角色索引 -> TextureRect（元素寶石圖示）
@@ -83,21 +84,37 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	if result.portrait != null:
 		_portraits[index] = result.portrait
 
-	# 冷卻標籤覆蓋層（預設隱藏）
-	var cd_lbl := Label.new()
-	cd_lbl.text = ""
-	cd_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	cd_lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	cd_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cd_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cd_lbl.add_theme_font_size_override("font_size", 20)
-	cd_lbl.visible = false
-	panel.add_child(cd_lbl)
-	_cd_labels[index] = cd_lbl
-
 	# 放射光芒：插入為 gem_icon 的「前一個兄弟」— 與 gem_icon 同在 gem_layer，
 	# 但繪製順序在它之前，因此會出現在元素圖示「下方」、卡片其它內容「上方」。
 	var gem_icon: TextureRect = result.gem_icon
+	var gem_parent: Node = gem_icon.get_parent()
+
+	# 左上角黑色漸層底（在 gem_icon 之下）— 提升 CD 數字 / 元素圖示對比度
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0, 0, 0, 0.75))
+	grad.set_color(1, Color(0, 0, 0, 0.0))
+	# 用斜對角漸層（左上 → 右下）
+	var grad_tex := GradientTexture2D.new()
+	grad_tex.gradient = grad
+	grad_tex.fill = GradientTexture2D.FILL_LINEAR
+	grad_tex.fill_from = Vector2(0.0, 0.0)
+	grad_tex.fill_to = Vector2(1.0, 1.0)
+	grad_tex.width = 64
+	grad_tex.height = 64
+	var gem_bg := TextureRect.new()
+	gem_bg.texture = grad_tex
+	gem_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	gem_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	gem_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gem_bg.offset_left = -2.0
+	gem_bg.offset_top = -2.0
+	gem_bg.offset_right = 46.0
+	gem_bg.offset_bottom = 46.0
+	gem_bg.z_index = -1
+	if gem_parent != null:
+		gem_parent.add_child(gem_bg)
+		gem_parent.move_child(gem_bg, gem_icon.get_index())
+
 	var ray := Node2D.new()
 	ray.set_script(load("res://scripts/ray_burst.gd"))
 	ray.position = Vector2(14.0, 14.0)  # gem_size(28) * 0.5
@@ -108,7 +125,6 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	ray.set("ray_half_angle", 0.35)
 	var gem_element_color: Color = Block.COLORS.get(c.gem_type, Color.WHITE)
 	ray.set("ray_color", Color(gem_element_color.r, gem_element_color.g, gem_element_color.b, 0.7))
-	var gem_parent: Node = gem_icon.get_parent()
 	if gem_parent != null:
 		gem_parent.add_child(ray)
 		gem_parent.move_child(ray, gem_icon.get_index())
@@ -118,6 +134,32 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 		gem_icon.add_child(ray)
 	_gem_icons[index] = gem_icon
 	_gem_rays[index] = ray
+
+	# 冷卻數字標籤：與左上角元素圖示共用同一位置，CD > 0 時顯示、元素圖示隱藏
+	var cd_lbl := Label.new()
+	cd_lbl.text = ""
+	cd_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cd_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cd_lbl.offset_left = gem_icon.offset_left
+	cd_lbl.offset_top = gem_icon.offset_top
+	cd_lbl.offset_right = gem_icon.offset_right
+	cd_lbl.offset_bottom = gem_icon.offset_bottom
+	cd_lbl.pivot_offset = Vector2(14.0, 14.0)
+	cd_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cd_lbl.add_theme_font_size_override("font_size", 20)
+	cd_lbl.add_theme_color_override("font_color", Color.WHITE)
+	cd_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	cd_lbl.add_theme_constant_override("outline_size", 4)
+	cd_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	cd_lbl.add_theme_constant_override("shadow_offset_x", 2)
+	cd_lbl.add_theme_constant_override("shadow_offset_y", 2)
+	cd_lbl.z_index = 0
+	cd_lbl.visible = false
+	if gem_parent != null:
+		gem_parent.add_child(cd_lbl)
+	else:
+		gem_icon.add_child(cd_lbl)
+	_cd_labels[index] = cd_lbl
 
 	# 點擊處理
 	panel.gui_input.connect(_on_card_gui_input.bind(index))
@@ -255,8 +297,8 @@ func _show_char_popup(index: int) -> void:
 	header.add_child(info_vbox)
 
 	var name_lbl := Label.new()
-	name_lbl.text = c.character_name
-	name_lbl.add_theme_font_size_override("font_size", 24)
+	name_lbl.text = Locale.tr_ui(c.character_name)
+	name_lbl.add_theme_font_size_override("font_size", 27)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	name_lbl.add_theme_constant_override("outline_size", 4)
@@ -281,7 +323,7 @@ func _show_char_popup(index: int) -> void:
 
 	var lv_lbl := Label.new()
 	lv_lbl.text = "Lv. %d" % c.level
-	lv_lbl.add_theme_font_size_override("font_size", 20)
+	lv_lbl.add_theme_font_size_override("font_size", 23)
 	lv_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
 	lv_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	lv_lbl.add_theme_constant_override("outline_size", 3)
@@ -306,8 +348,8 @@ func _show_char_popup(index: int) -> void:
 	skills_scroll.add_child(skills_margin)
 	skills_margin.add_child(skills_vbox)
 
-	_add_popup_skill(skills_vbox, Locale.tr_ui("PASSIVE"), c.passive_skill_name, c.passive_skill_desc, null)
-	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"),  c.active_skill_name,  c.active_skill_desc,  null)
+	_add_popup_skill(skills_vbox, Locale.tr_ui("PASSIVE"), Locale.tr_or(c.passive_skill_name, c.passive_skill_name), Locale.tr_or(c.passive_skill_name + " DESC", c.passive_skill_desc), null)
+	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"),  Locale.tr_or(c.active_skill_name, c.active_skill_name),  Locale.tr_or(c.active_skill_name + " DESC", c.active_skill_desc),  null)
 
 	var elem_color: Color = Block.COLORS.get(c.gem_type, Color(0.4, 0.6, 1.0))
 	var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type, null)
@@ -321,7 +363,7 @@ func _show_char_popup(index: int) -> void:
 		var upper_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
 		var pattern: Array = FuseTutorialCanvas._blast_pattern_for(upper_type)
 		var chain: Control = FuseTutorialCanvas._make_skill_chain(fuse_label, base_gem_tex, upper_tex, pattern, elem_color)
-		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), sk_name, sk_desc, chain)
+		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), Locale.tr_or(sk_name, sk_name), Locale.tr_or(sk_name + " DESC", sk_desc), chain)
 
 	# ── 淡入動畫 ──
 	dim.modulate.a = 0.0
@@ -342,32 +384,84 @@ func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, de
 	if skill_name == "":
 		return
 	var entry := VBoxContainer.new()
-	entry.add_theme_constant_override("separation", 4)
+	entry.add_theme_constant_override("separation", 6)
 	parent.add_child(entry)
 
+	# ── 標題列：MarginContainer 讓漸層與 HBox 疊放 ──
+	var row_wrap := MarginContainer.new()
+	row_wrap.add_theme_constant_override("margin_left", 0)
+	row_wrap.add_theme_constant_override("margin_right", 0)
+	row_wrap.add_theme_constant_override("margin_top", 0)
+	row_wrap.add_theme_constant_override("margin_bottom", 0)
+	entry.add_child(row_wrap)
+
+	# 漸層背景：先加（渲染在最底層），左半不透明黑→右側淡出透明
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0, 0, 0, 0.55))
+	grad.set_color(1, Color(0, 0, 0, 0))
+	var grad_tex := GradientTexture2D.new()
+	grad_tex.gradient = grad
+	grad_tex.fill_from = Vector2(0, 0.5)
+	grad_tex.fill_to = Vector2(1, 0.5)
+	var row_bg := TextureRect.new()
+	row_bg.texture = grad_tex
+	row_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	row_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	row_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row_wrap.add_child(row_bg)
+
+	# 內容 HBox（在漸層上方）
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
-	entry.add_child(row)
+	row_wrap.add_child(row)
 
-	var tag_lbl := Label.new()
-	tag_lbl.text = "[%s]" % tag
-	tag_lbl.add_theme_font_size_override("font_size", 13)
-	tag_lbl.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
-	tag_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(tag_lbl)
+	# [標籤] 盒子
+	if tag != "":
+		var tag_box := PanelContainer.new()
+		var tag_style := StyleBoxFlat.new()
+		tag_style.set_corner_radius_all(4)
+		tag_style.content_margin_top = 1
+		tag_style.content_margin_bottom = 1
+		tag_style.content_margin_left = 5
+		tag_style.content_margin_right = 5
+
+		var tag_color := Color(0.4, 0.4, 0.4)
+		if tag == Locale.tr_ui("ACTIVE"):
+			tag_color = Color(0.9, 0.75, 0.1)   # 黃
+		elif tag == Locale.tr_ui("RESPONDING"):
+			tag_color = Color(0.2, 0.5, 0.9)    # 藍
+		elif tag == Locale.tr_ui("PASSIVE"):
+			tag_color = Color(0.4, 0.7, 0.3)    # 綠
+
+		tag_style.bg_color = tag_color
+		tag_box.add_theme_stylebox_override("panel", tag_style)
+		row.add_child(tag_box)
+
+		var tag_lbl := Label.new()
+		tag_lbl.text = tag
+		tag_lbl.add_theme_font_size_override("font_size", 16)
+		tag_lbl.add_theme_color_override("font_color", Color.WHITE)
+		tag_lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
+		tag_lbl.add_theme_constant_override("shadow_offset_x", 1)
+		tag_lbl.add_theme_constant_override("shadow_offset_y", 1)
+		tag_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tag_box.add_child(tag_lbl)
 
 	var nm := Label.new()
 	nm.text = skill_name
-	nm.add_theme_font_size_override("font_size", 16)
+	nm.add_theme_font_size_override("font_size", 19)
 	nm.add_theme_color_override("font_color", Color.WHITE)
+	nm.add_theme_color_override("font_outline_color", Color.BLACK)
+	nm.add_theme_constant_override("outline_size", 4)
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(nm)
 
 	if desc != "":
 		var dl := Label.new()
 		dl.text = desc
-		dl.add_theme_font_size_override("font_size", 13)
-		dl.add_theme_color_override("font_color", Color(0.75, 0.75, 0.82))
+		dl.add_theme_font_size_override("font_size", 16)
+		dl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		dl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		entry.add_child(dl)
@@ -394,14 +488,44 @@ func _close_char_popup() -> void:
 
 
 ## 顯示主動技能冷卻數字。turns_left=0 表示已就緒。
-## CD 數字不再顯示在卡片上（僅保留就緒狀態的發光），故 cd_lbl 永遠隱藏。
+## 右上角：CD>0 顯示數字（有 pop 動畫）；CD<=0 顯示元素圖示。
 func update_cooldown(index: int, turns_left: int) -> void:
 	if not _cd_labels.has(index):
 		return
 	var cd_lbl: Label = _cd_labels[index]
-	cd_lbl.visible = false
+	var gem_icon: TextureRect = _gem_icons.get(index)
+	var prev: int = _prev_cd.get(index, -999)
+	_prev_cd[index] = turns_left
 	if turns_left > 0:
+		cd_lbl.text = "%d" % turns_left
+		cd_lbl.visible = true
+		if gem_icon != null:
+			gem_icon.visible = false
+		# 遞減時播放 pop 動畫
+		if prev > turns_left and prev != -999:
+			_play_cd_pop(cd_lbl)
 		_stop_glow(index)
+	else:
+		cd_lbl.visible = false
+		if gem_icon != null:
+			gem_icon.visible = true
+			# 就緒：元素圖示彈出動畫
+			if prev > 0 and prev != -999:
+				var tw := create_tween()
+				tw.tween_property(gem_icon, "scale", Vector2(1.5, 1.5), 0.12) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+				tw.tween_property(gem_icon, "scale", Vector2(1.0, 1.0), 0.12) \
+					.set_ease(Tween.EASE_IN_OUT)
+
+
+## CD 數字 pop 動畫：縮放交替 + 黑变色闃狀
+func _play_cd_pop(cd_lbl: Label) -> void:
+	cd_lbl.scale = Vector2(1.0, 1.0)
+	var tw := create_tween()
+	tw.tween_property(cd_lbl, "scale", Vector2(1.6, 1.6), 0.12) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(cd_lbl, "scale", Vector2(1.0, 1.0), 0.16) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
 
 
 ## 開始卡片發光脈衝（主動技能已就緒）

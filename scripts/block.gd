@@ -74,6 +74,35 @@ const BREAK_COLS := 3   # 精靈圖表列數
 const BREAK_ROWS := 3   # 精靈圖表行數
 const BREAK_FRAMES := 9 # 消除動畫總幀數
 
+# 高階寶石「內識元素計數」— 被爆破時，除了他抹除的區域以外，本身亦貢獻這么多顆同元素
+# 定義為「融合門檻」— 例如火球炸需 9 顆火寶石融合 → 被爆時內識為 9
+const UPPER_INTRINSIC_VALUE: Dictionary = {
+	UpperType.FIREBALL: 9,
+	UpperType.FIRE_PILLAR_X: 4,
+	UpperType.FIRE_PILLAR_Y: 4,
+	UpperType.SAINT_CROSS: 9,
+	UpperType.LEAF_SHIELD: 4,
+	UpperType.SNOWBALL: 4,
+	UpperType.WATER_SLASH_X: 4,
+	UpperType.WATER_SLASH_Y: 4,
+	UpperType.PORCUPINE: 9,
+	UpperType.TURTLE: 5,
+}
+
+# 高階寶石的「正規元素」：融合成高階寶石時強制設定 block_type，避免被誤指定
+const UPPER_ELEMENT: Dictionary = {
+	UpperType.FIREBALL: Type.RED,
+	UpperType.FIRE_PILLAR_X: Type.RED,
+	UpperType.FIRE_PILLAR_Y: Type.RED,
+	UpperType.SAINT_CROSS: Type.LIGHT,
+	UpperType.LEAF_SHIELD: Type.GREEN,
+	UpperType.SNOWBALL: Type.BLUE,
+	UpperType.WATER_SLASH_X: Type.BLUE,
+	UpperType.WATER_SLASH_Y: Type.BLUE,
+	UpperType.PORCUPINE: Type.GREEN,
+	UpperType.TURTLE: Type.GREEN,
+}
+
 # 融合提示描邊色（較深色，避免與白色文字混淆）
 const FUSE_HINT_OUTLINE_COLORS = {
 	Type.RED: Color(0.85, 0.45, 0.0),     # 橙色
@@ -123,6 +152,9 @@ func set_upper_type(ut: UpperType) -> void:
 	# 融合為高階寶石時清除所有額外效果（X5 不繼承）
 	if ut != UpperType.NONE:
 		clear_extras()
+		# 強制套用正規元素，以保證被爆時 block_type 計入正確的元素顆別
+		if UPPER_ELEMENT.has(ut):
+			block_type = UPPER_ELEMENT[ut]
 	update_visual()
 
 
@@ -163,8 +195,14 @@ func clear_extras() -> void:
 	_refresh_extra_visuals()
 
 
-## 取得這顆寶石被消除/連鎖/融合時計算的數量（X5 → 5，否則 1）
+## 取得這顆寶石被消除/連鎖/融合時計算的數量
+## 規則：
+##   - 高階寶石：返回內識元素計數（UPPER_INTRINSIC_VALUE）
+##   - X5：5
+##   - 一般：1
 func get_blast_value() -> int:
+	if is_upper_gem():
+		return UPPER_INTRINSIC_VALUE.get(upper_type, 1)
 	return 5 if has_extra(ExtraEffect.X5) else 1
 
 
@@ -177,8 +215,13 @@ func _refresh_extra_visuals() -> void:
 			_x5_badge.text = "x5"
 			_x5_badge.add_theme_font_size_override("font_size", 18)
 			_x5_badge.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-			_x5_badge.add_theme_color_override("font_outline_color", Color(0.85, 0.05, 0.05, 1))
+			# 描邊/陰影跟隨寶石元素色
+			var elem_col: Color = COLORS.get(block_type, Color(0.85, 0.05, 0.05, 1))
+			_x5_badge.add_theme_color_override("font_outline_color", elem_col)
 			_x5_badge.add_theme_constant_override("outline_size", 4)
+			_x5_badge.add_theme_color_override("font_shadow_color", Color(elem_col.r, elem_col.g, elem_col.b, 0.85))
+			_x5_badge.add_theme_constant_override("shadow_offset_x", 2)
+			_x5_badge.add_theme_constant_override("shadow_offset_y", 2)
 			_x5_badge.position = Vector2(8, -28)
 			_x5_badge.z_index = 20
 			_x5_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE

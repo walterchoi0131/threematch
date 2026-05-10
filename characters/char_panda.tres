@@ -16,11 +16,21 @@ portrait_offset = Vector2(-83, -61)
 dialog_square_offset = Vector2(-1, 0)
 square_scale = 1.35
 square_offset = Vector2(-126, -32)
+active_skill_name = "Resurgence+"
+active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/融合時計為 5 顆）。CD：6 回合。"
+active_skill_cd = 6
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 4+ leaf gems: create a Leaf Shield gem at tapped cell. Click to heal ATK×5. Absorbs enemy attacks (50% dmg reduction).",
-"fuse_label": "4",
-"name": "Leaf Shield",
+"desc": "Blast 5+ leaf gems: summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
+"fuse_label": "5",
+"name": "Turtle",
+"priority": 2,
+"threshold": 5,
+"trigger_type": "count"
+}, {
+"desc": "Blast 9+ leaf gems: summon a Porcupine gem at tapped cell. Self-blast only. Attacks first enemy for ΣTeamMagic × 0.5 each turn.",
+"fuse_label": "9",
+"name": "Porcupine",
 "priority": 1,
-"threshold": 4,
+"threshold": 9,
 "trigger_type": "count"
 }])

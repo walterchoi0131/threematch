@@ -385,11 +385,11 @@ func _build_skills_section(parent: VBoxContainer, _card_w: float) -> void:
 
 	# Passive — 不顯示寶石
 	if _char.passive_skill_name != "":
-		_add_skill_entry(parent, Locale.tr_ui("PASSIVE"), _char.passive_skill_name, _char.passive_skill_desc, 0, null, "", [])
+		_add_skill_entry(parent, Locale.tr_ui("PASSIVE"), Locale.tr_or(_char.passive_skill_name, _char.passive_skill_name), Locale.tr_or(_char.passive_skill_name + " DESC", _char.passive_skill_desc), 0, null, "", [])
 
 	# Active — 不顯示寶石
 	if _char.active_skill_name != "":
-		_add_skill_entry(parent, Locale.tr_ui("ACTIVE"), _char.active_skill_name, _char.active_skill_desc, _char.active_skill_cd, null, "", [])
+		_add_skill_entry(parent, Locale.tr_ui("ACTIVE"), Locale.tr_or(_char.active_skill_name, _char.active_skill_name), Locale.tr_or(_char.active_skill_name + " DESC", _char.active_skill_desc), _char.active_skill_cd, null, "", [])
 
 	# Responding — 顯示對應融合寶石、合成提示與爆發範圍
 	for skill: Dictionary in _char.responding_skills:

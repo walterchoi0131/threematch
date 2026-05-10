@@ -14,7 +14,7 @@ signal enemy_attacked(enemy: Enemy, damage: int)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
 signal round_spawned(round_idx: int)  ## 一波敵人已生成完畢
 signal loot_dropped(enemy_data: EnemyData, results: Array)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
-
+signal turn_gem_blasts_changed()  ## 本回合寶石計數（含 pending_skill_blasts）變動
 # ── references set by Main ────────────────────────────────────────────
 var enemy_container: HBoxContainer
 
@@ -39,6 +39,7 @@ var turn: int = 0
 # ── skill state ───────────────────────────────────────────────────────
 var skill_cooldowns: Dictionary = {}       # char_index -> int (turns remaining)
 var turn_gem_blasts: Dictionary = {}       # Block.Type -> int (gems blasted this turn)
+var pending_skill_blasts: Dictionary = {}  # Block.Type -> int (技能儲存的额外計數，下次以該 type 正常攻擊時計入並清零)
 var last_blast_positions: Array[Vector2i] = []  # positions of the last normal blast (for line detection)
 
 # ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
@@ -75,6 +76,7 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 			skill_cooldowns[i] = characters[i].active_skill_cd
 
 	turn_gem_blasts.clear()
+	pending_skill_blasts.clear()
 	last_blast_positions.clear()
 	turn = 0
 	current_round = 0
@@ -95,7 +97,9 @@ func _spawn_round(round_idx: int) -> void:
 	for e in active_enemies:
 		if is_instance_valid(e):
 			e.queue_free()
-	active_enemies.clear()
+	active_enemies.clear()	# 也清理上一波残留的随位佔位符（已隱藏的死敷人豍點）
+	for child in enemy_container.get_children():
+		child.queue_free()
 	targeted_enemy = null
 
 	if round_idx >= stage_rounds.size():
@@ -160,11 +164,21 @@ func record_blast(gem_type: Block.Type, count: int, positions: Array[Vector2i] =
 	turn_gem_blasts[gem_type] = turn_gem_blasts.get(gem_type, 0) + count
 	if positions.size() > 0:
 		last_blast_positions = positions
+	turn_gem_blasts_changed.emit()
 
 
 ## 根據寶石類型和數量計算攻擊資料（傷害、目標、是否克制）
 func get_attack_data(gem_type: Block.Type, count: int) -> Array:
 	var attacks := []
+	# 消耗 pending_skill_blasts（技能儲存的额外數量）：
+	# 1) 計入此次攻擊（count += pending） 2) 將其累入 turn_gem_blasts，
+	# 讓寶石計量器仍以「合併後總數」顯示。
+	var pending: int = int(pending_skill_blasts.get(gem_type, 0))
+	if pending > 0:
+		count += pending
+		turn_gem_blasts[gem_type] = int(turn_gem_blasts.get(gem_type, 0)) + pending
+		pending_skill_blasts[gem_type] = 0
+		turn_gem_blasts_changed.emit()
 	# 若當前目標已失效，嘗試自動切換到下一個存活敵人
 	var target := targeted_enemy
 	if target == null or not is_instance_valid(target) or target.current_hp <= 0:
@@ -173,6 +187,13 @@ func get_attack_data(gem_type: Block.Type, count: int) -> Array:
 			if is_instance_valid(e) and e.current_hp > 0:
 				target = e
 				break
+		# fallback：若無存活敵人，接受「延遲死亡」狀態的敵人作為目標
+		# （讓高階寶石連鎖中被聖十字打死的敵人仍能被後續 VFX 攻擊「過殺」）
+		if target == null:
+			for e in active_enemies:
+				if is_instance_valid(e) and e.defer_death:
+					target = e
+					break
 		if target != null:
 			_set_target(target)
 	for i in characters.size():
@@ -285,6 +306,12 @@ func get_cooldown(char_index: int) -> int:
 	return skill_cooldowns.get(char_index, -1)
 
 
+## 重置所有角色主動技能冷卻（偵錯用）
+func reset_all_skill_cooldowns() -> void:
+	for i in skill_cooldowns:
+		skill_cooldowns[i] = 0
+
+
 ## 結束回合：遞增回合計數、減少冷卻、清除本回合資料（不含敵人行動）
 func finish_turn() -> void:
 	turn += 1
@@ -297,6 +324,7 @@ func finish_turn() -> void:
 
 	turn_gem_blasts.clear()
 	last_blast_positions.clear()
+	turn_gem_blasts_changed.emit()
 	_update_enemy_cds()
 
 
@@ -304,6 +332,7 @@ func finish_turn() -> void:
 func reset_blast_data() -> void:
 	turn_gem_blasts.clear()
 	last_blast_positions.clear()
+	turn_gem_blasts_changed.emit()
 
 
 ## 本回合是否有敵人即將行動

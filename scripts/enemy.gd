@@ -60,6 +60,12 @@ func _refresh_intent() -> void:
 	if not intent_label:
 		return
 	intent_label.text = "⚔ %d  CD %d" % [data.attack_damage, turns_until_attack]
+	intent_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	intent_label.add_theme_constant_override("shadow_offset_x", 2)
+	intent_label.add_theme_constant_override("shadow_offset_y", 2)
+	intent_label.add_theme_constant_override("shadow_outline_size", 2)
+	intent_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	intent_label.add_theme_constant_override("outline_size", 4)
 	if turns_until_attack <= 1:
 		intent_label.modulate = Color(1.0, 0.35, 0.35)
 	else:
@@ -220,11 +226,11 @@ func finalize_death() -> void:
 		_play_death_animation()
 
 
-## 死亡淡出動畫
+## 死亡淡出動畫：僅設 alpha=0，不釋放也不隱藏，避免 HBoxContainer 重新排列
 func _play_death_animation() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, 0.4)
-	tween.tween_callback(queue_free)
 
 
 ## 處理滑鼠點擊敎人事件

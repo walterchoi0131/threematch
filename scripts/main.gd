@@ -6,8 +6,6 @@ const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
-const MeteorVFXScript := preload("res://scripts/meteor_vfx.gd")
-const RACOON_PAW_TEX := preload("res://assets/racoon_paw.png")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -23,6 +21,7 @@ const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 @onready var player_hp_fill: ColorRect = $UILayer/PlayerHPBar/Fill
 @onready var enemy_container: HBoxContainer = $UILayer/EnemyRow
 @onready var character_panel: HBoxContainer = $UILayer/CharacterRow
+@onready var gem_meter: GemMeter = $UILayer/GemMeter
 @onready var status_label: Label = $UILayer/StatusLabel
 @onready var return_button: Button = $UILayer/ReturnButton
 @onready var _battle_bg_rect: TextureRect = $BattleBackground
@@ -36,10 +35,12 @@ var _escape_won: bool = false
 # ── game data ─────────────────────────────────────────────────────────
 const CHAR_BOAR := preload("res://characters/char_boar.tres")
 const CHAR_RACCOON := preload("res://characters/char_raccoon.tres")
+const CHAR_PANDA := preload("res://characters/char_panda.tres")
 const CHAR_FOX := preload("res://characters/char_fox.tres")
 const CHAR_HUSKY := preload("res://characters/char_husky.tres")
-const CHAR_PANDA := preload("res://characters/char_panda.tres")
 const CHAR_POLAR := preload("res://characters/char_polar.tres")
+const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
+const CHAR_SHARK := preload("res://characters/char_shark.tres")
 
 var party: Array[CharacterData] = []
 var current_stage: StageData = null
@@ -128,7 +129,11 @@ func _ready() -> void:
 
 	party = GameState.selected_party.duplicate()
 	if party.is_empty():
-		party = [CHAR_BOAR, CHAR_RACCOON, CHAR_HUSKY]
+		var last: Array[CharacterData] = GameState.get_last_used_party()
+		if last.size() > 0:
+			party = last
+		else:
+			party = [CHAR_DRAGON, CHAR_SHARK, CHAR_PANDA, CHAR_HUSKY]
 
 	board.gems_blasted.connect(_on_gems_blasted)
 	board.score_changed.connect(_on_score_changed)
@@ -151,6 +156,7 @@ func _ready() -> void:
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
 	battle_manager.loot_dropped.connect(_on_loot_dropped)
 	battle_manager.round_spawned.connect(_on_round_spawned)
+	battle_manager.turn_gem_blasts_changed.connect(_refresh_gem_meter)
 
 	character_panel.setup(party)
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
@@ -304,7 +310,7 @@ func _play_stage_intro() -> void:
 	character_panel.play_intro_slide()  # fire-and-forget
 
 	# 再等 2.9 秒（黑幕共 3.4 秒）完成後解鎖棋盤
-	await get_tree().create_timer(2.9).timeout
+	await get_tree().create_timer(0.1).timeout
 	board.is_busy = false
 
 
@@ -588,46 +594,6 @@ func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offs
 	dn.show_number(pos, amount, color, random_x_offset, is_super)
 
 
-## 浣熊掌印 tap 動畫：在 center_p 上方放置 racoon_paw，按壓並彈起，同時寶石縮放回彈
-func _play_racoon_paw_tap(center_p: Vector2i, center_block: Block) -> void:
-	var paw := Sprite2D.new()
-	paw.texture = RACOON_PAW_TEX
-	# 指尖在圖片左上角 → centered=false 並用負 offset 將指尖對齊寶石中心
-	paw.centered = false
-	var tex_size: Vector2 = RACOON_PAW_TEX.get_size()
-	# 指尖位置（相對於圖片左上角）約在 (10%, 10%) 處
-	var fingertip_offset: Vector2 = Vector2(-tex_size.x * 0.10, -tex_size.y * 0.10)
-	paw.position = board.grid_to_world(center_p) + fingertip_offset
-	paw.z_index = 50
-	# 縮小 8 倍
-	var base_scale: float = 1.0 / 8.0
-	var press_scale: Vector2 = Vector2(0.9, 0.9) * base_scale
-	var start_scale: Vector2 = Vector2(1.6, 1.6) * base_scale
-	var lift_scale: Vector2 = Vector2(1.4, 1.4) * base_scale
-	paw.scale = start_scale
-	paw.modulate.a = 0.0
-	board.add_child(paw)
-
-	var press_tw := create_tween().set_parallel(true)
-	press_tw.tween_property(paw, "scale", press_scale, 0.18) \
-		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	press_tw.tween_property(paw, "modulate:a", 1.0, 0.10)
-	if is_instance_valid(center_block):
-		press_tw.tween_property(center_block, "scale", Vector2(0.7, 0.7), 0.18) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	await press_tw.finished
-
-	var lift_tw := create_tween().set_parallel(true)
-	lift_tw.tween_property(paw, "scale", lift_scale, 0.14) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	lift_tw.tween_property(paw, "modulate:a", 0.0, 0.14)
-	if is_instance_valid(center_block):
-		lift_tw.tween_property(center_block, "scale", Vector2.ONE, 0.14) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	await lift_tw.finished
-	paw.queue_free()
-
-
 # ── 棋盤回呼 ─────────────────────────────────────────────────
 
 ## 寶石消除後的主要處理流程：
@@ -672,7 +638,10 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	if is_fuse:
 		# ── 融合管線（不消耗回合，整段保留鎖定）──
-		# 融合路徑保留原 turn_gem_blasts 流程：不還原，由融合管線結束時 reset_blast_data 清除
+		# 融合不計入寶石計量器：還原 saved_blasts（這筆 record_blast 不計）
+		battle_manager.turn_gem_blasts = saved_blasts
+		battle_manager.last_blast_positions = saved_positions
+		battle_manager.turn_gem_blasts_changed.emit()
 		board.is_busy = true
 		await _execute_fuse_pipeline(gem_type, global_positions, responses)
 		return
@@ -849,13 +818,13 @@ func _end_player_turn() -> void:
 	# 召喚物每回合行動：豪豬攻擊 / 烏龜回血
 	await _resolve_persistent_upper_gems()
 
-	# 敵人行動前 1 秒延遲（同時鎖定棋盤直到敵人攻擊完成）
+	# 敵人行動前延遲（同時鎖定棋盤直到敵人攻擊完成）
 	var will_attack: bool = battle_manager.has_enemies_to_attack()
 	if will_attack:
 		board.is_busy = true
 		# 敵人攻擊期間暗化棋盤（與長按預覽相同色）
 		board.darken_all_gems(0.3)
-		await get_tree().create_timer(1.0).timeout
+		await get_tree().create_timer(0.35).timeout
 
 	var did_attack: bool = await battle_manager.do_enemy_phase()
 	if did_attack:
@@ -1163,7 +1132,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 			if heal > 0:
 				battle_manager.apply_heal(heal)
 				character_panel.show_heal_text(char_index, heal)
-			_add_log_entry("%s [b]飲水[/b] [color=#44ff88]+%d[/color]" % [_gem_bbcode(gem_type), heal], gem_type, char_data)
+			_add_log_entry("%s [b]%s[/b] [color=#44ff88]+%d[/color]" % [_gem_bbcode(gem_type), Locale.tr_ui("Drinking"), heal], gem_type, char_data)
 		## ── 浣熊弓箭攻擊（暫時停用，改走預設攻擊，保留備用）──
 		# "Raccoon":  # 葉屬性 — 每 3 個寶石發射 1 枝箭，每枝隨機攻擊一個存活敵人
 		# 	var arrow_count := ceili(float(gem_count) / 3.0)
@@ -1241,7 +1210,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var priority: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE]
 			board.convert_gems(Block.Type.GREEN, 3, priority)
 			var _rc: CharacterData = party[resp.char_index]
-			_add_log_entry("[b]葉風暴[/b] %s ×3" % [_gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, _rc)
+			_add_log_entry("[b]%s[/b] %s ×3" % [Locale.tr_ui("LOG_LEAF_STORM"), _gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, _rc)
 			await get_tree().create_timer(0.4).timeout
 		"Fireball":
 			# Place a Fireball upper gem at the tapped position
@@ -1295,14 +1264,9 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			_add_log_entry(_format_fuse_bbcode(_sc.gem_type, _sc_count, Block.UpperType.SNOWBALL), _sc.gem_type, _sc)
 			await get_tree().create_timer(0.15).timeout
 		"Water Slash":
-			# Place a Water Slash upper gem based on blast direction (row or col)
+			# Place a Water Slash upper gem (always vertical type — chain logic ignores X/Y orientation)
 			var pos: Vector2i = board.last_tapped_pos
-			var blast_dir: String = board.get_line_direction(battle_manager.last_blast_positions)
-			var slash_type: Block.UpperType
-			if blast_dir == "horizontal":
-				slash_type = Block.UpperType.WATER_SLASH_X
-			else:
-				slash_type = Block.UpperType.WATER_SLASH_Y
+			var slash_type: Block.UpperType = Block.UpperType.WATER_SLASH_Y
 			board.place_upper_gem(pos, slash_type)
 			_play_sfx(_se_freeze)
 			var _wc: CharacterData = party[resp.char_index]
@@ -1367,7 +1331,7 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 			battle_manager.apply_heal(heal_amount)
 			if panda_index >= 0:
 				character_panel.show_heal_text(panda_index, heal_amount)
-			_add_log_entry("[b]葉盾[/b] %s 回覆 %d HP" % [_gem_bbcode(Block.Type.GREEN), heal_amount], Block.Type.GREEN, panda_data)
+			_add_log_entry("[b]%s[/b] %s %s %d HP" % [Locale.tr_ui("Leaf Shield"), _gem_bbcode(Block.Type.GREEN), Locale.tr_ui("LOG_HEAL"), heal_amount], Block.Type.GREEN, panda_data)
 		Block.UpperType.SAINT_CROSS:
 			# 聖十字：標記需要在結算時執行聖十字效果
 			_pending_saint_cross_count += 1
@@ -1378,7 +1342,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 	var chain_mult: float = 1.0 + (chain_count - 1) * 0.10
 	var had_saint_cross := _pending_saint_cross_count > 0
 
-	# ── 結算所有累積的聖十字效果 ──
+	# ── 結算所有累積的聖十字效果（單一目標）──
 	if had_saint_cross:
 		var total_enemy_gems := 0
 		for bt in blasted_by_type:
@@ -1392,27 +1356,36 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 				husky_index = i
 				break
 		var base_atk := husky_data.get_atk() if husky_data != null else 5
-		# 聖十字傷害 ×0.4（原 50 → 20，整體調降 60%）
-		var holy_damage := int(total_enemy_gems * 20 * base_atk * chain_mult * _pending_saint_cross_count)
-		# 啟用延遲死亡：聖十字殺敵時不立即死亡，讓後續 VFX/攻擊仍有目標
+		# 聖十字傷害：最初公式 ×0.4（-60%）×0.2（-80%）= ×0.08
+		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult * _pending_saint_cross_count * 0.08)
+		# 選定單一目標：當前鎖定敵，若無效則取第一個存活敵
+		var saint_target: Enemy = battle_manager.targeted_enemy
+		if saint_target == null or not is_instance_valid(saint_target) or saint_target.current_hp <= 0:
+			saint_target = null
+			for e in battle_manager.active_enemies:
+				if is_instance_valid(e) and e.current_hp > 0:
+					saint_target = e
+					break
+		# 開啟延遲死亡：即使聖十字打死敵人，後續本波 VFX 攻擊仍可找到目標（過殺）
 		for enemy in battle_manager.active_enemies:
 			if is_instance_valid(enemy):
 				enemy.defer_death = true
-		# 對所有存活敵人造成傷害 + 斬擊 VFX（slash.png）
-		for enemy in battle_manager.active_enemies:
-			if is_instance_valid(enemy) and enemy.current_hp > 0:
-				var enemy_center: Vector2 = enemy.get_global_rect().get_center()
-				# 斬擊 VFX（純視覺，傷害已由 take_damage 處理）
-				var slash := Node2D.new()
-				slash.set_script(SlashEffectScript)
-				fx_layer.add_child(slash)
-				slash.deduct_hp.connect(func() -> void:
-					_play_sfx(_se_impact)
-				, CONNECT_ONE_SHOT)
-				slash.play(enemy_center)  # fire-and-forget
-				enemy.take_damage(holy_damage)
-				_spawn_damage_number(enemy_center, holy_damage, Block.COLORS[Block.Type.LIGHT], true)
-				await get_tree().create_timer(0.15).timeout
+		var light_color: Color = Block.COLORS[Block.Type.LIGHT]
+		if saint_target != null:
+			var target_pos: Vector2 = saint_target.get_global_rect().get_center()
+			var slash := Node2D.new()
+			slash.set_script(SlashEffectScript)
+			fx_layer.add_child(slash)
+			var captured_enemy: Enemy = saint_target
+			var captured_dmg: int = holy_damage
+			slash.deduct_hp.connect(func() -> void:
+				if is_instance_valid(captured_enemy):
+					captured_enemy.take_damage(captured_dmg)
+					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), captured_dmg, light_color, true)
+				_play_sfx(_se_impact)
+			, CONNECT_ONE_SHOT)
+			slash.play(target_pos)  # fire-and-forget
+			await get_tree().create_timer(0.4).timeout
 		# 回復 20% 最大血量（每個聖十字各回復一次）
 		var heal_amount := int(floor(battle_manager.player_max_hp * 0.2)) * _pending_saint_cross_count
 		battle_manager.apply_heal(heal_amount)
@@ -1420,7 +1393,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 			character_panel.show_heal_text(husky_index, heal_amount)
 		var cross_str := "×%d " % _pending_saint_cross_count if _pending_saint_cross_count > 1 else ""
 		var chain_str := (" ×%.1f鎖" % chain_mult) if chain_count >= 2 else ""
-		_add_log_entry("[b]聖十字[/b] %s%s %d × ⚔%d%s = %d 回覆%d" % [cross_str, _gem_bbcode(Block.Type.LIGHT), total_enemy_gems, base_atk, chain_str, holy_damage, heal_amount], Block.Type.LIGHT, husky_data)
+		_add_log_entry("[b]%s[/b] %s%s %d × ⚔%d%s = %d %s%d" % [Locale.tr_ui("LOG_SAINT_CROSS"), cross_str, _gem_bbcode(Block.Type.LIGHT), total_enemy_gems, base_atk, chain_str, holy_damage, Locale.tr_ui("LOG_HEAL"), heal_amount], Block.Type.LIGHT, husky_data)
 		_pending_saint_cross_count = 0
 
 	# ── 處理所有非聖十字的寶石類型：透過通用管線播放 VFX → 攻擊 ──
@@ -1440,13 +1413,6 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 
 	if not vfx_blasted.is_empty():
 		await _process_blast_results(vfx_blasted, vfx_positions, _chain_atk_bonus)
-	elif had_saint_cross:
-		# 沒有後續 VFX 攻擊：手動結算聖十字延遲死亡的敵人
-		for enemy in battle_manager.active_enemies.duplicate():
-			if is_instance_valid(enemy):
-				enemy.defer_death = false
-				if enemy.current_hp <= 0:
-					enemy.finalize_death()
 
 	# 連鏈標籤淡出
 	if is_instance_valid(_live_chain_label):
@@ -1526,7 +1492,7 @@ func _process_turn_start_passives() -> void:
 			# 光合作用：轉 3 個寶石為葉（優先紅 > 藍）
 			var priority: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE]
 			board.convert_gems(Block.Type.GREEN, 3, priority)
-			_add_log_entry("光合作用：3→%s" % _gem_bbcode(Block.Type.GREEN), Block.Type.GREEN, c)
+			_add_log_entry("%s：3→%s" % [Locale.tr_ui("Photosynthesis"), _gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, c)
 			await get_tree().create_timer(0.4).timeout
 
 
@@ -1545,42 +1511,67 @@ func _on_active_skill_activated(char_index: int) -> void:
 			# 攻擊形態：將所有火寶石轉為水寶石
 			battle_manager.use_active_skill(char_index)
 			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
-			_add_log_entry("攻擊形態：%s→%s" % [_gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Attack Form"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
-		"止水明鏡":
+		"Tranquil Mirror":
 			# 止水明鏡：將棋盤上所有火寶石轉換為水寶石
 			battle_manager.use_active_skill(char_index)
 			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
-			_add_log_entry("止水明鏡：%s→%s" % [_gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Tranquil Mirror"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
-		"龍焰領域":
-			# 龍焰領域：進入火焰範圍選擇模式，點擊後播放隕石動畫，落地時將範圍內寶石轉換為火寶石
+		"Iai: Water Soul":
+			# 居合.水魂：消除棋盤上所有水寶石並儲存於 pending，下次水屬性攻擊時併入
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			# ── 水元素 VFX：從每顆水寶石飛向技能使用者卡片──
+			var water_positions: Array[Vector2] = []
+			for x in board.columns:
+				for y in board.rows:
+					var bb: Block = board.grid[x][y]
+					if bb != null and bb.block_type == Block.Type.BLUE and not bb.is_upper_gem():
+						water_positions.append(bb.global_position)
+			if water_positions.size() > 0:
+				var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
+				var water_color: Color = Block.COLORS.get(Block.Type.BLUE, Color(0.2, 0.55, 1.0))
+				var particle_duration := 0.7
+				var n_total: int = mini(water_positions.size(), MAX_VFX_PARTICLES)
+				for i in n_total:
+					var particle: Node2D = _acquire_particle()
+					if particle == null:
+						break
+					var spread: float = (float(i) / max(n_total - 1, 1)) * 2.0 - 1.0 if n_total > 1 else 0.0
+					particle.launch(water_positions[i], card_center, water_color, particle_duration, spread)
+			var blasted: int = await board.blast_all_of_type(Block.Type.BLUE)
+			if blasted > 0:
+				battle_manager.pending_skill_blasts[Block.Type.BLUE] = int(battle_manager.pending_skill_blasts.get(Block.Type.BLUE, 0)) + blasted
+				battle_manager.turn_gem_blasts_changed.emit()
+			_add_log_entry("%s：%s %d %s" % [Locale.tr_ui("Iai: Water Soul"), Locale.tr_ui("LOG_STORE"), blasted, _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			await get_tree().create_timer(0.2).timeout
+			_update_skill_ui()
+		"Dragon Flame Domain":
+			# 龍焰領域：進入火焰範圍選擇模式，點擊後鋭隕石落下並將範圍內寶石轉換為火寶石
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
 			board.enter_selection_mode(Block.Type.RED, "fireball")
 			var positions: Array = await board.selection_confirmed
-			# 計算落地中心（被選範圍的平均位置，轉為全域螢幕座標）
+			# 以範圍中心（positions[0]）作為隕石落下點
 			if positions.size() > 0:
-				var avg: Vector2 = Vector2.ZERO
-				for pos in positions:
-					var gp: Vector2i = pos as Vector2i
-					avg += board.grid_to_world(gp)
-				avg /= float(positions.size())
-				var target_screen: Vector2 = board.to_global(avg)
-				var meteor: Node2D = Node2D.new()
-				meteor.set_script(MeteorVFXScript)
+				var center_p: Vector2i = positions[0] as Vector2i
+				var landing_global: Vector2 = board.to_global(board.grid_to_world(center_p)) + Vector2(board.CELL_SIZE * 0.5, board.CELL_SIZE * 0.5)
+				var meteor := MeteorVFX.new()
 				fx_layer.add_child(meteor)
-				await meteor.play(target_screen)
-				_play_sfx(_se_impact)
+				await meteor.play(landing_global)
+				# 落地打擊音效
+				_play_sfx(load("res://assets/se/skef_atk6.mp3"), 1.2)
 			var converted := 0
 			for pos in positions:
 				var p: Vector2i = pos as Vector2i
 				if board.grid[p.x][p.y] != null and board.grid[p.x][p.y].block_type != Block.Type.RED:
 					board._animate_gem_morph(board.grid[p.x][p.y], Block.Type.RED)
 					converted += 1
-			_add_log_entry("龍焰領域：%d→%s" % [converted, _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
+			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("Dragon Flame Domain"), converted, _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
 			await get_tree().create_timer(0.4).timeout
 		"There shall be light":
 			# 光輝降臨：進入選擇模式，懸停預覽十字範圍，點擊確認轉換為光寶石
@@ -1596,9 +1587,9 @@ func _on_active_skill_activated(char_index: int) -> void:
 				if board.grid[p.x][p.y] != null and board.grid[p.x][p.y].block_type != Block.Type.LIGHT:
 					board._animate_gem_morph(board.grid[p.x][p.y], Block.Type.LIGHT)
 					converted += 1
-			_add_log_entry("光輝降臨：%d→%s" % [converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
+			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("There shall be light"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 			await get_tree().create_timer(0.4).timeout
-		"生息", "生息.強":
+		"Resurgence", "Resurgence+":
 			# 生息：選一顆寶石，將其上下左右四鄰轉換為相同元素
 			# 生息.強：再額外將被點擊的寶石加上 X5 額外效果
 			battle_manager.use_active_skill(char_index)
@@ -1611,9 +1602,77 @@ func _on_active_skill_activated(char_index: int) -> void:
 			var center_block: Block = board.grid[center_p.x][center_p.y]
 			if center_block == null:
 				return
+
+			# ── 狸貓手掌點擊動畫 ────────────────────────────────
+			# 取得元素顏色（波紋用）
+			var elem_color: Color = Block.COLORS.get(center_block.block_type, Color.WHITE)
+
+			# 1) 直接顯示手掌圖示（Sprite2D 加到 fx_layer）
+			var paw_tex: Texture2D = load("res://assets/panda_paw.png")
+			var paw := Sprite2D.new()
+			paw.texture = paw_tex
+			paw.centered = false          # 以左上角（指尖）為錨點
+			paw.scale = Vector2(0.1, 0.1) # 縮小 10 倍
+			paw.z_index = 30
+			var gem_global: Vector2 = center_block.global_position
+			# 指尖落在寶石中心，並稍微往左上偏移讓爪子更自然
+			paw.position = gem_global + Vector2(-16, -6)
+			fx_layer.add_child(paw)
+
+			# 2) 按壓：縮小 + 逆時針旋轉 約 -25°；同步寶石縮小
+			var tap_tw := create_tween().set_parallel(true)
+			tap_tw.tween_property(paw, "scale", Vector2(0.07, 0.07), 0.2) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			tap_tw.tween_property(paw, "rotation", deg_to_rad(-25.0), 0.2) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			tap_tw.tween_property(center_block, "scale", Vector2(0.7, 0.7), 0.2) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			await tap_tw.finished
+
+			# ── 波紋（甜甜圈）特效 — 在按壓最深時從寶石中心向外擴散 ──
+			var ring_script := GDScript.new()
+			ring_script.source_code = (
+				"extends Node2D\n"
+				+ "var radius: float = 0.0\n"
+				+ "var ring_alpha: float = 1.0\n"
+				+ "var ring_color: Color = Color.WHITE\n"
+				+ "func _draw() -> void:\n"
+				+ "\tdraw_arc(Vector2.ZERO, radius, 0.0, TAU, 64,"
+				+ " Color(ring_color.r, ring_color.g, ring_color.b, ring_alpha), 8.0, true)\n"
+				+ "func _process(_dt: float) -> void:\n"
+				+ "\tqueue_redraw()\n"
+			)
+			ring_script.reload()
+			var ring := Node2D.new()
+			ring.set_script(ring_script)
+			ring.set("ring_color", elem_color)
+			ring.position = gem_global
+			ring.z_index = 25
+			fx_layer.add_child(ring)
+			var ring_tw := create_tween().set_parallel(true)
+			ring_tw.tween_property(ring, "radius", 60.0, 0.9) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			ring_tw.tween_property(ring, "ring_alpha", 0.0, 0.9) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			ring_tw.finished.connect(ring.queue_free)
+
+			# 彈回：scale、rotation 復原；寶石也彈回
+			var revert_tw := create_tween().set_parallel(true)
+			revert_tw.tween_property(paw, "scale", Vector2(0.1, 0.1), 0.28) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+			revert_tw.tween_property(paw, "rotation", 0.0, 0.28) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+			revert_tw.tween_property(center_block, "scale", Vector2(1.0, 1.0), 0.28) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+			await revert_tw.finished
+
+			# 3) 手掌淡出（非阻塞）
+			var paw_out := create_tween()
+			paw_out.tween_property(paw, "modulate:a", 0.0, 0.3)
+			paw_out.tween_callback(paw.queue_free)
+
+			# ── 技能效果 ────────────────────────────────────────
 			var target_element: Block.Type = center_block.block_type as Block.Type
-			# 浣熊掌印 tap 動畫：落下 → 按壓（寶石縮小）→ 抬起淡出（寶石回彈）
-			await _play_racoon_paw_tap(center_p, center_block)
 			var converted := 0
 			for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 				var np: Vector2i = center_p + dir
@@ -1627,12 +1686,12 @@ func _on_active_skill_activated(char_index: int) -> void:
 				board._animate_gem_morph(nb, target_element)
 				converted += 1
 			# 生息.強 加 X5 標記到中心寶石（高階寶石跳過）
-			if c.active_skill_name == "生息.強" and not center_block.is_upper_gem():
+			if c.active_skill_name == "Resurgence+" and not center_block.is_upper_gem():
 				center_block.add_extra(Block.ExtraEffect.X5)
-			var skill_label: String = c.active_skill_name
+			var skill_label: String = Locale.tr_ui(c.active_skill_name)
 			_add_log_entry("%s：%d→%s" % [skill_label, converted, _gem_bbcode(target_element)], target_element, c)
 			await get_tree().create_timer(0.4).timeout
-		"爆炸":
+		"Blast":
 			# 爆炸：由上到下逐行消除所有寶石，VFX 飛向角色卡 → 攻擊，然後填充
 			battle_manager.use_active_skill(char_index)
 			board.is_busy = true
@@ -1645,11 +1704,11 @@ func _on_active_skill_activated(char_index: int) -> void:
 			var total_gems := 0
 			for bt in blasted:
 				total_gems += blasted[bt] as int
-			_add_log_entry("爆炸：%s 消除 %d 顆寶石" % [_gem_bbcode(Block.Type.RED), total_gems], Block.Type.RED, c)
+			_add_log_entry("%s：%s 消除 %d 顆寶石" % [Locale.tr_ui("Blast"), _gem_bbcode(Block.Type.RED), total_gems], Block.Type.RED, c)
 			# 透過通用管線播放 VFX → 攻擊
 			await _process_blast_results(blasted, _upper_blast_positions)
 			await _end_player_turn()
-		"打雪仗":
+		"Snowball Fight":
 			# 打雪仗：動員棋盤上所有雪球飛向目標敵人，每顆造成 ATK×10 傷害
 			var snowballs: Array[Vector2i] = board.find_upper_gems(Block.UpperType.SNOWBALL)
 			if snowballs.is_empty():
@@ -1872,6 +1931,21 @@ func _on_player_hp_changed(current: int, maximum: int) -> void:
 func _on_turn_changed(t: int) -> void:
 	turn_label.text = "Turn: %d" % t
 	round_label.text = "Round: %d" % (battle_manager.current_round + 1)
+
+
+## 重新整理寶石計量器：合併本回合消除數 + 技能儲存（pending）數
+func _refresh_gem_meter() -> void:
+	if gem_meter == null:
+		return
+	var combined: Dictionary = {}
+	for k in battle_manager.turn_gem_blasts.keys():
+		combined[k] = int(battle_manager.turn_gem_blasts[k])
+	for k in battle_manager.pending_skill_blasts.keys():
+		var v: int = int(battle_manager.pending_skill_blasts[k])
+		if v <= 0:
+			continue
+		combined[k] = int(combined.get(k, 0)) + v
+	gem_meter.refresh(combined)
 
 
 ## 為玩家血量標籤套用 Russo One 字型＋黑色描邊
@@ -2122,8 +2196,8 @@ func _apply_burning_tick() -> void:
 
 	# ── 視覺演出階段 ──────────────────────────────────────────
 	# 1) 暗化棋盤，只留燃燒寶石
-	board.darken_except(burn_positions, 0.25)
-	await get_tree().create_timer(0.3).timeout
+	board.darken_except(burn_positions, 0.2)
+	await get_tree().create_timer(0.18).timeout
 
 	# 2) 播放打擊音效
 	var strike_stream: AudioStream = load("res://assets/se/skef_atk6.mp3")
@@ -2138,15 +2212,15 @@ func _apply_burning_tick() -> void:
 		tw.tween_property(b, "scale", Vector2(1.35, 1.35), 0.08).set_ease(Tween.EASE_OUT)
 		tw.tween_property(b, "scale", Vector2(1.0, 1.0), 0.12).set_ease(Tween.EASE_IN)
 
-	await get_tree().create_timer(0.25).timeout
+	await get_tree().create_timer(0.18).timeout
 
 	# 4) 扣血
 	battle_manager.apply_player_damage(total)
 	_add_log_entry("燃燒：%d 顆 %s 寶石，扣 %d HP" % [n, _gem_bbcode(Block.Type.RED), total], Block.Type.RED, null)
 
 	# 5) 還原棋盤亮度
-	await get_tree().create_timer(0.15).timeout
-	board.brighten_all_gems(0.25)
+	await get_tree().create_timer(0.08).timeout
+	board.brighten_all_gems(0.2)
 
 
 ## 戰鬥勝利
@@ -2168,6 +2242,9 @@ func _on_battle_won() -> void:
 	# 標記關卡通關（用於世界地圖解鎖）
 	if current_stage != null:
 		GameState.mark_stage_cleared(current_stage.stage_id)
+		# 關卡未設定 fixed party 時，記錄本場出戰隊伍為「下次預設隊伍」
+		if current_stage.set_party.is_empty():
+			GameState.set_last_used_party(party)
 
 	# 將結算資料寫入 GameState（結算場景讀取）
 	GameState.last_battle_loot = _battle_loot.duplicate()
@@ -2339,7 +2416,7 @@ func _setup_boss_bar() -> void:
 	bar.add_child(_boss_bar_label)
 
 
-## 在 Restart 右側建立「Kill All」「Combo Test」偵錯按鈕，三顆水平排成一列
+## 在 Restart 右側建立「Kill All」「Combo Test」「Skill Reset」偵錯按鈕，四顆水平排成一列
 func _setup_kill_all_button() -> void:
 	var ui_layer: CanvasLayer = $UILayer
 	var restart_btn: Node = ui_layer.get_node_or_null("RestartButton")
@@ -2382,8 +2459,58 @@ func _setup_kill_all_button() -> void:
 	combo_btn.offset_right = 210.0
 	combo_btn.offset_top = top_off
 	combo_btn.offset_bottom = bot_off
-	combo_btn.pressed.connect(_on_combo_test_pressed)
+	combo_btn.pressed.connect(_on_combo_test_pressed.bind(combo_btn))
 	ui_layer.add_child(combo_btn)
+
+	var skill_reset_btn := Button.new()
+	skill_reset_btn.name = "SkillResetButton"
+	skill_reset_btn.text = "Skill Reset"
+	skill_reset_btn.modulate = Color(0.5, 1.0, 0.8)
+	skill_reset_btn.anchor_left = 0.5
+	skill_reset_btn.anchor_top = 1.0
+	skill_reset_btn.anchor_right = 0.5
+	skill_reset_btn.anchor_bottom = 1.0
+	skill_reset_btn.offset_left = 218.0
+	skill_reset_btn.offset_right = 358.0
+	skill_reset_btn.offset_top = top_off
+	skill_reset_btn.offset_bottom = bot_off
+	skill_reset_btn.pressed.connect(_on_skill_reset_pressed)
+	ui_layer.add_child(skill_reset_btn)
+
+	# 連鎖間隔調整滑桿（偵錯）— 0.0 ~ 0.6 秒，置於按鈕列正下方
+	var chain_box := VBoxContainer.new()
+	chain_box.name = "ChainIntervalDebug"
+	chain_box.anchor_left = 0.5
+	chain_box.anchor_top = 1.0
+	chain_box.anchor_right = 0.5
+	chain_box.anchor_bottom = 1.0
+	chain_box.offset_left = -200.0
+	chain_box.offset_right = 200.0
+	chain_box.offset_top = bot_off + 4.0   # 緊接按鈕列下方
+	chain_box.offset_bottom = bot_off + 44.0
+	chain_box.add_theme_constant_override("separation", 2)
+	ui_layer.add_child(chain_box)
+
+	var chain_lbl := Label.new()
+	chain_lbl.name = "ChainIntervalLabel"
+	chain_lbl.text = "Chain Interval: %.2fs" % board.chain_blast_interval
+	chain_lbl.add_theme_font_size_override("font_size", 12)
+	chain_lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.85))
+	chain_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chain_box.add_child(chain_lbl)
+
+	var chain_slider := HSlider.new()
+	chain_slider.min_value = 0.0
+	chain_slider.max_value = 0.6
+	chain_slider.step = 0.01
+	chain_slider.value = board.chain_blast_interval
+	chain_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chain_slider.custom_minimum_size = Vector2(0, 22)
+	chain_slider.value_changed.connect(func(v: float) -> void:
+		board.chain_blast_interval = v
+		chain_lbl.text = "Chain Interval: %.2fs" % v
+	)
+	chain_box.add_child(chain_slider)
 
 
 ## 一波敵人生成完畢 — 評估是否顯示 Boss 條
@@ -2470,10 +2597,110 @@ func _on_kill_all_pressed() -> void:
 			e.take_damage(e.current_hp)
 
 
-## 偵錯：將棋盤上隨機 15 顆普通寶石變成火炸彈
-func _on_combo_test_pressed() -> void:
-	if board != null and board.has_method("debug_spawn_firebombs"):
-		board.debug_spawn_firebombs(15)
+## 偵錯：Combo Test 按鈕 — 在按鈕上方彈出當前隊伍可用的高階寶石選單
+func _on_combo_test_pressed(source_btn: Button) -> void:
+	if board == null:
+		return
+
+	# 若已有選單開著則關閉（toggle）
+	var ui_layer: CanvasLayer = $UILayer
+	var existing: Node = ui_layer.get_node_or_null("ComboPopup")
+	if existing != null:
+		existing.queue_free()
+		return
+
+	# 收集當前隊伍所有高階寶石技能（去重）
+	var upper_entries: Array = []
+	var seen_names: Dictionary = {}
+	for c: CharacterData in party:
+		for skill: Dictionary in c.responding_skills:
+			var sname: String = skill.get("name", "")
+			if sname.is_empty() or seen_names.has(sname):
+				continue
+			seen_names[sname] = true
+			upper_entries.append({"name": sname, "gem_type": c.gem_type})
+
+	if upper_entries.is_empty():
+		return
+
+	# 建立彈出面板
+	var popup := PanelContainer.new()
+	popup.name = "ComboPopup"
+	var popup_style := StyleBoxFlat.new()
+	popup_style.bg_color = Color(0.1, 0.1, 0.15, 0.95)
+	popup_style.set_corner_radius_all(6)
+	popup_style.set_content_margin_all(4)
+	popup.add_theme_stylebox_override("panel", popup_style)
+	popup.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 3)
+	popup.add_child(vbox)
+
+	for entry in upper_entries:
+		var ename: String = entry["name"]
+		var egem: int = entry["gem_type"]
+		var row_btn := Button.new()
+		row_btn.text = ename
+		row_btn.flat = false
+		var gem_color: Color = Block.COLORS.get(egem, Color.WHITE)
+		row_btn.modulate = gem_color.lightened(0.25)
+		row_btn.custom_minimum_size = Vector2(130, 28)
+		row_btn.pressed.connect(func() -> void:
+			popup.queue_free()
+			_debug_spawn_upper(ename)
+		)
+		vbox.add_child(row_btn)
+
+	ui_layer.add_child(popup)
+	await get_tree().process_frame
+
+	# 將面板對齊在按鈕正上方
+	var btn_rect: Rect2 = source_btn.get_global_rect()
+	var popup_size: Vector2 = popup.size
+	popup.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	popup.offset_left = btn_rect.position.x
+	popup.offset_top = btn_rect.position.y - popup_size.y - 4.0
+	popup.offset_right = popup.offset_left + popup_size.x
+	popup.offset_bottom = popup.offset_top + popup_size.y
+
+
+## 偵錯：根據技能名稱在棋盤隨機生成 15 個對應高階寶石
+func _debug_spawn_upper(skill_name: String) -> void:
+	if board == null:
+		return
+	# 找對應 UpperType
+	var ut_map: Dictionary = {
+		"Fireball": Block.UpperType.FIREBALL,
+		"Fire Pillar": Block.UpperType.FIRE_PILLAR_Y,
+		"Justice Slash": Block.UpperType.SAINT_CROSS,
+		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
+		"Snowball": Block.UpperType.SNOWBALL,
+		"Water Slash": Block.UpperType.WATER_SLASH_Y,
+		"Porcupine": Block.UpperType.PORCUPINE,
+		"Turtle": Block.UpperType.TURTLE,
+	}
+	if not ut_map.has(skill_name):
+		# 倒回旧行為
+		if board.has_method("debug_spawn_firebombs"):
+			board.debug_spawn_firebombs(15)
+		return
+	var ut: Block.UpperType = ut_map[skill_name] as Block.UpperType
+	var candidates: Array = []
+	for x in board.columns:
+		for y in board.rows:
+			var b: Block = board.grid[x][y]
+			if b != null and not b.is_upper_gem():
+				candidates.append(Vector2i(x, y))
+	candidates.shuffle()
+	var n: int = mini(15, candidates.size())
+	for i in n:
+		board.place_upper_gem(candidates[i], ut)
+
+
+func _on_skill_reset_pressed() -> void:
+	battle_manager.reset_all_skill_cooldowns()
+	_update_skill_ui()
 
 
 ## HP 條傷害預覽白條：與 Fill 對齊（同 padding），停留 0.45s 後右邊崩興至新 HP 邊界

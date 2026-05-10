@@ -164,7 +164,7 @@ func _build_ui() -> void:
 	_confirm_btn.pressed.connect(_on_confirm)
 	btn_row.add_child(_confirm_btn)
 
-	# 自動選取：關卡指定隊伍則使用之；否則預選前 N 個角色
+	# 自動選取：關卡指定隊伍則使用之；否則預選上次出戰隊伍；都沒有則預選前 N 個角色
 	if _stage.set_party.size() > 0:
 		for c: CharacterData in _stage.set_party:
 			var idx: int = GameState.owned_characters.find(c)
@@ -175,9 +175,16 @@ func _build_ui() -> void:
 			if not _selected_indices.has(i):
 				_card_panels[i].modulate = Color(1, 1, 1, 0.35)
 	else:
-		var auto_count: int = mini(GameState.owned_characters.size(), GameState.MAX_PARTY_SIZE)
-		for i in auto_count:
-			_toggle_select(i)
+		var last_party: Array[CharacterData] = GameState.get_last_used_party()
+		if last_party.size() > 0:
+			for c: CharacterData in last_party:
+				var idx: int = GameState.owned_characters.find(c)
+				if idx >= 0 and not _selected_indices.has(idx) and _selected_indices.size() < GameState.MAX_PARTY_SIZE:
+					_toggle_select(idx)
+		else:
+			var auto_count: int = mini(GameState.owned_characters.size(), GameState.MAX_PARTY_SIZE)
+			for i in auto_count:
+				_toggle_select(i)
 
 
 # ── 頂部三欄：我的隊伍 | 元素分佈 | BOSS ────────────────────
