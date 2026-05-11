@@ -7,6 +7,7 @@
 [ext_resource type="Resource" uid="uid://b5xw1nv2s4tg2" path="res://stages/stage_1_2.tres" id="5_stage_1_2"]
 [ext_resource type="Resource" uid="uid://cm3p2rt5q8nv1" path="res://stages/stage_1_3.tres" id="6_stage_1_3"]
 [ext_resource type="Resource" uid="uid://cg0cxhhwwyvnk" path="res://stages/stage_1_4.tres" id="7_stage_1_4"]
+[ext_resource type="Resource" uid="uid://dq8x1t5n3p7bv" path="res://stages/stage_1_5.tres" id="8_stage_1_5"]
 
 [sub_resource type="StyleBoxFlat" id="SBF_nav"]
 bg_color = Color(0.08, 0.1, 0.14, 0.92)
@@ -81,6 +82,15 @@ offset_top = 555.0
 offset_right = 644.0
 offset_bottom = 665.0
 stage = ExtResource("7_stage_1_4")
+
+[node name="Stage1_5" parent="UILayer/Pages/MapPage" instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 660.0
+offset_top = 480.0
+offset_right = 800.0
+offset_bottom = 590.0
+stage = ExtResource("8_stage_1_5")
 
 [node name="CharactersPage" type="Control" parent="UILayer/Pages" unique_id=1542128791]
 visible = false

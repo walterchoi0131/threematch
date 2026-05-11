@@ -12,7 +12,7 @@ const MAX_VISIBLE_ICONS := 6
 # 顯示順序（其它類型若出現會附在後面）
 const DISPLAY_ORDER: Array[int] = [
 	Block.Type.RED, Block.Type.BLUE, Block.Type.GREEN, Block.Type.LIGHT,
-	Block.Type.YELLOW, Block.Type.PURPLE, Block.Type.ORANGE,
+	Block.Type.DARK, Block.Type.YELLOW, Block.Type.PURPLE, Block.Type.ORANGE,
 ]
 
 

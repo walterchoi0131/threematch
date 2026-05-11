@@ -74,6 +74,8 @@ var _translations: Dictionary = {
 	"Porcupine DESC": {"zh": "消除 9+ 葉寶石:在點擊處召喚豪豬寶石。爆炸時只消除自身。每回合所有角色攻擊後,以全隊魔力 × 0.5 攻擊敵方。", "en": "Blast 9+ leaf gems: summon a Porcupine gem at the tapped cell. Self-blast only. After all party attacks each turn, attacks the first enemy for ΣTeamMagic × 0.5."},
 	"Turtle": {"zh": "召喚:烏龜", "en": "Summon: Turtle"},
 	"Turtle DESC": {"zh": "消除 5+ 葉寶石:在點擊處召喚烏龜寶石。爆炸時只消除自身。每回合所有角色攻擊後,以全隊魔力 × 0.8 為玩家回血。", "en": "Blast 5+ leaf gems: summon a Turtle gem at the tapped cell. Self-blast only. After all party attacks each turn, heals the player for ΣTeamMagic × 0.8."},
+	"Bamboo Supply": {"zh": "竹葉補給", "en": "Bamboo Supply"},
+	"Bamboo Supply DESC": {"zh": "消除 6+ 葉寶石：在點擊處生成竹葉補給寶石；爆破時消除周圍 8 格並回復 Panda 魔力 × 1.6 HP。", "en": "Blast 6+ leaf gems: create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 1.6."},
 
 	# ── 角色名稱 ──
 	"Boar": {"zh": "野豬", "en": "Boar"},

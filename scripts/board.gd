@@ -272,6 +272,14 @@ func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_
 
 ## 隨機選擇一個允許的寶石類型
 func _random_type() -> int:
+	# 關卡 1-5：均分 25% 暗/火/水/葉（測試用）
+	if stage != null and stage.stage_id == "1-5":
+		var r5: int = randi() % 4
+		match r5:
+			0: return Block.Type.RED
+			1: return Block.Type.BLUE
+			2: return Block.Type.GREEN
+			_: return Block.Type.DARK
 	# 關卡 1-4：固定 60% 火 / 10% 水 / 10% 葉 / 20% 光
 	if stage != null and stage.stage_id == "1-4":
 		var r: int = randi() % 100
@@ -1440,6 +1448,8 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return [pos]
 		Block.UpperType.SNOWBALL:
 			return _get_surrounding_positions(pos)
+		Block.UpperType.BAMBOO_SUPPLY:
+			return _get_surrounding_positions(pos)
 		Block.UpperType.WATER_SLASH_X:
 			return _get_row_positions(pos.y)
 		Block.UpperType.WATER_SLASH_Y:
@@ -2048,6 +2058,104 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 	var chain_uppers: Array[Vector2i] = []
 	var processed_uppers: Dictionary = {}
 	processed_uppers[start_pos] = true
+
+	# ── 水劍特例：套用「貪心連線」連鎖預測（與 _handle_water_sword_sequence 相同邏輯）──
+	if start_ut == Block.UpperType.WATER_SLASH_X or start_ut == Block.UpperType.WATER_SLASH_Y:
+		# 收集全棋盤水劍
+		var swords: Array[Vector2i] = [start_pos]
+		for sp in find_upper_gems(Block.UpperType.WATER_SLASH_X):
+			if sp != start_pos:
+				swords.append(sp)
+		for sp in find_upper_gems(Block.UpperType.WATER_SLASH_Y):
+			if sp != start_pos:
+				swords.append(sp)
+
+		# 貪心建構連鎖順序：每次選距上一把最遠的水劍
+		var order: Array[Vector2i] = [start_pos]
+		var remaining: Array[Vector2i] = []
+		for s in swords:
+			if s != start_pos:
+				remaining.append(s)
+		while not remaining.is_empty():
+			var cur: Vector2i = order[order.size() - 1]
+			var best_idx: int = 0
+			var best_d: float = -1.0
+			for i in remaining.size():
+				var diff: Vector2 = Vector2(remaining[i] - cur)
+				var d: float = diff.length_squared()
+				if d > best_d:
+					best_d = d
+					best_idx = i
+			order.append(remaining[best_idx])
+			remaining.remove_at(best_idx)
+
+		# 把後續的水劍標記為 chain_uppers（亮起為 upper border）
+		for k in range(1, order.size()):
+			var sp_next: Vector2i = order[k]
+			chain_uppers.append(sp_next)
+			processed_uppers[sp_next] = true
+
+		# 計算每段連線格子；最後一把走整欄
+		var sw_chain_groups: Array[Dictionary] = []
+		var sw_all: Dictionary = {}
+		var sw_deferred: Array[Dictionary] = []  # 路徑上的非水劍 upper（之後繼續 BFS）
+		for i in order.size():
+			var sp_i: Vector2i = order[i]
+			var seg_cells: Array[Vector2i]
+			if i < order.size() - 1:
+				seg_cells = _line_cells_between(sp_i, order[i + 1])
+			else:
+				seg_cells = _get_col_positions(sp_i.x)
+			var group_pos: Array[Vector2i] = []
+			for c in seg_cells:
+				if not _is_valid(c):
+					continue
+				if c == start_pos or sw_all.has(c):
+					continue
+				# 起點水劍不放入 direct_blast 鍵集合（保持 chain_uppers 已含）
+				sw_all[c] = true
+				if processed_uppers.has(c):
+					# 是水劍序列中的另一把水劍 — 跳過格子本身的「被爆」標記（亮 upper border 即可）
+					continue
+				group_pos.append(c)
+				# 路徑上若有非水劍 upper，加入 deferred 等水劍序列結束後 BFS
+				var b: Block = grid[c.x][c.y]
+				if b != null and b.is_upper_gem() and not processed_uppers.has(c):
+					processed_uppers[c] = true
+					chain_uppers.append(c)
+					sw_deferred.append({"pos": c, "ut": b.upper_type})
+			if group_pos.size() > 0:
+				sw_chain_groups.append({"ut": start_ut, "positions": group_pos})
+
+		# 後續 BFS：對水劍路徑上波及的非水劍 upper 做一般連鎖預測
+		var bfs_queue: Array[Dictionary] = sw_deferred
+		var bfs_all: Dictionary = sw_all.duplicate()
+		while bfs_queue.size() > 0:
+			var current: Dictionary = bfs_queue.pop_front()
+			var cpos: Vector2i = current.pos
+			var cut: Block.UpperType = current.ut
+			var cpositions: Array[Vector2i] = _get_blast_positions_for_upper(cpos, cut)
+			var group_positions: Array[Vector2i] = []
+			for p in cpositions:
+				if p == cpos or bfs_all.has(p):
+					continue
+				bfs_all[p] = true
+				group_positions.append(p)
+				if _is_valid(p) and grid[p.x][p.y] != null:
+					var b2: Block = grid[p.x][p.y]
+					if b2.is_upper_gem() and not processed_uppers.has(p):
+						chain_uppers.append(p)
+						processed_uppers[p] = true
+						bfs_queue.append({"pos": p, "ut": b2.upper_type})
+			if group_positions.size() > 0:
+				sw_chain_groups.append({"ut": cut, "positions": group_positions})
+
+		return {
+			"direct": [],  # 水劍模式以 chain_groups 表示所有爆破段
+			"direct_ut": start_ut,
+			"chain_groups": sw_chain_groups,
+			"chain_uppers": chain_uppers,
+		}
 
 	# 第一層：直接爆炸
 	var first_positions: Array[Vector2i] = _get_blast_positions_for_upper(start_pos, start_ut)

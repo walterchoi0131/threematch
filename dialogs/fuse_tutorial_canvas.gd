@@ -18,6 +18,7 @@ const NAME_TO_UPPER: Dictionary = {
 	"Snowball": Block.UpperType.SNOWBALL,
 	"Porcupine": Block.UpperType.PORCUPINE,
 	"Turtle": Block.UpperType.TURTLE,
+	"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
 }
 
 
@@ -289,6 +290,10 @@ static func _blast_pattern_for(upper_type: int) -> Array:
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
 			return [Vector2i(2, 2)]
+		Block.UpperType.BAMBOO_SUPPLY:
+			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
+					Vector2i(1, 2),                  Vector2i(3, 2),
+					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 	return []
 
 

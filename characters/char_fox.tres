@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_script")
 character_name = "Fox"
+gem_type = 7
 level = 11
 base_hp = 45
 hp_growth = 7.0

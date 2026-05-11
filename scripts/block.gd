@@ -4,15 +4,15 @@ class_name Block
 extends Node2D
 
 # ── 寶石類型列舉 ──
-enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y, PORCUPINE, TURTLE }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬、豪豬、琉龜
+enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬、豪豬、琉龜、竹葉補給
 
 # 額外效果（可同時掛載多個於單一寶石上）
 # X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
 # BURNING：每回合結束扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
 enum ExtraEffect { X5, BURNING }
 
-const TYPE_COUNT := 7  # 寶石類型總數
+const TYPE_COUNT := 8  # 寶石類型總數
 
 # 每種類型對應的顏色
 const COLORS = {
@@ -23,6 +23,7 @@ const COLORS = {
 	Type.PURPLE: Color(0.61, 0.15, 0.69),
 	Type.ORANGE: Color(1.0, 0.60, 0.0),
 	Type.LIGHT: Color(1.0, 0.92, 0.23),
+	Type.DARK: Color(0.30, 0.20, 0.45),
 }
 
 # 每種類型對應的圖示符號（無貼圖時的備用顯示）
@@ -34,6 +35,7 @@ const ICONS = {
 	Type.PURPLE: "●",
 	Type.ORANGE: "▲",
 	Type.LIGHT: "✦",
+	Type.DARK: "☾",
 }
 
 # 有美術貼圖的寶石類型；未列出的類型會退回使用圖示符號
@@ -42,6 +44,7 @@ const GEM_TEXTURES: Dictionary = {
 	Type.BLUE: preload("res://assets/gems/gem_blue.png"),
 	Type.GREEN: preload("res://assets/gems/gem_green.png"),
 	Type.LIGHT: preload("res://assets/gems/gem_light.png"),
+	Type.DARK: preload("res://assets/gems/gem_moon.png"),
 }
 
 # 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
@@ -56,6 +59,7 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.WATER_SLASH_Y: preload("res://assets/gems/gem_watersword.png"),
 	UpperType.PORCUPINE: preload("res://assets/gems/arrowpig.png"),
 	UpperType.TURTLE: preload("res://assets/gems/turtle.png"),
+	UpperType.BAMBOO_SUPPLY: preload("res://assets/gems/gem_bamboo.png"),
 }
 
 # 消除動畫精靈圖表（3 列 × 3 行 = 9 幀）
@@ -63,6 +67,7 @@ const BREAK_TEXTURES: Dictionary = {
 	Type.RED: preload("res://assets/gems/gems_break/firebreak.png"),
 	Type.BLUE: preload("res://assets/gems/gems_break/waterbreak.png"),
 	Type.GREEN: preload("res://assets/gems/gems_break/leafbreak.png"),
+	Type.DARK: preload("res://assets/gems/gems_break/moon_break.png"),
 }
 # 高階寶石消除動畫精靈圖表
 const UPPER_BREAK_TEXTURES: Dictionary = {
@@ -87,6 +92,7 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.WATER_SLASH_Y: 4,
 	UpperType.PORCUPINE: 9,
 	UpperType.TURTLE: 5,
+	UpperType.BAMBOO_SUPPLY: 3,
 }
 
 # 高階寶石的「正規元素」：融合成高階寶石時強制設定 block_type，避免被誤指定
@@ -101,6 +107,7 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.WATER_SLASH_Y: Type.BLUE,
 	UpperType.PORCUPINE: Type.GREEN,
 	UpperType.TURTLE: Type.GREEN,
+	UpperType.BAMBOO_SUPPLY: Type.GREEN,
 }
 
 # 融合提示描邊色（較深色，避免與白色文字混淆）
@@ -112,6 +119,7 @@ const FUSE_HINT_OUTLINE_COLORS = {
 	Type.YELLOW: Color(0.75, 0.55, 0.0),  # 深金
 	Type.PURPLE: Color(0.40, 0.05, 0.50), # 深紫
 	Type.ORANGE: Color(0.70, 0.30, 0.0),  # 深橙
+	Type.DARK: Color(0.20, 0.10, 0.40),   # 深紫黑
 }
 
 # 彈跳常數 — 無論掉落距離多遠，所有寶石使用相同的彈跳幅度
@@ -304,7 +312,7 @@ func _update_upper_overlay() -> void:
 	match upper_type:
 		UpperType.SAINT_CROSS:
 			upper_base_color = COLORS[Type.LIGHT]
-		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE:
+		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY:
 			upper_base_color = COLORS[Type.GREEN]
 		UpperType.SNOWBALL:
 			upper_base_color = COLORS[Type.BLUE]
@@ -340,7 +348,7 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(1.0, 0.95, 0.40, 0.60)
 		UpperType.LEAF_SHIELD:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.PORCUPINE, UpperType.TURTLE:
+		UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.SNOWBALL:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
@@ -394,6 +402,9 @@ func play_destroy_animation() -> void:
 	# 橫向火柱使用同一張精靈圖表但旋轉 90°
 	if upper_type == UpperType.FIRE_PILLAR_X:
 		break_sprite.rotation = deg_to_rad(90)
+	# DARK（月亮）破裂圖較大，縮小 5×
+	if block_type == Type.DARK and upper_type == UpperType.NONE:
+		break_sprite.scale = Vector2(0.2, 0.2)
 	add_child(break_sprite)
 
 	var frame_duration := 0.0175  # 每幀 ~0.0175 秒，9 幀共 ~0.14 秒

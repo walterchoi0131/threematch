@@ -81,6 +81,7 @@ const GEM_ICON_PATHS := {
 	Block.Type.BLUE: "res://assets/gems/gem_blue.png",
 	Block.Type.GREEN: "res://assets/gems/gem_green.png",
 	Block.Type.LIGHT: "res://assets/gems/gem_light.png",
+	Block.Type.DARK: "res://assets/gems/gem_moon.png",
 }
 const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.FIREBALL: "res://assets/gems/gem_fireball.png",
@@ -91,6 +92,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
 	Block.UpperType.WATER_SLASH_X: "res://assets/gems/gem_watersword.png",
 	Block.UpperType.WATER_SLASH_Y: "res://assets/gems/gem_watersword.png",
+	Block.UpperType.BAMBOO_SUPPLY: "res://assets/gems/gem_bamboo.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -633,7 +635,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	# 先檢查回應技能以決定流程
 	var responses := battle_manager.check_responding_skills(board)
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 
 	if is_fuse:
@@ -704,6 +706,99 @@ func _acquire_particle() -> Node2D:
 		_vfx_pool.append(p)
 		return p
 	return null
+
+
+## ── 主動技 Animation Phase ──────────────────────────────────────────
+## 各主動技的「動畫前置」參數查表。回傳 null = 該技能無動畫前置。
+## 字典欄位：
+##   anim_path: String          影片資源路徑（必須）
+##   anim_offset: Vector2       相對於 board 左下角的位移（正值往右下）
+##   anim_seek_sec: float       影片內起始秒數（seek 之後才 play）
+##   anim_duration_sec: float   播放時長（0 = 等待影片自然結束；fallback 時用作等待秒數）
+##   anim_size: Vector2         顯示尺寸（Vector2.ZERO = 用影片原寸）
+func _get_active_skill_anim_params(c: CharacterData) -> Variant:
+	if c == null:
+		return null
+	match c.active_skill_name:
+		"Dragon Flame Domain":
+			return {
+				"anim_path": "res://assets/animation/anim_meteror.ogv",
+				"anim_offset": Vector2.ZERO,
+				"anim_seek_sec": 1.0,
+				"anim_duration_sec": 0.0,
+				"anim_size": Vector2.ZERO,
+				"anim_scale": 0.5,
+			}
+	return null
+
+
+## 播放主動技動畫前置：建立 VideoStreamPlayer 於 board 左下角 + offset 處，
+## 期間 board.is_busy = true。影片載入失敗時 fallback 為等待 anim_duration_sec（或 1.5 秒）。
+func _play_skill_animation_phase(params: Variant) -> void:
+	if params == null:
+		return
+	var p: Dictionary = params as Dictionary
+	var anim_path: String = p.get("anim_path", "")
+	if anim_path.is_empty():
+		return
+	var anim_offset: Vector2 = p.get("anim_offset", Vector2.ZERO)
+	var anim_seek: float = float(p.get("anim_seek_sec", 0.0))
+	var anim_duration: float = float(p.get("anim_duration_sec", 0.0))
+	var anim_size: Vector2 = p.get("anim_size", Vector2.ZERO)
+	var anim_scale: float = float(p.get("anim_scale", 1.0))
+
+	# 鎖住棋盤
+	var was_busy: bool = board.is_busy
+	board.is_busy = true
+
+	# 計算 board 左下角 global 座標
+	var bl_local: Vector2 = Vector2(0.0, float(board.rows) * float(board.CELL_SIZE))
+	var anchor_global: Vector2 = board.to_global(bl_local) + anim_offset
+
+	var stream: VideoStream = null
+	if ResourceLoader.exists(anim_path):
+		var loaded: Resource = load(anim_path)
+		if loaded is VideoStream:
+			stream = loaded
+
+	if stream != null:
+		var player := VideoStreamPlayer.new()
+		player.stream = stream
+		player.expand = anim_size != Vector2.ZERO
+		if anim_size != Vector2.ZERO:
+			player.size = anim_size
+		player.scale = Vector2(anim_scale, anim_scale)
+		player.position = anchor_global
+		# 以左下為錨點：將顯示框往上平移其高度
+		player.pivot_offset = Vector2.ZERO
+		player.z_index = 50
+		fx_layer.add_child(player)
+		# 等一幀讓 stream 取得長度
+		await get_tree().process_frame
+		# 左下對齊：依實際大小（含縮放）往上偏移
+		var disp_h: float = anim_size.y if anim_size != Vector2.ZERO else float(player.size.y)
+		disp_h *= anim_scale
+		player.position = anchor_global - Vector2(0.0, disp_h)
+
+		player.play()
+		if anim_seek > 0.0:
+			player.stream_position = anim_seek
+
+		if anim_duration > 0.0:
+			await get_tree().create_timer(anim_duration).timeout
+		else:
+			# 等到影片自然結束
+			await player.finished
+		if is_instance_valid(player):
+			player.stop()
+			player.queue_free()
+	else:
+		# Fallback：載入失敗 → 印警告並以 anim_duration 或 1.5s 等待
+		push_warning("Animation phase: failed to load video '%s'; falling back to wait." % anim_path)
+		var wait_sec: float = anim_duration if anim_duration > 0.0 else 1.5
+		await get_tree().create_timer(wait_sec).timeout
+
+	board.is_busy = was_busy
 
 
 # ── 回合管線 ─────────────────────────────────────────────────────
@@ -781,7 +876,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	battle_manager.turn_gem_blasts = saved_blasts
 	battle_manager.last_blast_positions = saved_positions
 
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 	if not is_fuse:
 		return
@@ -853,6 +948,7 @@ func _end_player_turn() -> void:
 
 const PORCUPINE_POWER: float = 0.5  # 豪豬攻擊：全隊魔力 × 0.5
 const TURTLE_POWER: float = 0.8     # 烏龜回血：全隊魔力 × 0.8
+const BAMBOO_SUPPLY_HEAL_MULT: float = 1.6  # 竹葉補給回血：Panda 魔力 × 1.6
 
 
 ## 在玩家回合結束、敵人行動之前：讓所有場上的召喚物（豪豬/烏龜）行動一次。
@@ -1291,6 +1387,15 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _tc_count: int = int(battle_manager.turn_gem_blasts.get(_tc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_tc.gem_type, _tc_count, Block.UpperType.TURTLE), _tc.gem_type, _tc)
 			await get_tree().create_timer(0.15).timeout
+		"Bamboo Supply":
+			# 竹葉補給：在點擊處生成竹葉補給寶石；爆破時消除周圍 8 格並回復觸發者 HP
+			var pos: Vector2i = board.last_tapped_pos
+			board.place_upper_gem(pos, Block.UpperType.BAMBOO_SUPPLY, Block.Type.GREEN)
+			_play_sfx(_se_freeze)
+			var _bc: CharacterData = party[resp.char_index]
+			var _bc_count: int = int(battle_manager.turn_gem_blasts.get(_bc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_bc.gem_type, _bc_count, Block.UpperType.BAMBOO_SUPPLY), _bc.gem_type, _bc)
+			await get_tree().create_timer(0.15).timeout
 
 
 # ── upper gem handlers ───────────────────────────────────────────────
@@ -1335,7 +1440,21 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 		Block.UpperType.SAINT_CROSS:
 			# 聖十字：標記需要在結算時執行聖十字效果
 			_pending_saint_cross_count += 1
-
+		Block.UpperType.BAMBOO_SUPPLY:
+			# 竹葉補給：治療 Panda magic × BAMBOO_SUPPLY_HEAL_MULT
+			var panda_data2: CharacterData = null
+			var panda_index2 := -1
+			for i in party.size():
+				if party[i].character_name == "Panda":
+					panda_data2 = party[i]
+					panda_index2 = i
+					break
+			var magic_val: int = panda_data2.get_magic() if panda_data2 != null else 5
+			var heal_amount2: int = int(round(float(magic_val) * BAMBOO_SUPPLY_HEAL_MULT))
+			battle_manager.apply_heal(heal_amount2)
+			if panda_index2 >= 0:
+				character_panel.show_heal_text(panda_index2, heal_amount2)
+			_add_log_entry("[b]%s[/b] %s %s %d HP" % [Locale.tr_ui("Bamboo Supply"), _gem_bbcode(Block.Type.GREEN), Locale.tr_ui("LOG_HEAL"), heal_amount2], Block.Type.GREEN, panda_data2)
 
 ## 高階寶石爆炸完成後：統一結算所有累積的獨有效果 + VFX 攻擊
 func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _triggered_upper: Block.UpperType) -> void:
@@ -1551,11 +1670,13 @@ func _on_active_skill_activated(char_index: int) -> void:
 			await get_tree().create_timer(0.2).timeout
 			_update_skill_ui()
 		"Dragon Flame Domain":
-			# 龍焰領域：進入火焰範圍選擇模式，點擊後鋭隕石落下並將範圍內寶石轉換為火寶石
+			# 龍焰領域：先播放動畫前置，再進入火焰範圍選擇模式
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
 			board.enter_selection_mode(Block.Type.RED, "fireball")
 			var positions: Array = await board.selection_confirmed
+			# 範圍選擇完成後播放動畫前置（隕石/領域動畫）
+			await _play_skill_animation_phase(_get_active_skill_anim_params(c))
 			# 以範圍中心（positions[0]）作為隕石落下點
 			if positions.size() > 0:
 				var center_p: Vector2i = positions[0] as Vector2i
@@ -1608,18 +1729,18 @@ func _on_active_skill_activated(char_index: int) -> void:
 			var elem_color: Color = Block.COLORS.get(center_block.block_type, Color.WHITE)
 
 			# 1) 直接顯示手掌圖示（Sprite2D 加到 fx_layer）
-			var paw_tex: Texture2D = load("res://assets/panda_paw.png")
+			var paw_tex: Texture2D = load("res://assets/panda_paw_2.png")
 			var paw := Sprite2D.new()
 			paw.texture = paw_tex
 			paw.centered = false          # 以左上角（指尖）為錨點
 			paw.scale = Vector2(0.1, 0.1) # 縮小 10 倍
 			paw.z_index = 30
 			var gem_global: Vector2 = center_block.global_position
-			# 指尖落在寶石中心，並稍微往左上偏移讓爪子更自然
-			paw.position = gem_global + Vector2(-16, -6)
+			# 指尖從左方點向寶石：手掌錨點往左大幅偏移，並微微上提
+			paw.position = gem_global + Vector2(-40, -10)
 			fx_layer.add_child(paw)
 
-			# 2) 按壓：縮小 + 逆時針旋轉 約 -25°；同步寶石縮小
+			# 2) 按壓：縮小 + 順時針旋轉 約 25°；同步寶石縮小
 			var tap_tw := create_tween().set_parallel(true)
 			tap_tw.tween_property(paw, "scale", Vector2(0.07, 0.07), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -2679,6 +2800,7 @@ func _debug_spawn_upper(skill_name: String) -> void:
 		"Water Slash": Block.UpperType.WATER_SLASH_Y,
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,
+		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
 	}
 	if not ut_map.has(skill_name):
 		# 倒回旧行為

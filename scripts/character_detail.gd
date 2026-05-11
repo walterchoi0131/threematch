@@ -424,6 +424,7 @@ func _resolve_responding_upper(skill_name: String) -> int:
 		"Snowball": Block.UpperType.SNOWBALL,
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,
+		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
 	}
 	return NAME_TO_UPPER.get(skill_name, -1)
 
@@ -462,6 +463,11 @@ func _blast_pattern_for(upper_type: int) -> Array:
 		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
 			# 只爆自身（中心格）
 			return [Vector2i(2, 2)]
+		Block.UpperType.BAMBOO_SUPPLY:
+			# 環形（3x3 外圈）
+			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
+					Vector2i(1, 2),                  Vector2i(3, 2),
+					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 	return []
 
 
