@@ -42,17 +42,17 @@ const ICONS = {
 const GEM_TEXTURES: Dictionary = {
 	Type.RED: preload("res://assets/gems/gem_red.png"),
 	Type.BLUE: preload("res://assets/gems/gem_blue.png"),
-	Type.GREEN: preload("res://assets/gems/gem_green.png"),
-	Type.LIGHT: preload("res://assets/gems/gem_light.png"),
+	Type.GREEN: preload("res://assets/gems/gem_leaf2.png"),
+	Type.LIGHT: preload("res://assets/gems/gem_light2.png"),
 	Type.DARK: preload("res://assets/gems/gem_moon.png"),
 }
 
 # 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
 const UPPER_GEM_TEXTURES: Dictionary = {
-	UpperType.FIREBALL: preload("res://assets/gems/gem_fireball.png"),
+	UpperType.FIREBALL: preload("res://assets/gems/gem_fireball2.png"),
 	UpperType.FIRE_PILLAR_X: preload("res://assets/gems/gem_fire_turnado.png"),
 	UpperType.FIRE_PILLAR_Y: preload("res://assets/gems/gem_fire_turnado.png"),
-	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_saint_cross.png"),
+	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_lightCross2.png"),
 	UpperType.LEAF_SHIELD: preload("res://assets/gems/gem_leafshield.png"),
 	UpperType.SNOWBALL: preload("res://assets/gems/gem_snowball.png"),
 	UpperType.WATER_SLASH: preload("res://assets/gems/gem_shark.png"),
@@ -65,7 +65,8 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 const BREAK_TEXTURES: Dictionary = {
 	Type.RED: preload("res://assets/gems/gems_break/firebreak.png"),
 	Type.BLUE: preload("res://assets/gems/gems_break/waterbreak.png"),
-	Type.GREEN: preload("res://assets/gems/gems_break/leafbreak.png"),
+	Type.GREEN: preload("res://assets/gems/gems_break/gem_leafBreak2.png"),
+	Type.LIGHT: preload("res://assets/gems/gems_break/gem_lightBreak2.png"),
 	Type.DARK: preload("res://assets/gems/gems_break/moon_break.png"),
 }
 # 高階寶石消除動畫精靈圖表
