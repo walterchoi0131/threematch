@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://cjhe7ltpcv7lf"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/raccoon_baby.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://b8ra2cb0babye" path="res://assets/raccoon_baby.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
