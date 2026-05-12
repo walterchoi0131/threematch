@@ -5,7 +5,7 @@ extends Node2D
 
 # ── 寶石類型列舉 ──
 enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬、豪豬、琉龜、竹葉補給
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給
 
 # 額外效果（可同時掛載多個於單一寶石上）
 # X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
@@ -55,8 +55,7 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_saint_cross.png"),
 	UpperType.LEAF_SHIELD: preload("res://assets/gems/gem_leafshield.png"),
 	UpperType.SNOWBALL: preload("res://assets/gems/gem_snowball.png"),
-	UpperType.WATER_SLASH_X: preload("res://assets/gems/gem_watersword.png"),
-	UpperType.WATER_SLASH_Y: preload("res://assets/gems/gem_watersword.png"),
+	UpperType.WATER_SLASH: preload("res://assets/gems/gem_shark.png"),
 	UpperType.PORCUPINE: preload("res://assets/gems/arrowpig.png"),
 	UpperType.TURTLE: preload("res://assets/gems/turtle.png"),
 	UpperType.BAMBOO_SUPPLY: preload("res://assets/gems/gem_bamboo.png"),
@@ -88,8 +87,7 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.SAINT_CROSS: 9,
 	UpperType.LEAF_SHIELD: 4,
 	UpperType.SNOWBALL: 4,
-	UpperType.WATER_SLASH_X: 4,
-	UpperType.WATER_SLASH_Y: 4,
+	UpperType.WATER_SLASH: 4,
 	UpperType.PORCUPINE: 9,
 	UpperType.TURTLE: 5,
 	UpperType.BAMBOO_SUPPLY: 3,
@@ -103,8 +101,7 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.SAINT_CROSS: Type.LIGHT,
 	UpperType.LEAF_SHIELD: Type.GREEN,
 	UpperType.SNOWBALL: Type.BLUE,
-	UpperType.WATER_SLASH_X: Type.BLUE,
-	UpperType.WATER_SLASH_Y: Type.BLUE,
+	UpperType.WATER_SLASH: Type.BLUE,
 	UpperType.PORCUPINE: Type.GREEN,
 	UpperType.TURTLE: Type.GREEN,
 	UpperType.BAMBOO_SUPPLY: Type.GREEN,
@@ -316,7 +313,7 @@ func _update_upper_overlay() -> void:
 			upper_base_color = COLORS[Type.GREEN]
 		UpperType.SNOWBALL:
 			upper_base_color = COLORS[Type.BLUE]
-		UpperType.WATER_SLASH_X, UpperType.WATER_SLASH_Y:
+		UpperType.WATER_SLASH:
 			upper_base_color = COLORS[Type.BLUE]
 		_:
 			upper_base_color = COLORS[Type.RED]
@@ -352,7 +349,7 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.SNOWBALL:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
-		UpperType.WATER_SLASH_X, UpperType.WATER_SLASH_Y:
+		UpperType.WATER_SLASH:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙

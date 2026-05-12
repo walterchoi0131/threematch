@@ -21,14 +21,14 @@ active_skill_name = "Blast"
 active_skill_desc = "Blast every row from top to bottom"
 active_skill_cd = 1
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 9+ fire gems: create a Fireball gem at tapped cell. Tap to blast cross area.",
+"desc": "create a Fireball gem at tapped cell. Tap to blast cross area.",
 "fuse_label": "9",
 "name": "Fireball",
 "priority": 1,
 "threshold": 9,
 "trigger_type": "count"
 }, {
-"desc": "Blast 4+ fire gems in a row/column: create a Fire Pillar gem. Tap to blast entire row or column.",
+"desc": "create a Fire Pillar gem. Tap to blast entire row or column.",
 "fuse_label": "4",
 "name": "Fire Pillar",
 "priority": 2,

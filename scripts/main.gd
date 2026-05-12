@@ -90,8 +90,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.SAINT_CROSS: "res://assets/gems/gem_saint_cross.png",
 	Block.UpperType.LEAF_SHIELD: "res://assets/gems/gem_leafshield.png",
 	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
-	Block.UpperType.WATER_SLASH_X: "res://assets/gems/gem_watersword.png",
-	Block.UpperType.WATER_SLASH_Y: "res://assets/gems/gem_watersword.png",
+	Block.UpperType.WATER_SLASH: "res://assets/gems/gem_shark.png",
 	Block.UpperType.BAMBOO_SUPPLY: "res://assets/gems/gem_bamboo.png",
 }
 var _log_scroll: ScrollContainer = null
@@ -1362,7 +1361,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 		"Water Slash":
 			# Place a Water Slash upper gem (always vertical type — chain logic ignores X/Y orientation)
 			var pos: Vector2i = board.last_tapped_pos
-			var slash_type: Block.UpperType = Block.UpperType.WATER_SLASH_Y
+			var slash_type: Block.UpperType = Block.UpperType.WATER_SLASH
 			board.place_upper_gem(pos, slash_type)
 			_play_sfx(_se_freeze)
 			var _wc: CharacterData = party[resp.char_index]
@@ -1640,7 +1639,7 @@ func _on_active_skill_activated(char_index: int) -> void:
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Tranquil Mirror"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
-		"Iai: Water Soul":
+		"居合。水":
 			# 居合.水魂：消除棋盤上所有水寶石並儲存於 pending，下次水屬性攻擊時併入
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
@@ -1666,7 +1665,7 @@ func _on_active_skill_activated(char_index: int) -> void:
 			if blasted > 0:
 				battle_manager.pending_skill_blasts[Block.Type.BLUE] = int(battle_manager.pending_skill_blasts.get(Block.Type.BLUE, 0)) + blasted
 				battle_manager.turn_gem_blasts_changed.emit()
-			_add_log_entry("%s：%s %d %s" % [Locale.tr_ui("Iai: Water Soul"), Locale.tr_ui("LOG_STORE"), blasted, _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			_add_log_entry("%s：%s %d %s" % [Locale.tr_ui("居合。水"), Locale.tr_ui("LOG_STORE"), blasted, _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.2).timeout
 			_update_skill_ui()
 		"Dragon Flame Domain":
@@ -1732,19 +1731,20 @@ func _on_active_skill_activated(char_index: int) -> void:
 			var paw_tex: Texture2D = load("res://assets/panda_paw_2.png")
 			var paw := Sprite2D.new()
 			paw.texture = paw_tex
-			paw.centered = false          # 以左上角（指尖）為錨點
+			paw.centered = true           # 以紋理中心為旋轉錨點
 			paw.scale = Vector2(0.1, 0.1) # 縮小 10 倍
 			paw.z_index = 30
 			var gem_global: Vector2 = center_block.global_position
-			# 指尖從左方點向寶石：手掌錨點往左大幅偏移，並微微上提
-			paw.position = gem_global + Vector2(-40, -10)
+			# 中心點對應原先左上角錨點的等效位置（偏移加上半張圖尺寸）
+			var paw_half: Vector2 = Vector2(paw_tex.get_width(), paw_tex.get_height()) * 0.5 * paw.scale
+			paw.position = gem_global + Vector2(-80, -30) + paw_half
 			fx_layer.add_child(paw)
 
 			# 2) 按壓：縮小 + 順時針旋轉 約 25°；同步寶石縮小
 			var tap_tw := create_tween().set_parallel(true)
 			tap_tw.tween_property(paw, "scale", Vector2(0.07, 0.07), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-			tap_tw.tween_property(paw, "rotation", deg_to_rad(-25.0), 0.2) \
+			tap_tw.tween_property(paw, "rotation", deg_to_rad(25.0), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 			tap_tw.tween_property(center_block, "scale", Vector2(0.7, 0.7), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -2797,7 +2797,7 @@ func _debug_spawn_upper(skill_name: String) -> void:
 		"Justice Slash": Block.UpperType.SAINT_CROSS,
 		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 		"Snowball": Block.UpperType.SNOWBALL,
-		"Water Slash": Block.UpperType.WATER_SLASH_Y,
+		"Water Slash": Block.UpperType.WATER_SLASH,
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,
 		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,

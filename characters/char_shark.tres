@@ -22,11 +22,11 @@ square_scale = 0.75
 square_offset = Vector2(-26, -26)
 rectangular_scale = 0.25
 rectangular_offset = Vector2(-39, 162)
-active_skill_name = "Iai: Water Soul"
+active_skill_name = "居合。水"
 active_skill_desc = "Blast all water gems on the board. The destroyed count is stored and added to the next water attack. CD: 5 turns."
 active_skill_cd = 5
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 4+ water gems (any shape): create a Water Slash gem at tapped cell. Click to chain across all Water Slashes on the board (lines between swords + final vertical column).",
+"desc": "create a Water Slash gem at tapped cell. Click to chain across all Water Slashes on the board (lines between swords + final vertical column).",
 "fuse_label": "4",
 "name": "Water Slash",
 "priority": 1,

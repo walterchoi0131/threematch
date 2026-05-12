@@ -21,7 +21,7 @@ active_skill_name = "Snowball Fight"
 active_skill_desc = "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."
 active_skill_cd = 5
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 4+ water gems: create a Snowball gem at tapped cell. Click to blast 8 surrounding gems.",
+"desc": "create a Snowball gem at tapped cell. Click to blast 8 surrounding gems.",
 "fuse_label": "4",
 "name": "Snowball",
 "priority": 1,

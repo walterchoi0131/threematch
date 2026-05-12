@@ -1016,7 +1016,7 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	var ut: Block.UpperType = block.upper_type
 
 	# 水劍專用連鎖序列：不走一般 upper-gem chain 路徑
-	if ut == Block.UpperType.WATER_SLASH_X or ut == Block.UpperType.WATER_SLASH_Y:
+	if ut == Block.UpperType.WATER_SLASH:
 		await _handle_water_sword_sequence(pos)
 		return
 
@@ -1139,7 +1139,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			continue
 
 		# 水劍：交由專用連鎖序列處理（與點擊同樣規則，且不允許其他 upper 插入）
-		if cut == Block.UpperType.WATER_SLASH_X or cut == Block.UpperType.WATER_SLASH_Y:
+		if cut == Block.UpperType.WATER_SLASH:
 			await _handle_water_sword_sequence(cp, chain_data, total_blasted_by_type, false)
 			continue
 
@@ -1190,6 +1190,11 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 		return
 	var ut: Block.UpperType = start_block.upper_type
 
+	# 狂鯊連鎖期間放慢節奏至 0.3s，結束後還原
+	var _saved_interval: float = chain_blast_interval
+	if is_initial:
+		chain_blast_interval = 0.3
+
 	if is_initial:
 		chain_data.clear()
 		chain_data.append(0)
@@ -1198,10 +1203,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 
 	# 收集所有水劍位置（含起始）
 	var swords: Array[Vector2i] = [start_pos]
-	for p in find_upper_gems(Block.UpperType.WATER_SLASH_X):
-		if p != start_pos:
-			swords.append(p)
-	for p in find_upper_gems(Block.UpperType.WATER_SLASH_Y):
+	for p in find_upper_gems(Block.UpperType.WATER_SLASH):
 		if p != start_pos:
 			swords.append(p)
 
@@ -1262,8 +1264,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 			if b == null:
 				continue
 			var is_other_upper: bool = b.is_upper_gem() \
-				and b.upper_type != Block.UpperType.WATER_SLASH_X \
-				and b.upper_type != Block.UpperType.WATER_SLASH_Y
+				and b.upper_type != Block.UpperType.WATER_SLASH
 			if is_other_upper:
 				# 不立即觸發以避免 chain 插入；收集到佇列在水劍序列完成後逐一觸發
 				var key: int = c.x * 1000 + c.y
@@ -1331,7 +1332,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 		, CONNECT_ONE_SHOT)
 
 		# 水劍：交給水劍序列（不應發生—所有水劍已在上輪被處理）
-		if dut == Block.UpperType.WATER_SLASH_X or dut == Block.UpperType.WATER_SLASH_Y:
+		if dut == Block.UpperType.WATER_SLASH:
 			await _handle_water_sword_sequence(dp, chain_data, total_blasted_by_type, false)
 			continue
 
@@ -1347,6 +1348,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 
 	if is_initial:
 		upper_blast_completed.emit(chain_data[0], total_blasted_by_type, ut)
+		chain_blast_interval = _saved_interval
 
 
 ## 水劍連鎖射線動畫：projetilNew.png 為 1×6 縱向精靈表（上到下 6 幀）
@@ -1368,7 +1370,8 @@ func _play_water_chain_beam(start_global: Vector2, end_global: Vector2) -> void:
 	var diff: Vector2 = end_global - start_global
 	var dist: float = diff.length()
 	var scale_x: float = (dist / frame_w) if frame_w > 0.0 else 1.0
-	sprite.scale = Vector2(scale_x, 1.0)
+	# Y 方向放大 2 倍 → 水劍斬痕加粗
+	sprite.scale = Vector2(scale_x, 2.0)
 	sprite.rotation = diff.angle()
 	sprite.z_index = 25
 	add_child(sprite)
@@ -1417,8 +1420,7 @@ func _line_cells_between(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
 ## 播放高階寶石爆炸 VFX：水劍會在每個受影響格子各播放一次（X 旋轉 90°）；
 ## 其他類型則維持單點播放於中心。
 func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_global: Vector2) -> void:
-	if ut == Block.UpperType.WATER_SLASH_X or ut == Block.UpperType.WATER_SLASH_Y:
-		var rot: float = (PI * 0.5) if ut == Block.UpperType.WATER_SLASH_X else 0.0
+	if ut == Block.UpperType.WATER_SLASH:
 		var positions: Array[Vector2i] = _get_blast_positions_for_upper(center_pos, ut)
 		for p in positions:
 			var gp: Vector2 = center_global
@@ -1428,7 +1430,7 @@ func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_globa
 					gp = b.global_position
 				else:
 					gp = center_global + Vector2(p - center_pos) * float(CELL_SIZE)
-			BlastVfx.play(self, gp, ut, rot)
+			BlastVfx.play(self, gp, ut, 0.0)
 		return
 	BlastVfx.play(self, center_global, ut)
 
@@ -1450,9 +1452,7 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return _get_surrounding_positions(pos)
 		Block.UpperType.BAMBOO_SUPPLY:
 			return _get_surrounding_positions(pos)
-		Block.UpperType.WATER_SLASH_X:
-			return _get_row_positions(pos.y)
-		Block.UpperType.WATER_SLASH_Y:
+		Block.UpperType.WATER_SLASH:
 			return _get_col_positions(pos.x)
 	return [pos]
 
@@ -2060,13 +2060,10 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 	processed_uppers[start_pos] = true
 
 	# ── 水劍特例：套用「貪心連線」連鎖預測（與 _handle_water_sword_sequence 相同邏輯）──
-	if start_ut == Block.UpperType.WATER_SLASH_X or start_ut == Block.UpperType.WATER_SLASH_Y:
+	if start_ut == Block.UpperType.WATER_SLASH:
 		# 收集全棋盤水劍
 		var swords: Array[Vector2i] = [start_pos]
-		for sp in find_upper_gems(Block.UpperType.WATER_SLASH_X):
-			if sp != start_pos:
-				swords.append(sp)
-		for sp in find_upper_gems(Block.UpperType.WATER_SLASH_Y):
+		for sp in find_upper_gems(Block.UpperType.WATER_SLASH):
 			if sp != start_pos:
 				swords.append(sp)
 

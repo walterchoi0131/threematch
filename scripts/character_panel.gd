@@ -349,7 +349,7 @@ func _show_char_popup(index: int) -> void:
 	skills_margin.add_child(skills_vbox)
 
 	_add_popup_skill(skills_vbox, Locale.tr_ui("PASSIVE"), Locale.tr_or(c.passive_skill_name, c.passive_skill_name), Locale.tr_or(c.passive_skill_name + " DESC", c.passive_skill_desc), null)
-	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"),  Locale.tr_or(c.active_skill_name, c.active_skill_name),  Locale.tr_or(c.active_skill_name + " DESC", c.active_skill_desc),  null)
+	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"),  Locale.tr_or(c.active_skill_name, c.active_skill_name),  Locale.tr_or(c.active_skill_name + " DESC", c.active_skill_desc),  null, c.active_skill_cd)
 
 	var elem_color: Color = Block.COLORS.get(c.gem_type, Color(0.4, 0.6, 1.0))
 	var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type, null)
@@ -380,7 +380,7 @@ func _show_char_popup(index: int) -> void:
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 
-func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, desc: String, fuse_chain: Control) -> void:
+func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, desc: String, fuse_chain: Control, cooldown: int = 0) -> void:
 	if skill_name == "":
 		return
 	var entry := VBoxContainer.new()
@@ -456,6 +456,16 @@ func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, de
 	nm.add_theme_constant_override("outline_size", 4)
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(nm)
+
+	if cooldown > 0:
+		var cd_lbl := Label.new()
+		cd_lbl.text = "⏱︎ %d" % cooldown
+		cd_lbl.add_theme_font_size_override("font_size", 14)
+		cd_lbl.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0))
+		cd_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cd_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		cd_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(cd_lbl)
 
 	if desc != "":
 		var dl := Label.new()

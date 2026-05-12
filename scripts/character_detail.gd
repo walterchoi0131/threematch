@@ -417,7 +417,7 @@ func _resolve_responding_upper(skill_name: String) -> int:
 	const NAME_TO_UPPER: Dictionary = {
 		"Fireball": Block.UpperType.FIREBALL,
 		"Fire Pillar": Block.UpperType.FIRE_PILLAR_X,
-		"Water Slash": Block.UpperType.WATER_SLASH_X,
+		"Water Slash": Block.UpperType.WATER_SLASH,
 		"Justice Slash": Block.UpperType.SAINT_CROSS,
 		"Saint Cross": Block.UpperType.SAINT_CROSS,
 		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
@@ -435,12 +435,12 @@ func _blast_pattern_for(upper_type: int) -> Array:
 		Block.UpperType.FIREBALL:
 			# 十字（中心 + 上下左右各延 1 格）
 			return [Vector2i(2, 2), Vector2i(2, 1), Vector2i(2, 3), Vector2i(1, 2), Vector2i(3, 2)]
-		Block.UpperType.FIRE_PILLAR_X, Block.UpperType.WATER_SLASH_X:
+		Block.UpperType.FIRE_PILLAR_X:
 			# 整列
 			var cells: Array = []
 			for x in 5: cells.append(Vector2i(x, 2))
 			return cells
-		Block.UpperType.FIRE_PILLAR_Y, Block.UpperType.WATER_SLASH_Y:
+		Block.UpperType.FIRE_PILLAR_Y, Block.UpperType.WATER_SLASH:
 			var cells_y: Array = []
 			for y in 5: cells_y.append(Vector2i(2, y))
 			return cells_y
@@ -532,6 +532,15 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 	nm.add_theme_constant_override("outline_size", 3)
 	name_row.add_child(nm)
 
+	if cooldown > 0:
+		var cd_inline := Label.new()
+		cd_inline.text = "⏱︎ %d" % cooldown
+		cd_inline.add_theme_font_size_override("font_size", 14)
+		cd_inline.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0))
+		cd_inline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cd_inline.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		name_row.add_child(cd_inline)
+
 	# 描述
 	if desc != "":
 		var desc_lbl := Label.new()
@@ -540,14 +549,6 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 		desc_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.92))
 		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		info.add_child(desc_lbl)
-
-	# 冷卻
-	if cooldown > 0:
-		var cd_lbl := Label.new()
-		cd_lbl.text = "%s : %d" % [Locale.tr_ui("COOLDOWN"), cooldown]
-		cd_lbl.add_theme_font_size_override("font_size", 13)
-		cd_lbl.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0))
-		info.add_child(cd_lbl)
 
 
 # ── 技能條輔助元件 ─────────────────────────────────────────
