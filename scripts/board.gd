@@ -17,12 +17,15 @@ var min_match: int = 2        # 最少連接數才可消除
 var grid: Array = []          # 二維網格陣列 grid[x][y] = Block 或 null
 # is_busy 屬性後備欄位（property 用，setter 觸發 drain）
 var _is_busy_back: bool = false
+var _escape_refill_input_lock: bool = false
 # is_busy：是否正在處理動畫/消除中（防止重複點擊）
 # 改為 property — falling edge 自動觸發 deferred clicks drain
 var is_busy: bool:
 	get:
 		return _is_busy_back
 	set(v):
+		if not v and _escape_refill_input_lock:
+			return
 		var was: bool = _is_busy_back
 		_is_busy_back = v
 		if was and not v:
@@ -35,11 +38,13 @@ var is_fusing: bool = false       # 融合動畫進行中（允許並行點擊�
 var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點擊的位置（由 _on_gems_blasted 讀取）
 
 # ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
-# logic_grid[x][y] 儲存 Block.Type（int）或：
+## logic_grid[x][y] 儲存 Block.Type（int）或：
 #   LOGIC_UNKNOWN：等待視覺填充隨機顏色（BFS 不會匹配）
 #   LOGIC_UPPER：高階寶石（BFS 不會匹配普通爆破）
+#   LOGIC_PLANK：block（PLANK）— 不參與 BFS
 const LOGIC_UNKNOWN := 999
 const LOGIC_UPPER := -1
+const LOGIC_PLANK := -2
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
 var deferred_clicks: Array[Vector2i] = []
@@ -72,6 +77,14 @@ var _longpress_raised_blocks: Array[Block] = []  # 預覽時被抬高 z_index �
 var _tutorial_filter: Array[Vector2i] = []   # 非空時，只允許點擊這些位置
 var _hand_sprite: Sprite2D = null            # 教學手指圖示
 var _hand_tween: Tween = null                # 手指浮動動畫
+
+## collapse-and-fill 前置回呼：在現有寶石落定後、新寶石生成前由外部（main.gd）設定。
+## 設定後每次有新寶石填入前會 await 此 Callable（可用於燃燒扣血等需要視覺節奏的效果）。
+## 回呼以 async func() 形式提供（回傳值忽略），可在內部使用 await。
+var pre_refill_hook: Callable = Callable()
+## 欲觸發前置回呼標記：僅在玩家實際消除回合（正常點擊拆除 / 高階寶石被點擊）前置為 true。
+## 技能等非拆除回合觸發的準苯類型不會設定此標記，從而跟燃燒正常點擊區隔。
+var _blast_refill_armed: bool = false
 
 signal score_changed(new_score: int)      # 分數變更時發出
 signal gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)  # 寶石消除時發出
@@ -132,13 +145,23 @@ func initialize_board() -> void:
 		grid[x].resize(rows)
 		for y in rows:
 			_create_block(x, y)
-	# 若有固定佈局，覆寫寶石類型
+	# 若有固定佈局，覆寫寶石類型（負值代表「保留隨機」，跳過該格）
 	if stage != null and stage.fixed_layout.size() == columns:
 		for x in columns:
 			var col: Array = stage.fixed_layout[x]
 			for y in rows:
 				if y < col.size() and grid[x][y] != null:
-					grid[x][y].set_block_type(col[y])
+					var t: int = int(col[y])
+					if t < 0:
+						continue
+					grid[x][y].set_block_type(t)
+	# 關卡 1-4：所有 PLANK 自動掛載 BURNING 效果
+	if stage != null and stage.stage_id == "1-4":
+		for x in columns:
+			for y in rows:
+				var b: Block = grid[x][y]
+				if b != null and b.is_block():
+					b.add_extra(Block.ExtraEffect.BURNING)
 	_init_logic_grid_from_visual()
 	_update_fuse_hints()
 
@@ -156,6 +179,8 @@ func _init_logic_grid_from_visual() -> void:
 				logic_grid[x][y] = LOGIC_UNKNOWN
 			elif b.is_upper_gem():
 				logic_grid[x][y] = LOGIC_UPPER
+			elif b.is_block():
+				logic_grid[x][y] = LOGIC_PLANK
 			else:
 				logic_grid[x][y] = b.block_type
 
@@ -168,7 +193,12 @@ func _sync_logic_unknowns_from_visual() -> void:
 			if logic_grid[x][y] == LOGIC_UNKNOWN:
 				var b: Block = grid[x][y]
 				if b != null:
-					logic_grid[x][y] = LOGIC_UPPER if b.is_upper_gem() else int(b.block_type)
+					if b.is_upper_gem():
+						logic_grid[x][y] = LOGIC_UPPER
+					elif b.is_block():
+						logic_grid[x][y] = LOGIC_PLANK
+					else:
+						logic_grid[x][y] = int(b.block_type)
 
 
 ## 完整將 logic_grid 重置為視覺狀態（無 queued click 時的安全點呼叫，例如波次轉換後）
@@ -311,6 +341,10 @@ func _is_valid(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < columns and pos.y >= 0 and pos.y < rows
 
 
+func _is_no_enemy_mode() -> bool:
+	return stage != null and stage.mode == StageData.Mode.ESCAPE
+
+
 ## 處理滑鼠輸入：左鍵點擊棋盤上的寶石；選擇模式下懸停預覽 + 點擊確認；長按高階寶石預覽爆炸範圍
 func _unhandled_input(event: InputEvent) -> void:
 	if _selection_mode:
@@ -370,6 +404,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_valid(fuse_gp):
 				_try_concurrent_fuse(fuse_gp)
 			return
+		# 逃脫/無敵人關卡沒有敵人攻擊節奏可吸收預輸入；busy 期間直接忽略點擊。
+		if _is_no_enemy_mode():
+			return
 		# State/UI 分離：在動畫期間預先 queue 普通爆破點擊
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var queue_local_pos := get_local_mouse_position()
@@ -398,7 +435,7 @@ func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
 	if not _is_valid(start):
 		return []
 	var target: int = logic_grid[start.x][start.y]
-	if target == LOGIC_UNKNOWN or target == LOGIC_UPPER:
+	if target == LOGIC_UNKNOWN or target == LOGIC_UPPER or target == LOGIC_PLANK:
 		return []
 	var visited := {}
 	var connected: Array[Vector2i] = []
@@ -422,9 +459,19 @@ func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
 
 
 ## 邏輯端 destroy + collapse：消除指定位置，現有寶石下移，頂部標記為 UNKNOWN
+## 同時將鄰格的 PLANK 也標記為 UNKNOWN（與 _destroy_blocks 行為一致，避免 queue 預測錯位）
 func _logic_destroy_and_collapse(positions: Array[Vector2i]) -> void:
 	for p in positions:
 		logic_grid[p.x][p.y] = LOGIC_UNKNOWN
+	# 鄰格 PLANK 也視為被消除
+	const NEIGHBOR_DIRS: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for p in positions:
+		for d in NEIGHBOR_DIRS:
+			var np: Vector2i = p + d
+			if not _is_valid(np):
+				continue
+			if logic_grid[np.x][np.y] == LOGIC_PLANK:
+				logic_grid[np.x][np.y] = LOGIC_UNKNOWN
 	for x in columns:
 		var stack: Array = []
 		for y in rows:
@@ -463,11 +510,13 @@ func _try_queue_click(pos: Vector2i) -> void:
 		return
 	# 允許在動畫期間 queue 高階寶石點擊（normal blast → upper blast 路線）
 	var b: Block = grid[pos.x][pos.y]
+	if b != null and b.is_block():
+		return
 	if b != null and b.is_upper_gem():
 		deferred_clicks.append(pos)
 		return
 	var t: int = logic_grid[pos.x][pos.y]
-	if t == LOGIC_UNKNOWN or t == LOGIC_UPPER:
+	if t == LOGIC_UNKNOWN or t == LOGIC_UPPER or t == LOGIC_PLANK:
 		return
 	var matches := _find_connected_logic(pos)
 	if matches.size() < min_match:
@@ -526,11 +575,21 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 	var block: Block = grid[pos.x][pos.y]
 	last_tapped_pos = pos
 
+	# block（PLANK）— 不响應點擊，不消耗回合；播放抖動表示無效
+	if block != null and block.is_block():
+		var sh_tw: Tween = create_tween()
+		sh_tw.tween_property(block, "position:x", block.position.x + 4, 0.05)
+		sh_tw.tween_property(block, "position:x", block.position.x - 4, 0.05)
+		sh_tw.tween_property(block, "position:x", block.position.x, 0.05)
+		_next_click_is_drained = false
+		return
+
 	# 高階寶石 — 特殊點擊（消耗一回合，觸發範圍/橫列爆炸並可連鏈）
 	if block.is_upper_gem():
 		_next_click_is_drained = false
 		is_busy = true
 		await _handle_upper_click(pos)
+		_blast_refill_armed = true
 		await _collapse_and_fill()
 		# is_busy 由 main.gd _on_upper_blast_completed 在攻擊動畫結束後解除
 		return
@@ -551,6 +610,11 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 		_next_click_is_drained = false
 		return
 
+	# 通過 match 檢查後立即鎖住輸入；逃脫/無敵人模式尤其需要等掉落補滿後才還控制權。
+	if _is_no_enemy_mode():
+		_escape_refill_input_lock = true
+	is_busy = true
+
 	# 邏輯狀態同步：若此次點擊不是來自 drain queue，需即時更新邏輯狀態
 	# （drain 來的點擊在 _try_queue_click 已預先套用過邏輯狀態）
 	if not _next_click_is_drained:
@@ -559,14 +623,16 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 			battle_manager_ref.logic_apply_blast(int(block.block_type), matches.size())
 	_next_click_is_drained = false
 
-	is_busy = true
 	_destroy_blocks(matches)          # 非阻塞 — 啟動動畫並延遲釋放
 	if skip_collapse:
 		# 融合流程 — main.gd 會在放置高階寶石後呼叫 do_collapse()
+		_escape_refill_input_lock = false
 		return
+	_blast_refill_armed = true
 	await _collapse_and_fill()        # 掉落立即開始
 	# State/UI 分離：destroy + collapse 完成後立即解鎖，讓下一個 queued click 可開始
 	# （角色攻擊與 VFX 由 main.gd 在 attack queue 中以 fire-and-forget 並行播放）
+	_escape_refill_input_lock = false
 	is_busy = false
 
 
@@ -574,6 +640,9 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 func _find_connected(start: Vector2i) -> Array[Vector2i]:
 	var block: Block = grid[start.x][start.y]
 	if block == null:
+		return []
+	# block（PLANK）不參與任何配對
+	if block.is_block():
 		return []
 
 	var target_type = block.block_type
@@ -596,6 +665,9 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 		# 高階寶石不參與普通配對 — 跳過
 		if cur_block.is_upper_gem():
 			continue
+		# block（PLANK）不參與 — 跳過
+		if cur_block.is_block():
+			continue
 
 		visited[current] = true
 		connected.append(current)
@@ -609,6 +681,7 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 
 
 ## 消除指定位置的寶石：計算得分、發出信號、播放動畫、延遲釋放節點
+## 同時掃描鄰格，若有 PLANK（block）則靜默移除（無得分、無信號、無攻擊）
 func _destroy_blocks(positions: Array[Vector2i]) -> void:
 	var gem_type: Block.Type = grid[positions[0].x][positions[0].y].block_type
 	var blocks: Array = []
@@ -622,6 +695,28 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 			grid[pos.x][pos.y] = null
 			blocks.append(block)
 
+	# 鄰格 PLANK 靜默移除（不計分、不發信號）
+	var planks_to_remove: Array = []
+	var plank_seen: Dictionary = {}
+	const NEIGHBOR_DIRS: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for pos in positions:
+		for d in NEIGHBOR_DIRS:
+			var np: Vector2i = pos + d
+			if not _is_valid(np):
+				continue
+			var key: int = np.x * 1000 + np.y
+			if plank_seen.has(key):
+				continue
+			var nb: Block = grid[np.x][np.y]
+			if nb != null and nb.is_block():
+				plank_seen[key] = true
+				grid[np.x][np.y] = null
+				planks_to_remove.append(nb)
+				# 邏輯端同步：標記為 UNKNOWN 讓崩落補位
+				logic_grid[np.x][np.y] = LOGIC_UNKNOWN
+				nb.play_destroy_animation()
+				_spawn_plank_debris(nb.global_position)
+
 	score += positions.size() * 10
 	score_changed.emit(score)
 	gems_blasted.emit(gem_type, effective_count, blast_positions)
@@ -634,6 +729,9 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 		for b in blocks:
 			if is_instance_valid(b):
 				b.queue_free()
+		for p in planks_to_remove:
+			if is_instance_valid(p):
+				p.queue_free()
 	, CONNECT_ONE_SHOT)
 
 
@@ -676,6 +774,18 @@ func _collapse_and_fill() -> void:
 	var longest_dur := 0.0
 	var total_new_count := 0  # 本次掉落新生成寶石總數（用於 gems_refilled 信號）
 
+	# 計算是否有空格需要新寶石（在填入前觸發前置回呼，例如燃燒扣血）
+	var any_new: bool = false
+	for x in columns:
+		for f in columns_data[x]:
+			if f.is_new:
+				any_new = true
+				break
+		if any_new:
+			break
+	if any_new and pre_refill_hook.is_valid():
+		await pre_refill_hook.call()
+
 	for x in columns:
 		var col_falls: Array = columns_data[x]
 		if col_falls.is_empty():
@@ -696,6 +806,8 @@ func _collapse_and_fill() -> void:
 				spawn_idx += 1
 			else:
 				# 現有寶石從目前位置開始掉落
+				if not is_instance_valid(f.block):
+					continue
 				from_pos = f.block.position
 
 			var dist := absf(f.to_pos.y - from_pos.y)
@@ -914,6 +1026,79 @@ func _animate_gem_morph(block: Block, new_type: Block.Type) -> void:
 	tween.tween_callback(_update_fuse_hints)
 
 
+## 靜默移除指定位置的 PLANK（無得分、無信號）— 供具有 BREAK 屬性的技能使用
+func silently_destroy_plank(pos: Vector2i) -> bool:
+	if pos.x < 0 or pos.x >= columns or pos.y < 0 or pos.y >= rows:
+		return false
+	var b: Block = grid[pos.x][pos.y]
+	if b == null or not b.is_block():
+		return false
+	var origin: Vector2 = b.global_position
+	grid[pos.x][pos.y] = null
+	logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
+	b.play_destroy_animation()
+	_spawn_plank_debris(origin)
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		if is_instance_valid(b):
+			b.queue_free()
+	, CONNECT_ONE_SHOT)
+	return true
+
+
+## 在指定全域座標生成「3D 風格」木屑爆裂飛散動畫
+## 8~10 片小木板紋理向四面飛濺，受重力下墜、旋轉、淡出，到達畫面底部後自動 free
+func _spawn_plank_debris(world_pos: Vector2) -> void:
+	const PLANK_TEX_PATH := "res://assets/blocks/wood.png"
+	if not ResourceLoader.exists(PLANK_TEX_PATH):
+		return
+	var tex: Texture2D = load(PLANK_TEX_PATH)
+	# 用一個獨立 Node2D 容器掛在最頂層，避免被棋盤節點 free 影響
+	var host: Node = get_tree().current_scene
+	if host == null:
+		host = self
+	var debris_root := Node2D.new()
+	debris_root.z_index = 100
+	host.add_child(debris_root)
+	debris_root.global_position = world_pos
+
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var count: int = rng.randi_range(8, 10)
+	var vp_h: float = get_viewport().get_visible_rect().size.y
+	var fall_target_y: float = vp_h - world_pos.y + 80.0  # 相對於 debris_root 本地座標
+	var max_lifetime: float = 0.0
+	for i in count:
+		var s := Sprite2D.new()
+		s.texture = tex
+		var sc: float = rng.randf_range(0.18, 0.32)
+		s.scale = Vector2(sc, sc)
+		s.rotation = rng.randf_range(0.0, TAU)
+		debris_root.add_child(s)
+		# 初速：朝四面散開，略偏向上
+		var angle: float = rng.randf_range(-PI, 0)  # 上半圈
+		var speed: float = rng.randf_range(120.0, 260.0)
+		var dx: float = cos(angle) * speed
+		var dy: float = sin(angle) * speed * 0.6 - rng.randf_range(80.0, 160.0)
+		var lifetime: float = rng.randf_range(0.9, 1.3)
+		max_lifetime = maxf(max_lifetime, lifetime)
+		# 用 Tween 模擬：水平等速 + 拋物線（用 trans cubic ease in 模擬重力）
+		var target_x: float = dx * lifetime
+		var target_y: float = fall_target_y
+		var spin: float = rng.randf_range(-TAU * 1.5, TAU * 1.5)
+		var tw: Tween = s.create_tween().set_parallel(true)
+		tw.tween_property(s, "position:x", target_x, lifetime).set_trans(Tween.TRANS_LINEAR)
+		tw.tween_property(s, "position:y", target_y, lifetime).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(s, "rotation", s.rotation + spin, lifetime)
+		tw.tween_property(s, "modulate:a", 0.0, lifetime).set_delay(lifetime * 0.5)
+		# 套用初始小幅向上偏移當作起跳
+		s.position = Vector2(0, dy * 0.05)
+	# 整個容器在最長壽命後 free
+	get_tree().create_timer(max_lifetime + 0.1).timeout.connect(func() -> void:
+		if is_instance_valid(debris_root):
+			debris_root.queue_free()
+	, CONNECT_ONE_SHOT)
+
+
 # ── 高階寶石系統 ─────────────────────────────────────────────────────
 
 ## 在指定網格位置放置高階寶石。
@@ -931,7 +1116,9 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 		var row_positions := _get_row_positions(row_y)
 		var valid: Array[Vector2i] = []
 		for p in row_positions:
-			if grid[p.x][p.y] != null:
+			var pb: Block = grid[p.x][p.y]
+			# PLANK 非 BREAK 屬性技能不可影響
+			if pb != null and not pb.is_block():
 				valid.append(p)
 		if valid.is_empty():
 			continue
@@ -1060,6 +1247,7 @@ func _handle_upper_click(pos: Vector2i) -> void:
 func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, total_blasted_by_type: Dictionary) -> void:
 	# 收集要消除的寶石和被波及的其他高階寶石
 	var to_destroy: Array[Vector2i] = []
+	var planks_in_blast: Array[Vector2i] = []  # 範圍內的 PLANK（靜默移除）
 	var chained_uppers: Array[Dictionary] = []  # { pos, upper_type }
 
 	for p in positions:
@@ -1071,6 +1259,10 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		# 如果這個寶石是高階寶石，加入連鏈爆炸佇列（暫不消除）
 		if b.is_upper_gem():
 			chained_uppers.append({"pos": p, "upper_type": b.upper_type})
+			continue
+		# block（PLANK）— 靜默移除（不計分、不發信號、不貢獻攻擊）
+		if b.is_block():
+			planks_in_blast.append(p)
 			continue
 		to_destroy.append(p)
 
@@ -1101,6 +1293,18 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		blocks_to_free.append(b)
 		b.play_destroy_animation()
 
+	# 靜默消除 PLANK（無得分、無信號）
+	var planks_to_free: Array = []
+	for p in planks_in_blast:
+		var pb: Block = grid[p.x][p.y]
+		if pb == null:
+			continue
+		grid[p.x][p.y] = null
+		logic_grid[p.x][p.y] = LOGIC_UNKNOWN
+		planks_to_free.append(pb)
+		pb.play_destroy_animation()
+		_spawn_plank_debris(pb.global_position)
+
 	score += to_destroy.size() * 10
 	score_changed.emit(score)
 
@@ -1114,10 +1318,13 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		for b in blocks_to_free:
 			if is_instance_valid(b):
 				b.queue_free()
+		for p in planks_to_free:
+			if is_instance_valid(p):
+				p.queue_free()
 	, CONNECT_ONE_SHOT)
 
 	# 本批有真正消除才需要等待視覺節奏；空批（被前面的連鎖清光了）直接 0 等待
-	if to_destroy.size() > 0:
+	if to_destroy.size() > 0 or planks_in_blast.size() > 0:
 		await get_tree().create_timer(0.15).timeout
 
 	# 處理連鏈的高階寶石：輪到時消除，執行與點擊相同的爆炸行為
@@ -1271,6 +1478,14 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 				if not deferred_seen.has(key):
 					deferred_seen[key] = true
 					deferred_uppers.append({"pos": c, "upper_type": b.upper_type})
+				continue
+			# block（PLANK）— 靜默移除（不計分、不發信號、不貢獻攻擊）
+			if b.is_block():
+				grid[c.x][c.y] = null
+				logic_grid[c.x][c.y] = LOGIC_UNKNOWN
+				blocks_to_free.append(b)
+				b.play_destroy_animation()
+				_spawn_plank_debris(b.global_position)
 				continue
 			var bt: Block.Type = b.block_type as Block.Type
 			var bv: int = b.get_blast_value()
@@ -2059,122 +2274,43 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 	var processed_uppers: Dictionary = {}
 	processed_uppers[start_pos] = true
 
-	# ── 水劍特例：套用「貪心連線」連鎖預測（與 _handle_water_sword_sequence 相同邏輯）──
-	if start_ut == Block.UpperType.WATER_SLASH:
-		# 收集全棋盤水劍
-		var swords: Array[Vector2i] = [start_pos]
-		for sp in find_upper_gems(Block.UpperType.WATER_SLASH):
-			if sp != start_pos:
-				swords.append(sp)
-
-		# 貪心建構連鎖順序：每次選距上一把最遠的水劍
-		var order: Array[Vector2i] = [start_pos]
-		var remaining: Array[Vector2i] = []
-		for s in swords:
-			if s != start_pos:
-				remaining.append(s)
-		while not remaining.is_empty():
-			var cur: Vector2i = order[order.size() - 1]
-			var best_idx: int = 0
-			var best_d: float = -1.0
-			for i in remaining.size():
-				var diff: Vector2 = Vector2(remaining[i] - cur)
-				var d: float = diff.length_squared()
-				if d > best_d:
-					best_d = d
-					best_idx = i
-			order.append(remaining[best_idx])
-			remaining.remove_at(best_idx)
-
-		# 把後續的水劍標記為 chain_uppers（亮起為 upper border）
-		for k in range(1, order.size()):
-			var sp_next: Vector2i = order[k]
-			chain_uppers.append(sp_next)
-			processed_uppers[sp_next] = true
-
-		# 計算每段連線格子；最後一把走整欄
-		var sw_chain_groups: Array[Dictionary] = []
-		var sw_all: Dictionary = {}
-		var sw_deferred: Array[Dictionary] = []  # 路徑上的非水劍 upper（之後繼續 BFS）
-		for i in order.size():
-			var sp_i: Vector2i = order[i]
-			var seg_cells: Array[Vector2i]
-			if i < order.size() - 1:
-				seg_cells = _line_cells_between(sp_i, order[i + 1])
-			else:
-				seg_cells = _get_col_positions(sp_i.x)
-			var group_pos: Array[Vector2i] = []
-			for c in seg_cells:
-				if not _is_valid(c):
-					continue
-				if c == start_pos or sw_all.has(c):
-					continue
-				# 起點水劍不放入 direct_blast 鍵集合（保持 chain_uppers 已含）
-				sw_all[c] = true
-				if processed_uppers.has(c):
-					# 是水劍序列中的另一把水劍 — 跳過格子本身的「被爆」標記（亮 upper border 即可）
-					continue
-				group_pos.append(c)
-				# 路徑上若有非水劍 upper，加入 deferred 等水劍序列結束後 BFS
-				var b: Block = grid[c.x][c.y]
-				if b != null and b.is_upper_gem() and not processed_uppers.has(c):
-					processed_uppers[c] = true
-					chain_uppers.append(c)
-					sw_deferred.append({"pos": c, "ut": b.upper_type})
-			if group_pos.size() > 0:
-				sw_chain_groups.append({"ut": start_ut, "positions": group_pos})
-
-		# 後續 BFS：對水劍路徑上波及的非水劍 upper 做一般連鎖預測
-		var bfs_queue: Array[Dictionary] = sw_deferred
-		var bfs_all: Dictionary = sw_all.duplicate()
-		while bfs_queue.size() > 0:
-			var current: Dictionary = bfs_queue.pop_front()
-			var cpos: Vector2i = current.pos
-			var cut: Block.UpperType = current.ut
-			var cpositions: Array[Vector2i] = _get_blast_positions_for_upper(cpos, cut)
-			var group_positions: Array[Vector2i] = []
-			for p in cpositions:
-				if p == cpos or bfs_all.has(p):
-					continue
-				bfs_all[p] = true
-				group_positions.append(p)
-				if _is_valid(p) and grid[p.x][p.y] != null:
-					var b2: Block = grid[p.x][p.y]
-					if b2.is_upper_gem() and not processed_uppers.has(p):
-						chain_uppers.append(p)
-						processed_uppers[p] = true
-						bfs_queue.append({"pos": p, "ut": b2.upper_type})
-			if group_positions.size() > 0:
-				sw_chain_groups.append({"ut": cut, "positions": group_positions})
-
-		return {
-			"direct": [],  # 水劍模式以 chain_groups 表示所有爆破段
-			"direct_ut": start_ut,
-			"chain_groups": sw_chain_groups,
-			"chain_uppers": chain_uppers,
-		}
-
-	# 第一層：直接爆炸
-	var first_positions: Array[Vector2i] = _get_blast_positions_for_upper(start_pos, start_ut)
+	# 連鏈爆炸：BFS 佇列（任何 upper 觸發，包含被連鎖到的水劍）
 	var next_queue: Array[Dictionary] = []
-	for p in first_positions:
-		if p == start_pos:
-			continue
-		direct_blast[p] = true
-		if _is_valid(p) and grid[p.x][p.y] != null:
-			var b: Block = grid[p.x][p.y]
-			if b.is_upper_gem() and not processed_uppers.has(p):
-				chain_uppers.append(p)
-				processed_uppers[p] = true
-				next_queue.append({"pos": p, "ut": b.upper_type})
-
-	# 後續層：連鏈爆炸（按觸發的高階寶石分組）
 	var chain_groups: Array[Dictionary] = []   # [{ ut, positions }]
 	var all_chain: Dictionary = {}             # 去重用
+
+	# ── 水劍特例：套用「貪心連線」連鎖預測（與 _handle_water_sword_sequence 相同邏輯）──
+	if start_ut == Block.UpperType.WATER_SLASH:
+		var sw_groups: Array[Dictionary] = _calc_water_slash_chain_preview(
+			start_pos, processed_uppers, all_chain, chain_uppers, next_queue)
+		for g in sw_groups:
+			chain_groups.append(g)
+	else:
+		# 第一層：直接爆炸
+		var first_positions: Array[Vector2i] = _get_blast_positions_for_upper(start_pos, start_ut)
+		for p in first_positions:
+			if p == start_pos:
+				continue
+			direct_blast[p] = true
+			if _is_valid(p) and grid[p.x][p.y] != null:
+				var b: Block = grid[p.x][p.y]
+				if b.is_upper_gem() and not processed_uppers.has(p):
+					chain_uppers.append(p)
+					processed_uppers[p] = true
+					next_queue.append({"pos": p, "ut": b.upper_type})
+
+	# 後續層：連鏈爆炸（按觸發的高階寶石分組）
 	while next_queue.size() > 0:
 		var current: Dictionary = next_queue.pop_front()
 		var cpos: Vector2i = current.pos
 		var cut: Block.UpperType = current.ut
+		# 連鏈水劍：使用專用貪心連鎖，而非單純的 column 爆破
+		if cut == Block.UpperType.WATER_SLASH:
+			var sw_groups2: Array[Dictionary] = _calc_water_slash_chain_preview(
+				cpos, processed_uppers, all_chain, chain_uppers, next_queue)
+			for g in sw_groups2:
+				chain_groups.append(g)
+			continue
 		var cpositions: Array[Vector2i] = _get_blast_positions_for_upper(cpos, cut)
 		var group_positions: Array[Vector2i] = []
 		for p in cpositions:
@@ -2197,6 +2333,82 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 		"chain_groups": chain_groups,
 		"chain_uppers": chain_uppers,
 	}
+
+
+## 計算「以 seed_pos 為起點」的水劍貪心連鎖預覽。
+## 會將後續水劍與路徑上波及的非水劍 upper 加入 chain_uppers / processed_uppers，
+## 並將非水劍 upper 推入 bfs_queue 等後續 BFS 處理；visited 是共享的格子去重集合。
+## 回傳：每段水劍連線/最後一把欄位爆破組成的 Dictionary 陣列。
+func _calc_water_slash_chain_preview(
+		seed_pos: Vector2i,
+		processed_uppers: Dictionary,
+		visited: Dictionary,
+		chain_uppers: Array[Vector2i],
+		bfs_queue: Array[Dictionary]) -> Array[Dictionary]:
+	# 收集所有「尚未處理過」的水劍位置（含 seed 自身）
+	var swords: Array[Vector2i] = [seed_pos]
+	for sp in find_upper_gems(Block.UpperType.WATER_SLASH):
+		if sp == seed_pos:
+			continue
+		if processed_uppers.has(sp):
+			continue
+		swords.append(sp)
+
+	# 貪心建構連鎖順序：每次選距上一把最遠的水劍
+	var order: Array[Vector2i] = [seed_pos]
+	var remaining: Array[Vector2i] = []
+	for s in swords:
+		if s != seed_pos:
+			remaining.append(s)
+	while not remaining.is_empty():
+		var cur: Vector2i = order[order.size() - 1]
+		var best_idx: int = 0
+		var best_d: float = -1.0
+		for i in remaining.size():
+			var diff: Vector2 = Vector2(remaining[i] - cur)
+			var d: float = diff.length_squared()
+			if d > best_d:
+				best_d = d
+				best_idx = i
+		order.append(remaining[best_idx])
+		remaining.remove_at(best_idx)
+
+	# 把後續的水劍標記為 chain_uppers（亮起為 upper border）
+	for k in range(1, order.size()):
+		var sp_next: Vector2i = order[k]
+		if not processed_uppers.has(sp_next):
+			chain_uppers.append(sp_next)
+			processed_uppers[sp_next] = true
+
+	# 計算每段連線格子；最後一把走整欄
+	var groups: Array[Dictionary] = []
+	for i in order.size():
+		var sp_i: Vector2i = order[i]
+		var seg_cells: Array[Vector2i]
+		if i < order.size() - 1:
+			seg_cells = _line_cells_between(sp_i, order[i + 1])
+		else:
+			seg_cells = _get_col_positions(sp_i.x)
+		var group_pos: Array[Vector2i] = []
+		for c in seg_cells:
+			if not _is_valid(c):
+				continue
+			if c == seed_pos or visited.has(c):
+				continue
+			visited[c] = true
+			if processed_uppers.has(c):
+				# 是水劍序列中的另一把水劍 — 跳過格子本身的「被爆」標記（亮 upper border 即可）
+				continue
+			group_pos.append(c)
+			# 路徑上若有非水劍 upper，加入 BFS 佇列待後續連鎖
+			var b: Block = grid[c.x][c.y]
+			if b != null and b.is_upper_gem() and not processed_uppers.has(c):
+				processed_uppers[c] = true
+				chain_uppers.append(c)
+				bfs_queue.append({"pos": c, "ut": b.upper_type})
+		if group_pos.size() > 0:
+			groups.append({"ut": Block.UpperType.WATER_SLASH, "positions": group_pos})
+	return groups
 
 
 ## 顯示長按爆炸預覽：漸變暗化棋盤 + 高亮爆炸範圍

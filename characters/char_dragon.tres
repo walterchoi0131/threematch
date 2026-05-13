@@ -1,26 +1,27 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://b3ii2ruw241h2"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://b2d3f5dn6b3om" path="res://assets/dragon.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/dragon.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
 character_name = "Dragon"
-level = 12
+level = 17
 base_atk = 4
 atk_growth = 0.8
 base_hp = 60
 hp_growth = 9.0
 portrait_texture = ExtResource("2_portrait")
 portrait_offset = Vector2(-69, -80)
-dialog_square_scale = 3.4
-dialog_square_offset = Vector2(-282, -3)
+dialog_square_scale = 1.1500000000000001
+dialog_square_offset = Vector2(-109, -28)
 square_offset = Vector2(-112, -47)
 rectangular_scale = 0.3
 rectangular_offset = Vector2(-102, 186)
 active_skill_name = "Dragon Flame Domain"
 active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
 active_skill_cd = 3
+has_break_essence = true
 responding_skills = Array[Dictionary]([{
 "desc": "create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",
 "fuse_label": "9",

@@ -48,6 +48,13 @@ func get_card_screen_center(index: int) -> Vector2:
 	return _cards[index].get_global_rect().get_center()
 
 
+## 取得角色卡片節點（供外部覆蓋層 / 高亮使用）
+func get_card(index: int) -> Control:
+	if index < 0 or index >= _cards.size():
+		return null
+	return _cards[index]
+
+
 ## 進場準備：將所有卡片設為透明並推到螢幕底部以下
 ## 必須在 UI 佈局完成後（process_frame 之後）呼叫，才能讀取正確的 global_position
 func prepare_intro() -> void:

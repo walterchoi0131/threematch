@@ -134,6 +134,7 @@ var _translations: Dictionary = {
 	"LOG_HEAL": {"zh": "回覆", "en": "Heal"},
 	"LOG_STORE": {"zh": "儲存", "en": "Stored"},
 	"LOG_CONVERT_TO": {"zh": "轉換為", "en": "→"},
+	"TAP_HERO_TO_USE_SKILL": {"zh": "點擊角色使用技能", "en": "Tap the hero to use skill"},
 }
 
 

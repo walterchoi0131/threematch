@@ -1,13 +1,13 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://bl4lebxjksw72"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://cch2mevaonj6u" path="res://assets/shark.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/shark.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
 character_name = "Shark"
 gem_type = 1
-level = 12
+level = 17
 base_atk = 3
 atk_growth = 0.7
 base_hp = 55
@@ -16,8 +16,8 @@ portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_scale = 0.75
 portrait_offset = Vector2(0, -56)
-dialog_square_scale = 1.35
-dialog_square_offset = Vector2(-11, -1)
+dialog_square_scale = 0.9500000000000001
+dialog_square_offset = Vector2(-40, -1)
 square_scale = 0.75
 square_offset = Vector2(-26, -26)
 rectangular_scale = 0.25
