@@ -32,6 +32,15 @@ var _escape_mode: bool = false
 var _escape_refill_remaining: int = 0
 var _escape_won: bool = false
 
+# ── Stage 1-4 急難奇蹟事件 ─────────────────────────────────
+var _plank_event_pending: bool = false
+var _plank_event_done: bool = false
+const _PLANK_EVENT_THRESHOLD := 200
+const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
+
+## 主動技能完整執行完成信號（供外部事件 await 完成狀態使用）
+signal active_skill_finished(char_index: int)
+
 # ── game data ─────────────────────────────────────────────────────────
 const CHAR_BOAR := preload("res://characters/char_boar.tres")
 const CHAR_RACCOON := preload("res://characters/char_raccoon.tres")
@@ -90,8 +99,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.SAINT_CROSS: "res://assets/gems/gem_saint_cross.png",
 	Block.UpperType.LEAF_SHIELD: "res://assets/gems/gem_leafshield.png",
 	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
-	Block.UpperType.WATER_SLASH_X: "res://assets/gems/gem_watersword.png",
-	Block.UpperType.WATER_SLASH_Y: "res://assets/gems/gem_watersword.png",
+	Block.UpperType.WATER_SLASH: "res://assets/gems/gem_shark.png",
 	Block.UpperType.BAMBOO_SUPPLY: "res://assets/gems/gem_bamboo.png",
 }
 var _log_scroll: ScrollContainer = null
@@ -145,6 +153,11 @@ func _ready() -> void:
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
 	board.gems_refilled.connect(_on_gems_refilled)
+	# 燃燒數到定時：在每次實際點擊拆除回合有新寶石生成前由連鎖回呼觸發
+	board.pre_refill_hook = func() -> void:
+		if board._blast_refill_armed:
+			board._blast_refill_armed = false
+			await _apply_burning_tick()
 	# State/UI 分離：board 需引用 battle_manager 以查詢邏輯狀態
 	board.battle_manager_ref = battle_manager
 
@@ -728,6 +741,7 @@ func _get_active_skill_anim_params(c: CharacterData) -> Variant:
 				"anim_duration_sec": 0.0,
 				"anim_size": Vector2.ZERO,
 				"anim_scale": 0.5,
+				"anim_playback_speed": 1.5,
 			}
 	return null
 
@@ -746,6 +760,8 @@ func _play_skill_animation_phase(params: Variant) -> void:
 	var anim_duration: float = float(p.get("anim_duration_sec", 0.0))
 	var anim_size: Vector2 = p.get("anim_size", Vector2.ZERO)
 	var anim_scale: float = float(p.get("anim_scale", 1.0))
+
+	var anim_playback_speed: float = float(p.get("anim_playback_speed", 1.0))
 
 	# 鎖住棋盤
 	var was_busy: bool = board.is_busy
@@ -785,10 +801,15 @@ func _play_skill_animation_phase(params: Variant) -> void:
 			player.stream_position = anim_seek
 
 		if anim_duration > 0.0:
-			await get_tree().create_timer(anim_duration).timeout
-		else:
-			# 等到影片自然結束
+			await get_tree().create_timer(anim_duration / anim_playback_speed).timeout
+		elif anim_playback_speed != 1.0:
+			# Engine.time_scale 放大每幀 delta，VideoStreamPlayer 據此加速解碼
+			Engine.time_scale = anim_playback_speed
 			await player.finished
+			Engine.time_scale = 1.0
+		else:
+			await player.finished
+		Engine.time_scale = 1.0  # 確保無論如何都還原
 		if is_instance_valid(player):
 			player.stop()
 			player.queue_free()
@@ -927,8 +948,6 @@ func _end_player_turn() -> void:
 		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
 
 	await _process_turn_start_passives()
-	# 燃燒傷害：每顆 BURNING 寶石每回合扣 1% 玩家最大 HP（敵人行動之後結算）
-	await _apply_burning_tick()
 	_update_skill_ui()
 	if not battle_manager.is_round_transitioning:
 		# State/UI 分離：解除邏輯阻擋
@@ -942,6 +961,11 @@ func _end_player_turn() -> void:
 			board.brighten_all_gems(0.3)
 		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
 		board.is_busy = false
+		# Stage 1-4 急難事件：在玩家下一個回合開始前該發
+		if _plank_event_pending and not _plank_event_done:
+			_plank_event_pending = false
+			_plank_event_done = true
+			await _run_plank_emergency_event()
 
 
 # ── 持久化召喚物：每回合行動 ───────────────────────────────────
@@ -1362,7 +1386,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 		"Water Slash":
 			# Place a Water Slash upper gem (always vertical type — chain logic ignores X/Y orientation)
 			var pos: Vector2i = board.last_tapped_pos
-			var slash_type: Block.UpperType = Block.UpperType.WATER_SLASH_Y
+			var slash_type: Block.UpperType = Block.UpperType.WATER_SLASH
 			board.place_upper_gem(pos, slash_type)
 			_play_sfx(_se_freeze)
 			var _wc: CharacterData = party[resp.char_index]
@@ -1492,18 +1516,36 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 		var light_color: Color = Block.COLORS[Block.Type.LIGHT]
 		if saint_target != null:
 			var target_pos: Vector2 = saint_target.get_global_rect().get_center()
-			var slash := Node2D.new()
-			slash.set_script(SlashEffectScript)
-			fx_layer.add_child(slash)
+			# ── 光爆動畫：逐幀播放 lightbrust/vnbvx_1..29.png ──
+			const LIGHTBRUST_FRAMES := 29
+			const LIGHTBRUST_DURATION := 0.6
+			var lb_node := Node2D.new()
+			lb_node.position = target_pos
+			lb_node.z_index = 30
+			fx_layer.add_child(lb_node)
+			var lb_sprite := Sprite2D.new()
+			lb_sprite.texture = load("res://assets/animation/lightbrust/vnbvx_1.png")
+			lb_sprite.scale = Vector2(0.6, 0.6)
+			lb_node.add_child(lb_sprite)
+			var frame_dur: float = LIGHTBRUST_DURATION / LIGHTBRUST_FRAMES
 			var captured_enemy: Enemy = saint_target
 			var captured_dmg: int = holy_damage
-			slash.deduct_hp.connect(func() -> void:
+			# 在中途幀觸發扣血
+			get_tree().create_timer(LIGHTBRUST_DURATION * 0.45).timeout.connect(func() -> void:
 				if is_instance_valid(captured_enemy):
 					captured_enemy.take_damage(captured_dmg)
 					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), captured_dmg, light_color, true)
 				_play_sfx(_se_impact)
 			, CONNECT_ONE_SHOT)
-			slash.play(target_pos)  # fire-and-forget
+			var lb_tw := create_tween()
+			for fi: int in LIGHTBRUST_FRAMES:
+				var frame_path: String = "res://assets/animation/lightbrust/vnbvx_%d.png" % (fi + 1)
+				lb_tw.tween_callback(func() -> void:
+					if is_instance_valid(lb_sprite):
+						lb_sprite.texture = load(frame_path)
+				)
+				lb_tw.tween_interval(frame_dur)
+			lb_tw.tween_callback(lb_node.queue_free)
 			await get_tree().create_timer(0.4).timeout
 		# 回復 20% 最大血量（每個聖十字各回復一次）
 		var heal_amount := int(floor(battle_manager.player_max_hp * 0.2)) * _pending_saint_cross_count
@@ -1619,6 +1661,11 @@ func _process_turn_start_passives() -> void:
 
 ## 角色主動技能觸發（玩家點擊角色卡片）
 func _on_active_skill_activated(char_index: int) -> void:
+	await _handle_active_skill(char_index)
+	active_skill_finished.emit(char_index)
+
+
+func _handle_active_skill(char_index: int) -> void:
 	if board.is_busy:
 		return
 	if not battle_manager.is_active_ready(char_index):
@@ -1640,7 +1687,7 @@ func _on_active_skill_activated(char_index: int) -> void:
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Tranquil Mirror"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
-		"Iai: Water Soul":
+		"居合。水":
 			# 居合.水魂：消除棋盤上所有水寶石並儲存於 pending，下次水屬性攻擊時併入
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
@@ -1666,7 +1713,7 @@ func _on_active_skill_activated(char_index: int) -> void:
 			if blasted > 0:
 				battle_manager.pending_skill_blasts[Block.Type.BLUE] = int(battle_manager.pending_skill_blasts.get(Block.Type.BLUE, 0)) + blasted
 				battle_manager.turn_gem_blasts_changed.emit()
-			_add_log_entry("%s：%s %d %s" % [Locale.tr_ui("Iai: Water Soul"), Locale.tr_ui("LOG_STORE"), blasted, _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			_add_log_entry("%s：%s %d %s" % [Locale.tr_ui("居合。水"), Locale.tr_ui("LOG_STORE"), blasted, _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.2).timeout
 			_update_skill_ui()
 		"Dragon Flame Domain":
@@ -1687,12 +1734,25 @@ func _on_active_skill_activated(char_index: int) -> void:
 				# 落地打擊音效
 				_play_sfx(load("res://assets/se/skef_atk6.mp3"), 1.2)
 			var converted := 0
+			var planks_broken := 0
 			for pos in positions:
 				var p: Vector2i = pos as Vector2i
-				if board.grid[p.x][p.y] != null and board.grid[p.x][p.y].block_type != Block.Type.RED:
-					board._animate_gem_morph(board.grid[p.x][p.y], Block.Type.RED)
+				var tb: Block = board.grid[p.x][p.y]
+				if tb == null:
+					continue
+				if tb.is_block():
+					# BREAK 屬性：龍焰領域可連同 PLANK 一併側除
+					if c.has_break_essence and board.silently_destroy_plank(p):
+						planks_broken += 1
+					continue
+				if tb.block_type != Block.Type.RED:
+					board._animate_gem_morph(tb, Block.Type.RED)
 					converted += 1
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("Dragon Flame Domain"), converted, _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
+			await get_tree().create_timer(0.4).timeout
+			# 若打破了木板，必須讓上方寶石墜落填補空位
+			if planks_broken > 0:
+				await board._collapse_and_fill()
 			await get_tree().create_timer(0.4).timeout
 		"There shall be light":
 			# 光輝降臨：進入選擇模式，懸停預覽十字範圍，點擊確認轉換為光寶石
@@ -1705,8 +1765,11 @@ func _on_active_skill_activated(char_index: int) -> void:
 			var converted := 0
 			for pos in positions:
 				var p: Vector2i = pos as Vector2i
-				if board.grid[p.x][p.y] != null and board.grid[p.x][p.y].block_type != Block.Type.LIGHT:
-					board._animate_gem_morph(board.grid[p.x][p.y], Block.Type.LIGHT)
+				var tb: Block = board.grid[p.x][p.y]
+				if tb == null or tb.is_block():
+					continue
+				if tb.block_type != Block.Type.LIGHT:
+					board._animate_gem_morph(tb, Block.Type.LIGHT)
 					converted += 1
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("There shall be light"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 			await get_tree().create_timer(0.4).timeout
@@ -1732,19 +1795,20 @@ func _on_active_skill_activated(char_index: int) -> void:
 			var paw_tex: Texture2D = load("res://assets/panda_paw_2.png")
 			var paw := Sprite2D.new()
 			paw.texture = paw_tex
-			paw.centered = false          # 以左上角（指尖）為錨點
+			paw.centered = true           # 以紋理中心為旋轉錨點
 			paw.scale = Vector2(0.1, 0.1) # 縮小 10 倍
 			paw.z_index = 30
 			var gem_global: Vector2 = center_block.global_position
-			# 指尖從左方點向寶石：手掌錨點往左大幅偏移，並微微上提
-			paw.position = gem_global + Vector2(-40, -10)
+			# 中心點對應原先左上角錨點的等效位置（偏移加上半張圖尺寸）
+			var paw_half: Vector2 = Vector2(paw_tex.get_width(), paw_tex.get_height()) * 0.5 * paw.scale
+			paw.position = gem_global + Vector2(-80, -30) + paw_half
 			fx_layer.add_child(paw)
 
 			# 2) 按壓：縮小 + 順時針旋轉 約 25°；同步寶石縮小
 			var tap_tw := create_tween().set_parallel(true)
 			tap_tw.tween_property(paw, "scale", Vector2(0.07, 0.07), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-			tap_tw.tween_property(paw, "rotation", deg_to_rad(-25.0), 0.2) \
+			tap_tw.tween_property(paw, "rotation", deg_to_rad(25.0), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 			tap_tw.tween_property(center_block, "scale", Vector2(0.7, 0.7), 0.2) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -1800,15 +1864,15 @@ func _on_active_skill_activated(char_index: int) -> void:
 				if not board._is_valid(np):
 					continue
 				var nb: Block = board.grid[np.x][np.y]
-				if nb == null or nb.is_upper_gem():
+				if nb == null or nb.is_upper_gem() or nb.is_block():
 					continue
 				if nb.block_type == target_element:
 					continue
 				board._animate_gem_morph(nb, target_element)
 				converted += 1
-			# 生息.強 加 X5 標記到中心寶石（高階寶石跳過）
+			# 生息.強 加 X3 標記到中心寶石（高階寶石跳過）
 			if c.active_skill_name == "Resurgence+" and not center_block.is_upper_gem():
-				center_block.add_extra(Block.ExtraEffect.X5)
+				center_block.add_extra(Block.ExtraEffect.X3)
 			var skill_label: String = Locale.tr_ui(c.active_skill_name)
 			_add_log_entry("%s：%d→%s" % [skill_label, converted, _gem_bbcode(target_element)], target_element, c)
 			await get_tree().create_timer(0.4).timeout
@@ -2299,9 +2363,272 @@ func _on_gems_refilled(count: int) -> void:
 		return
 	_escape_refill_remaining = maxi(_escape_refill_remaining - count, 0)
 	_update_escape_refill_label()
+	# Stage 1-4 急難事件：剩餘需填充首次低於門檻時觸發（只一次）
+	if current_stage != null and current_stage.stage_id == "1-4" \
+			and not _plank_event_done and not _plank_event_pending \
+			and _escape_refill_remaining > 0 and _escape_refill_remaining < _PLANK_EVENT_THRESHOLD:
+		_plank_event_pending = true
 	if _escape_refill_remaining <= 0:
 		_escape_won = true
 		battle_manager.battle_won.emit()
+
+
+# ── Stage 1-4 急難奇蹟事件：龍焰登場 ─────────────────────────
+
+## 找出隊伍中第一位指定名稱的角色 index（找不到回傳 -1）
+func _find_party_index_by_name(name: String) -> int:
+	for i in party.size():
+		if party[i] != null and party[i].character_name == name:
+			return i
+	return -1
+
+
+## 木板從天而降：在棋盤中央 cols 3-4, rows 2-5 一次性掉落 8 片 BURNING PLANK
+func _drop_plank_pile_animation() -> void:
+	var target_cols: Array[int] = [3, 4]
+	var target_rows: Array[int] = [2, 3, 4, 5]
+	var drop_dur: float = 0.45
+	var stagger: float = 0.05
+	var idx: int = 0
+	for x in target_cols:
+		for y in target_rows:
+			# 先靜默釋放原本位置的 block（不論 plank/gem/upper），不發信號
+			var existing: Block = board.grid[x][y]
+			if existing != null and is_instance_valid(existing):
+				board.grid[x][y] = null
+				existing.queue_free()
+			# 在天空位置生成新 PLANK，並以墜落動畫落到目標格
+			var sky_pos: Vector2 = board.grid_to_world(Vector2i(x, -2 - idx % 4))
+			var target_pos: Vector2 = board.grid_to_world(Vector2i(x, y))
+			var pb: Block = preload("res://scenes/block.tscn").instantiate() as Block
+			pb.position = sky_pos
+			board.add_child(pb)
+			pb.set_block_type(Block.Type.PLANK)
+			pb.grid_pos = Vector2i(x, y)
+			pb.add_extra(Block.ExtraEffect.BURNING)
+			board.grid[x][y] = pb
+			board.logic_grid[x][y] = -2  # LOGIC_PLANK
+			# 以掉落動畫滑落到位
+			var tw: Tween = pb.create_tween()
+			tw.tween_property(pb, "position", target_pos, drop_dur) \
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			idx += 1
+			await get_tree().create_timer(stagger).timeout
+	await get_tree().create_timer(drop_dur + 0.1).timeout
+	# 同步邏輯網格（plank 狀態），並刷新融合提示
+	board.resync_logic_from_visual()
+
+
+## 在指定卡片周圍建立「四條」全螢幕黯化條（保留卡片區域為亮）+ STOP 滑鼠
+func _setup_dim_overlay(card_rect: Rect2) -> CanvasLayer:
+	var layer := CanvasLayer.new()
+	layer.layer = 50
+	add_child(layer)
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var dim_color := Color(0, 0, 0, 0.6)
+	# 上條
+	var top := ColorRect.new()
+	top.color = dim_color
+	top.position = Vector2.ZERO
+	top.size = Vector2(vp.x, max(card_rect.position.y, 0))
+	top.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(top)
+	# 下條
+	var bot := ColorRect.new()
+	bot.color = dim_color
+	bot.position = Vector2(0, card_rect.position.y + card_rect.size.y)
+	bot.size = Vector2(vp.x, max(vp.y - (card_rect.position.y + card_rect.size.y), 0))
+	bot.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(bot)
+	# 左條
+	var lft := ColorRect.new()
+	lft.color = dim_color
+	lft.position = Vector2(0, card_rect.position.y)
+	lft.size = Vector2(max(card_rect.position.x, 0), card_rect.size.y)
+	lft.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(lft)
+	# 右條
+	var rgt := ColorRect.new()
+	rgt.color = dim_color
+	rgt.position = Vector2(card_rect.position.x + card_rect.size.x, card_rect.position.y)
+	rgt.size = Vector2(max(vp.x - (card_rect.position.x + card_rect.size.x), 0), card_rect.size.y)
+	rgt.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(rgt)
+
+	# ── 卡片上方：循環擴散的脈衝圓圈（淡出）+ 上下浮動的手指 + 提示文字 ──
+	var center: Vector2 = card_rect.position + card_rect.size * 0.5
+	var radius: float = card_rect.size.length() * 0.55
+
+	# 脈衝圓圈：以 Node2D + 自訂 _draw 實作，三層錯開時間
+	var pulse_root := Node2D.new()
+	pulse_root.position = center
+	pulse_root.z_index = 5
+	layer.add_child(pulse_root)
+	for i in 3:
+		var ring := _PulseRing.new()
+		ring.base_radius = radius
+		ring.delay = float(i) * 0.5
+		pulse_root.add_child(ring)
+
+	# 手指/游標圖示：在卡片正上方，上下浮動
+	var hand_tex: Texture2D = load("res://assets/Hand3.png")
+	if hand_tex != null:
+		var hand := Sprite2D.new()
+		hand.texture = hand_tex
+		hand.scale = Vector2(1, 1)
+		hand.position = Vector2(center.x, card_rect.position.y )
+		hand.z_index = 6
+		layer.add_child(hand)
+		var ht: Tween = hand.create_tween().set_loops()
+		ht.tween_property(hand, "position:y", hand.position.y - 18, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		ht.tween_property(hand, "position:y", hand.position.y, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	# 提示文字（畫面正中央）
+	var prompt := Label.new()
+	prompt.text = Locale.tr_ui("TAP_HERO_TO_USE_SKILL")
+	prompt.add_theme_font_size_override("font_size", 36)
+	prompt.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	prompt.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	prompt.add_theme_constant_override("outline_size", 4)
+	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prompt.size = Vector2(vp.x, 32)
+	prompt.position = Vector2(0, (vp.y - 32) * 0.5)
+	prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prompt.z_index = 6
+	layer.add_child(prompt)
+	var pt: Tween = prompt.create_tween().set_loops()
+	pt.tween_property(prompt, "modulate:a", 0.5, 0.7).set_trans(Tween.TRANS_SINE)
+	pt.tween_property(prompt, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
+
+	return layer
+
+
+## 卡片提示用的脈衝圓圈：基底半徑 + 啟動延遲，循環從 1.0× 擴散到 1.8× 並淡出
+class _PulseRing extends Node2D:
+	var base_radius: float = 60.0
+	var delay: float = 0.0
+	var _t: float = 0.0
+	const _DURATION: float = 1.5
+
+	func _ready() -> void:
+		_t = -delay
+		set_process(true)
+
+	func _process(dt: float) -> void:
+		_t += dt
+		if _t >= _DURATION:
+			_t = 0.0
+		queue_redraw()
+
+	func _draw() -> void:
+		if _t < 0.0:
+			return
+		var k: float = _t / _DURATION
+		var r: float = base_radius * (1.0 + k * 0.8)
+		var a: float = clampf(1.0 - k, 0.0, 1.0) * 0.7
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 64, Color(1.0, 0.85, 0.2, a), 4.0, true)
+
+
+## 在卡片上播放「邊界脈動」動畫（金色脈衝邊框）；回傳建立的 Panel 節點，事件結束時 free
+func _start_card_pulse(card: Control) -> Panel:
+	var pulse := Panel.new()
+	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pulse.position = Vector2(-6, -6)
+	pulse.size = card.size + Vector2(12, 12)
+	# 自製脈衝邊框（透明背景 + 金色邊）
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0)
+	sb.border_color = Color(1.0, 0.85, 0.2, 1.0)
+	sb.border_width_left = 4
+	sb.border_width_right = 4
+	sb.border_width_top = 4
+	sb.border_width_bottom = 4
+	sb.corner_radius_top_left = 8
+	sb.corner_radius_top_right = 8
+	sb.corner_radius_bottom_left = 8
+	sb.corner_radius_bottom_right = 8
+	pulse.add_theme_stylebox_override("panel", sb)
+	card.add_child(pulse)
+	# 循環縮放與透明度脈動
+	var tw: Tween = pulse.create_tween().set_loops()
+	tw.tween_property(pulse, "modulate:a", 0.3, 0.5).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(pulse, "modulate:a", 1.0, 0.5).set_trans(Tween.TRANS_SINE)
+	pulse.set_meta("_pulse_tween", tw)
+	return pulse
+
+
+## 等待指定 char_index 的主動技能完整執行完成
+func _wait_for_active_skill_finish(char_index: int) -> void:
+	while true:
+		var idx: int = await active_skill_finished
+		if idx == char_index:
+			return
+
+
+## 主事件：木板大量降臨 → 對話 → 黯化 → 龍焰使用 → 收尾對話
+func _run_plank_emergency_event() -> void:
+	board.is_busy = true
+
+	# 1) 木板從天而降
+	await _drop_plank_pile_animation()
+
+	# 必要時懶建戰鬥對話面板（非教學關卡預設為 null）
+	if _battle_dialog == null:
+		_battle_dialog = _BattleDialog.new()
+		_battle_dialog.set_anchors_preset(Control.PRESET_FULL_RECT)
+		$UILayer.add_child(_battle_dialog)
+
+	# 2) 恐慌對話
+	if _battle_dialog != null:
+		_battle_dialog.visible = true
+		_battle_dialog.show_lines(_Stage1_4Emergency.make_pre_dialog())
+		await _battle_dialog.all_lines_finished
+		_battle_dialog.visible = false
+
+	# 3) 找到 Dragon
+	var dragon_idx: int = _find_party_index_by_name("Dragon")
+	if dragon_idx < 0:
+		# 隊伍中無龍 → 無法執行此事件（仍標記為已完成）
+		board.is_busy = false
+		return
+
+	# 4) 重置 Dragon 主動技能 CD，讓他可立即發動
+	battle_manager.skill_cooldowns[dragon_idx] = 0
+	_update_skill_ui()
+
+	# 5) 黯化全螢幕（保留 Dragon 卡片區域）+ 卡片邊界脈動
+	var dragon_card: Control = character_panel.get_card(dragon_idx)
+	if dragon_card == null:
+		board.is_busy = false
+		return
+	var card_rect: Rect2 = dragon_card.get_global_rect()
+	var dim_layer: CanvasLayer = _setup_dim_overlay(card_rect)
+	var pulse: Panel = _start_card_pulse(dragon_card)
+
+	# 6) 解除 board.is_busy 讓 Dragon 主動技能可被觸發（黯化覆蓋層阻擋了棋盤輸入）
+	board.is_busy = false
+
+	# 7) 等待 Dragon 卡片被點擊（active_skill_activated 信號），但不等整個技能流程
+	while true:
+		var activated_idx: int = await character_panel.active_skill_activated
+		if activated_idx == dragon_idx:
+			break
+
+	# 8) 立刻移除黯化與脈動，讓玩家可在棋盤上進行範圍選擇
+	if is_instance_valid(pulse):
+		pulse.queue_free()
+	if is_instance_valid(dim_layer):
+		dim_layer.queue_free()
+
+	# 9) 等待主動技能完整執行完成
+	await _wait_for_active_skill_finish(dragon_idx)
+
+	# 10) 收尾對話
+	if _battle_dialog != null:
+		_battle_dialog.visible = true
+		_battle_dialog.show_lines(_Stage1_4Emergency.make_post_dialog())
+		await _battle_dialog.all_lines_finished
+		_battle_dialog.visible = false
 
 
 ## 燃燒額外效果結算：每顆 BURNING 寶石扣玩家最大 HP 的 1%
@@ -2797,7 +3124,7 @@ func _debug_spawn_upper(skill_name: String) -> void:
 		"Justice Slash": Block.UpperType.SAINT_CROSS,
 		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 		"Snowball": Block.UpperType.SNOWBALL,
-		"Water Slash": Block.UpperType.WATER_SLASH_Y,
+		"Water Slash": Block.UpperType.WATER_SLASH,
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,
 		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,

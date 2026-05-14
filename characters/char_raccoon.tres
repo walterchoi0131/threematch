@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://cjhe7ltpcv7lf"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/raccoon_baby.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://b8ra2cb0babye" path="res://assets/raccoon_baby.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -23,14 +23,14 @@ active_skill_name = "Resurgence+"
 active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/融合時計為 5 顆）。CD：6 回合。"
 active_skill_cd = 6
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 5+ leaf gems: summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
+"desc": "summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
 "fuse_label": "5",
 "name": "Turtle",
 "priority": 2,
 "threshold": 5,
 "trigger_type": "count"
 }, {
-"desc": "Blast 9+ leaf gems: summon a Porcupine gem at tapped cell. Self-blast only. Attacks first enemy for ΣTeamMagic × 0.5 each turn.",
+"desc": "summon a Porcupine gem at tapped cell. Self-blast only. Attacks first enemy for ΣTeamMagic × 0.5 each turn.",
 "fuse_label": "9",
 "name": "Porcupine",
 "priority": 1,

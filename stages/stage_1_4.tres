@@ -15,3 +15,4 @@ background = 1
 bgm = ExtResource("1_lvgyu")
 mode = 1
 escape_refill_target = 400
+fixed_layout = [[], [], [-1, -1, -1, -1, -1, 8], [-1, -1, -1, -1, -1, 8], [-1, -1, -1, -1, -1, 8], [-1, -1, -1, -1, -1, 8], [], []]

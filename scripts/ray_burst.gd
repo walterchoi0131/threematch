@@ -2,7 +2,7 @@
 ## 使用 _draw() 從中心畫出錐形三角形，_process() 持續旋轉。
 extends Node2D
 
-var ray_count := 8      # 射線條數
+var ray_count := 6      # 射線條數
 var outer_radius := 30.0   # 射線最遠端半徑
 ## 每道射線半角：0.28 rad ≈ 16°，8 條 × 32° = 256°，約 71% 填充率（粗錐形）
 var ray_half_angle := 0.18

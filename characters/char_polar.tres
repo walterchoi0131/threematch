@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://bc6ifewpuad80"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/polar.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://cm4ef4ymhn42k" path="res://assets/polar.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -21,7 +21,7 @@ active_skill_name = "Snowball Fight"
 active_skill_desc = "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."
 active_skill_cd = 5
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 4+ water gems: create a Snowball gem at tapped cell. Click to blast 8 surrounding gems.",
+"desc": "create a Snowball gem at tapped cell. Click to blast 8 surrounding gems.",
 "fuse_label": "4",
 "name": "Snowball",
 "priority": 1,

@@ -11,7 +11,7 @@ const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 const NAME_TO_UPPER: Dictionary = {
 	"Fireball": Block.UpperType.FIREBALL,
 	"Fire Pillar": Block.UpperType.FIRE_PILLAR_X,
-	"Water Slash": Block.UpperType.WATER_SLASH_X,
+	"Water Slash": Block.UpperType.WATER_SLASH,
 	"Justice Slash": Block.UpperType.SAINT_CROSS,
 	"Saint Cross": Block.UpperType.SAINT_CROSS,
 	"Leaf Shield": Block.UpperType.LEAF_SHIELD,
@@ -267,11 +267,11 @@ static func _blast_pattern_for(upper_type: int) -> Array:
 	match upper_type:
 		Block.UpperType.FIREBALL:
 			return [Vector2i(2, 2), Vector2i(2, 1), Vector2i(2, 3), Vector2i(1, 2), Vector2i(3, 2)]
-		Block.UpperType.FIRE_PILLAR_X, Block.UpperType.WATER_SLASH_X:
+		Block.UpperType.FIRE_PILLAR_X:
 			var cells: Array = []
 			for x in 5: cells.append(Vector2i(x, 2))
 			return cells
-		Block.UpperType.FIRE_PILLAR_Y, Block.UpperType.WATER_SLASH_Y:
+		Block.UpperType.FIRE_PILLAR_Y, Block.UpperType.WATER_SLASH:
 			var cells_y: Array = []
 			for y in 5: cells_y.append(Vector2i(2, y))
 			return cells_y

@@ -592,7 +592,8 @@ func _build_char_btn(parent: HBoxContainer, c: CharacterData, idx: int) -> void:
 		var tex := TextureRect.new()
 		tex.texture = c.portrait_texture
 		tex.set_anchors_preset(Control.PRESET_FULL_RECT)
-		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		tex.expand_mode  = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		btn.add_child(tex)
 

@@ -6,23 +6,24 @@
 [resource]
 script = ExtResource("1_script")
 character_name = "Dragon"
-level = 12
+level = 17
 base_atk = 4
 atk_growth = 0.8
 base_hp = 60
 hp_growth = 9.0
 portrait_texture = ExtResource("2_portrait")
 portrait_offset = Vector2(-69, -80)
-dialog_square_scale = 3.4
-dialog_square_offset = Vector2(-282, -3)
+dialog_square_scale = 1.1500000000000001
+dialog_square_offset = Vector2(-109, -28)
 square_offset = Vector2(-112, -47)
 rectangular_scale = 0.3
 rectangular_offset = Vector2(-102, 186)
 active_skill_name = "Dragon Flame Domain"
 active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
 active_skill_cd = 3
+has_break_essence = true
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 9+ fire gems: create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",
+"desc": "create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",
 "fuse_label": "9",
 "name": "Fireball",
 "priority": 1,

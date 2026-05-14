@@ -4,15 +4,17 @@ class_name Block
 extends Node2D
 
 # ── 寶石類型列舉 ──
-enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH_X, WATER_SLASH_Y, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、橫水斬、縱水斬、豪豬、琉龜、竹葉補給
+# PLANK：無屬性方塊（block）— 不參與 BFS / 連鎖 / 融合；被相鄰一般爆破或高階爆破波及時會無聲被消除（無攻擊力）
+enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK, PLANK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗、木板
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給
 
 # 額外效果（可同時掛載多個於單一寶石上）
 # X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
-# BURNING：每回合結束扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
-enum ExtraEffect { X5, BURNING }
+# X3：消除 / 連鎖 / 融合時計為 3 顆同色寶石；融合為高階寶石時清除
+# BURNING：每次消除後新寶石生成前扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
+enum ExtraEffect { X5, BURNING, X3 }
 
-const TYPE_COUNT := 8  # 寶石類型總數
+const TYPE_COUNT := 9  # 寶石類型總數（含 PLANK 方塊）
 
 # 每種類型對應的顏色
 const COLORS = {
@@ -24,6 +26,7 @@ const COLORS = {
 	Type.ORANGE: Color(1.0, 0.60, 0.0),
 	Type.LIGHT: Color(1.0, 0.92, 0.23),
 	Type.DARK: Color(0.30, 0.20, 0.45),
+	Type.PLANK: Color(0.55, 0.36, 0.18),  # 木色（備用；有貼圖時不顯示）
 }
 
 # 每種類型對應的圖示符號（無貼圖時的備用顯示）
@@ -36,27 +39,28 @@ const ICONS = {
 	Type.ORANGE: "▲",
 	Type.LIGHT: "✦",
 	Type.DARK: "☾",
+	Type.PLANK: "■",
 }
 
 # 有美術貼圖的寶石類型；未列出的類型會退回使用圖示符號
 const GEM_TEXTURES: Dictionary = {
 	Type.RED: preload("res://assets/gems/gem_red.png"),
 	Type.BLUE: preload("res://assets/gems/gem_blue.png"),
-	Type.GREEN: preload("res://assets/gems/gem_green.png"),
-	Type.LIGHT: preload("res://assets/gems/gem_light.png"),
+	Type.GREEN: preload("res://assets/gems/gem_leaf2.png"),
+	Type.LIGHT: preload("res://assets/gems/gem_light2.png"),
 	Type.DARK: preload("res://assets/gems/gem_moon.png"),
+	Type.PLANK: preload("res://assets/blocks/wood.png"),
 }
 
 # 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
 const UPPER_GEM_TEXTURES: Dictionary = {
-	UpperType.FIREBALL: preload("res://assets/gems/gem_fireball.png"),
+	UpperType.FIREBALL: preload("res://assets/gems/gem_fireball2.png"),
 	UpperType.FIRE_PILLAR_X: preload("res://assets/gems/gem_fire_turnado.png"),
 	UpperType.FIRE_PILLAR_Y: preload("res://assets/gems/gem_fire_turnado.png"),
-	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_saint_cross.png"),
+	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_lightCross2.png"),
 	UpperType.LEAF_SHIELD: preload("res://assets/gems/gem_leafshield.png"),
 	UpperType.SNOWBALL: preload("res://assets/gems/gem_snowball.png"),
-	UpperType.WATER_SLASH_X: preload("res://assets/gems/gem_watersword.png"),
-	UpperType.WATER_SLASH_Y: preload("res://assets/gems/gem_watersword.png"),
+	UpperType.WATER_SLASH: preload("res://assets/gems/gem_shark.png"),
 	UpperType.PORCUPINE: preload("res://assets/gems/arrowpig.png"),
 	UpperType.TURTLE: preload("res://assets/gems/turtle.png"),
 	UpperType.BAMBOO_SUPPLY: preload("res://assets/gems/gem_bamboo.png"),
@@ -66,7 +70,8 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 const BREAK_TEXTURES: Dictionary = {
 	Type.RED: preload("res://assets/gems/gems_break/firebreak.png"),
 	Type.BLUE: preload("res://assets/gems/gems_break/waterbreak.png"),
-	Type.GREEN: preload("res://assets/gems/gems_break/leafbreak.png"),
+	Type.GREEN: preload("res://assets/gems/gems_break/gem_leafBreak2.png"),
+	Type.LIGHT: preload("res://assets/gems/gems_break/gem_lightBreak2.png"),
 	Type.DARK: preload("res://assets/gems/gems_break/moon_break.png"),
 }
 # 高階寶石消除動畫精靈圖表
@@ -88,8 +93,7 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.SAINT_CROSS: 9,
 	UpperType.LEAF_SHIELD: 4,
 	UpperType.SNOWBALL: 4,
-	UpperType.WATER_SLASH_X: 4,
-	UpperType.WATER_SLASH_Y: 4,
+	UpperType.WATER_SLASH: 4,
 	UpperType.PORCUPINE: 9,
 	UpperType.TURTLE: 5,
 	UpperType.BAMBOO_SUPPLY: 3,
@@ -103,8 +107,7 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.SAINT_CROSS: Type.LIGHT,
 	UpperType.LEAF_SHIELD: Type.GREEN,
 	UpperType.SNOWBALL: Type.BLUE,
-	UpperType.WATER_SLASH_X: Type.BLUE,
-	UpperType.WATER_SLASH_Y: Type.BLUE,
+	UpperType.WATER_SLASH: Type.BLUE,
 	UpperType.PORCUPINE: Type.GREEN,
 	UpperType.TURTLE: Type.GREEN,
 	UpperType.BAMBOO_SUPPLY: Type.GREEN,
@@ -152,6 +155,11 @@ func _ready() -> void:
 ## 是否為高階寶石
 func is_upper_gem() -> bool:
 	return upper_type != UpperType.NONE
+
+
+## 是否為 block（無屬性方塊）— 不參與 BFS / 連鎖 / 融合
+func is_block() -> bool:
+	return upper_type == UpperType.NONE and block_type == Type.PLANK
 
 
 ## 設定高階寶石類型並更新外觀
@@ -205,22 +213,30 @@ func clear_extras() -> void:
 
 ## 取得這顆寶石被消除/連鎖/融合時計算的數量
 ## 規則：
+##   - block（PLANK 等無屬性方塊）：0（不貢獻任何元素計數）
 ##   - 高階寶石：返回內識元素計數（UPPER_INTRINSIC_VALUE）
 ##   - X5：5
+##   - X3：3
 ##   - 一般：1
 func get_blast_value() -> int:
+	if is_block():
+		return 0
 	if is_upper_gem():
 		return UPPER_INTRINSIC_VALUE.get(upper_type, 1)
-	return 5 if has_extra(ExtraEffect.X5) else 1
+	if has_extra(ExtraEffect.X5):
+		return 5
+	if has_extra(ExtraEffect.X3):
+		return 3
+	return 1
 
 
 ## 重建額外效果的視覺節點
 func _refresh_extra_visuals() -> void:
-	# X5 徽章
-	if has_extra(ExtraEffect.X5):
+	# X5 / X3 倍率徽章
+	if has_extra(ExtraEffect.X5) or has_extra(ExtraEffect.X3):
+		var badge_text: String = "x5" if has_extra(ExtraEffect.X5) else "x3"
 		if _x5_badge == null:
 			_x5_badge = Label.new()
-			_x5_badge.text = "x5"
 			_x5_badge.add_theme_font_size_override("font_size", 18)
 			_x5_badge.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 			# 描邊/陰影跟隨寶石元素色
@@ -234,6 +250,7 @@ func _refresh_extra_visuals() -> void:
 			_x5_badge.z_index = 20
 			_x5_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(_x5_badge)
+		_x5_badge.text = badge_text
 		_x5_badge.visible = true
 	elif _x5_badge != null:
 		_x5_badge.visible = false
@@ -316,7 +333,7 @@ func _update_upper_overlay() -> void:
 			upper_base_color = COLORS[Type.GREEN]
 		UpperType.SNOWBALL:
 			upper_base_color = COLORS[Type.BLUE]
-		UpperType.WATER_SLASH_X, UpperType.WATER_SLASH_Y:
+		UpperType.WATER_SLASH:
 			upper_base_color = COLORS[Type.BLUE]
 		_:
 			upper_base_color = COLORS[Type.RED]
@@ -352,7 +369,7 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.SNOWBALL:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
-		UpperType.WATER_SLASH_X, UpperType.WATER_SLASH_Y:
+		UpperType.WATER_SLASH:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙

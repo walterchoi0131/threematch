@@ -26,3 +26,11 @@ Skill: Nullify area upper gem
 
 劇毒關卡, 沒有木珠, 教學生息技能
 瀑布關卡, 石頭關卡水, 教學居合技能
+
+Big Polar
+Fuse Big snowball
+Active Snowball Attack
+
+Small polar
+Active Spreading Water gems
+Fuse small snowball

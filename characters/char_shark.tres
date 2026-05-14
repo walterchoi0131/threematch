@@ -7,7 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Shark"
 gem_type = 1
-level = 12
+level = 17
 base_atk = 3
 atk_growth = 0.7
 base_hp = 55
@@ -16,17 +16,17 @@ portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_scale = 0.75
 portrait_offset = Vector2(0, -56)
-dialog_square_scale = 1.35
-dialog_square_offset = Vector2(-11, -1)
+dialog_square_scale = 0.9500000000000001
+dialog_square_offset = Vector2(-40, -1)
 square_scale = 0.75
 square_offset = Vector2(-26, -26)
 rectangular_scale = 0.25
 rectangular_offset = Vector2(-39, 162)
-active_skill_name = "Iai: Water Soul"
+active_skill_name = "居合。水"
 active_skill_desc = "Blast all water gems on the board. The destroyed count is stored and added to the next water attack. CD: 5 turns."
 active_skill_cd = 5
 responding_skills = Array[Dictionary]([{
-"desc": "Blast 4+ water gems (any shape): create a Water Slash gem at tapped cell. Click to chain across all Water Slashes on the board (lines between swords + final vertical column).",
+"desc": "create a Water Slash gem at tapped cell. Click to chain across all Water Slashes on the board (lines between swords + final vertical column).",
 "fuse_label": "4",
 "name": "Water Slash",
 "priority": 1,
