@@ -260,8 +260,9 @@ func _refresh() -> void:
 
 	var sid: String = stage.stage_id
 	var prereq: String = stage.prerequisite_stage_id
-	var unlocked: bool = prereq == "" or GameState.is_stage_cleared(prereq)
-	var cleared: bool = GameState.is_stage_cleared(sid)
+	var in_editor: bool = Engine.is_editor_hint()
+	var unlocked: bool = in_editor or prereq == "" or GameState.is_stage_cleared(prereq)
+	var cleared: bool = not in_editor and GameState.is_stage_cleared(sid)
 
 	visible = unlocked
 	_btn.text = ""
@@ -287,7 +288,8 @@ func set_latest(latest: bool) -> void:
 	if _marker == null:
 		return
 	# 通關後不顯示 "!"
-	var cleared: bool = stage != null and GameState.is_stage_cleared(stage.stage_id)
+	var cleared: bool = stage != null and not Engine.is_editor_hint() \
+		and GameState.is_stage_cleared(stage.stage_id)
 	var show_marker: bool = latest and not cleared
 	_marker.visible = show_marker
 	if _rays != null:

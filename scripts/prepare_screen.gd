@@ -16,8 +16,10 @@ var _selected_indices: Array[int] = []
 var _card_panels: Array[PanelContainer] = []
 var _card_styles: Array[Dictionary] = []  # [{normal, selected}]
 var _card_lv_labels: Array[Label] = []    # 每張 roster 卡片的 Lv. 標籤（TYPE 排序時顯示）
-var _sort_mode: int = CharacterSorter.Mode.TYPE
-var _sort_ascending: bool = true   # TYPE 預設升冪
+var _card_selection_badges: Array[Control] = []
+var _sort_mode: int = CharacterSorter.Mode.LEVEL
+var _sort_ascending: bool = false
+var _element_filter: int = CharacterSorter.ELEMENT_FILTER_ALL
 var _roster_grid: Control = null
 
 # ── UI 節點 ──
@@ -132,6 +134,9 @@ func _build_ui() -> void:
 	var sel_label := _make_header_label(Locale.tr_ui("CHAR_SELECTION"), Color(0.85, 0.85, 0.9))
 	sel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sel_header.add_child(sel_label)
+
+	var element_bar: HBoxContainer = CharacterSorter.make_element_filter_bar(_element_filter, _on_element_filter_changed, GameState.owned_characters)
+	sel_header.add_child(element_bar)
 
 	var sort_row: Button = CharacterSorter.make_sort_dropdown(_sort_mode, _on_sort_changed, _sort_ascending)
 	sel_header.add_child(sort_row)
@@ -637,6 +642,7 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 	_card_panels.clear()
 	_card_styles.clear()
 	_card_lv_labels.clear()
+	_card_selection_badges.clear()
 
 	var fixed_set: Dictionary = {}
 	if _is_party_locked():
@@ -658,6 +664,8 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 		_card_lv_labels.append(data.get("lv_label"))
 		if fixed_set.has(c):
 			_add_fixed_overlay(panel)
+		var badge: Control = _add_selection_badge(panel)
+		_card_selection_badges.append(badge)
 
 	_update_lv_labels_visibility()
 	_apply_sort()
@@ -728,6 +736,11 @@ func _on_sort_changed(mode: int, ascending: bool) -> void:
 	_apply_sort()
 
 
+func _on_element_filter_changed(element_filter: int) -> void:
+	_element_filter = element_filter
+	_apply_sort()
+
+
 func _apply_sort() -> void:
 	if _roster_grid == null:
 		return
@@ -744,7 +757,7 @@ func _apply_sort() -> void:
 			"card": _card_panels[i],
 			"is_fixed": fixed_set.has(ch),
 		})
-	RosterLayout.apply(_roster_grid, entries, _sort_mode, 6, _sort_ascending)
+	RosterLayout.apply(_roster_grid, entries, _sort_mode, 6, _sort_ascending, _element_filter)
 
 
 # ── 選擇邏輯 ──────────────────────────────────────────────────
@@ -775,13 +788,42 @@ func _is_party_locked() -> bool:
 func _toggle_select(index: int) -> void:
 	if _selected_indices.has(index):
 		_selected_indices.erase(index)
-		_card_panels[index].add_theme_stylebox_override("panel", _card_styles[index].normal)
+		_set_roster_card_selected(index, false)
 	else:
 		if _selected_indices.size() >= GameState.MAX_PARTY_SIZE:
 			return
 		_selected_indices.append(index)
-		_card_panels[index].add_theme_stylebox_override("panel", _card_styles[index].selected)
+		_set_roster_card_selected(index, true)
 	_refresh_team_summary()
+
+
+func _set_roster_card_selected(index: int, selected: bool) -> void:
+	if index < 0 or index >= _card_panels.size():
+		return
+	var style: StyleBox = _card_styles[index].selected if selected else _card_styles[index].normal
+	_card_panels[index].add_theme_stylebox_override("panel", style)
+	if index < _card_selection_badges.size() and is_instance_valid(_card_selection_badges[index]):
+		_card_selection_badges[index].visible = selected
+
+
+func _add_selection_badge(panel: PanelContainer) -> Control:
+	var overlay := Control.new()
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 30
+	panel.add_child(overlay)
+
+	var badge := _SelectionTickBadge.new()
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	badge.offset_left = -30.0
+	badge.offset_top = 0.0
+	badge.offset_right = 0.0
+	badge.offset_bottom = 28.0
+	badge.custom_minimum_size = Vector2(30.0, 28.0)
+	badge.visible = false
+	overlay.add_child(badge)
+	return badge
 
 
 func _on_cancel() -> void:
@@ -894,3 +936,14 @@ class _PieDrawer extends Control:
 			var angle: float = float(j) / float(seg_count) * TAU - PI * 0.5
 			outline_pts.append(center + Vector2(cos(angle), sin(angle)) * radius)
 		draw_polyline(outline_pts, Color(0.4, 0.4, 0.5, 0.6), 1.5)
+
+
+class _SelectionTickBadge extends Control:
+	func _draw() -> void:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.55, 0.78, 0.08, 1.0), true)
+		var tick := PackedVector2Array([
+			Vector2(size.x * 0.24, size.y * 0.53),
+			Vector2(size.x * 0.42, size.y * 0.70),
+			Vector2(size.x * 0.78, size.y * 0.30),
+		])
+		draw_polyline(tick, Color.WHITE, 4.0, true)

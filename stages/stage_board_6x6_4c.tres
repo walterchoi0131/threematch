@@ -1,0 +1,62 @@
+[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://br26x6fourclr"]
+
+[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="1_bgm"]
+[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="2_stage"]
+[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="3_enemy"]
+[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="4_slime"]
+[ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="5_blue"]
+[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_loot"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_char"]
+[ext_resource type="Resource" uid="uid://cykw4g8khj6rr" path="res://characters/char_shark.tres" id="8_shark"]
+[ext_resource type="Resource" uid="uid://bdbktexrnd1lj" path="res://characters/char_panda.tres" id="9_panda"]
+[ext_resource type="Resource" uid="uid://bgttaela65j0m" path="res://characters/char_dragon.tres" id="10_dragon"]
+[ext_resource type="Resource" uid="uid://p6qx5pm80cmm" path="res://characters/char_husky.tres" id="11_husky"]
+
+[sub_resource type="Resource" id="gold_loot"]
+script = ExtResource("6_loot")
+amount_min = 8
+amount_max = 16
+
+[sub_resource type="Resource" id="slime_a"]
+script = ExtResource("3_enemy")
+enemy_name = "Research Slime"
+enemy_level = 4
+max_hp = 120
+attack_damage = 10
+portrait_texture = ExtResource("4_slime")
+loot_table = Array[ExtResource("6_loot")]([SubResource("gold_loot")])
+
+[sub_resource type="Resource" id="slime_b"]
+script = ExtResource("3_enemy")
+enemy_name = "Research Slime"
+enemy_level = 4
+max_hp = 120
+attack_damage = 10
+portrait_texture = ExtResource("4_slime")
+loot_table = Array[ExtResource("6_loot")]([SubResource("gold_loot")])
+
+[sub_resource type="Resource" id="slime_boss"]
+script = ExtResource("3_enemy")
+enemy_name = "6x6 Test Slime"
+enemy_level = 5
+max_hp = 340
+attack_damage = 24
+attack_interval = 2
+portrait_color = Color(0.25, 0.47, 0.85, 1)
+portrait_texture = ExtResource("5_blue")
+element = 1
+is_main_boss = true
+loot_table = Array[ExtResource("6_loot")]([SubResource("gold_loot")])
+
+[resource]
+script = ExtResource("2_stage")
+stage_id = "6x6-4C"
+connects_to = Array[String](["7x7-4C"])
+stage_name = "Research 6x6 / 4 Colors"
+allowed_types = Array[int]([0, 1, 2, 6])
+columns = 6
+rows = 6
+rounds = Array[Array]([[SubResource("slime_a"), SubResource("slime_b")], [SubResource("slime_boss")]])
+background = 1
+bgm = ExtResource("1_bgm")
+set_party = Array[ExtResource("7_char")]([ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_dragon"), ExtResource("11_husky")])

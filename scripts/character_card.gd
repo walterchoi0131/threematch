@@ -263,6 +263,18 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 	var lv_label: Label = null
 	if square:
 		var lv_font: Font = load(FONT_PATH)
+		var lv_bg := TextureRect.new()
+		lv_bg.texture = _make_text_radial_texture()
+		lv_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		lv_bg.stretch_mode = TextureRect.STRETCH_SCALE
+		lv_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lv_bg.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		lv_bg.offset_left = -5.0
+		lv_bg.offset_top = -30.0
+		lv_bg.offset_right = 72.0
+		lv_bg.offset_bottom = 4.0
+		lv_bg.visible = false
+		gem_layer.add_child(lv_bg)
 		lv_label = Label.new()
 		lv_label.text = "Lv.%d" % c.level
 		if lv_font != null:
@@ -280,6 +292,10 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 		lv_label.offset_right = 4.0
 		lv_label.offset_bottom = 0.0
 		lv_label.visible = false
+		lv_label.visibility_changed.connect(func() -> void:
+			if is_instance_valid(lv_bg):
+				lv_bg.visible = lv_label.visible
+		)
 		gem_layer.add_child(lv_label)
 
 	return {
@@ -289,6 +305,24 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 		"glow": glow,
 		"lv_label": lv_label,
 	}
+
+
+static func _make_text_radial_texture() -> GradientTexture2D:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
+	gradient.colors = PackedColorArray([
+		Color(0, 0, 0, 0.62),
+		Color(0, 0, 0, 0.42),
+		Color(0, 0, 0, 0.0),
+	])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.32, 0.58)
+	texture.fill_to = Vector2(1.0, 0.58)
+	texture.width = 96
+	texture.height = 48
+	return texture
 
 
 ## 建立角色卡片。回傳 PanelContainer。

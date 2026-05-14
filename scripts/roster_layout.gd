@@ -1,5 +1,5 @@
 ## RosterLayout — 依排序模式重新排列角色卡片，並於卡片底部顯示對應指標。
-## 當排序模式為 TYPE 時，按元素分組，每組有半透明同色背景 + 右下元素圖示。
+## 元素分組/篩選由 CharacterSorter 的元素列處理；本類負責平面排序與卡片排列。
 ## 由 characters_screen.gd 與 prepare_screen.gd 共用。
 class_name RosterLayout
 extends RefCounted
@@ -7,11 +7,9 @@ extends RefCounted
 const CharacterSorterRef = preload("res://scripts/character_sorter.gd")
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
 const ATK_ICON_PATH := "res://assets/slash.png"
-
 const GROUP_BG_ALPHA := 0.25
 const GROUP_ICON_ALPHA := 0.5
 const GROUP_ICON_SIZE := 28.0
-
 
 ## 套用排序到容器。
 ## host: 會清空並重建為新的佈局
@@ -19,7 +17,8 @@ const GROUP_ICON_SIZE := 28.0
 ## sort_mode: CharacterSorter.Mode
 ## columns: 每列卡片數
 ## ascending: 是否升冪排序（預設降冪）
-static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 5, ascending: bool = false) -> void:
+## element_filter: CharacterSorter.ELEMENT_FILTER_ALL 表示不篩選，其他值為 Block.Type。
+static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 5, ascending: bool = false, element_filter: int = CharacterSorterRef.ELEMENT_FILTER_ALL) -> void:
 	# 1) 將所有卡片從原父節點移除
 	for e: Dictionary in entries:
 		var card: Control = e.card
@@ -31,32 +30,62 @@ static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 
 	for child in host.get_children():
 		child.queue_free()
 
-	# 3) 排序
-	var chars: Array = []
+	# 3) 篩選 + 排序
+	var visible_entries: Array[Dictionary] = []
 	for e: Dictionary in entries:
-		chars.append(e.c)
-	var sorted_idx: Array = CharacterSorterRef.sort_indexed(chars, sort_mode, ascending)
+		var c: CharacterData = e.c
+		if element_filter != CharacterSorterRef.ELEMENT_FILTER_ALL and int(c.gem_type) != element_filter:
+			continue
+		visible_entries.append(e)
+	var sorted_entries: Array[Dictionary] = _sort_entries(visible_entries, sort_mode, ascending)
 
 	# 4) 將 FIXED 角色穩定地排到最前（不論排序模式）
-	var fixed_first: Array = []
-	var rest: Array = []
-	for entry: Dictionary in sorted_idx:
-		var owned_idx: int = entry.i
-		if entries[owned_idx].get("is_fixed", false):
+	var fixed_first: Array[Dictionary] = []
+	var rest: Array[Dictionary] = []
+	for entry: Dictionary in sorted_entries:
+		if entry.get("is_fixed", false):
 			fixed_first.append(entry)
 		else:
 			rest.append(entry)
-	sorted_idx = fixed_first + rest
+	sorted_entries = fixed_first + rest
 
-	if sort_mode == CharacterSorterRef.Mode.TYPE:
-		_build_grouped_layout(host, entries, sorted_idx, columns)
-	else:
-		_build_flat_grid(host, entries, sorted_idx, columns)
+	_build_grouped_layout(host, sorted_entries, columns)
+
+
+static func _sort_entries(entries: Array[Dictionary], sort_mode: int, ascending: bool) -> Array[Dictionary]:
+	var sorted: Array[Dictionary] = entries.duplicate()
+	match sort_mode:
+		CharacterSorterRef.Mode.LEVEL:
+			sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				var ac: CharacterData = a.c
+				var bc: CharacterData = b.c
+				return ac.level < bc.level if ascending else ac.level > bc.level)
+		CharacterSorterRef.Mode.ATK:
+			sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				var ac: CharacterData = a.c
+				var bc: CharacterData = b.c
+				return ac.get_atk() < bc.get_atk() if ascending else ac.get_atk() > bc.get_atk())
+		CharacterSorterRef.Mode.HP:
+			sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				var ac: CharacterData = a.c
+				var bc: CharacterData = b.c
+				return ac.get_max_hp() < bc.get_max_hp() if ascending else ac.get_max_hp() > bc.get_max_hp())
+		CharacterSorterRef.Mode.MAGIC:
+			sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				var ac: CharacterData = a.c
+				var bc: CharacterData = b.c
+				return ac.get_magic() < bc.get_magic() if ascending else ac.get_magic() > bc.get_magic())
+		CharacterSorterRef.Mode.TYPE:
+			sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				var ac: CharacterData = a.c
+				var bc: CharacterData = b.c
+				return int(ac.gem_type) < int(bc.gem_type) if ascending else int(ac.gem_type) > int(bc.gem_type))
+	return sorted
 
 
 # ── 內部：扁平網格 ──────────────────────────────────────────
 
-static func _build_flat_grid(host: Control, entries: Array, sorted_idx: Array, columns: int) -> void:
+static func _build_flat_grid(host: Control, sorted_entries: Array[Dictionary], columns: int) -> void:
 	var grid := GridContainer.new()
 	grid.columns = columns
 	grid.add_theme_constant_override("h_separation", 12)
@@ -64,35 +93,35 @@ static func _build_flat_grid(host: Control, entries: Array, sorted_idx: Array, c
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	host.add_child(grid)
 
-	for entry: Dictionary in sorted_idx:
-		var owned_idx: int = entry.i
-		var card: Control = entries[owned_idx].card
+	for entry: Dictionary in sorted_entries:
+		var card: Control = entry.card
 		grid.add_child(card)
 
 
 # ── 內部：依元素分組 ────────────────────────────────────────
 
-static func _build_grouped_layout(host: Control, entries: Array, sorted_idx: Array, columns: int) -> void:
+static func _build_grouped_layout(host: Control, sorted_entries: Array[Dictionary], columns: int) -> void:
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 10)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	host.add_child(vbox)
 
-	# 依 gem_type 聚合
-	var groups: Dictionary = {}     # type -> Array[owned_idx]
-	var order: Array = []           # 首次出現順序
-	for entry: Dictionary in sorted_idx:
-		var owned_idx: int = entry.i
-		var t: int = int(entries[owned_idx].c.gem_type)
-		if not groups.has(t):
-			groups[t] = []
-			order.append(t)
-		groups[t].append(owned_idx)
+	var groups: Dictionary = {}
+	var chars: Array = []
+	for entry: Dictionary in sorted_entries:
+		var c: CharacterData = entry.c
+		chars.append(c)
+		var element_type: int = int(c.gem_type)
+		if not groups.has(element_type):
+			groups[element_type] = []
+		(groups[element_type] as Array).append(entry)
 
-	for t in order:
+	for element_type: int in CharacterSorterRef.get_element_filter_order(chars):
+		if not groups.has(element_type):
+			continue
 		var group_panel := PanelContainer.new()
 		group_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var bg_color: Color = Block.COLORS.get(t, Color.GRAY)
+		var bg_color: Color = Block.COLORS.get(element_type, Color.GRAY)
 		bg_color.a = GROUP_BG_ALPHA
 		var style := StyleBoxFlat.new()
 		style.bg_color = bg_color
@@ -101,20 +130,18 @@ static func _build_grouped_layout(host: Control, entries: Array, sorted_idx: Arr
 		group_panel.add_theme_stylebox_override("panel", style)
 		vbox.add_child(group_panel)
 
-		# PanelContainer 會讓所有子節點疊在同一矩形上；先放 GridContainer
-		# 以決定最小高度，再放元素圖示 overlay 於右下角。
 		var grid := GridContainer.new()
 		grid.columns = columns
 		grid.add_theme_constant_override("h_separation", 12)
 		grid.add_theme_constant_override("v_separation", 12)
 		group_panel.add_child(grid)
 
-		for owned_idx: int in groups[t]:
-			grid.add_child(entries[owned_idx].card)
+		for entry: Dictionary in groups[element_type]:
+			var card: Control = entry.card
+			grid.add_child(card)
 
-		# 右下元素圖示（半透明，不攔截滑鼠）
-		var gem_tex: Texture2D = Block.GEM_TEXTURES.get(t)
-		if gem_tex:
+		var gem_tex: Texture2D = Block.GEM_TEXTURES.get(element_type)
+		if gem_tex != null:
 			var overlay := Control.new()
 			overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			overlay.custom_minimum_size = Vector2.ZERO
@@ -154,12 +181,17 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 		child.queue_free()
 
 	# 建立 badge 容器（底部左）
+	var badge_panel := PanelContainer.new()
+	badge_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	badge_panel.position = Vector2(-3, -27)
+	badge_panel.add_theme_stylebox_override("panel", _make_badge_radial_style())
+	overlay.add_child(badge_panel)
+
 	var badge := HBoxContainer.new()
 	badge.add_theme_constant_override("separation", 4)
-	badge.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	badge.position = Vector2(3, -22)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.add_child(badge)
+	badge_panel.add_child(badge)
 
 	var text: String = ""
 	var icon_path: String = ""
@@ -173,7 +205,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 			text = "%d" % c.get_max_hp()
 			icon_path = ATK_ICON_PATH
 		CharacterSorterRef.Mode.TYPE:
-			# TYPE 模式已以分組呈現，徽章不顯示
+			# TYPE 模式只負責元素排序，左上元素圖示已足夠，不另加指標徽章。
 			overlay.visible = false
 			return
 
@@ -201,3 +233,27 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 	lbl.add_theme_constant_override("outline_size", 3)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.add_child(lbl)
+
+
+static func _make_badge_radial_style() -> StyleBoxTexture:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
+	gradient.colors = PackedColorArray([
+		Color(0, 0, 0, 0.62),
+		Color(0, 0, 0, 0.42),
+		Color(0, 0, 0, 0.0),
+	])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.35, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	texture.width = 128
+	texture.height = 48
+	var style := StyleBoxTexture.new()
+	style.texture = texture
+	style.set_content_margin(SIDE_LEFT, 6.0)
+	style.set_content_margin(SIDE_RIGHT, 10.0)
+	style.set_content_margin(SIDE_TOP, 3.0)
+	style.set_content_margin(SIDE_BOTTOM, 3.0)
+	return style

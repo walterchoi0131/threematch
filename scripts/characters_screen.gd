@@ -8,8 +8,9 @@ signal closed
 const CharacterSorter = preload("res://scripts/character_sorter.gd")
 const RosterLayout = preload("res://scripts/roster_layout.gd")
 
-var _sort_mode: int = CharacterSorter.Mode.TYPE
-var _sort_ascending: bool = true   # TYPE 預設升冪
+var _sort_mode: int = CharacterSorter.Mode.LEVEL
+var _sort_ascending: bool = false
+var _element_filter: int = CharacterSorter.ELEMENT_FILTER_ALL
 var _roster_host: Control = null
 var _card_panels: Array[PanelContainer] = []   # 對應 owned_characters[i]
 var _card_lv_labels: Array[Label] = []         # 每張卡片的 Lv. 標籤（TYPE 排序時顯示）
@@ -82,6 +83,9 @@ func _build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
+	var element_bar: HBoxContainer = CharacterSorter.make_element_filter_bar(_element_filter, _on_element_filter_changed, GameState.owned_characters)
+	header.add_child(element_bar)
+
 	var sort_row: Button = CharacterSorter.make_sort_dropdown(_sort_mode, _on_sort_changed, _sort_ascending)
 	header.add_child(sort_row)
 
@@ -132,11 +136,16 @@ func _on_sort_changed(mode: int, ascending: bool) -> void:
 	_apply_sort()
 
 
+func _on_element_filter_changed(element_filter: int) -> void:
+	_element_filter = element_filter
+	_apply_sort()
+
+
 func _apply_sort() -> void:
 	var entries: Array = []
 	for i in GameState.owned_characters.size():
 		entries.append({"i": i, "c": GameState.owned_characters[i], "card": _card_panels[i]})
-	RosterLayout.apply(_roster_host, entries, _sort_mode, 6, _sort_ascending)
+	RosterLayout.apply(_roster_host, entries, _sort_mode, 6, _sort_ascending, _element_filter)
 
 
 func _on_card_clicked(event: InputEvent, index: int) -> void:

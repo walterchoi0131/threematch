@@ -1,13 +1,13 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://bdbktexrnd1lj"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/panda.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://b2ldvi14lqlks" path="res://assets/panda.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
 character_name = "Panda"
 gem_type = 2
-level = 13
+level = 15
 base_hp = 48
 hp_growth = 7.0
 portrait_texture = ExtResource("2_portrait")
@@ -18,6 +18,8 @@ dialog_square_scale = 1.45
 dialog_square_offset = Vector2(-129, -9)
 square_scale = 1.35
 square_offset = Vector2(-126, -32)
+rectangular_scale = 0.25
+rectangular_offset = Vector2(-33, 178)
 active_skill_name = "Resurgence+"
 active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/融合時計為 5 顆）。CD：6 回合。"
 active_skill_cd = 6

@@ -60,4 +60,5 @@ const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 @export var set_party: Array[CharacterData] = []
 
 ## 固定棋盤佈局（二維陣列 [x][y] = Block.Type）。空陣列 = 隨機生成。
+## 可部分指定：負值或未寫入的格子會保留開場隨機寶石。
 @export var fixed_layout: Array = []

@@ -42,9 +42,13 @@ var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點�
 #   LOGIC_UNKNOWN：等待視覺填充隨機顏色（BFS 不會匹配）
 #   LOGIC_UPPER：高階寶石（BFS 不會匹配普通爆破）
 #   LOGIC_PLANK：block（PLANK）— 不參與 BFS
+#   LOGIC_ROCK：rock（ROCK）— 不參與 BFS、不移動、不被消除
+#   LOGIC_SPAWNED_UNKNOWN：只在掉落預測中暫用；落定後轉回 LOGIC_UNKNOWN
 const LOGIC_UNKNOWN := 999
+const LOGIC_SPAWNED_UNKNOWN := 998
 const LOGIC_UPPER := -1
 const LOGIC_PLANK := -2
+const LOGIC_ROCK := -3
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
 var deferred_clicks: Array[Vector2i] = []
@@ -71,6 +75,7 @@ var _longpress_timer: float = 0.0          # 已按住時間
 var _longpress_active: bool = false        # 長按預覽是否已顯示
 var _longpress_overlays: Array[Node] = []  # 爆炸範圍高亮覆蓋層
 var _longpress_dim_tween: Tween = null     # 暗化/還原動畫 tween
+var _longpress_initial_tween: Tween = null # 初始爆炸色層循環動畫 tween
 var _longpress_raised_blocks: Array[Block] = []  # 預覽時被抬高 z_index 的方塊
 
 # ── 教學系統 ──
@@ -181,6 +186,8 @@ func _init_logic_grid_from_visual() -> void:
 				logic_grid[x][y] = LOGIC_UPPER
 			elif b.is_block():
 				logic_grid[x][y] = LOGIC_PLANK
+			elif b.is_rock():
+				logic_grid[x][y] = LOGIC_ROCK
 			else:
 				logic_grid[x][y] = b.block_type
 
@@ -197,6 +204,8 @@ func _sync_logic_unknowns_from_visual() -> void:
 						logic_grid[x][y] = LOGIC_UPPER
 					elif b.is_block():
 						logic_grid[x][y] = LOGIC_PLANK
+					elif b.is_rock():
+						logic_grid[x][y] = LOGIC_ROCK
 					else:
 						logic_grid[x][y] = int(b.block_type)
 
@@ -345,6 +354,20 @@ func _is_no_enemy_mode() -> bool:
 	return stage != null and stage.mode == StageData.Mode.ESCAPE
 
 
+func _is_static_obstacle(block: Block) -> bool:
+	return block != null and (block.is_block() or block.is_rock())
+
+
+func _shake_block(block: Block) -> void:
+	if block == null:
+		return
+	var base_x: float = block.position.x
+	var sh_tw: Tween = create_tween()
+	sh_tw.tween_property(block, "position:x", base_x + 4.0, 0.05)
+	sh_tw.tween_property(block, "position:x", base_x - 4.0, 0.05)
+	sh_tw.tween_property(block, "position:x", base_x, 0.05)
+
+
 ## 處理滑鼠輸入：左鍵點擊棋盤上的寶石；選擇模式下懸停預覽 + 點擊確認；長按高階寶石預覽爆炸範圍
 func _unhandled_input(event: InputEvent) -> void:
 	if _selection_mode:
@@ -360,7 +383,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			var local_pos := get_local_mouse_position()
 			var gp := world_to_grid(local_pos)
 			if _is_valid(gp):
+				var clicked_block: Block = grid[gp.x][gp.y]
 				var positions := _get_selection_positions(gp)
+				if positions.size() <= 1 and _is_static_obstacle(clicked_block):
+					_shake_block(clicked_block)
+					return
 				_clear_preview_overlays()
 				_selection_mode = false
 				_preview_center = Vector2i(-1, -1)
@@ -435,7 +462,7 @@ func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
 	if not _is_valid(start):
 		return []
 	var target: int = logic_grid[start.x][start.y]
-	if target == LOGIC_UNKNOWN or target == LOGIC_UPPER or target == LOGIC_PLANK:
+	if target == LOGIC_UNKNOWN or target == LOGIC_UPPER or target == LOGIC_PLANK or target == LOGIC_ROCK:
 		return []
 	var visited := {}
 	var connected: Array[Vector2i] = []
@@ -472,18 +499,103 @@ func _logic_destroy_and_collapse(positions: Array[Vector2i]) -> void:
 				continue
 			if logic_grid[np.x][np.y] == LOGIC_PLANK:
 				logic_grid[np.x][np.y] = LOGIC_UNKNOWN
-	for x in columns:
-		var stack: Array = []
-		for y in rows:
-			if logic_grid[x][y] != LOGIC_UNKNOWN:
-				stack.append(logic_grid[x][y])
-		var stack_idx: int = stack.size() - 1
-		for y in range(rows - 1, -1, -1):
-			if stack_idx >= 0:
-				logic_grid[x][y] = stack[stack_idx]
-				stack_idx -= 1
-			else:
-				logic_grid[x][y] = LOGIC_UNKNOWN
+	_settle_logic_grid_with_rocks()
+
+
+func _settle_logic_grid_with_rocks() -> void:
+	var max_iterations: int = maxi(1, columns * rows * (columns + rows + 4))
+	var iteration: int = 0
+	while iteration < max_iterations:
+		var changed: bool = false
+		if _logic_apply_vertical_fall_step():
+			changed = true
+		if _logic_apply_rock_slide_step(iteration):
+			changed = true
+		if _logic_spawn_top_unknowns():
+			changed = true
+		if not changed:
+			break
+		iteration += 1
+	if iteration >= max_iterations:
+		push_warning("Logic collapse reached iteration limit; leaving current settled state.")
+
+	for column_index in columns:
+		for row_index in rows:
+			if int(logic_grid[column_index][row_index]) == LOGIC_SPAWNED_UNKNOWN:
+				logic_grid[column_index][row_index] = LOGIC_UNKNOWN
+
+
+func _logic_apply_vertical_fall_step() -> bool:
+	var moved: bool = false
+	for row_index in range(rows - 2, -1, -1):
+		for column_index in columns:
+			var value: int = int(logic_grid[column_index][row_index])
+			if not _logic_cell_can_move(value):
+				continue
+			if int(logic_grid[column_index][row_index + 1]) != LOGIC_UNKNOWN:
+				continue
+			logic_grid[column_index][row_index + 1] = value
+			logic_grid[column_index][row_index] = LOGIC_UNKNOWN
+			moved = true
+	return moved
+
+
+func _logic_apply_rock_slide_step(iteration: int) -> bool:
+	var moved: bool = false
+	for row_index in range(rows - 2, -1, -1):
+		for column_index in columns:
+			var value: int = int(logic_grid[column_index][row_index])
+			if not _logic_cell_can_move(value):
+				continue
+			if int(logic_grid[column_index][row_index + 1]) == LOGIC_UNKNOWN:
+				continue
+			var first_direction: int = -1 if (column_index + row_index + iteration) % 2 == 0 else 1
+			var slide_directions: Array[int] = [first_direction, -first_direction]
+			for direction in slide_directions:
+				if not _logic_can_slide_under_rock(column_index, row_index, direction):
+					continue
+				var target_x: int = column_index + direction
+				var target_y: int = row_index + 1
+				logic_grid[target_x][target_y] = value
+				logic_grid[column_index][row_index] = LOGIC_UNKNOWN
+				moved = true
+				break
+	return moved
+
+
+func _logic_can_slide_under_rock(source_x: int, source_y: int, direction: int) -> bool:
+	var target_x: int = source_x + direction
+	var target_y: int = source_y + 1
+	if target_x < 0 or target_x >= columns or target_y < 0 or target_y >= rows:
+		return false
+	if int(logic_grid[target_x][target_y]) != LOGIC_UNKNOWN:
+		return false
+	return _logic_target_has_rock_roof(target_x, target_y)
+
+
+func _logic_target_has_rock_roof(target_x: int, target_y: int) -> bool:
+	var row_index: int = target_y - 1
+	while row_index >= 0:
+		var value: int = int(logic_grid[target_x][row_index])
+		if value == LOGIC_UNKNOWN:
+			row_index -= 1
+			continue
+		return value == LOGIC_ROCK
+	return false
+
+
+func _logic_spawn_top_unknowns() -> bool:
+	var spawned: bool = false
+	for column_index in columns:
+		if int(logic_grid[column_index][0]) != LOGIC_UNKNOWN:
+			continue
+		logic_grid[column_index][0] = LOGIC_SPAWNED_UNKNOWN
+		spawned = true
+	return spawned
+
+
+func _logic_cell_can_move(value: int) -> bool:
+	return value != LOGIC_UNKNOWN and value != LOGIC_ROCK
 
 
 ## 預測：此次爆破是否會觸發任何融合（回應）技能
@@ -510,13 +622,13 @@ func _try_queue_click(pos: Vector2i) -> void:
 		return
 	# 允許在動畫期間 queue 高階寶石點擊（normal blast → upper blast 路線）
 	var b: Block = grid[pos.x][pos.y]
-	if b != null and b.is_block():
+	if _is_static_obstacle(b):
 		return
 	if b != null and b.is_upper_gem():
 		deferred_clicks.append(pos)
 		return
 	var t: int = logic_grid[pos.x][pos.y]
-	if t == LOGIC_UNKNOWN or t == LOGIC_UPPER or t == LOGIC_PLANK:
+	if t == LOGIC_UNKNOWN or t == LOGIC_UPPER or t == LOGIC_PLANK or t == LOGIC_ROCK:
 		return
 	var matches := _find_connected_logic(pos)
 	if matches.size() < min_match:
@@ -575,12 +687,9 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 	var block: Block = grid[pos.x][pos.y]
 	last_tapped_pos = pos
 
-	# block（PLANK）— 不响應點擊，不消耗回合；播放抖動表示無效
-	if block != null and block.is_block():
-		var sh_tw: Tween = create_tween()
-		sh_tw.tween_property(block, "position:x", block.position.x + 4, 0.05)
-		sh_tw.tween_property(block, "position:x", block.position.x - 4, 0.05)
-		sh_tw.tween_property(block, "position:x", block.position.x, 0.05)
+	# PLANK / ROCK — 不响應點擊，不消耗回合；播放抖動表示無效
+	if _is_static_obstacle(block):
+		_shake_block(block)
 		_next_click_is_drained = false
 		return
 
@@ -603,10 +712,7 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 	if matches.is_empty():
 		# 寶石抖動提示無效操作
 		if block:
-			var tween := create_tween()
-			tween.tween_property(block, "position:x", block.position.x + 4, 0.05)
-			tween.tween_property(block, "position:x", block.position.x - 4, 0.05)
-			tween.tween_property(block, "position:x", block.position.x, 0.05)
+			_shake_block(block)
 		_next_click_is_drained = false
 		return
 
@@ -641,8 +747,8 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 	var block: Block = grid[start.x][start.y]
 	if block == null:
 		return []
-	# block（PLANK）不參與任何配對
-	if block.is_block():
+	# PLANK / ROCK 不參與任何配對
+	if block.is_block() or block.is_rock():
 		return []
 
 	var target_type = block.block_type
@@ -665,8 +771,8 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 		# 高階寶石不參與普通配對 — 跳過
 		if cur_block.is_upper_gem():
 			continue
-		# block（PLANK）不參與 — 跳過
-		if cur_block.is_block():
+		# PLANK / ROCK 不參與 — 跳過
+		if cur_block.is_block() or cur_block.is_rock():
 			continue
 
 		visited[current] = true
@@ -735,94 +841,43 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 	, CONNECT_ONE_SHOT)
 
 
-## 掉落與填充：現有寶石向下壓縮，空位從頂部生成新寶石掉落
+## 掉落與填充：新寶石只從棋盤頂部進入；ROCK 下方空洞只能靠鄰欄斜向滑入
 func _collapse_and_fill() -> void:
-	# 每一欄的資料：{ block, to_pos, is_new, gx, gy }
-	var columns_data: Array = []  # Array of Arrays
-	columns_data.resize(columns)
+	var collapse_plan: Dictionary = _build_collapse_plan()
+	var fall_moves: Array = collapse_plan.get("falls", [])
+	var total_new_count: int = int(collapse_plan.get("new_count", 0))
+	var longest_dur: float = 0.0
 
-	for x in columns:
-		var col_falls: Array = []
-
-		# 將現有寶石向下壓縮
-		var write_y := rows - 1
-		for read_y in range(rows - 1, -1, -1):
-			if grid[x][read_y] != null:
-				if read_y != write_y:
-					grid[x][write_y] = grid[x][read_y]
-					grid[x][read_y] = null
-					grid[x][write_y].grid_pos = Vector2i(x, write_y)
-					col_falls.append({
-						block = grid[x][write_y],
-						to_pos = grid_to_world(Vector2i(x, write_y)),
-						is_new = false
-					})
-				write_y -= 1
-
-		# 記錄需要新寶石的空位
-		for y in rows:
-			if grid[x][y] == null:
-				col_falls.append({
-					to_pos = grid_to_world(Vector2i(x, y)),
-					is_new = true,
-					gx = x, gy = y
-				})
-
-		columns_data[x] = col_falls
-
-	# ── 第二階段：建立新寶石並以 FALL_SPEED 速度動畫掉落 ───
-	var longest_dur := 0.0
-	var total_new_count := 0  # 本次掉落新生成寶石總數（用於 gems_refilled 信號）
-
-	# 計算是否有空格需要新寶石（在填入前觸發前置回呼，例如燃燒扣血）
-	var any_new: bool = false
-	for x in columns:
-		for f in columns_data[x]:
-			if f.is_new:
-				any_new = true
-				break
-		if any_new:
-			break
+	# 在填入新寶石前觸發前置回呼，例如燃燒扣血。
+	var any_new: bool = total_new_count > 0
 	if any_new and pre_refill_hook.is_valid():
 		await pre_refill_hook.call()
 
-	for x in columns:
-		var col_falls: Array = columns_data[x]
-		if col_falls.is_empty():
-			continue
-
-		# 計算本欄新寶石數量，用來堆疊生成位置
-		var spawn_count := 0
-		for f in col_falls:
-			if f.is_new:
-				spawn_count += 1
-
-		var spawn_idx := 0
-		for f in col_falls:
-			var from_pos: Vector2
-			if f.is_new:
-				# 新寶石堆疊在棋盤上方：第 -1, -2, … 行
-				from_pos = grid_to_world(Vector2i(f.gx, -1 - (spawn_count - 1 - spawn_idx)))
-				spawn_idx += 1
-			else:
-				# 現有寶石從目前位置開始掉落
-				if not is_instance_valid(f.block):
-					continue
-				from_pos = f.block.position
-
-			var dist := absf(f.to_pos.y - from_pos.y)
-			if dist < 0.5:
+	for fall_data in fall_moves:
+		var from_pos: Vector2
+		var target_pos: Vector2 = fall_data.to_pos
+		if bool(fall_data.is_new):
+			var spawn_x: int = int(fall_data.spawn_x)
+			var spawn_idx: int = int(fall_data.spawn_idx)
+			var spawn_y: int = -1 - spawn_idx
+			from_pos = grid_to_world(Vector2i(spawn_x, spawn_y))
+		else:
+			if not is_instance_valid(fall_data.block):
 				continue
-			var dur := dist / FALL_SPEED
-			longest_dur = maxf(longest_dur, dur)
+			from_pos = fall_data.block.position
 
-			if f.is_new:
-				var block := _create_block(f.gx, f.gy, from_pos, true)
-				block.modulate.a = 0.0
-				block.fall_to(f.to_pos, dur, 0.0, true)
-				total_new_count += 1
-			else:
-				f.block.fall_to(f.to_pos, dur, 0.0, false)
+		var dist: float = from_pos.distance_to(target_pos)
+		if dist < 0.5:
+			continue
+		var dur: float = dist / FALL_SPEED
+		longest_dur = maxf(longest_dur, dur)
+
+		if bool(fall_data.is_new):
+			var block: Block = _create_block(int(fall_data.gx), int(fall_data.gy), from_pos, true)
+			block.modulate.a = 0.0
+			block.fall_to(target_pos, dur, 0.0, true)
+		else:
+			fall_data.block.fall_to(target_pos, dur, 0.0, false)
 
 	if longest_dur == 0.0:
 		_sync_logic_unknowns_from_visual()
@@ -833,6 +888,166 @@ func _collapse_and_fill() -> void:
 	await get_tree().create_timer(longest_dur + Block.BOUNCE_DUR + 0.05).timeout
 	_sync_logic_unknowns_from_visual()
 	_update_fuse_hints()
+
+
+func _build_collapse_plan() -> Dictionary:
+	var state: Array = _copy_grid_state()
+	var spawn_counts: Array = []
+	spawn_counts.resize(columns)
+	for column_index in columns:
+		spawn_counts[column_index] = 0
+
+	_settle_visual_state_with_rocks(state, spawn_counts, true)
+
+	var fall_moves: Array = []
+	var new_count: int = 0
+	for column_index in columns:
+		for row_index in rows:
+			var cell: Variant = state[column_index][row_index]
+			var target_grid_pos: Vector2i = Vector2i(column_index, row_index)
+			if cell is Block:
+				var block: Block = cell as Block
+				grid[column_index][row_index] = block
+				if block.is_rock():
+					block.grid_pos = target_grid_pos
+					block.position = grid_to_world(target_grid_pos)
+					continue
+				var original_grid_pos: Vector2i = block.grid_pos
+				block.grid_pos = target_grid_pos
+				if original_grid_pos != target_grid_pos:
+					fall_moves.append({
+						block = block,
+						to_pos = grid_to_world(target_grid_pos),
+						is_new = false
+					})
+			elif cell is Dictionary:
+				var cell_data: Dictionary = cell
+				var spawn_x: int = int(cell_data["spawn_x"])
+				grid[column_index][row_index] = null
+				new_count += 1
+				fall_moves.append({
+					to_pos = grid_to_world(target_grid_pos),
+					is_new = true,
+					gx = column_index,
+					gy = row_index,
+					spawn_x = spawn_x,
+					spawn_idx = int(cell_data["spawn_idx"]),
+					spawn_count = int(spawn_counts[spawn_x])
+				})
+			else:
+				grid[column_index][row_index] = null
+	return {"falls": fall_moves, "new_count": new_count}
+
+
+func _copy_grid_state() -> Array:
+	var state: Array = []
+	state.resize(columns)
+	for column_index in columns:
+		state[column_index] = []
+		state[column_index].resize(rows)
+		for row_index in rows:
+			state[column_index][row_index] = grid[column_index][row_index]
+	return state
+
+
+func _settle_visual_state_with_rocks(state: Array, spawn_counts: Array, spawn_from_top: bool) -> void:
+	var max_iterations: int = maxi(1, columns * rows * (columns + rows + 4))
+	var iteration: int = 0
+	while iteration < max_iterations:
+		var changed: bool = false
+		if _visual_apply_vertical_fall_step(state):
+			changed = true
+		if _visual_apply_rock_slide_step(state, iteration):
+			changed = true
+		if spawn_from_top and _visual_spawn_top_blocks(state, spawn_counts):
+			changed = true
+		if not changed:
+			break
+		iteration += 1
+	if iteration >= max_iterations:
+		push_warning("Visual collapse reached iteration limit; leaving current settled state.")
+
+
+func _visual_apply_vertical_fall_step(state: Array) -> bool:
+	var moved: bool = false
+	for row_index in range(rows - 2, -1, -1):
+		for column_index in columns:
+			var cell: Variant = state[column_index][row_index]
+			if not _variant_cell_can_move(cell):
+				continue
+			if state[column_index][row_index + 1] != null:
+				continue
+			state[column_index][row_index + 1] = cell
+			state[column_index][row_index] = null
+			moved = true
+	return moved
+
+
+func _visual_apply_rock_slide_step(state: Array, iteration: int) -> bool:
+	var moved: bool = false
+	for row_index in range(rows - 2, -1, -1):
+		for column_index in columns:
+			var cell: Variant = state[column_index][row_index]
+			if not _variant_cell_can_move(cell):
+				continue
+			if state[column_index][row_index + 1] == null:
+				continue
+			var first_direction: int = -1 if (column_index + row_index + iteration) % 2 == 0 else 1
+			var slide_directions: Array[int] = [first_direction, -first_direction]
+			for direction in slide_directions:
+				if not _visual_can_slide_under_rock(state, column_index, row_index, direction):
+					continue
+				var target_x: int = column_index + direction
+				var target_y: int = row_index + 1
+				state[target_x][target_y] = cell
+				state[column_index][row_index] = null
+				moved = true
+				break
+	return moved
+
+
+func _visual_can_slide_under_rock(state: Array, source_x: int, source_y: int, direction: int) -> bool:
+	var target_x: int = source_x + direction
+	var target_y: int = source_y + 1
+	if target_x < 0 or target_x >= columns or target_y < 0 or target_y >= rows:
+		return false
+	if state[target_x][target_y] != null:
+		return false
+	return _visual_target_has_rock_roof(state, target_x, target_y)
+
+
+func _visual_target_has_rock_roof(state: Array, target_x: int, target_y: int) -> bool:
+	var row_index: int = target_y - 1
+	while row_index >= 0:
+		var cell: Variant = state[target_x][row_index]
+		if cell == null:
+			row_index -= 1
+			continue
+		return _variant_cell_is_rock(cell)
+	return false
+
+
+func _visual_spawn_top_blocks(state: Array, spawn_counts: Array) -> bool:
+	var spawned: bool = false
+	for column_index in columns:
+		if state[column_index][0] != null:
+			continue
+		state[column_index][0] = {
+			"is_new": true,
+			"spawn_x": column_index,
+			"spawn_idx": int(spawn_counts[column_index])
+		}
+		spawn_counts[column_index] = int(spawn_counts[column_index]) + 1
+		spawned = true
+	return spawned
+
+
+func _variant_cell_can_move(cell: Variant) -> bool:
+	return cell != null and not _variant_cell_is_rock(cell)
+
+
+func _variant_cell_is_rock(cell: Variant) -> bool:
+	return cell is Block and (cell as Block).is_rock()
 
 
 ## 重新開始：清除棋盤並重新初始化
@@ -1008,6 +1223,8 @@ func play_fuse_animation(block: Block) -> void:
 
 ## 寶石變身動畫：縮小 → 替換類型 → 放大 + 融合闃光/彈跳 → 更新融合提示
 func _animate_gem_morph(block: Block, new_type: Block.Type) -> void:
+	if block == null or block.is_rock():
+		return
 	var tween := create_tween()
 	# 縮小
 	tween.tween_property(block, "scale", Vector2(0.3, 0.3), 0.15) \
@@ -1117,8 +1334,8 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 		var valid: Array[Vector2i] = []
 		for p in row_positions:
 			var pb: Block = grid[p.x][p.y]
-			# PLANK 非 BREAK 屬性技能不可影響
-			if pb != null and not pb.is_block():
+			# PLANK / ROCK 非 BREAK 屬性技能不可影響；ROCK 永遠不可影響
+			if pb != null and not pb.is_block() and not pb.is_rock():
 				valid.append(p)
 		if valid.is_empty():
 			continue
@@ -1171,6 +1388,8 @@ func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = 
 	if not _is_valid(pos):
 		return
 	var block: Block = grid[pos.x][pos.y]
+	if block != null and block.is_rock():
+		return
 	if block == null:
 		block = _create_block(pos.x, pos.y)
 		block.set_block_type(gem_type)
@@ -1187,7 +1406,7 @@ func debug_spawn_firebombs(count: int) -> void:
 	for x in columns:
 		for y in rows:
 			var b: Block = grid[x][y]
-			if b != null and not b.is_upper_gem():
+			if b != null and not b.is_upper_gem() and not b.is_block() and not b.is_rock():
 				candidates.append(b)
 	candidates.shuffle()
 	var n: int = mini(count, candidates.size())
@@ -1255,6 +1474,8 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			continue
 		var b: Block = grid[p.x][p.y]
 		if b == null:
+			continue
+		if b.is_rock():
 			continue
 		# 如果這個寶石是高階寶石，加入連鏈爆炸佇列（暫不消除）
 		if b.is_upper_gem():
@@ -1469,6 +1690,8 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 				continue
 			var b: Block = grid[c.x][c.y]
 			if b == null:
+				continue
+			if b.is_rock():
 				continue
 			var is_other_upper: bool = b.is_upper_gem() \
 				and b.upper_type != Block.UpperType.WATER_SLASH
@@ -2148,15 +2371,12 @@ func _simulate_post_collapse_grid() -> Array:
 	if _is_valid(last_tapped_pos) and sim[last_tapped_pos.x][last_tapped_pos.y] == null:
 		sim[last_tapped_pos.x][last_tapped_pos.y] = &"upper_placeholder"
 
-	# 模擬掉落：將非空格向下壓縮
-	for x in columns:
-		var write_y := rows - 1
-		for read_y in range(rows - 1, -1, -1):
-			if sim[x][read_y] != null:
-				if read_y != write_y:
-					sim[x][write_y] = sim[x][read_y]
-					sim[x][read_y] = null
-				write_y -= 1
+	# 模擬掉落：ROCK 固定，新寶石從頂部進入，ROCK 下方空洞可由鄰欄斜向滑入。
+	var spawn_counts: Array = []
+	spawn_counts.resize(columns)
+	for column_index in columns:
+		spawn_counts[column_index] = 0
+	_settle_visual_state_with_rocks(sim, spawn_counts, true)
 
 	return sim
 
@@ -2177,7 +2397,7 @@ func _find_connected_in_grid(start: Vector2i, sim_grid: Array) -> Array[Vector2i
 	if cell == null or cell is not Block:
 		return []
 	var block: Block = cell as Block
-	if block.is_upper_gem():
+	if block.is_upper_gem() or block.is_block() or block.is_rock():
 		return []
 
 	var target_type: Block.Type = block.block_type as Block.Type
@@ -2197,7 +2417,7 @@ func _find_connected_in_grid(start: Vector2i, sim_grid: Array) -> Array[Vector2i
 		var cur_block: Block = cur_cell as Block
 		if cur_block.block_type != target_type:
 			continue
-		if cur_block.is_upper_gem():
+		if cur_block.is_upper_gem() or cur_block.is_block() or cur_block.is_rock():
 			continue
 
 		visited[current] = true
@@ -2232,7 +2452,7 @@ func _would_trigger_fuse(gem_type: Block.Type, group: Array[Vector2i]) -> bool:
 ## 驗證：1) 模擬掉落後棋盤仍可行 2) 真實棋盤也可行 → 立即消除並發出信號。
 func _try_concurrent_fuse(click_pos: Vector2i) -> void:
 	var block: Block = grid[click_pos.x][click_pos.y]
-	if block == null or block.is_upper_gem():
+	if block == null or block.is_upper_gem() or block.is_block() or block.is_rock():
 		return
 
 	# 1. 在模擬掉落後的棋盤中驗證可行性
@@ -2264,12 +2484,19 @@ func _try_concurrent_fuse(click_pos: Vector2i) -> void:
 const PREVIEW_OVERLAY_Z := 5   # 爆炸範圍覆蓋層 z_index
 const PREVIEW_BLOCK_Z := 8     # 受影響方塊在預覽時的 z_index（高於覆蓋層）
 const PREVIEW_BORDER_Z := 9    # 邊框覆蓋層 z_index
+const PREVIEW_INITIAL_OVERLAY_Z := 10  # 初始爆炸半透明色層（蓋在受影響寶石上方）
+const PREVIEW_INITIAL_ALPHA_MAX := 0.50
+const PREVIEW_INITIAL_ALPHA_MIN := 0.12
+const PREVIEW_INITIAL_FADE_IN := 0.35
+const PREVIEW_INITIAL_FADE_OUT := 0.55
 
 ## 計算高階寶石的完整爆炸範圍（含連鏈遞迴）
-## 回傳 { direct: Array[Vector2i], chain_groups: Array[Dictionary], chain_uppers: Array[Vector2i] }
+## 回傳 { direct: Array[Vector2i], initial: Array[Vector2i], chain_groups: Array[Dictionary], chain_uppers: Array[Vector2i] }
 ## chain_groups: [{ ut: UpperType, positions: Array[Vector2i] }, ...]
 func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dictionary:
 	var direct_blast: Dictionary = {}   # 直接爆炸範圍
+	var initial_blast: Dictionary = {}  # 第一波爆炸範圍（給彩色脈衝層）
+	initial_blast[start_pos] = true
 	var chain_uppers: Array[Vector2i] = []
 	var processed_uppers: Dictionary = {}
 	processed_uppers[start_pos] = true
@@ -2282,7 +2509,7 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 	# ── 水劍特例：套用「貪心連線」連鎖預測（與 _handle_water_sword_sequence 相同邏輯）──
 	if start_ut == Block.UpperType.WATER_SLASH:
 		var sw_groups: Array[Dictionary] = _calc_water_slash_chain_preview(
-			start_pos, processed_uppers, all_chain, chain_uppers, next_queue)
+			start_pos, processed_uppers, all_chain, chain_uppers, next_queue, initial_blast, true)
 		for g in sw_groups:
 			chain_groups.append(g)
 	else:
@@ -2291,7 +2518,10 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 		for p in first_positions:
 			if p == start_pos:
 				continue
+			if _is_valid(p) and grid[p.x][p.y] != null and grid[p.x][p.y].is_rock():
+				continue
 			direct_blast[p] = true
+			initial_blast[p] = true
 			if _is_valid(p) and grid[p.x][p.y] != null:
 				var b: Block = grid[p.x][p.y]
 				if b.is_upper_gem() and not processed_uppers.has(p):
@@ -2307,7 +2537,7 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 		# 連鏈水劍：使用專用貪心連鎖，而非單純的 column 爆破
 		if cut == Block.UpperType.WATER_SLASH:
 			var sw_groups2: Array[Dictionary] = _calc_water_slash_chain_preview(
-				cpos, processed_uppers, all_chain, chain_uppers, next_queue)
+				cpos, processed_uppers, all_chain, chain_uppers, next_queue, initial_blast, false)
 			for g in sw_groups2:
 				chain_groups.append(g)
 			continue
@@ -2315,6 +2545,8 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 		var group_positions: Array[Vector2i] = []
 		for p in cpositions:
 			if p == cpos or direct_blast.has(p) or all_chain.has(p):
+				continue
+			if _is_valid(p) and grid[p.x][p.y] != null and grid[p.x][p.y].is_rock():
 				continue
 			all_chain[p] = true
 			group_positions.append(p)
@@ -2329,6 +2561,7 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 
 	return {
 		"direct": direct_blast.keys(),
+		"initial": initial_blast.keys(),
 		"direct_ut": start_ut,
 		"chain_groups": chain_groups,
 		"chain_uppers": chain_uppers,
@@ -2344,7 +2577,9 @@ func _calc_water_slash_chain_preview(
 		processed_uppers: Dictionary,
 		visited: Dictionary,
 		chain_uppers: Array[Vector2i],
-		bfs_queue: Array[Dictionary]) -> Array[Dictionary]:
+		bfs_queue: Array[Dictionary],
+		initial_blast: Dictionary,
+		mark_initial: bool) -> Array[Dictionary]:
 	# 收集所有「尚未處理過」的水劍位置（含 seed 自身）
 	var swords: Array[Vector2i] = [seed_pos]
 	for sp in find_upper_gems(Block.UpperType.WATER_SLASH):
@@ -2393,6 +2628,11 @@ func _calc_water_slash_chain_preview(
 		for c in seg_cells:
 			if not _is_valid(c):
 				continue
+			var b: Block = grid[c.x][c.y]
+			if b != null and b.is_rock():
+				continue
+			if mark_initial and i == 0:
+				initial_blast[c] = true
 			if c == seed_pos or visited.has(c):
 				continue
 			visited[c] = true
@@ -2401,7 +2641,6 @@ func _calc_water_slash_chain_preview(
 				continue
 			group_pos.append(c)
 			# 路徑上若有非水劍 upper，加入 BFS 佇列待後續連鎖
-			var b: Block = grid[c.x][c.y]
 			if b != null and b.is_upper_gem() and not processed_uppers.has(c):
 				processed_uppers[c] = true
 				chain_uppers.append(c)
@@ -2423,6 +2662,13 @@ func _show_blast_preview(pos: Vector2i) -> void:
 	var direct_ut: Block.UpperType = result.direct_ut
 	var chain_groups: Array = result.chain_groups
 	var chain_uppers: Array = result.chain_uppers
+
+	var initial_positions: Array[Vector2i] = []
+	for p in result.initial:
+		var initial_pos: Vector2i = p as Vector2i
+		if not initial_positions.has(initial_pos):
+			initial_positions.append(initial_pos)
+	_add_initial_blast_overlay(initial_positions, Block.COLORS.get(block.block_type, Color.WHITE))
 
 	# 收集所有不暗化的位置
 	var bright_set: Dictionary = {}
@@ -2460,6 +2706,39 @@ func _show_blast_preview(pos: Vector2i) -> void:
 			_longpress_raised_blocks.append(rb)
 
 	blast_preview_entered.emit()
+
+
+func _add_initial_blast_overlay(positions: Array[Vector2i], element_color: Color) -> void:
+	if _longpress_initial_tween != null and _longpress_initial_tween.is_valid():
+		_longpress_initial_tween.kill()
+	_longpress_initial_tween = null
+
+	var overlay_color := Color(element_color.r, element_color.g, element_color.b, 0.0)
+	var pulse_rects: Array[ColorRect] = []
+	for p in positions:
+		if not _is_valid(p):
+			continue
+		var rect := ColorRect.new()
+		rect.color = overlay_color
+		rect.size = Vector2(CELL_SIZE, CELL_SIZE)
+		rect.position = Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE)
+		rect.z_index = PREVIEW_INITIAL_OVERLAY_Z
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(rect)
+		_longpress_overlays.append(rect)
+		pulse_rects.append(rect)
+
+	if pulse_rects.is_empty():
+		return
+	_longpress_initial_tween = create_tween().set_loops()
+	_longpress_initial_tween.set_parallel(true)
+	for rect in pulse_rects:
+		_longpress_initial_tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, PREVIEW_INITIAL_FADE_IN) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	_longpress_initial_tween.chain()
+	for rect in pulse_rects:
+		_longpress_initial_tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, PREVIEW_INITIAL_FADE_OUT) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 
 
 ## 漸變邊框覆蓋層透明度（對其下所有 ColorRect 子節點）
@@ -2520,6 +2799,9 @@ func _hide_blast_preview() -> void:
 	_longpress_raised_blocks.clear()
 
 	# 終止先前的暗化/還原 tween
+	if _longpress_initial_tween != null and _longpress_initial_tween.is_valid():
+		_longpress_initial_tween.kill()
+	_longpress_initial_tween = null
 	if _longpress_dim_tween != null and _longpress_dim_tween.is_valid():
 		_longpress_dim_tween.kill()
 	_longpress_dim_tween = create_tween().set_parallel(true)

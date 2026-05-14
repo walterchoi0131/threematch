@@ -8,6 +8,11 @@
 [ext_resource type="Resource" uid="uid://cm3p2rt5q8nv1" path="res://stages/stage_1_3.tres" id="6_stage_1_3"]
 [ext_resource type="Resource" uid="uid://cg0cxhhwwyvnk" path="res://stages/stage_1_4.tres" id="7_stage_1_4"]
 [ext_resource type="Resource" uid="uid://dq8x1t5n3p7bv" path="res://stages/stage_1_5.tres" id="8_stage_1_5"]
+[ext_resource type="Resource" path="res://stages/stage_board_5x5_3c.tres" id="9_board_5x5_3c"]
+[ext_resource type="Resource" uid="uid://br26x6fourclr" path="res://stages/stage_board_6x6_4c.tres" id="10_board_6x6_4c"]
+[ext_resource type="Resource" uid="uid://br27x7fourclr" path="res://stages/stage_board_7x7_4c.tres" id="11_board_7x7_4c"]
+[ext_resource type="Resource" uid="uid://br28x8fiveclr" path="res://stages/stage_board_8x8_5c.tres" id="12_board_8x8_5c"]
+[ext_resource type="Resource" uid="uid://br3ayafiveclr" path="res://stages/stage_board_9x9_5c.tres" id="13_board_9x9_5c"]
 
 [sub_resource type="StyleBoxFlat" id="SBF_nav"]
 bg_color = Color(0.08, 0.1, 0.14, 0.92)
@@ -42,7 +47,8 @@ grow_vertical = 2
 mouse_filter = 1
 
 [node name="MapPage" type="Control" parent="UILayer/Pages" unique_id=944089655]
-anchors_preset = 0
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 1
@@ -50,47 +56,92 @@ mouse_filter = 1
 [node name="Stage1_1" parent="UILayer/Pages/MapPage" unique_id=204662907 instance=ExtResource("3_stagebtn")]
 custom_minimum_size = Vector2(140, 110)
 anchors_preset = 0
-offset_left = 208.0
-offset_top = 522.0
-offset_right = 348.0
-offset_bottom = 632.0
+offset_left = 222.0
+offset_top = 512.0
+offset_right = 362.0
+offset_bottom = 622.0
 stage = ExtResource("4_stage_1_1")
 
 [node name="Stage1_2" parent="UILayer/Pages/MapPage" unique_id=936576380 instance=ExtResource("3_stagebtn")]
 custom_minimum_size = Vector2(140, 110)
 anchors_preset = 0
-offset_left = 362.0
-offset_top = 464.0
-offset_right = 502.0
-offset_bottom = 574.0
+offset_left = 335.0
+offset_top = 452.0
+offset_right = 475.0
+offset_bottom = 562.0
 stage = ExtResource("5_stage_1_2")
 
 [node name="Stage1_3" parent="UILayer/Pages/MapPage" unique_id=579701151 instance=ExtResource("3_stagebtn")]
 custom_minimum_size = Vector2(140, 110)
 anchors_preset = 0
-offset_left = 329.0
-offset_top = 642.0
-offset_right = 469.0
-offset_bottom = 752.0
+offset_left = 319.0
+offset_top = 598.0
+offset_right = 459.0
+offset_bottom = 708.0
 stage = ExtResource("6_stage_1_3")
 
 [node name="Stage1_4" parent="UILayer/Pages/MapPage" unique_id=721394082 instance=ExtResource("3_stagebtn")]
 custom_minimum_size = Vector2(140, 110)
 anchors_preset = 0
-offset_left = 504.0
-offset_top = 555.0
-offset_right = 644.0
-offset_bottom = 665.0
+offset_left = 463.0
+offset_top = 551.0
+offset_right = 603.0
+offset_bottom = 661.0
 stage = ExtResource("7_stage_1_4")
 
-[node name="Stage1_5" parent="UILayer/Pages/MapPage" instance=ExtResource("3_stagebtn")]
+[node name="Stage1_5" parent="UILayer/Pages/MapPage" unique_id=2012276627 instance=ExtResource("3_stagebtn")]
 custom_minimum_size = Vector2(140, 110)
 anchors_preset = 0
-offset_left = 660.0
-offset_top = 480.0
-offset_right = 800.0
-offset_bottom = 590.0
+offset_left = 385.0
+offset_top = 714.0
+offset_right = 525.0
+offset_bottom = 824.0
 stage = ExtResource("8_stage_1_5")
+
+[node name="StageBoard5x5_3C" parent="UILayer/Pages/MapPage" unique_id=990013204 instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 44.0
+offset_top = 132.0
+offset_right = 184.0
+offset_bottom = 242.0
+stage = ExtResource("9_board_5x5_3c")
+
+[node name="StageBoard6x6_4C" parent="UILayer/Pages/MapPage" unique_id=380891657 instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 44.0
+offset_top = 284.0
+offset_right = 184.0
+offset_bottom = 394.0
+stage = ExtResource("10_board_6x6_4c")
+
+[node name="StageBoard7x7_4C" parent="UILayer/Pages/MapPage" unique_id=659775529 instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 44.0
+offset_top = 436.0
+offset_right = 184.0
+offset_bottom = 546.0
+stage = ExtResource("11_board_7x7_4c")
+
+[node name="StageBoard8x8_5C" parent="UILayer/Pages/MapPage" unique_id=520081242 instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 44.0
+offset_top = 588.0
+offset_right = 184.0
+offset_bottom = 698.0
+stage = ExtResource("12_board_8x8_5c")
+
+[node name="StageBoard9x9_5C" parent="UILayer/Pages/MapPage" unique_id=717453912 instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 44.0
+offset_top = 740.0
+offset_right = 184.0
+offset_bottom = 850.0
+stage = ExtResource("13_board_9x9_5c")
 
 [node name="CharactersPage" type="Control" parent="UILayer/Pages" unique_id=1542128791]
 visible = false

@@ -5,7 +5,8 @@ extends Node2D
 
 # ── 寶石類型列舉 ──
 # PLANK：無屬性方塊（block）— 不參與 BFS / 連鎖 / 融合；被相鄰一般爆破或高階爆破波及時會無聲被消除（無攻擊力）
-enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK, PLANK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗、木板
+# ROCK：無屬性障礙 — 不參與 BFS / 連鎖 / 融合；不可移除且不會掉落。
+enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK, PLANK, ROCK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗、木板、岩石
 enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給
 
 # 額外效果（可同時掛載多個於單一寶石上）
@@ -14,7 +15,7 @@ enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF
 # BURNING：每次消除後新寶石生成前扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
 enum ExtraEffect { X5, BURNING, X3 }
 
-const TYPE_COUNT := 9  # 寶石類型總數（含 PLANK 方塊）
+const TYPE_COUNT := 10  # 寶石類型總數（含 PLANK / ROCK 方塊）
 
 # 每種類型對應的顏色
 const COLORS = {
@@ -27,6 +28,7 @@ const COLORS = {
 	Type.LIGHT: Color(1.0, 0.92, 0.23),
 	Type.DARK: Color(0.30, 0.20, 0.45),
 	Type.PLANK: Color(0.55, 0.36, 0.18),  # 木色（備用；有貼圖時不顯示）
+	Type.ROCK: Color(0.34, 0.36, 0.38),
 }
 
 # 每種類型對應的圖示符號（無貼圖時的備用顯示）
@@ -40,6 +42,7 @@ const ICONS = {
 	Type.LIGHT: "✦",
 	Type.DARK: "☾",
 	Type.PLANK: "■",
+	Type.ROCK: "R",
 }
 
 # 有美術貼圖的寶石類型；未列出的類型會退回使用圖示符號
@@ -50,6 +53,7 @@ const GEM_TEXTURES: Dictionary = {
 	Type.LIGHT: preload("res://assets/gems/gem_light2.png"),
 	Type.DARK: preload("res://assets/gems/gem_moon.png"),
 	Type.PLANK: preload("res://assets/blocks/wood.png"),
+	Type.ROCK: preload("res://assets/blocks/rock.png"),
 }
 
 # 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
@@ -162,6 +166,11 @@ func is_block() -> bool:
 	return upper_type == UpperType.NONE and block_type == Type.PLANK
 
 
+## 是否為不可移除、不可掉落的岩石障礙
+func is_rock() -> bool:
+	return upper_type == UpperType.NONE and block_type == Type.ROCK
+
+
 ## 設定高階寶石類型並更新外觀
 func set_upper_type(ut: UpperType) -> void:
 	upper_type = ut
@@ -213,13 +222,13 @@ func clear_extras() -> void:
 
 ## 取得這顆寶石被消除/連鎖/融合時計算的數量
 ## 規則：
-##   - block（PLANK 等無屬性方塊）：0（不貢獻任何元素計數）
+##   - block（PLANK / ROCK 等無屬性方塊）：0（不貢獻任何元素計數）
 ##   - 高階寶石：返回內識元素計數（UPPER_INTRINSIC_VALUE）
 ##   - X5：5
 ##   - X3：3
 ##   - 一般：1
 func get_blast_value() -> int:
-	if is_block():
+	if is_block() or is_rock():
 		return 0
 	if is_upper_gem():
 		return UPPER_INTRINSIC_VALUE.get(upper_type, 1)

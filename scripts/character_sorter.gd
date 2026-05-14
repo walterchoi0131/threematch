@@ -5,6 +5,7 @@ class_name CharacterSorter
 extends RefCounted
 
 enum Mode { LEVEL, ATK, HP, MAGIC, TYPE }
+const ELEMENT_FILTER_ALL := -1
 
 
 ## 對 (index, character) 配對陣列排序，回傳排序後的新陣列。
@@ -147,3 +148,109 @@ static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_
 	)
 	refresh.call()
 	return btn
+
+
+## 建立獨立元素篩選列：全部 + 目前名冊中存在的元素圖示。
+## on_changed 接收 (element_filter: int)，ELEMENT_FILTER_ALL 代表不篩選。
+static func make_element_filter_bar(initial_filter: int, on_changed: Callable, characters: Array = []) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.size_flags_horizontal = Control.SIZE_SHRINK_END
+
+	var state: Dictionary = {"filter": initial_filter}
+	var btns: Array[Dictionary] = []
+
+	var all_btn := Button.new()
+	all_btn.text = Locale.tr_ui("ALL")
+	all_btn.toggle_mode = true
+	all_btn.focus_mode = Control.FOCUS_NONE
+	all_btn.custom_minimum_size = Vector2(52, 32)
+	row.add_child(all_btn)
+	btns.append({"btn": all_btn, "filter": ELEMENT_FILTER_ALL, "color": Color(0.22, 0.22, 0.28, 1.0)})
+
+	for element_type: int in get_element_filter_order(characters):
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.custom_minimum_size = Vector2(38, 32)
+		var tex: Texture2D = Block.GEM_TEXTURES.get(element_type)
+		if tex != null:
+			btn.icon = tex
+		else:
+			btn.text = str(Block.ICONS.get(element_type, "?"))
+		row.add_child(btn)
+		var element_color: Color = Block.COLORS.get(element_type, Color.GRAY)
+		btns.append({"btn": btn, "filter": element_type, "color": element_color})
+
+	var refresh := func() -> void:
+		for info: Dictionary in btns:
+			var btn: Button = info.btn
+			var filter_value: int = int(info.filter)
+			var selected: bool = filter_value == int(state.filter)
+			btn.button_pressed = selected
+			_apply_filter_button_style(btn, info.color, selected)
+
+	for info: Dictionary in btns:
+		var btn: Button = info.btn
+		var filter_value: int = int(info.filter)
+		btn.pressed.connect(func() -> void:
+			state.filter = filter_value
+			refresh.call()
+			on_changed.call(filter_value)
+		)
+
+	refresh.call()
+	return row
+
+
+static func get_element_filter_order(characters: Array) -> Array[int]:
+	var preferred: Array[int] = [
+		Block.Type.LIGHT,
+		Block.Type.RED,
+		Block.Type.GREEN,
+		Block.Type.BLUE,
+		Block.Type.DARK,
+		Block.Type.YELLOW,
+		Block.Type.PURPLE,
+		Block.Type.ORANGE,
+	]
+	var present: Dictionary = {}
+	for item in characters:
+		if item == null or item is not CharacterData:
+			continue
+		var c: CharacterData = item as CharacterData
+		var element_type: int = int(c.gem_type)
+		if element_type >= 0 and element_type < int(Block.Type.PLANK):
+			present[element_type] = true
+
+	var order: Array[int] = []
+	for element_type: int in preferred:
+		if present.has(element_type):
+			order.append(element_type)
+	for key in present.keys():
+		var element_type: int = int(key)
+		if not order.has(element_type):
+			order.append(element_type)
+	return order
+
+
+static func _apply_filter_button_style(btn: Button, base_color: Color, selected: bool) -> void:
+	for state_name: String in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		var bg_color: Color = Color(0.10, 0.10, 0.13, 0.92)
+		var border_color: Color = Color(base_color.r, base_color.g, base_color.b, 0.72)
+		if selected:
+			bg_color = Color(base_color.r, base_color.g, base_color.b, 0.72)
+			border_color = Color(base_color.r, base_color.g, base_color.b, 1.0).lightened(0.25)
+		if state_name == "hover":
+			bg_color = bg_color.lightened(0.10)
+		elif state_name == "pressed":
+			bg_color = bg_color.darkened(0.12)
+		sb.bg_color = bg_color
+		sb.set_corner_radius_all(6)
+		sb.set_border_width_all(2)
+		sb.border_color = border_color
+		sb.set_content_margin_all(5)
+		btn.add_theme_stylebox_override(state_name, sb)
+	btn.add_theme_color_override("font_color", Color(0.95, 0.95, 0.98))
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
