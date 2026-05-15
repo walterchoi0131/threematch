@@ -188,6 +188,7 @@ func _ready() -> void:
 	battle_manager.battle_won.connect(_on_battle_won)
 	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
+	battle_manager.enemy_stone_magic_cast.connect(_on_enemy_stone_magic_cast)
 	battle_manager.loot_dropped.connect(_on_loot_dropped)
 	battle_manager.round_spawned.connect(_on_round_spawned)
 	battle_manager.turn_gem_blasts_changed.connect(_refresh_gem_meter)
@@ -2322,6 +2323,74 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 		_play_sfx(_se_impact)
 	, CONNECT_ONE_SHOT)
 	trail.launch(from_pos, to_pos, color, 0.5)
+
+
+## 敎人石化魔法：隨機將一個普通格轉為 ROCK
+func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var target_pos: Vector2i = board.get_random_rock_transmutation_target()
+	var enemy_name: String = enemy.data.enemy_name if enemy.data != null else "Enemy"
+	if target_pos == Vector2i(-1, -1):
+		_add_log_entry("[b]%s[/b] 石化魔法沒有目標" % [enemy_name], Block.Type.DARK)
+		return
+
+	var target_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
+	var color: Color = enemy.data.portrait_color if enemy.data != null else Block.COLORS.get(Block.Type.DARK, Color.WHITE)
+	var gather_duration := 0.24
+	_play_stone_magic_gather_vfx(target_global, color, gather_duration)
+	get_tree().create_timer(gather_duration).timeout.connect(func() -> void:
+		if board.transmute_cell_to_rock(target_pos):
+			_play_sfx(_se_impact)
+	, CONNECT_ONE_SHOT)
+	_add_log_entry("[b]%s[/b] 石化魔法：1 格 → %s" % [enemy_name, _gem_bbcode(Block.Type.ROCK)], Block.Type.DARK)
+
+
+## 目標格聚集式石化特效：多條裂紋線從外側收束到中心
+func _play_stone_magic_gather_vfx(target_global: Vector2, color: Color, duration: float) -> void:
+	var root := Node2D.new()
+	root.z_index = 100
+	fx_layer.add_child(root)
+	root.global_position = target_global
+
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var line_color: Color = Color(0.02, 0.02, 0.025, 0.95).lerp(color, 0.25)
+	var line_count := 9
+	for i in line_count:
+		var angle: float = TAU * float(i) / float(line_count) + rng.randf_range(-0.18, 0.18)
+		var dir: Vector2 = Vector2(cos(angle), sin(angle))
+		var tangent: Vector2 = Vector2(-dir.y, dir.x)
+		var length: float = rng.randf_range(88.0, 150.0)
+		var start: Vector2 = dir * length
+		var mid: Vector2 = dir * rng.randf_range(30.0, 58.0) + tangent * rng.randf_range(-18.0, 18.0)
+		var line := Line2D.new()
+		line.points = PackedVector2Array([start, mid, Vector2.ZERO])
+		line.width = rng.randf_range(2.0, 4.0)
+		line.default_color = line_color
+		line.modulate.a = 0.0
+		line.scale = Vector2.ONE
+		root.add_child(line)
+
+		var delay: float = rng.randf_range(0.0, 0.06)
+		var line_tween := create_tween().set_parallel(true)
+		line_tween.tween_property(line, "modulate:a", 1.0, 0.05).set_delay(delay)
+		line_tween.tween_property(line, "scale", Vector2(0.05, 0.05), maxf(duration - delay, 0.05)).set_delay(delay).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		line_tween.tween_property(line, "modulate:a", 0.0, 0.08).set_delay(maxf(duration - 0.08, delay))
+
+	var pulse := ColorRect.new()
+	pulse.color = Color(color.r, color.g, color.b, 0.45)
+	pulse.size = Vector2(44, 44)
+	pulse.position = Vector2(-22, -22)
+	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(pulse)
+	var pulse_tween := create_tween().set_parallel(true)
+	pulse_tween.tween_property(pulse, "scale", Vector2(0.12, 0.12), duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	pulse_tween.tween_property(pulse, "color:a", 0.0, duration)
+	get_tree().create_timer(duration + 0.08).timeout.connect(func() -> void:
+		if is_instance_valid(root):
+			root.queue_free()
+	, CONNECT_ONE_SHOT)
 
 
 # ── 戰鬥回呼 ──────────────────────────────────────────────────

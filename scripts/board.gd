@@ -1360,6 +1360,58 @@ func convert_gems(to_type: Block.Type, count: int, priority_types: Array[Block.T
 	return picked
 
 
+## 隨機取得可被轉化為 ROCK 的普通寶石格；沒有合法目標時回傳 (-1, -1)
+func get_random_rock_transmutation_target() -> Vector2i:
+	var candidates: Array[Vector2i] = []
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null:
+				continue
+			if block.is_upper_gem() or block.is_block() or block.is_rock():
+				continue
+			candidates.append(Vector2i(x, y))
+
+	if candidates.is_empty():
+		return Vector2i(-1, -1)
+
+	candidates.shuffle()
+	return candidates[0]
+
+
+## 將指定普通寶石格轉化為 ROCK，並播放 fuse animation
+func transmute_cell_to_rock(pos: Vector2i) -> bool:
+	if not _is_valid(pos):
+		return false
+	var block: Block = grid[pos.x][pos.y]
+	if block == null:
+		return false
+	if block.is_upper_gem() or block.is_block() or block.is_rock():
+		return false
+
+	block.clear_extras()
+	block.set_upper_type(Block.UpperType.NONE)
+	block.set_block_type(Block.Type.ROCK)
+	if not deferred_clicks.is_empty():
+		deferred_clicks.clear()
+		_init_logic_grid_from_visual()
+	else:
+		_sync_edit_logic_cell(pos, Block.Type.ROCK)
+	play_fuse_animation(block)
+	_update_fuse_hints()
+	return true
+
+
+## 隨機將一個普通寶石格轉化為 ROCK；沒有合法目標時回傳 (-1, -1)
+func transmute_random_cell_to_rock() -> Vector2i:
+	var pos: Vector2i = get_random_rock_transmutation_target()
+	if pos == Vector2i(-1, -1):
+		return pos
+	if not transmute_cell_to_rock(pos):
+		return Vector2i(-1, -1)
+	return pos
+
+
 ## 將棋盤上所有 [from_type] 類型的寶石轉換為 [to_type]。返回轉換數量。
 func convert_all_of_type(from_type: Block.Type, to_type: Block.Type) -> int:
 	var count := 0

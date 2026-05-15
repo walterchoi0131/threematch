@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/enemy/bone_wizard.png" id="2_texture"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
+
+[sub_resource type="Resource" id="gold_drop"]
+script = ExtResource("3_loot_script")
+item_type = 0
+amount_min = 28
+amount_max = 45
+drop_chance = 1.0
+
+[resource]
+script = ExtResource("1_script")
+enemy_name = "Bone Wizard"
+enemy_level = 7
+max_hp = 200
+attack_damage = 26
+attack_coeff = 1.0
+attack_interval = 1
+action_pattern = Array[int]([0, 1])
+portrait_color = Color(0.3, 0.2, 0.45, 1)
+portrait_texture = ExtResource("2_texture")
+element = 7
+loot_table = Array[LootItem]([SubResource("gold_drop")])

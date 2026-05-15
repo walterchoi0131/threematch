@@ -11,6 +11,7 @@ var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
 var is_targeted: bool = false     # 是否被玩家選中為目標
 var turns_until_attack: int = 0   # 距離下次攻擊的剩餘回合數
+var action_pattern_index: int = 0 # 下一次行動在 action_pattern 中的位置
 var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻怪的過殺機制）
 
 @onready var intent_label: Label = $VBox/IntentRow/IntentBG/IntentLabel       # 攻擊意圖標籤
@@ -28,9 +29,25 @@ func setup(enemy_data: EnemyData, init_cd: int = -1) -> void:
 	data = enemy_data
 	current_hp = data.max_hp
 	turns_until_attack = init_cd if init_cd > 0 else data.attack_interval
+	action_pattern_index = 0
 	refresh_ui()
 	_style_hp_label()
 	hp_changed.emit(current_hp, data.max_hp)
+
+
+## 取得目前輪到的行動類型
+func get_current_action() -> int:
+	if data == null:
+		return EnemyData.ActionType.ATTACK
+	return int(data.get_action_at(action_pattern_index))
+
+
+## 推進到下一個行動
+func advance_action_pattern() -> void:
+	if data == null:
+		action_pattern_index = 0
+		return
+	action_pattern_index = data.get_next_action_index(action_pattern_index)
 
 
 ## 隱藏／顯示敵人腳下的 HP 條（當該敵人由頂部 Boss 條顯示時）
@@ -59,7 +76,12 @@ func refresh_ui() -> void:
 func _refresh_intent() -> void:
 	if not intent_label:
 		return
-	intent_label.text = "⚔ %d  CD %d" % [data.attack_damage, turns_until_attack]
+	var action_type: int = get_current_action()
+	match action_type:
+		EnemyData.ActionType.STONE_MAGIC:
+			intent_label.text = "ROCK  CD %d" % [turns_until_attack]
+		_:
+			intent_label.text = "⚔ %d  CD %d" % [data.get_attack_damage(), turns_until_attack]
 	intent_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 	intent_label.add_theme_constant_override("shadow_offset_x", 2)
 	intent_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -81,10 +103,20 @@ func update_cd(turns_left: int) -> void:
 
 ## 攻擊閃光提示
 func flash_attack() -> void:
+	flash_action(EnemyData.ActionType.ATTACK)
+
+
+## 行動閃光提示
+func flash_action(action_type: int) -> void:
 	if not intent_label:
 		return
-	intent_label.text = "⚔ %d ATTACK!" % [data.attack_damage]
-	intent_label.modulate = Color(1.0, 0.15, 0.15)
+	match action_type:
+		EnemyData.ActionType.STONE_MAGIC:
+			intent_label.text = "ROCK!"
+			intent_label.modulate = Color(0.65, 0.65, 0.7)
+		_:
+			intent_label.text = "⚔ %d ATTACK!" % [data.get_attack_damage()]
+			intent_label.modulate = Color(1.0, 0.15, 0.15)
 	# 閃光後刷新顯示（turns_until_attack 已由 battle_manager 重置為 attack_interval）
 	get_tree().create_timer(0.5).timeout.connect(func() -> void:
 		if is_instance_valid(self) and intent_label:

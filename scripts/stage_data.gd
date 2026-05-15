@@ -40,6 +40,7 @@ const BACKGROUND_PATHS: Dictionary = {
 ## 每個敌人生成時的初始 CD（取代 attack_interval）。
 ## 与 rounds 平行的嵌套陣列：rounds_init_cd[round][i] = int。
 ## 留空、長度不足或值 ≤ 0 表示使用 EnemyData.attack_interval 預設。
+## 可用來讓使用 action_pattern 的敵人在開場多等待幾回合。
 @export var rounds_init_cd: Array[Array] = []
 
 @export var background: Background = Background.NONE  # 關卡背景圖片

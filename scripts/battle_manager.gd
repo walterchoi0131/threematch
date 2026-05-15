@@ -11,6 +11,8 @@ signal battle_won()
 signal turn_changed(turn: int)
 ## Emitted when an enemy attacks; Main handles projectile VFX then calls apply_player_damage.
 signal enemy_attacked(enemy: Enemy, damage: int)
+## Emitted when an enemy casts stone magic; Main handles board transmutation VFX.
+signal enemy_stone_magic_cast(enemy: Enemy)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
 signal round_spawned(round_idx: int)  ## 一波敵人已生成完畢
 signal loot_dropped(enemy_data: EnemyData, results: Array)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
@@ -367,19 +369,26 @@ func do_enemy_phase() -> bool:
 	if attacking.is_empty():
 		return false
 	for i in attacking.size():
+		var enemy: Enemy = attacking[i]
+		var action_type: int = enemy.get_current_action()
 		# 重置下一次攻擊 CD（同步邏輯與視覺）
-		attacking[i].turns_until_attack = attacking[i].data.attack_interval
-		logic_enemy_cd[attacking[i]] = attacking[i].data.attack_interval
-		attacking[i].flash_attack()
-		_enemy_attack(attacking[i])
+		enemy.turns_until_attack = enemy.data.attack_interval
+		logic_enemy_cd[enemy] = enemy.data.attack_interval
+		enemy.flash_action(action_type)
+		_enemy_act(enemy, action_type)
 		if i < attacking.size() - 1:
 			await get_tree().create_timer(0.2).timeout
 	return true
 
 
-## 敎人執行攻擊
-func _enemy_attack(enemy: Enemy) -> void:
-	enemy_attacked.emit(enemy, enemy.data.attack_damage)
+## 敎人執行目前 pattern 行動
+func _enemy_act(enemy: Enemy, action_type: int) -> void:
+	enemy.advance_action_pattern()
+	match action_type:
+		EnemyData.ActionType.STONE_MAGIC:
+			enemy_stone_magic_cast.emit(enemy)
+		_:
+			enemy_attacked.emit(enemy, enemy.data.get_attack_damage())
 
 
 ## 對玩家造成傷害

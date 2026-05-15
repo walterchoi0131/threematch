@@ -6,30 +6,13 @@
 [ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
 [ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
 [ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
+[ext_resource type="Resource" path="res://enemies/bone_wizard.tres" id="6_bonewizard"]
 [ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_76jdj"]
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")
 amount_min = 28
 amount_max = 45
-
-[sub_resource type="Resource" id="slime_a1"]
-script = ExtResource("2_enemy")
-enemy_level = 7
-max_hp = 200
-attack_damage = 26
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_a2"]
-script = ExtResource("2_enemy")
-enemy_level = 7
-max_hp = 200
-attack_damage = 26
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
 [sub_resource type="Resource" id="slime_b1"]
 script = ExtResource("2_enemy")
@@ -82,7 +65,8 @@ stage_id = "1-5"
 prerequisite_stage_id = "1-4"
 stage_name = "Stage 1-5 (Dark Test)"
 allowed_types = Array[int]([0, 1, 2, 7])
-rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
+rounds = Array[Array]([[ExtResource("6_bonewizard"), ExtResource("6_bonewizard")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
+rounds_init_cd = Array[Array]([[1, 2], [], []])
 background = 1
 bgm = ExtResource("1_lvgyu")
 fixed_layout = [[-1, 9], [-1, 9], [-1, 9], [-1, 9], [-1, -1], [-1, 9], [-1, 9], [-1, 9]]
