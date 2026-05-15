@@ -3231,7 +3231,7 @@ func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
 
 	var target_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
 	var color: Color = enemy.data.portrait_color if enemy.data != null else Block.COLORS.get(Block.Type.DARK, Color.WHITE)
-	var gather_duration := 0.24
+	var gather_duration := 0.36
 	_play_stone_magic_gather_vfx(target_global, color, gather_duration)
 	get_tree().create_timer(gather_duration).timeout.connect(func() -> void:
 		if board.transmute_cell_to_rock(target_pos):
@@ -3240,51 +3240,31 @@ func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
 	_add_log_entry("[b]%s[/b] 石化魔法：1 格 → %s" % [enemy_name, _gem_bbcode(Block.Type.ROCK)], Block.Type.DARK)
 
 
-## 目標格聚集式石化特效：多條裂紋線從外側收束到中心
-func _play_stone_magic_gather_vfx(target_global: Vector2, color: Color, duration: float) -> void:
-	var root := Node2D.new()
-	root.z_index = 100
-	fx_layer.add_child(root)
-	root.global_position = target_global
-
-	var rng := RandomNumberGenerator.new()
+## 石化前置特效：重用現有攻擊 trail，灰色弧光在目標格周圍出現並旋入中心。
+func _play_stone_magic_gather_vfx(target_global: Vector2, _color: Color, duration: float) -> void:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.randomize()
-	var line_color: Color = Color(0.02, 0.02, 0.025, 0.95).lerp(color, 0.25)
-	var line_count := 9
-	for i in line_count:
-		var angle: float = TAU * float(i) / float(line_count) + rng.randf_range(-0.18, 0.18)
-		var dir: Vector2 = Vector2(cos(angle), sin(angle))
-		var tangent: Vector2 = Vector2(-dir.y, dir.x)
-		var length: float = rng.randf_range(88.0, 150.0)
-		var start: Vector2 = dir * length
-		var mid: Vector2 = dir * rng.randf_range(30.0, 58.0) + tangent * rng.randf_range(-18.0, 18.0)
-		var line := Line2D.new()
-		line.points = PackedVector2Array([start, mid, Vector2.ZERO])
-		line.width = rng.randf_range(2.0, 4.0)
-		line.default_color = line_color
-		line.modulate.a = 0.0
-		line.scale = Vector2.ONE
-		root.add_child(line)
-
-		var delay: float = rng.randf_range(0.0, 0.06)
-		var line_tween := create_tween().set_parallel(true)
-		line_tween.tween_property(line, "modulate:a", 1.0, 0.05).set_delay(delay)
-		line_tween.tween_property(line, "scale", Vector2(0.05, 0.05), maxf(duration - delay, 0.05)).set_delay(delay).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		line_tween.tween_property(line, "modulate:a", 0.0, 0.08).set_delay(maxf(duration - 0.08, delay))
-
-	var pulse := ColorRect.new()
-	pulse.color = Color(color.r, color.g, color.b, 0.45)
-	pulse.size = Vector2(44, 44)
-	pulse.position = Vector2(-22, -22)
-	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(pulse)
-	var pulse_tween := create_tween().set_parallel(true)
-	pulse_tween.tween_property(pulse, "scale", Vector2(0.12, 0.12), duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	pulse_tween.tween_property(pulse, "color:a", 0.0, duration)
-	get_tree().create_timer(duration + 0.08).timeout.connect(func() -> void:
-		if is_instance_valid(root):
-			root.queue_free()
-	, CONNECT_ONE_SHOT)
+	var trail_color: Color = Color(0.55, 0.58, 0.64, 1.0)
+	var trail_count: int = 8
+	# TrailProjectile 內部會再除以 speed_divisor，這裡先乘回去，讓最後一條軌跡能在 duration 結束時貼齊轉石動畫。
+	var launch_duration: float = duration * 0.72 * TrailProjectileScript.speed_divisor
+	for i in trail_count:
+		var angle: float = TAU * float(i) / float(trail_count) + rng.randf_range(-0.22, 0.22)
+		var radius: float = rng.randf_range(120.0, 172.0)
+		var from_pos: Vector2 = target_global + Vector2(cos(angle), sin(angle)) * radius
+		var swirl_spread: float = rng.randf_range(0.9, 1.65) * (-1.0 if rng.randf() < 0.5 else 1.0)
+		var delay: float = duration * rng.randf_range(0.0, 0.28)
+		get_tree().create_timer(delay).timeout.connect(func() -> void:
+			var trail: Node2D = Node2D.new()
+			trail.set_script(TrailProjectileScript)
+			trail.z_index = 100
+			fx_layer.add_child(trail)
+			trail.released.connect(func() -> void:
+				if is_instance_valid(trail):
+					trail.queue_free()
+			, CONNECT_ONE_SHOT)
+			trail.launch(from_pos, target_global, trail_color, launch_duration, swirl_spread)
+		, CONNECT_ONE_SHOT)
 
 
 # ── 戰鬥回呼 ──────────────────────────────────────────────────
