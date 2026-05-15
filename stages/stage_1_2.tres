@@ -1,12 +1,13 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://b5xw1nv2s4tg2"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
-[ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_8hubh"]
+[ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
+[ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
+[ext_resource type="Resource" path="res://enemies/bone_wizard.tres" id="5_8ceh8"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="7_8hubh"]
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")
@@ -82,6 +83,8 @@ stage_id = "1-2"
 prerequisite_stage_id = "1-1"
 stage_name = "Stage 1-2"
 allowed_types = Array[int]([0, 1, 2, 6])
-rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
+rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2"), ExtResource("5_8ceh8")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
+rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0, 0], [0]])
 background = 1
 bgm = ExtResource("1_lvgyu")
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]

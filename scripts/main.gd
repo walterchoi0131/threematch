@@ -134,11 +134,31 @@ const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 	Block.Type.PLANK,
 	Block.Type.ROCK,
 ]
+const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
+const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
 
 var _stage_editor_panel: PanelContainer = null
+var _stage_editor_root_box: VBoxContainer = null
 var _stage_editor_status: Label = null
 var _stage_editor_value_buttons: Dictionary = {}
 var _stage_editor_selected_value: int = Block.Type.RED
+var _stage_editor_enemy_area_panel: Control = null
+var _stage_editor_prev_round_button: Button = null
+var _stage_editor_next_round_button: Button = null
+var _stage_editor_add_round_button: Button = null
+var _stage_editor_remove_round_button: Button = null
+var _stage_editor_enemy_area_round_label: Label = null
+var _stage_editor_enemy_area_slots: Control = null
+var _stage_editor_current_round_index: int = 0
+var _stage_editor_rounds_container: VBoxContainer = null
+var _stage_editor_rounds_list: VBoxContainer = null
+var _stage_editor_rounds_expanded: bool = true
+var _stage_editor_enemy_picker_panel: PanelContainer = null
+var _stage_editor_enemy_picker_grid: GridContainer = null
+var _stage_editor_enemy_picker_round_index: int = -1
+var _stage_editor_rounds: Array[Array] = []
+var _stage_editor_rounds_init_cd: Array[Array] = []
+var _stage_editor_available_enemies: Array[Dictionary] = []
 
 
 # ── 生命週期 ───────────────────────────────────────────────────
@@ -161,7 +181,7 @@ func _ready() -> void:
 			party = [CHAR_DRAGON, CHAR_SHARK, CHAR_PANDA, CHAR_HUSKY]
 
 	if GameState.stage_edit_mode:
-		_setup_stage_edit_mode()
+		call_deferred("_setup_stage_edit_mode")
 		return
 
 	board.gems_blasted.connect(_on_gems_blasted)
@@ -252,7 +272,9 @@ func _layout_board() -> void:
 func _on_viewport_changed(_size: Vector2) -> void:
 	_layout_board()
 	_apply_safe_area()
+	_layout_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
+	_layout_stage_editor_enemy_picker_panel()
 	# 重新放置 chain header（若已建立）
 	if is_instance_valid(_live_chain_header) and is_instance_valid(_live_chain_label):
 		var board_rows: int = current_stage.rows if current_stage != null else 8
@@ -293,11 +315,13 @@ func _setup_stage_edit_mode() -> void:
 	_hide_battle_ui_for_stage_editor()
 	board.set_edit_mode(true)
 	board.set_edit_paint_value(_stage_editor_selected_value)
+	_stage_editor_load_round_state()
 	_apply_stage_background()
 	_layout_board()
 	if not ViewportUtils.viewport_changed.is_connected(_on_viewport_changed):
 		ViewportUtils.viewport_changed.connect(_on_viewport_changed)
 	_apply_safe_area()
+	_build_stage_editor_enemy_area()
 	_build_stage_editor_ui()
 	_set_stage_editor_status("Ready")
 
@@ -336,14 +360,17 @@ func _build_stage_editor_ui() -> void:
 	_stage_editor_panel.add_theme_stylebox_override("panel", panel_style)
 	$UILayer.add_child(_stage_editor_panel)
 
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	_stage_editor_panel.add_child(margin)
+
 	var root_box := VBoxContainer.new()
 	root_box.add_theme_constant_override("separation", 6)
-	root_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root_box.offset_left = 8.0
-	root_box.offset_top = 8.0
-	root_box.offset_right = -8.0
-	root_box.offset_bottom = -8.0
-	_stage_editor_panel.add_child(root_box)
+	margin.add_child(root_box)
+	_stage_editor_root_box = root_box
 
 	var header_row := HBoxContainer.new()
 	header_row.add_theme_constant_override("separation", 10)
@@ -417,6 +444,820 @@ func _make_stage_editor_command_button(label_text: String, callback: Callable) -
 	return button
 
 
+func _make_stage_editor_small_button(label_text: String, callback: Callable, min_size: Vector2 = Vector2(34, 32)) -> Button:
+	var button := Button.new()
+	button.text = label_text
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = min_size
+	button.add_theme_font_size_override("font_size", 12)
+	button.pressed.connect(callback)
+	return button
+
+
+func _make_stage_editor_panel_style(bg_color: Color = Color(0.08, 0.09, 0.12, 0.94)) -> StyleBoxFlat:
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = bg_color
+	panel_style.border_width_top = 2
+	panel_style.border_width_bottom = 2
+	panel_style.border_width_left = 2
+	panel_style.border_width_right = 2
+	panel_style.border_color = Color(0.42, 0.52, 0.72, 0.9)
+	panel_style.corner_radius_top_left = 8
+	panel_style.corner_radius_top_right = 8
+	panel_style.corner_radius_bottom_left = 8
+	panel_style.corner_radius_bottom_right = 8
+	return panel_style
+
+
+func _stage_editor_set_control_rect(control: Control, rect: Rect2) -> void:
+	control.anchor_left = 0.0
+	control.anchor_top = 0.0
+	control.anchor_right = 0.0
+	control.anchor_bottom = 0.0
+	control.offset_left = rect.position.x
+	control.offset_top = rect.position.y
+	control.offset_right = rect.position.x + rect.size.x
+	control.offset_bottom = rect.position.y + rect.size.y
+
+
+func _stage_editor_load_round_state() -> void:
+	_stage_editor_rounds.clear()
+	_stage_editor_rounds_init_cd.clear()
+	if current_stage == null:
+		return
+	for round_index in current_stage.rounds.size():
+		var source_round: Array = current_stage.rounds[round_index]
+		var round_copy: Array = []
+		for enemy_variant in source_round:
+			if enemy_variant is EnemyData:
+				round_copy.append(enemy_variant)
+		_stage_editor_rounds.append(round_copy)
+
+		var cd_copy: Array = []
+		var source_cd: Array = []
+		if round_index < current_stage.rounds_init_cd.size() and current_stage.rounds_init_cd[round_index] is Array:
+			source_cd = current_stage.rounds_init_cd[round_index]
+		for enemy_index in round_copy.size():
+			var cd_value: int = 0
+			if enemy_index < source_cd.size():
+				cd_value = maxi(0, int(source_cd[enemy_index]))
+			cd_copy.append(cd_value)
+		_stage_editor_rounds_init_cd.append(cd_copy)
+	_stage_editor_normalize_cd_lists()
+	_stage_editor_clamp_current_round_index()
+
+
+func _stage_editor_normalize_cd_lists() -> void:
+	while _stage_editor_rounds_init_cd.size() < _stage_editor_rounds.size():
+		_stage_editor_rounds_init_cd.append([])
+	while _stage_editor_rounds_init_cd.size() > _stage_editor_rounds.size():
+		_stage_editor_rounds_init_cd.remove_at(_stage_editor_rounds_init_cd.size() - 1)
+	for round_index in _stage_editor_rounds.size():
+		var round_list: Array = _stage_editor_rounds[round_index]
+		var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+		while cd_list.size() < round_list.size():
+			cd_list.append(0)
+		while cd_list.size() > round_list.size():
+			cd_list.remove_at(cd_list.size() - 1)
+		_stage_editor_rounds_init_cd[round_index] = cd_list
+
+
+func _stage_editor_clamp_current_round_index() -> void:
+	if _stage_editor_rounds.is_empty():
+		_stage_editor_current_round_index = 0
+		return
+	_stage_editor_current_round_index = clampi(_stage_editor_current_round_index, 0, _stage_editor_rounds.size() - 1)
+
+
+func _build_stage_editor_enemy_area() -> void:
+	if _stage_editor_enemy_area_panel != null:
+		return
+	_stage_editor_enemy_area_panel = ColorRect.new()
+	_stage_editor_enemy_area_panel.name = "StageEditorEnemyArea"
+	_stage_editor_enemy_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	(_stage_editor_enemy_area_panel as ColorRect).color = Color(0.02, 0.025, 0.04, 0.82)
+	$UILayer.add_child(_stage_editor_enemy_area_panel)
+
+	_stage_editor_prev_round_button = _make_stage_editor_small_button("<-", _on_stage_editor_prev_round_pressed, Vector2(42, 30))
+	_stage_editor_enemy_area_panel.add_child(_stage_editor_prev_round_button)
+
+	_stage_editor_enemy_area_round_label = Label.new()
+	_stage_editor_enemy_area_round_label.text = "Round"
+	_stage_editor_enemy_area_round_label.add_theme_font_size_override("font_size", 13)
+	_stage_editor_enemy_area_round_label.add_theme_color_override("font_color", Color.WHITE)
+	_stage_editor_enemy_area_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_editor_enemy_area_panel.add_child(_stage_editor_enemy_area_round_label)
+
+	_stage_editor_next_round_button = _make_stage_editor_small_button("->", _on_stage_editor_next_round_pressed, Vector2(42, 30))
+	_stage_editor_enemy_area_panel.add_child(_stage_editor_next_round_button)
+	_stage_editor_add_round_button = _make_stage_editor_small_button("+", _on_stage_editor_add_round_from_area_pressed, Vector2(32, 30))
+	_stage_editor_enemy_area_panel.add_child(_stage_editor_add_round_button)
+	_stage_editor_remove_round_button = _make_stage_editor_small_button("-", _on_stage_editor_remove_current_round_pressed, Vector2(32, 30))
+	_stage_editor_enemy_area_panel.add_child(_stage_editor_remove_round_button)
+
+	_stage_editor_enemy_area_slots = Control.new()
+	_stage_editor_enemy_area_slots.name = "EnemySlots"
+	_stage_editor_enemy_area_slots.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage_editor_enemy_area_slots.clip_contents = true
+	_stage_editor_enemy_area_panel.add_child(_stage_editor_enemy_area_slots)
+
+	_layout_stage_editor_enemy_area()
+	_refresh_stage_editor_enemy_area()
+
+
+func _layout_stage_editor_enemy_area() -> void:
+	if _stage_editor_enemy_area_panel == null:
+		return
+	var viewport_size: Vector2 = ViewportUtils.get_size()
+	var insets: Vector4 = ViewportUtils.get_safe_insets()
+	var panel_height := 130.0
+	var panel_top: float = maxf(44.0 + insets.x, board.position.y - panel_height - 6.0)
+	var panel_width: float = maxf(120.0, viewport_size.x - 24.0)
+	_stage_editor_set_control_rect(_stage_editor_enemy_area_panel, Rect2(12.0, panel_top, panel_width, panel_height))
+	_stage_editor_set_control_rect(_stage_editor_prev_round_button, Rect2(8.0, 8.0, 38.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_remove_round_button, Rect2(panel_width - 40.0, 8.0, 32.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_add_round_button, Rect2(panel_width - 76.0, 8.0, 32.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_next_round_button, Rect2(panel_width - 120.0, 8.0, 38.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_enemy_area_round_label, Rect2(50.0, 8.0, maxf(80.0, panel_width - 176.0), 28.0))
+	_stage_editor_set_control_rect(_stage_editor_enemy_area_slots, Rect2(8.0, 42.0, panel_width - 16.0, 82.0))
+
+
+func _refresh_stage_editor_enemy_area() -> void:
+	if _stage_editor_enemy_area_slots == null:
+		return
+	_stage_editor_normalize_cd_lists()
+	_stage_editor_clamp_current_round_index()
+	for child in _stage_editor_enemy_area_slots.get_children():
+		_stage_editor_enemy_area_slots.remove_child(child)
+		child.queue_free()
+
+	if _stage_editor_rounds.is_empty():
+		if _stage_editor_enemy_area_round_label != null:
+			_stage_editor_enemy_area_round_label.text = "No rounds"
+		var add_round_slot: Control = _make_stage_editor_add_round_slot()
+		_stage_editor_enemy_area_slots.add_child(add_round_slot)
+		_stage_editor_set_control_rect(add_round_slot, Rect2(0.0, 0.0, 116.0, 78.0))
+		return
+
+	var round_index: int = _stage_editor_current_round_index
+	var round_list: Array = _stage_editor_rounds[round_index]
+	if _stage_editor_enemy_area_round_label != null:
+		_stage_editor_enemy_area_round_label.text = "Round %d / %d  (%d enemies)" % [round_index + 1, _stage_editor_rounds.size(), round_list.size()]
+	var card_width := 116.0
+	var card_height := 78.0
+	var gap := 8.0
+	var x := 0.0
+	for enemy_index in round_list.size():
+		var card: Control = _make_stage_editor_enemy_area_card(round_index, enemy_index)
+		_stage_editor_enemy_area_slots.add_child(card)
+		_stage_editor_set_control_rect(card, Rect2(x, 0.0, card_width, card_height))
+		x += card_width + gap
+	var add_enemy_slot: Control = _make_stage_editor_add_enemy_slot(round_index)
+	_stage_editor_enemy_area_slots.add_child(add_enemy_slot)
+	_stage_editor_set_control_rect(add_enemy_slot, Rect2(x, 0.0, 78.0, 78.0))
+
+
+func _make_stage_editor_add_round_slot() -> Control:
+	var button := Button.new()
+	button.text = "+ Round"
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(116, 84)
+	button.add_theme_font_size_override("font_size", 14)
+	button.pressed.connect(_on_stage_editor_add_round_from_area_pressed)
+	return button
+
+
+func _make_stage_editor_add_enemy_slot(round_index: int) -> Control:
+	var button := Button.new()
+	button.text = "+"
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(78, 78)
+	button.add_theme_font_size_override("font_size", 30)
+	button.tooltip_text = "Add enemy"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.46)
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_color = Color(0.78, 0.86, 1.0, 0.72)
+	style.corner_radius_top_left = 39
+	style.corner_radius_top_right = 39
+	style.corner_radius_bottom_left = 39
+	style.corner_radius_bottom_right = 39
+	button.add_theme_stylebox_override("normal", style)
+	button.add_theme_stylebox_override("hover", style)
+	button.add_theme_stylebox_override("pressed", style)
+	button.pressed.connect(_on_stage_editor_add_enemy_pressed.bind(round_index))
+	return button
+
+
+func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> Control:
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	var enemy_data: EnemyData = enemy_list[enemy_index]
+	var cd_value: int = int(cd_list[enemy_index])
+
+	var card := ColorRect.new()
+	card.color = Color(0.06, 0.07, 0.10, 0.9)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var portrait := TextureRect.new()
+	portrait.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.texture = enemy_data.portrait_texture
+	card.add_child(portrait)
+	_stage_editor_set_control_rect(portrait, Rect2(4.0, 4.0, 42.0, 42.0))
+
+	var name_label := Label.new()
+	name_label.text = enemy_data.enemy_name
+	name_label.tooltip_text = enemy_data.resource_path if not enemy_data.resource_path.is_empty() else enemy_data.enemy_name
+	name_label.add_theme_font_size_override("font_size", 10)
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card.add_child(name_label)
+	_stage_editor_set_control_rect(name_label, Rect2(50.0, 4.0, 38.0, 42.0))
+
+	var remove_button: Button = _make_stage_editor_small_button("X", _on_stage_editor_remove_enemy_pressed.bind(round_index, enemy_index), Vector2(22, 22))
+	card.add_child(remove_button)
+	_stage_editor_set_control_rect(remove_button, Rect2(90.0, 4.0, 22.0, 22.0))
+
+	var minus_button: Button = _make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(22, 22))
+	card.add_child(minus_button)
+	_stage_editor_set_control_rect(minus_button, Rect2(4.0, 52.0, 22.0, 22.0))
+	var cd_label := Label.new()
+	cd_label.text = "CD %s" % ("Auto" if cd_value <= 0 else str(cd_value))
+	cd_label.add_theme_font_size_override("font_size", 10)
+	cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(cd_label)
+	_stage_editor_set_control_rect(cd_label, Rect2(28.0, 52.0, 34.0, 22.0))
+	var plus_button: Button = _make_stage_editor_small_button("+", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, 1), Vector2(22, 22))
+	card.add_child(plus_button)
+	_stage_editor_set_control_rect(plus_button, Rect2(64.0, 52.0, 22.0, 22.0))
+	var auto_button: Button = _make_stage_editor_small_button("A", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(22, 22))
+	card.add_child(auto_button)
+	_stage_editor_set_control_rect(auto_button, Rect2(88.0, 52.0, 22.0, 22.0))
+	return card
+
+
+func _build_stage_editor_rounds_panel() -> void:
+	if _stage_editor_rounds_container != null:
+		return
+	if _stage_editor_root_box == null:
+		return
+	_stage_editor_rounds_container = VBoxContainer.new()
+	_stage_editor_rounds_container.name = "StageEditorRoundsInline"
+	_stage_editor_rounds_container.add_theme_constant_override("separation", 6)
+	_stage_editor_rounds_container.visible = _stage_editor_rounds_expanded
+	_stage_editor_rounds_container.custom_minimum_size = Vector2(0, 154)
+	_stage_editor_rounds_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_root_box.add_child(_stage_editor_rounds_container)
+
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 8)
+	_stage_editor_rounds_container.add_child(header_row)
+
+	var title := Label.new()
+	title.text = "Rounds"
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(title)
+
+	header_row.add_child(_make_stage_editor_small_button("Add Round", _on_stage_editor_add_round_pressed, Vector2(78, 28)))
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 142)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_stage_editor_rounds_container.add_child(scroll)
+
+	_stage_editor_rounds_list = VBoxContainer.new()
+	_stage_editor_rounds_list.add_theme_constant_override("separation", 6)
+	_stage_editor_rounds_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_stage_editor_rounds_list)
+
+	_refresh_stage_editor_rounds_panel()
+
+
+func _build_stage_editor_enemy_picker_panel() -> void:
+	if _stage_editor_enemy_picker_panel != null:
+		return
+	_stage_editor_enemy_picker_panel = PanelContainer.new()
+	_stage_editor_enemy_picker_panel.name = "StageEditorEnemyPicker"
+	_stage_editor_enemy_picker_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stage_editor_enemy_picker_panel.visible = false
+	_stage_editor_enemy_picker_panel.z_index = 160
+	_stage_editor_enemy_picker_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.04, 0.05, 0.08, 0.98)))
+	$UILayer.add_child(_stage_editor_enemy_picker_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	_stage_editor_enemy_picker_panel.add_child(margin)
+
+	var root_box := VBoxContainer.new()
+	root_box.add_theme_constant_override("separation", 8)
+	margin.add_child(root_box)
+
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 8)
+	root_box.add_child(header_row)
+
+	var title := Label.new()
+	title.text = "Add Enemy"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(title)
+	header_row.add_child(_make_stage_editor_small_button("Close", _on_stage_editor_enemy_picker_close_pressed, Vector2(64, 32)))
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root_box.add_child(scroll)
+
+	_stage_editor_enemy_picker_grid = GridContainer.new()
+	_stage_editor_enemy_picker_grid.columns = 2
+	_stage_editor_enemy_picker_grid.add_theme_constant_override("h_separation", 6)
+	_stage_editor_enemy_picker_grid.add_theme_constant_override("v_separation", 6)
+	scroll.add_child(_stage_editor_enemy_picker_grid)
+	_layout_stage_editor_enemy_picker_panel()
+
+
+func _refresh_stage_editor_rounds_panel() -> void:
+	if _stage_editor_rounds_list == null:
+		return
+	_stage_editor_normalize_cd_lists()
+	for child in _stage_editor_rounds_list.get_children():
+		_stage_editor_rounds_list.remove_child(child)
+		child.queue_free()
+
+	if _stage_editor_rounds.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "No rounds yet. Add a round to begin."
+		empty_label.add_theme_color_override("font_color", Color(0.8, 0.86, 0.95, 1.0))
+		_stage_editor_rounds_list.add_child(empty_label)
+		return
+
+	for round_index in _stage_editor_rounds.size():
+		_stage_editor_rounds_list.add_child(_make_stage_editor_round_section(round_index))
+
+
+func _make_stage_editor_round_section(round_index: int) -> Control:
+	var round_list: Array = _stage_editor_rounds[round_index]
+	var section := PanelContainer.new()
+	section.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.12, 0.13, 0.18, 0.92)))
+	var row_count: int = maxi(1, round_list.size())
+	section.custom_minimum_size = Vector2(0, 72 + row_count * 92)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	section.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	margin.add_child(box)
+
+	var header := VBoxContainer.new()
+	header.add_theme_constant_override("separation", 4)
+	box.add_child(header)
+
+	var title := Label.new()
+	title.text = "Round %d  (%d enemies)" % [round_index + 1, round_list.size()]
+	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	var round_buttons := HBoxContainer.new()
+	round_buttons.add_theme_constant_override("separation", 6)
+	header.add_child(round_buttons)
+	round_buttons.add_child(_make_stage_editor_small_button("Add Enemy", _on_stage_editor_add_enemy_pressed.bind(round_index), Vector2(92, 28)))
+	round_buttons.add_child(_make_stage_editor_small_button("Remove Round", _on_stage_editor_remove_round_pressed.bind(round_index), Vector2(102, 28)))
+
+	if round_list.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "Empty round (add at least one enemy before saving)."
+		empty_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.55, 1.0))
+		box.add_child(empty_label)
+		return section
+
+	for enemy_index in round_list.size():
+		box.add_child(_make_stage_editor_enemy_row(round_index, enemy_index))
+	return section
+
+
+func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control:
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	var enemy_data: EnemyData = enemy_list[enemy_index]
+	var row_panel := PanelContainer.new()
+	row_panel.custom_minimum_size = Vector2(0, 86)
+	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.06, 0.07, 0.11, 0.98)))
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_top", 5)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_bottom", 5)
+	row_panel.add_child(margin)
+
+	var row_box := VBoxContainer.new()
+	row_box.add_theme_constant_override("separation", 4)
+	row_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(row_box)
+
+	var info_row := HBoxContainer.new()
+	info_row.add_theme_constant_override("separation", 6)
+	info_row.custom_minimum_size = Vector2(0, 48)
+	info_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_box.add_child(info_row)
+
+	var portrait_box := PanelContainer.new()
+	portrait_box.custom_minimum_size = Vector2(46, 46)
+	portrait_box.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.02, 0.025, 0.04, 1.0)))
+	info_row.add_child(portrait_box)
+
+	var portrait := TextureRect.new()
+	portrait.custom_minimum_size = Vector2(46, 46)
+	portrait.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.texture = enemy_data.portrait_texture
+	portrait_box.add_child(portrait)
+
+	var name_label := Label.new()
+	var source_name: String = enemy_data.resource_path.get_file() if not enemy_data.resource_path.is_empty() else "inline"
+	name_label.text = enemy_data.enemy_name
+	name_label.tooltip_text = source_name
+	name_label.add_theme_font_size_override("font_size", 11)
+	name_label.add_theme_color_override("font_color", Color(0.9, 0.94, 1.0, 1.0))
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_row.add_child(name_label)
+	info_row.add_child(_make_stage_editor_small_button("X", _on_stage_editor_remove_enemy_pressed.bind(round_index, enemy_index), Vector2(30, 30)))
+
+	var cd_value: int = int(cd_list[enemy_index])
+	var control_row := HBoxContainer.new()
+	control_row.add_theme_constant_override("separation", 6)
+	control_row.custom_minimum_size = Vector2(0, 30)
+	control_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_box.add_child(control_row)
+
+	var cd_label := Label.new()
+	cd_label.text = "CD %s" % ("Auto" if cd_value <= 0 else str(cd_value))
+	cd_label.custom_minimum_size = Vector2(58, 0)
+	cd_label.add_theme_font_size_override("font_size", 11)
+	cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	control_row.add_child(cd_label)
+	control_row.add_child(_make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(34, 30)))
+	control_row.add_child(_make_stage_editor_small_button("+", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, 1), Vector2(34, 30)))
+	control_row.add_child(_make_stage_editor_small_button("Auto", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(54, 30)))
+	return row_panel
+
+
+func _layout_stage_editor_enemy_picker_panel() -> void:
+	if _stage_editor_enemy_picker_panel == null:
+		return
+	var viewport_size: Vector2 = ViewportUtils.get_size()
+	var panel_width: float = minf(620.0, viewport_size.x - 40.0)
+	var panel_height: float = minf(720.0, viewport_size.y - 120.0)
+	if _stage_editor_enemy_picker_grid != null:
+		_stage_editor_enemy_picker_grid.columns = 1 if panel_width < 520.0 else 2
+	var panel_left: float = (viewport_size.x - panel_width) * 0.5
+	var panel_top: float = (viewport_size.y - panel_height) * 0.5
+	_stage_editor_enemy_picker_panel.anchor_left = 0.0
+	_stage_editor_enemy_picker_panel.anchor_top = 0.0
+	_stage_editor_enemy_picker_panel.anchor_right = 0.0
+	_stage_editor_enemy_picker_panel.anchor_bottom = 0.0
+	_stage_editor_enemy_picker_panel.offset_left = panel_left
+	_stage_editor_enemy_picker_panel.offset_right = panel_left + panel_width
+	_stage_editor_enemy_picker_panel.offset_top = panel_top
+	_stage_editor_enemy_picker_panel.offset_bottom = panel_top + panel_height
+
+
+func _on_stage_editor_rounds_pressed() -> void:
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Enemy area refreshed")
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_prev_round_pressed() -> void:
+	if _stage_editor_rounds.is_empty():
+		return
+	_stage_editor_current_round_index = posmod(_stage_editor_current_round_index - 1, _stage_editor_rounds.size())
+	_refresh_stage_editor_enemy_area()
+
+
+func _on_stage_editor_next_round_pressed() -> void:
+	if _stage_editor_rounds.is_empty():
+		return
+	_stage_editor_current_round_index = posmod(_stage_editor_current_round_index + 1, _stage_editor_rounds.size())
+	_refresh_stage_editor_enemy_area()
+
+
+func _on_stage_editor_add_round_from_area_pressed() -> void:
+	var insert_index: int = _stage_editor_current_round_index + 1 if not _stage_editor_rounds.is_empty() else 0
+	_stage_editor_rounds.insert(insert_index, [])
+	_stage_editor_rounds_init_cd.insert(insert_index, [])
+	_stage_editor_current_round_index = insert_index
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Round added")
+
+
+func _on_stage_editor_remove_current_round_pressed() -> void:
+	if _stage_editor_rounds.is_empty():
+		return
+	_stage_editor_rounds.remove_at(_stage_editor_current_round_index)
+	_stage_editor_rounds_init_cd.remove_at(_stage_editor_current_round_index)
+	_stage_editor_clamp_current_round_index()
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Round removed")
+
+
+func _on_stage_editor_rounds_close_pressed() -> void:
+	_stage_editor_rounds_expanded = true
+	if _stage_editor_rounds_container != null:
+		_stage_editor_rounds_container.visible = true
+		_refresh_stage_editor_rounds_panel()
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_add_round_pressed() -> void:
+	_stage_editor_rounds.append([])
+	_stage_editor_rounds_init_cd.append([])
+	_stage_editor_current_round_index = _stage_editor_rounds.size() - 1
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Round added")
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_remove_round_pressed(round_index: int) -> void:
+	if round_index < 0 or round_index >= _stage_editor_rounds.size():
+		return
+	_stage_editor_rounds.remove_at(round_index)
+	_stage_editor_rounds_init_cd.remove_at(round_index)
+	_stage_editor_clamp_current_round_index()
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Round removed")
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_add_enemy_pressed(round_index: int) -> void:
+	if round_index < 0 or round_index >= _stage_editor_rounds.size():
+		return
+	_stage_editor_enemy_picker_round_index = round_index
+	if _stage_editor_enemy_picker_panel == null:
+		_build_stage_editor_enemy_picker_panel()
+	_stage_editor_available_enemies = _stage_editor_load_available_enemies()
+	_refresh_stage_editor_enemy_picker()
+	if _stage_editor_enemy_picker_panel != null:
+		_stage_editor_enemy_picker_panel.visible = true
+	_set_stage_editor_status("Pick an enemy")
+
+
+func _on_stage_editor_remove_enemy_pressed(round_index: int, enemy_index: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	enemy_list.remove_at(enemy_index)
+	cd_list.remove_at(enemy_index)
+	_stage_editor_rounds[round_index] = enemy_list
+	_stage_editor_rounds_init_cd[round_index] = cd_list
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Enemy removed")
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_cd_delta_pressed(round_index: int, enemy_index: int, delta: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	cd_list[enemy_index] = maxi(0, int(cd_list[enemy_index]) + delta)
+	_stage_editor_rounds_init_cd[round_index] = cd_list
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_cd_auto_pressed(round_index: int, enemy_index: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	cd_list[enemy_index] = 0
+	_stage_editor_rounds_init_cd[round_index] = cd_list
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+
+
+func _stage_editor_has_enemy_slot(round_index: int, enemy_index: int) -> bool:
+	if round_index < 0 or round_index >= _stage_editor_rounds.size():
+		return false
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	return enemy_index >= 0 and enemy_index < enemy_list.size()
+
+
+func _on_stage_editor_enemy_picker_close_pressed() -> void:
+	if _stage_editor_enemy_picker_panel != null:
+		_stage_editor_enemy_picker_panel.visible = false
+	_stage_editor_enemy_picker_round_index = -1
+
+
+func _refresh_stage_editor_enemy_picker() -> void:
+	if _stage_editor_enemy_picker_grid == null:
+		return
+	for child in _stage_editor_enemy_picker_grid.get_children():
+		_stage_editor_enemy_picker_grid.remove_child(child)
+		child.queue_free()
+	if _stage_editor_available_enemies.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "No EnemyData resources found in res://enemies."
+		empty_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.55, 1.0))
+		_stage_editor_enemy_picker_grid.add_child(empty_label)
+		return
+	for entry: Dictionary in _stage_editor_available_enemies:
+		_stage_editor_enemy_picker_grid.add_child(_make_stage_editor_enemy_picker_button(entry))
+
+
+func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
+	var enemy_data: EnemyData = entry.get("data", null) as EnemyData
+	var resource_path: String = String(entry.get("path", ""))
+	var display_name: String = String(entry.get("name", ""))
+	if enemy_data != null:
+		display_name = enemy_data.enemy_name
+	if display_name.is_empty():
+		display_name = resource_path.get_file()
+	var button := Button.new()
+	button.text = "%s\n%s" % [display_name, resource_path.get_file()]
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(250, 72)
+	button.add_theme_font_size_override("font_size", 11)
+	if enemy_data != null and enemy_data.portrait_texture != null:
+		button.icon = enemy_data.portrait_texture
+		button.expand_icon = true
+	elif entry.has("manifest_entry"):
+		var manifest_entry: Dictionary = entry["manifest_entry"]
+		var image_path: String = String(manifest_entry.get("image_path", ""))
+		if not image_path.is_empty():
+			var texture_resource: Resource = load(image_path)
+			if texture_resource is Texture2D:
+				button.icon = texture_resource as Texture2D
+				button.expand_icon = true
+	button.tooltip_text = resource_path
+	button.pressed.connect(_on_stage_editor_enemy_entry_picked.bind(entry))
+	return button
+
+
+func _on_stage_editor_enemy_entry_picked(entry: Dictionary) -> void:
+	var enemy_data: EnemyData = entry.get("data", null) as EnemyData
+	if enemy_data == null and entry.has("manifest_entry"):
+		enemy_data = _stage_editor_make_manifest_enemy(entry["manifest_entry"])
+	if enemy_data == null:
+		_set_stage_editor_status("Enemy load failed", false)
+		return
+	_on_stage_editor_enemy_picked(enemy_data)
+
+
+func _on_stage_editor_enemy_picked(enemy_data: EnemyData) -> void:
+	var round_index: int = _stage_editor_enemy_picker_round_index
+	if round_index < 0 or round_index >= _stage_editor_rounds.size():
+		return
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	enemy_list.append(enemy_data)
+	cd_list.append(0)
+	_stage_editor_rounds[round_index] = enemy_list
+	_stage_editor_rounds_init_cd[round_index] = cd_list
+	if _stage_editor_enemy_picker_panel != null:
+		_stage_editor_enemy_picker_panel.visible = false
+	_stage_editor_enemy_picker_round_index = -1
+	_refresh_stage_editor_rounds_panel()
+	_stage_editor_current_round_index = round_index
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Enemy added")
+	_layout_stage_editor_ui()
+
+
+func _stage_editor_load_available_enemies() -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	_stage_editor_collect_enemy_resources(STAGE_EDITOR_ENEMY_ROOT, results)
+	_stage_editor_collect_manifest_enemies(results)
+	results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var left: String = String(a.get("label", ""))
+		var right: String = String(b.get("label", ""))
+		return left.naturalnocasecmp_to(right) < 0
+	)
+	return results
+
+
+func _stage_editor_collect_enemy_resources(dir_path: String, results: Array[Dictionary]) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while not file_name.is_empty():
+		if dir.current_is_dir():
+			if not file_name.begins_with("."):
+				_stage_editor_collect_enemy_resources("%s/%s" % [dir_path, file_name], results)
+		elif file_name.ends_with(".tres") or file_name.ends_with(".res"):
+			var resource_path: String = "%s/%s" % [dir_path, file_name]
+			var resource: Resource = load(resource_path)
+			if resource is EnemyData:
+				var enemy_data: EnemyData = resource as EnemyData
+				results.append({
+					"data": enemy_data,
+					"path": resource_path,
+					"label": "%s %s" % [enemy_data.enemy_name, resource_path],
+				})
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+
+func _stage_editor_collect_manifest_enemies(results: Array[Dictionary]) -> void:
+	if not FileAccess.file_exists(STAGE_EDITOR_GENERATED_MANIFEST):
+		return
+	var file := FileAccess.open(STAGE_EDITOR_GENERATED_MANIFEST, FileAccess.READ)
+	if file == null:
+		return
+	var manifest_text: String = file.get_as_text()
+	var parsed: Variant = JSON.parse_string(manifest_text)
+	if not (parsed is Dictionary):
+		return
+	var manifest: Dictionary = parsed
+	var entries: Array = manifest.get("entries", [])
+	for entry_variant in entries:
+		if not (entry_variant is Dictionary):
+			continue
+		var entry: Dictionary = entry_variant
+		if not bool(entry.get("enabled", true)):
+			continue
+		var image_path: String = String(entry.get("image_path", ""))
+		if image_path.is_empty():
+			continue
+		var display_name: String = String(entry.get("display_name", "")).strip_edges()
+		if display_name.is_empty():
+			display_name = String(entry.get("provisional_id", image_path.get_file())).strip_edges()
+		results.append({
+			"manifest_entry": entry,
+			"name": display_name,
+			"path": image_path,
+			"label": "%s %s" % [display_name, image_path],
+		})
+
+
+func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
+	var image_path: String = String(entry.get("image_path", ""))
+	if image_path.is_empty():
+		return null
+	var texture_resource: Resource = load(image_path)
+	var enemy_data := EnemyData.new()
+	var display_name: String = String(entry.get("display_name", "")).strip_edges()
+	if display_name.is_empty():
+		display_name = String(entry.get("provisional_id", image_path.get_file())).strip_edges()
+	enemy_data.enemy_name = display_name
+	enemy_data.enemy_level = int(entry.get("enemy_level", 1))
+	enemy_data.max_hp = int(entry.get("max_hp", 50))
+	enemy_data.attack_damage = int(entry.get("attack_damage", 6))
+	enemy_data.attack_coeff = float(entry.get("attack_coeff", 1.0))
+	enemy_data.attack_interval = int(entry.get("attack_interval", 2))
+	enemy_data.element = int(entry.get("element", Block.Type.DARK)) as Block.Type
+	if texture_resource is Texture2D:
+		enemy_data.portrait_texture = texture_resource as Texture2D
+	var portrait_values: Array = entry.get("portrait_color", [])
+	if portrait_values.size() >= 4:
+		enemy_data.portrait_color = Color(float(portrait_values[0]), float(portrait_values[1]), float(portrait_values[2]), float(portrait_values[3]))
+	var action_values: Array = entry.get("action_pattern", [])
+	var action_pattern: Array[EnemyData.ActionType] = []
+	for action_variant in action_values:
+		var action_value: EnemyData.ActionType = int(action_variant) as EnemyData.ActionType
+		action_pattern.append(action_value)
+	if not action_pattern.is_empty():
+		enemy_data.action_pattern = action_pattern
+	var loot := LootItem.new()
+	loot.amount_min = int(entry.get("loot_min", 1))
+	loot.amount_max = int(entry.get("loot_max", 1))
+	loot.drop_chance = 1.0
+	var loot_table: Array[LootItem] = []
+	loot_table.append(loot)
+	enemy_data.loot_table = loot_table
+	return enemy_data
+
+
 func _stage_editor_type_name(value: int) -> String:
 	match value:
 		Block.Type.RED:
@@ -456,12 +1297,63 @@ func _on_stage_editor_clear_pressed() -> void:
 
 
 func _on_stage_editor_save_pressed() -> void:
-	var err: int = board.save_fixed_layout_to_stage()
+	if current_stage == null or current_stage.resource_path.is_empty():
+		_set_stage_editor_status("Save failed: no stage resource", false)
+		return
+	var validation_error: String = _stage_editor_validate_rounds_for_save()
+	if not validation_error.is_empty():
+		_set_stage_editor_status(validation_error, false)
+		return
+	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
+	current_stage.rounds = _stage_editor_get_rounds_snapshot()
+	current_stage.rounds_init_cd = _stage_editor_get_round_cds_snapshot()
+	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
 	if err == OK:
-		var file_name: String = current_stage.resource_path.get_file() if current_stage != null else "stage"
+		var file_name: String = current_stage.resource_path.get_file()
 		_set_stage_editor_status("Saved %s" % file_name)
 	else:
 		_set_stage_editor_status("Save failed (%d)" % err, false)
+
+
+func _stage_editor_validate_rounds_for_save() -> String:
+	if current_stage == null:
+		return "Save failed: no stage"
+	if current_stage.mode == StageData.Mode.ESCAPE:
+		return ""
+	if _stage_editor_rounds.is_empty():
+		return "Save failed: add at least one round"
+	for round_index in _stage_editor_rounds.size():
+		var round_list: Array = _stage_editor_rounds[round_index]
+		if round_list.is_empty():
+			return "Save failed: round %d is empty" % (round_index + 1)
+		for enemy_variant in round_list:
+			if not (enemy_variant is EnemyData):
+				return "Save failed: round %d has invalid enemy" % (round_index + 1)
+	return ""
+
+
+func _stage_editor_get_rounds_snapshot() -> Array[Array]:
+	var snapshot: Array[Array] = []
+	for round_variant in _stage_editor_rounds:
+		var round_list: Array = round_variant
+		var round_copy: Array = []
+		for enemy_variant in round_list:
+			if enemy_variant is EnemyData:
+				round_copy.append(enemy_variant)
+		snapshot.append(round_copy)
+	return snapshot
+
+
+func _stage_editor_get_round_cds_snapshot() -> Array[Array]:
+	_stage_editor_normalize_cd_lists()
+	var snapshot: Array[Array] = []
+	for round_index in _stage_editor_rounds_init_cd.size():
+		var source_cd: Array = _stage_editor_rounds_init_cd[round_index]
+		var cd_copy: Array = []
+		for cd_variant in source_cd:
+			cd_copy.append(maxi(0, int(cd_variant)))
+		snapshot.append(cd_copy)
+	return snapshot
 
 
 func _on_stage_editor_back_pressed() -> void:
@@ -485,7 +1377,9 @@ func _layout_stage_editor_ui() -> void:
 	var insets: Vector4 = ViewportUtils.get_safe_insets()
 	var board_rows: int = current_stage.rows if current_stage != null else 8
 	var board_height: float = float(board_rows) * 64.0 * board.scale.y
-	var panel_height: float = 164.0
+	var base_panel_height: float = 132.0
+	var max_panel_height: float = maxf(180.0, viewport_size.y - insets.x - insets.z - 16.0)
+	var panel_height: float = minf(base_panel_height, max_panel_height)
 	var preferred_top: float = board.position.y + board_height + 12.0
 	var max_top: float = viewport_size.y - panel_height - insets.z - 8.0
 	var min_top: float = 8.0 + insets.x
