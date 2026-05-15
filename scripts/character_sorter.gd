@@ -210,9 +210,6 @@ static func get_element_filter_order(characters: Array) -> Array[int]:
 		Block.Type.GREEN,
 		Block.Type.BLUE,
 		Block.Type.DARK,
-		Block.Type.YELLOW,
-		Block.Type.PURPLE,
-		Block.Type.ORANGE,
 	]
 	var present: Dictionary = {}
 	for item in characters:
@@ -220,7 +217,7 @@ static func get_element_filter_order(characters: Array) -> Array[int]:
 			continue
 		var c: CharacterData = item as CharacterData
 		var element_type: int = int(c.gem_type)
-		if element_type >= 0 and element_type < int(Block.Type.PLANK):
+		if element_type >= 0 and element_type < int(Block.Type.PLANK) and Block.is_valid_type_value(element_type):
 			present[element_type] = true
 
 	var order: Array[int] = []

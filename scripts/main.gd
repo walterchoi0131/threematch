@@ -124,6 +124,21 @@ const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
 const BGM_PREVIEW_PITCH := 1               # 預覽模式BGM播放速度
 const BGM_PREVIEW_TIME_SCALE := 0.6          # 預覽模式遊戲速度
 const BGM_FADE_DUR := 0.25                   # 音量/速度漸變時間
+const STAGE_EDITOR_RANDOM := -1
+const STAGE_EDITOR_GEM_TYPES: Array[int] = [
+	Block.Type.RED,
+	Block.Type.BLUE,
+	Block.Type.GREEN,
+	Block.Type.LIGHT,
+	Block.Type.DARK,
+	Block.Type.PLANK,
+	Block.Type.ROCK,
+]
+
+var _stage_editor_panel: PanelContainer = null
+var _stage_editor_status: Label = null
+var _stage_editor_value_buttons: Dictionary = {}
+var _stage_editor_selected_value: int = Block.Type.RED
 
 
 # ── 生命週期 ───────────────────────────────────────────────────
@@ -144,6 +159,10 @@ func _ready() -> void:
 			party = last
 		else:
 			party = [CHAR_DRAGON, CHAR_SHARK, CHAR_PANDA, CHAR_HUSKY]
+
+	if GameState.stage_edit_mode:
+		_setup_stage_edit_mode()
+		return
 
 	board.gems_blasted.connect(_on_gems_blasted)
 	board.score_changed.connect(_on_score_changed)
@@ -177,8 +196,7 @@ func _ready() -> void:
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
-	return_button.text = Locale.tr_ui("EXIT")
-	return_button.visible = true
+	return_button.visible = false
 	_setup_boss_bar()
 	_setup_kill_all_button()
 	_setup_escape_hud()
@@ -217,37 +235,28 @@ func _apply_stage_background() -> void:
 ## 依當前 viewport 大小縮放與置中棋盤。
 func _layout_board() -> void:
 	var vp: Vector2 = ViewportUtils.get_size()
-	var board_size: Vector2 = _get_board_pixel_size()
+	var board_columns: int = current_stage.columns if current_stage != null else 8
+	var board_w: float = float(board_columns) * 64.0
 	# 棋盤左右各保留 16px 邊距；最多放大到讓棋盤填滿可用寬度
 	var max_w: float = vp.x - 32.0
-	var max_h: float = vp.y * 0.58
-	var s: float = max(0.1, minf(max_w / maxf(board_size.x, 1.0), max_h / maxf(board_size.y, 1.0)))
+	var s: float = max(0.1, max_w / board_w)
 	board.scale = Vector2(s, s)
-	board.position = Vector2((vp.x - board_size.x * s) * 0.5, vp.y * 0.22)
+	board.position = Vector2((vp.x - board_w * s) * 0.5, vp.y * 0.22)
 	# 背景圖片：從畫面最頂端延伸到棋盤頂端（cover fit）
 	_battle_bg_rect.position = Vector2(0.0, 0.0)
 	_battle_bg_rect.size = Vector2(vp.x, board.position.y)
-
-
-func _get_board_pixel_size() -> Vector2:
-	var board_columns: int = int(board.columns)
-	var board_rows: int = int(board.rows)
-	var cell_size: float = float(board.CELL_SIZE)
-	return Vector2(float(board_columns) * cell_size, float(board_rows) * cell_size)
-
-
-func _get_board_bottom_left() -> Vector2:
-	var board_size: Vector2 = _get_board_pixel_size()
-	return Vector2(board.position.x, board.position.y + board_size.y * board.scale.y)
 
 
 ## Viewport 改變時重排棋盤與 UI。
 func _on_viewport_changed(_size: Vector2) -> void:
 	_layout_board()
 	_apply_safe_area()
+	_layout_stage_editor_ui()
 	# 重新放置 chain header（若已建立）
 	if is_instance_valid(_live_chain_header) and is_instance_valid(_live_chain_label):
-		var bl: Vector2 = _get_board_bottom_left()
+		var board_rows: int = current_stage.rows if current_stage != null else 8
+		var board_h: float = float(board_rows) * 64.0 * board.scale.y
+		var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
 		_live_chain_header.position = bl + Vector2(8.0, -64.0)
 		_live_chain_label.position = bl + Vector2(8.0, -44.0)
 
@@ -277,6 +286,219 @@ func _apply_safe_area() -> void:
 	if ret_btn:
 		ret_btn.offset_top = -96.0 - bottom_inset
 		ret_btn.offset_bottom = -56.0 - bottom_inset
+
+
+func _setup_stage_edit_mode() -> void:
+	_hide_battle_ui_for_stage_editor()
+	board.set_edit_mode(true)
+	board.set_edit_paint_value(_stage_editor_selected_value)
+	_apply_stage_background()
+	_layout_board()
+	if not ViewportUtils.viewport_changed.is_connected(_on_viewport_changed):
+		ViewportUtils.viewport_changed.connect(_on_viewport_changed)
+	_apply_safe_area()
+	_build_stage_editor_ui()
+	_set_stage_editor_status("Ready")
+
+
+func _hide_battle_ui_for_stage_editor() -> void:
+	var top_bar: Control = $UILayer/TopBar
+	top_bar.visible = false
+	var hp_bar: Control = $UILayer/PlayerHPBar
+	hp_bar.visible = false
+	enemy_container.visible = false
+	character_panel.visible = false
+	gem_meter.visible = false
+	status_label.visible = false
+	return_button.visible = false
+	_escape_refill_label.visible = false
+	var restart_button: Button = $UILayer/RestartButton
+	restart_button.visible = false
+	board.battle_manager_ref = null
+
+
+func _build_stage_editor_ui() -> void:
+	if _stage_editor_panel != null:
+		return
+	_stage_editor_panel = PanelContainer.new()
+	_stage_editor_panel.name = "StageEditorToolbar"
+	_stage_editor_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.08, 0.09, 0.12, 0.94)
+	panel_style.border_width_top = 2
+	panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(0.42, 0.52, 0.72, 0.9)
+	panel_style.corner_radius_top_left = 8
+	panel_style.corner_radius_top_right = 8
+	panel_style.corner_radius_bottom_left = 8
+	panel_style.corner_radius_bottom_right = 8
+	_stage_editor_panel.add_theme_stylebox_override("panel", panel_style)
+	$UILayer.add_child(_stage_editor_panel)
+
+	var root_box := VBoxContainer.new()
+	root_box.add_theme_constant_override("separation", 6)
+	root_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root_box.offset_left = 8.0
+	root_box.offset_top = 8.0
+	root_box.offset_right = -8.0
+	root_box.offset_bottom = -8.0
+	_stage_editor_panel.add_child(root_box)
+
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 10)
+	root_box.add_child(header_row)
+
+	var stage_label := Label.new()
+	stage_label.text = "Edit %s" % current_stage.stage_id if current_stage != null else "Edit Stage"
+	stage_label.add_theme_font_size_override("font_size", 16)
+	stage_label.add_theme_color_override("font_color", Color.WHITE)
+	stage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(stage_label)
+
+	_stage_editor_status = Label.new()
+	_stage_editor_status.text = ""
+	_stage_editor_status.add_theme_font_size_override("font_size", 14)
+	_stage_editor_status.add_theme_color_override("font_color", Color(0.75, 0.9, 1.0, 1.0))
+	_stage_editor_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_stage_editor_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(_stage_editor_status)
+
+	var button_grid := GridContainer.new()
+	button_grid.columns = 7
+	button_grid.add_theme_constant_override("h_separation", 6)
+	button_grid.add_theme_constant_override("v_separation", 6)
+	root_box.add_child(button_grid)
+
+	for gem_type: int in STAGE_EDITOR_GEM_TYPES:
+		var value_button: Button = _make_stage_editor_value_button(gem_type, _stage_editor_type_name(gem_type))
+		button_grid.add_child(value_button)
+		_stage_editor_value_buttons[gem_type] = value_button
+
+	var eraser_button: Button = _make_stage_editor_value_button(STAGE_EDITOR_RANDOM, "Erase")
+	button_grid.add_child(eraser_button)
+	_stage_editor_value_buttons[STAGE_EDITOR_RANDOM] = eraser_button
+
+	button_grid.add_child(_make_stage_editor_command_button("Clear All", _on_stage_editor_clear_pressed))
+	button_grid.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
+	button_grid.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
+
+	_refresh_stage_editor_value_buttons()
+	_layout_stage_editor_ui()
+
+
+func _make_stage_editor_value_button(value: int, label_text: String) -> Button:
+	var button := Button.new()
+	button.toggle_mode = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(58, 42)
+	button.tooltip_text = label_text
+	button.add_theme_font_size_override("font_size", 13)
+	if value == STAGE_EDITOR_RANDOM:
+		button.text = label_text
+	elif Block.GEM_TEXTURES.has(value):
+		var icon_texture: Texture2D = Block.GEM_TEXTURES[value]
+		button.icon = icon_texture
+		button.expand_icon = true
+	else:
+		button.text = str(Block.ICONS.get(value, label_text))
+		button.add_theme_color_override("font_color", Block.COLORS.get(value, Color.WHITE))
+	button.pressed.connect(_on_stage_editor_value_selected.bind(value))
+	return button
+
+
+func _make_stage_editor_command_button(label_text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = label_text
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(88, 42)
+	button.add_theme_font_size_override("font_size", 13)
+	button.pressed.connect(callback)
+	return button
+
+
+func _stage_editor_type_name(value: int) -> String:
+	match value:
+		Block.Type.RED:
+			return "Red"
+		Block.Type.BLUE:
+			return "Blue"
+		Block.Type.GREEN:
+			return "Green"
+		Block.Type.LIGHT:
+			return "Light"
+		Block.Type.DARK:
+			return "Dark"
+		Block.Type.PLANK:
+			return "Plank"
+		Block.Type.ROCK:
+			return "Rock"
+		_:
+			return "Gem"
+
+
+func _on_stage_editor_value_selected(value: int) -> void:
+	_stage_editor_selected_value = value
+	board.set_edit_paint_value(value)
+	_refresh_stage_editor_value_buttons()
+	_set_stage_editor_status(_stage_editor_type_name(value) if value != STAGE_EDITOR_RANDOM else "Erase")
+
+
+func _refresh_stage_editor_value_buttons() -> void:
+	for key in _stage_editor_value_buttons.keys():
+		var button: Button = _stage_editor_value_buttons[key]
+		button.set_pressed_no_signal(int(key) == _stage_editor_selected_value)
+
+
+func _on_stage_editor_clear_pressed() -> void:
+	board.clear_fixed_layout()
+	_set_stage_editor_status("Cleared")
+
+
+func _on_stage_editor_save_pressed() -> void:
+	var err: int = board.save_fixed_layout_to_stage()
+	if err == OK:
+		var file_name: String = current_stage.resource_path.get_file() if current_stage != null else "stage"
+		_set_stage_editor_status("Saved %s" % file_name)
+	else:
+		_set_stage_editor_status("Save failed (%d)" % err, false)
+
+
+func _on_stage_editor_back_pressed() -> void:
+	GameState.stage_edit_mode = false
+	board.set_edit_mode(false)
+	GameState.fade_to_scene("res://scenes/map.tscn", 0.25)
+
+
+func _set_stage_editor_status(message: String, ok: bool = true) -> void:
+	if _stage_editor_status == null:
+		return
+	_stage_editor_status.text = message
+	var status_color: Color = Color(0.75, 0.9, 1.0, 1.0) if ok else Color(1.0, 0.55, 0.5, 1.0)
+	_stage_editor_status.add_theme_color_override("font_color", status_color)
+
+
+func _layout_stage_editor_ui() -> void:
+	if _stage_editor_panel == null:
+		return
+	var viewport_size: Vector2 = ViewportUtils.get_size()
+	var insets: Vector4 = ViewportUtils.get_safe_insets()
+	var board_rows: int = current_stage.rows if current_stage != null else 8
+	var board_height: float = float(board_rows) * 64.0 * board.scale.y
+	var panel_height: float = 164.0
+	var preferred_top: float = board.position.y + board_height + 12.0
+	var max_top: float = viewport_size.y - panel_height - insets.z - 8.0
+	var min_top: float = 8.0 + insets.x
+	if max_top < min_top:
+		max_top = min_top
+	var panel_top: float = clampf(preferred_top, min_top, max_top)
+	_stage_editor_panel.anchor_left = 0.0
+	_stage_editor_panel.anchor_top = 0.0
+	_stage_editor_panel.anchor_right = 0.0
+	_stage_editor_panel.anchor_bottom = 0.0
+	_stage_editor_panel.offset_left = 16.0
+	_stage_editor_panel.offset_right = viewport_size.x - 16.0
+	_stage_editor_panel.offset_top = panel_top
+	_stage_editor_panel.offset_bottom = panel_top + panel_height
 
 
 ## 設定融合提示：從隊伍角色中收集融合技能並傳遞給棋盤
@@ -1612,7 +1834,8 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 ## 建立或更新連鏈數字標籤，並播放 pop 彈跳動畫
 func _update_chain_label(count: int) -> void:
 	# 棋盤左下角座標（fx_layer 為 CanvasLayer，使用螢幕座標；考量 board.scale）
-	var bl: Vector2 = _get_board_bottom_left()
+	var board_h: float = 8.0 * 64.0 * board.scale.y
+	var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
 	# 每多一連鎖 +5 fontsize，加成上限 +50
 	var base_font_size: int = 44
 	var font_bonus: int = mini((count - 1) * 5, 50)
@@ -1622,7 +1845,7 @@ func _update_chain_label(count: int) -> void:
 	# "Chain" 靜態標籤 — 只建立一次
 	if not is_instance_valid(_live_chain_header):
 		_live_chain_header = Label.new()
-		_live_chain_header.text = Locale.tr_ui("COMBO")
+		_live_chain_header.text = "Chain"
 		_live_chain_header.add_theme_font_size_override("font_size", 22)
 		_live_chain_header.add_theme_color_override("font_color", Color.WHITE)
 		_live_chain_header.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -1752,8 +1975,6 @@ func _handle_active_skill(char_index: int) -> void:
 				var tb: Block = board.grid[p.x][p.y]
 				if tb == null:
 					continue
-				if tb.is_rock():
-					continue
 				if tb.is_block():
 					# BREAK 屬性：龍焰領域可連同 PLANK 一併側除
 					if c.has_break_essence and board.silently_destroy_plank(p):
@@ -1780,7 +2001,7 @@ func _handle_active_skill(char_index: int) -> void:
 			for pos in positions:
 				var p: Vector2i = pos as Vector2i
 				var tb: Block = board.grid[p.x][p.y]
-				if tb == null or tb.is_block() or tb.is_rock():
+				if tb == null or tb.is_block():
 					continue
 				if tb.block_type != Block.Type.LIGHT:
 					board._animate_gem_morph(tb, Block.Type.LIGHT)
@@ -1798,7 +2019,7 @@ func _handle_active_skill(char_index: int) -> void:
 				return
 			var center_p: Vector2i = sel_positions[0] as Vector2i
 			var center_block: Block = board.grid[center_p.x][center_p.y]
-			if center_block == null or center_block.is_block() or center_block.is_rock():
+			if center_block == null:
 				return
 
 			# ── 狸貓手掌點擊動畫 ────────────────────────────────
@@ -1878,14 +2099,14 @@ func _handle_active_skill(char_index: int) -> void:
 				if not board._is_valid(np):
 					continue
 				var nb: Block = board.grid[np.x][np.y]
-				if nb == null or nb.is_upper_gem() or nb.is_block() or nb.is_rock():
+				if nb == null or nb.is_upper_gem() or nb.is_block():
 					continue
 				if nb.block_type == target_element:
 					continue
 				board._animate_gem_morph(nb, target_element)
 				converted += 1
 			# 生息.強 加 X3 標記到中心寶石（高階寶石跳過）
-			if c.active_skill_name == "Resurgence+" and not center_block.is_upper_gem() and not center_block.is_rock():
+			if c.active_skill_name == "Resurgence+" and not center_block.is_upper_gem():
 				center_block.add_extra(Block.ExtraEffect.X3)
 			var skill_label: String = Locale.tr_ui(c.active_skill_name)
 			_add_log_entry("%s：%d→%s" % [skill_label, converted, _gem_bbcode(target_element)], target_element, c)
@@ -2408,8 +2629,6 @@ func _drop_plank_pile_animation() -> void:
 		for y in target_rows:
 			# 先靜默釋放原本位置的 block（不論 plank/gem/upper），不發信號
 			var existing: Block = board.grid[x][y]
-			if existing != null and existing.is_rock():
-				continue
 			if existing != null and is_instance_valid(existing):
 				board.grid[x][y] = null
 				existing.queue_free()
@@ -2880,33 +3099,21 @@ func _setup_boss_bar() -> void:
 	bar.add_child(_boss_bar_label)
 
 
-## 建立「Exit / Restart / Kill All / Combo Test / Skill Reset」按鈕列。
+## 在 Restart 右側建立「Kill All」「Combo Test」「Skill Reset」偵錯按鈕，四顆水平排成一列
 func _setup_kill_all_button() -> void:
 	var ui_layer: CanvasLayer = $UILayer
-	var exit_btn: Node = ui_layer.get_node_or_null("ReturnButton")
 	var restart_btn: Node = ui_layer.get_node_or_null("RestartButton")
 
-	# 五顆按鈕同寬，間距 6px，整組以 anchor 0.5 置中。
+	# 三顆按鈕同寬 (140px)，間距 8px，整組以 anchor 0.5 置中：
+	#   Restart: -226 to -86
+	#   Kill All: -78 to +62
+	#   Combo Test: +70 to +210
 	var top_off: float = -96.0
 	var bot_off: float = -56.0
 	if restart_btn is Button:
 		var rb: Button = restart_btn as Button
 		top_off = rb.offset_top
 		bot_off = rb.offset_bottom
-		rb.offset_left = -162.0
-		rb.offset_right = -58.0
-	if exit_btn is Button:
-		var eb: Button = exit_btn as Button
-		eb.text = Locale.tr_ui("EXIT")
-		eb.visible = true
-		eb.anchor_left = 0.5
-		eb.anchor_top = 1.0
-		eb.anchor_right = 0.5
-		eb.anchor_bottom = 1.0
-		eb.offset_left = -272.0
-		eb.offset_right = -168.0
-		eb.offset_top = top_off
-		eb.offset_bottom = bot_off
 
 	_kill_all_btn = Button.new()
 	_kill_all_btn.name = "KillAllButton"
@@ -2916,8 +3123,8 @@ func _setup_kill_all_button() -> void:
 	_kill_all_btn.anchor_top = 1.0
 	_kill_all_btn.anchor_right = 0.5
 	_kill_all_btn.anchor_bottom = 1.0
-	_kill_all_btn.offset_left = -52.0
-	_kill_all_btn.offset_right = 52.0
+	_kill_all_btn.offset_left = -78.0
+	_kill_all_btn.offset_right = 62.0
 	_kill_all_btn.offset_top = top_off
 	_kill_all_btn.offset_bottom = bot_off
 	_kill_all_btn.pressed.connect(_on_kill_all_pressed)
@@ -2931,8 +3138,8 @@ func _setup_kill_all_button() -> void:
 	combo_btn.anchor_top = 1.0
 	combo_btn.anchor_right = 0.5
 	combo_btn.anchor_bottom = 1.0
-	combo_btn.offset_left = 58.0
-	combo_btn.offset_right = 162.0
+	combo_btn.offset_left = 70.0
+	combo_btn.offset_right = 210.0
 	combo_btn.offset_top = top_off
 	combo_btn.offset_bottom = bot_off
 	combo_btn.pressed.connect(_on_combo_test_pressed.bind(combo_btn))
@@ -2946,8 +3153,8 @@ func _setup_kill_all_button() -> void:
 	skill_reset_btn.anchor_top = 1.0
 	skill_reset_btn.anchor_right = 0.5
 	skill_reset_btn.anchor_bottom = 1.0
-	skill_reset_btn.offset_left = 168.0
-	skill_reset_btn.offset_right = 272.0
+	skill_reset_btn.offset_left = 218.0
+	skill_reset_btn.offset_right = 358.0
 	skill_reset_btn.offset_top = top_off
 	skill_reset_btn.offset_bottom = bot_off
 	skill_reset_btn.pressed.connect(_on_skill_reset_pressed)

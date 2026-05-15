@@ -16,9 +16,10 @@ A match-3 puzzle game built with Godot 4.6.
 | Red    | 🔴     | ♥    |
 | Blue   | 🔵     | ♦    |
 | Green  | 🟢     | ♣    |
-| Yellow | 🟡     | ★    |
-| Purple | 🟣     | ●    |
-| Orange | 🟠     | ▲    |
+| Light  | 🟡     | ✦    |
+| Dark   | 🟣     | ☾    |
+| Plank  | 🟤     | ■    |
+| Rock   | ⚫     | R    |
 
 ---
 

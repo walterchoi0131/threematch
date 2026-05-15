@@ -49,6 +49,7 @@ const LOGIC_SPAWNED_UNKNOWN := 998
 const LOGIC_UPPER := -1
 const LOGIC_PLANK := -2
 const LOGIC_ROCK := -3
+const EDIT_RANDOM := -1
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
 var deferred_clicks: Array[Vector2i] = []
@@ -82,6 +83,13 @@ var _longpress_raised_blocks: Array[Block] = []  # 預覽時被抬高 z_index �
 var _tutorial_filter: Array[Vector2i] = []   # 非空時，只允許點擊這些位置
 var _hand_sprite: Sprite2D = null            # 教學手指圖示
 var _hand_tween: Tween = null                # 手指浮動動畫
+
+# ── 關卡棋盤編輯模式 ───────────────────────────────────────
+var _edit_mode: bool = false
+var _edit_paint_value: int = Block.Type.RED
+var _edit_dragging: bool = false
+var _edit_last_painted: Vector2i = Vector2i(-1, -1)
+var _edit_layout_values: Array = []
 
 ## collapse-and-fill 前置回呼：在現有寶石落定後、新寶石生成前由外部（main.gd）設定。
 ## 設定後每次有新寶石填入前會 await 此 Callable（可用於燃燒扣血等需要視覺節奏的效果）。
@@ -157,7 +165,7 @@ func initialize_board() -> void:
 			for y in rows:
 				if y < col.size() and grid[x][y] != null:
 					var t: int = int(col[y])
-					if t < 0:
+					if t < 0 or not Block.is_valid_type_value(t):
 						continue
 					grid[x][y].set_block_type(t)
 	# 關卡 1-4：所有 PLANK 自動掛載 BURNING 效果
@@ -330,7 +338,14 @@ func _random_type() -> int:
 			return Block.Type.GREEN
 		else:
 			return Block.Type.LIGHT
-	return allowed_types[randi() % allowed_types.size()]
+	var candidates: Array[int] = []
+	for value: Block.Type in allowed_types:
+		var type_value: int = int(value)
+		if Block.is_valid_type_value(type_value) and type_value != Block.Type.PLANK and type_value != Block.Type.ROCK:
+			candidates.append(type_value)
+	if candidates.is_empty():
+		return Block.Type.RED
+	return candidates[randi() % candidates.size()]
 
 
 ## 將網格座標轉換為世界像素座標（格子中心點）
@@ -368,8 +383,198 @@ func _shake_block(block: Block) -> void:
 	sh_tw.tween_property(block, "position:x", base_x, 0.05)
 
 
+func set_edit_mode(enabled: bool) -> void:
+	_edit_mode = enabled
+	_edit_dragging = false
+	_edit_last_painted = Vector2i(-1, -1)
+	if enabled:
+		deferred_clicks.clear()
+		is_busy = false
+		_selection_mode = false
+		_clear_preview_overlays()
+		if _longpress_active:
+			_hide_blast_preview()
+		_longpress_pos = Vector2i(-1, -1)
+		_longpress_timer = 0.0
+		_longpress_active = false
+		_build_edit_layout_from_stage()
+		_apply_edit_layout_to_visuals()
+	else:
+		_edit_layout_values.clear()
+
+
+func set_edit_paint_value(value: int) -> void:
+	_edit_paint_value = _normalize_edit_value(value)
+
+
+func paint_cell(pos: Vector2i, value: int) -> void:
+	if not _is_valid(pos):
+		return
+	_ensure_edit_layout_values()
+	var normalized: int = _normalize_edit_value(value)
+	var col: Array = _edit_layout_values[pos.x]
+	col[pos.y] = normalized
+	_set_edit_cell_visual(pos, normalized)
+	_edit_last_painted = pos
+
+
+func clear_fixed_layout() -> void:
+	_ensure_edit_layout_values()
+	for x in columns:
+		var col: Array = _edit_layout_values[x]
+		for y in rows:
+			col[y] = EDIT_RANDOM
+			_set_edit_cell_visual(Vector2i(x, y), EDIT_RANDOM)
+
+
+func get_fixed_layout_snapshot() -> Array:
+	_ensure_edit_layout_values()
+	var layout: Array = []
+	layout.resize(columns)
+	for x in columns:
+		var source_col: Array = _edit_layout_values[x]
+		var col: Array = []
+		col.resize(rows)
+		for y in rows:
+			col[y] = _normalize_edit_value(int(source_col[y]))
+		layout[x] = col
+	return layout
+
+
+func save_fixed_layout_to_stage() -> int:
+	if stage == null or stage.resource_path == "":
+		push_warning("Board editor: cannot save fixed_layout without a stage resource path.")
+		return ERR_INVALID_PARAMETER
+	stage.fixed_layout = get_fixed_layout_snapshot()
+	return ResourceSaver.save(stage, stage.resource_path)
+
+
+func _handle_edit_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_button: InputEventMouseButton = event as InputEventMouseButton
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse_button.pressed:
+			var press_pos: Vector2i = world_to_grid(get_local_mouse_position())
+			_edit_dragging = _is_valid(press_pos)
+			_edit_last_painted = Vector2i(-1, -1)
+			if _edit_dragging:
+				paint_cell(press_pos, _edit_paint_value)
+		else:
+			_edit_dragging = false
+			_edit_last_painted = Vector2i(-1, -1)
+		return
+	if event is InputEventMouseMotion and _edit_dragging:
+		var drag_pos: Vector2i = world_to_grid(get_local_mouse_position())
+		if _is_valid(drag_pos) and drag_pos != _edit_last_painted:
+			paint_cell(drag_pos, _edit_paint_value)
+
+
+func _build_edit_layout_from_stage() -> void:
+	_edit_layout_values.clear()
+	_edit_layout_values.resize(columns)
+	for x in columns:
+		var col: Array = []
+		col.resize(rows)
+		for y in rows:
+			col[y] = EDIT_RANDOM
+		_edit_layout_values[x] = col
+
+	if stage == null or stage.fixed_layout.size() != columns:
+		return
+	for x in columns:
+		if not (stage.fixed_layout[x] is Array):
+			continue
+		var source_col: Array = stage.fixed_layout[x]
+		var target_col: Array = _edit_layout_values[x]
+		for y in rows:
+			if y >= source_col.size():
+				continue
+			target_col[y] = _normalize_edit_value(int(source_col[y]))
+
+
+func _ensure_edit_layout_values() -> void:
+	if _edit_layout_values.size() != columns:
+		_build_edit_layout_from_stage()
+		return
+	for x in columns:
+		if not (_edit_layout_values[x] is Array):
+			_build_edit_layout_from_stage()
+			return
+		var col: Array = _edit_layout_values[x]
+		if col.size() != rows:
+			_build_edit_layout_from_stage()
+			return
+
+
+func _apply_edit_layout_to_visuals() -> void:
+	_ensure_edit_layout_values()
+	for x in columns:
+		var col: Array = _edit_layout_values[x]
+		for y in rows:
+			_set_edit_cell_visual(Vector2i(x, y), int(col[y]))
+	_init_logic_grid_from_visual()
+
+
+func _set_edit_cell_visual(pos: Vector2i, value: int) -> void:
+	var normalized: int = _normalize_edit_value(value)
+	if normalized == EDIT_RANDOM:
+		var old_block: Block = grid[pos.x][pos.y]
+		if old_block != null:
+			old_block.visible = false
+			old_block.queue_free()
+			grid[pos.x][pos.y] = null
+		_sync_edit_logic_cell(pos, EDIT_RANDOM)
+		return
+
+	var block: Block = grid[pos.x][pos.y]
+	if block == null:
+		block = _create_block(pos.x, pos.y)
+	block.grid_pos = pos
+	block.position = grid_to_world(pos)
+	block.scale = Vector2.ONE
+	block.modulate = Color(1, 1, 1, 1)
+	block.z_index = 0
+	block.clear_extras()
+	block.set_upper_type(Block.UpperType.NONE)
+	block.set_block_type(normalized)
+	grid[pos.x][pos.y] = block
+	_sync_edit_logic_cell(pos, normalized)
+
+
+func _sync_edit_logic_cell(pos: Vector2i, value: int) -> void:
+	if logic_grid.size() != columns or not (logic_grid[pos.x] is Array):
+		_init_logic_grid_from_visual()
+		return
+	var logic_col: Array = logic_grid[pos.x]
+	if logic_col.size() != rows:
+		_init_logic_grid_from_visual()
+		return
+	var normalized: int = _normalize_edit_value(value)
+	if normalized == EDIT_RANDOM:
+		logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
+	elif normalized == Block.Type.PLANK:
+		logic_grid[pos.x][pos.y] = LOGIC_PLANK
+	elif normalized == Block.Type.ROCK:
+		logic_grid[pos.x][pos.y] = LOGIC_ROCK
+	else:
+		logic_grid[pos.x][pos.y] = normalized
+
+
+func _normalize_edit_value(value: int) -> int:
+	if value == EDIT_RANDOM:
+		return EDIT_RANDOM
+	if Block.is_valid_type_value(value):
+		return value
+	return EDIT_RANDOM
+
+
 ## 處理滑鼠輸入：左鍵點擊棋盤上的寶石；選擇模式下懸停預覽 + 點擊確認；長按高階寶石預覽爆炸範圍
 func _unhandled_input(event: InputEvent) -> void:
+	if _edit_mode:
+		_handle_edit_input(event)
+		return
+
 	if _selection_mode:
 		if event is InputEventMouseMotion:
 			var local_pos := get_local_mouse_position()

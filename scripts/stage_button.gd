@@ -7,6 +7,7 @@ class_name StageButton
 extends Control
 
 signal stage_pressed(stage: StageData)
+signal stage_edit_pressed(stage: StageData)
 
 const FLAG_TEXTURE_PATH: String = "res://assets/flag.png"
 const FLAG_HFRAMES: int = 5
@@ -18,7 +19,9 @@ const OVAL_SCALE: float = 0.5
 ## 橢圓填色：未通關橘色、已通關淺綠
 const OVAL_FILL_AVAILABLE: Color = Color(0.94, 0.62, 0.18, 1.0)
 const OVAL_FILL_CLEARED: Color = Color(0.61, 0.90, 0.61, 1.0)
+const OVAL_FILL_LOCKED: Color = Color(0.34, 0.35, 0.38, 1.0)
 const OVAL_BORDER: Color = Color(0.24, 0.16, 0.08, 1.0)
+const EDIT_BUTTON_SIZE: Vector2 = Vector2(42, 28)
 
 ## 綁定的關卡資料（必填）
 @export var stage: StageData = null:
@@ -42,6 +45,7 @@ const OVAL_BORDER: Color = Color(0.24, 0.16, 0.08, 1.0)
 @export var available_tint: Color = Color(1, 1, 1, 1)
 
 var _btn: Button = null
+var _edit_btn: Button = null
 var _label: Label = null
 var _label_bg: TextureRect = null
 var _marker: Label = null
@@ -109,6 +113,17 @@ func _build() -> void:
 		_btn.pressed.connect(_on_pressed)
 		_btn.mouse_entered.connect(_on_hover_enter)
 		_btn.mouse_exited.connect(_on_hover_exit)
+
+	_edit_btn = Button.new()
+	_edit_btn.name = "EditBtn"
+	_edit_btn.text = "Edit"
+	_edit_btn.focus_mode = Control.FOCUS_NONE
+	_edit_btn.tooltip_text = "Edit stage layout"
+	_edit_btn.custom_minimum_size = EDIT_BUTTON_SIZE
+	_edit_btn.add_theme_font_size_override("font_size", 11)
+	add_child(_edit_btn)
+	if not Engine.is_editor_hint():
+		_edit_btn.pressed.connect(_on_edit_pressed)
 
 	# 關卡名稱標籤背景（仿戰鬥場景敵人意圖：黑色漸層 0→0.5→0）
 	_label_bg = TextureRect.new()
@@ -207,6 +222,11 @@ func _layout() -> void:
 	if _btn != null:
 		_btn.position = Vector2(0, 0)
 		_btn.size = Vector2(button_size.x, oval_h)
+	if _edit_btn != null:
+		var edit_x: float = max(0.0, oval_x - EDIT_BUTTON_SIZE.x - 4.0)
+		var edit_y: float = oval_y + (oval_h_small - EDIT_BUTTON_SIZE.y) * 0.5
+		_edit_btn.position = Vector2(edit_x, edit_y)
+		_edit_btn.size = EDIT_BUTTON_SIZE
 	if _label_bg != null:
 		var bg_h: float = button_size.y - oval_h
 		_label_bg.position = Vector2(0, oval_h)
@@ -242,12 +262,23 @@ func get_anchor_center() -> Vector2:
 	return Vector2(button_size.x * 0.5, oval_h * 0.5)
 
 
+func is_unlocked_for_play() -> bool:
+	if stage == null:
+		return false
+	if Engine.is_editor_hint():
+		return true
+	var prereq: String = stage.prerequisite_stage_id
+	return prereq == "" or GameState.is_stage_cleared(prereq)
+
+
 func _refresh() -> void:
 	if _btn == null:
 		return
 	if stage == null:
 		_btn.text = ""
 		_btn.disabled = true
+		if _edit_btn != null:
+			_edit_btn.visible = false
 		visible = true
 		if _label != null:
 			_label.text = ""
@@ -259,20 +290,22 @@ func _refresh() -> void:
 		return
 
 	var sid: String = stage.stage_id
-	var prereq: String = stage.prerequisite_stage_id
 	var in_editor: bool = Engine.is_editor_hint()
-	var unlocked: bool = in_editor or prereq == "" or GameState.is_stage_cleared(prereq)
+	var unlocked: bool = is_unlocked_for_play()
 	var cleared: bool = not in_editor and GameState.is_stage_cleared(sid)
 
-	visible = unlocked
+	visible = true
 	_btn.text = ""
-	_btn.disabled = false
+	_btn.disabled = not unlocked
 	_btn.modulate = cleared_tint if cleared else available_tint
-	var oval_col: Color = OVAL_FILL_CLEARED if cleared else OVAL_FILL_AVAILABLE
+	var oval_col: Color = OVAL_FILL_CLEARED if cleared else (OVAL_FILL_AVAILABLE if unlocked else OVAL_FILL_LOCKED)
 	if _oval != null:
 		_oval.fill_color = oval_col
 	if _glow != null:
 		_glow.fill_color = Color(oval_col.r, oval_col.g, oval_col.b, 0.55)
+	if _edit_btn != null:
+		_edit_btn.visible = not in_editor
+		_edit_btn.disabled = false
 	if _label != null:
 		_label.text = sid
 	# 已通關顯示旗幟動畫；未通關則由 set_latest 控制 "!"
@@ -322,11 +355,21 @@ func _process(delta: float) -> void:
 func _on_pressed() -> void:
 	if stage == null:
 		return
+	if not is_unlocked_for_play():
+		return
 	stage_pressed.emit(stage)
+
+
+func _on_edit_pressed() -> void:
+	if stage == null:
+		return
+	stage_edit_pressed.emit(stage)
 
 
 func _on_hover_enter() -> void:
 	if _glow == null or stage == null:
+		return
+	if not is_unlocked_for_play():
 		return
 	_fade_glow(1.0, 0.12)
 

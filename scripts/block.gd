@@ -6,7 +6,7 @@ extends Node2D
 # ── 寶石類型列舉 ──
 # PLANK：無屬性方塊（block）— 不參與 BFS / 連鎖 / 融合；被相鄰一般爆破或高階爆破波及時會無聲被消除（無攻擊力）
 # ROCK：無屬性障礙 — 不參與 BFS / 連鎖 / 融合；不可移除且不會掉落。
-enum Type { RED, BLUE, GREEN, YELLOW, PURPLE, ORANGE, LIGHT, DARK, PLANK, ROCK }  # 紅(火)、藍(水)、綠(葉)、黃、紫、橙、光、暗、木板、岩石
+enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石
 enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給
 
 # 額外效果（可同時掛載多個於單一寶石上）
@@ -15,16 +15,13 @@ enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF
 # BURNING：每次消除後新寶石生成前扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
 enum ExtraEffect { X5, BURNING, X3 }
 
-const TYPE_COUNT := 10  # 寶石類型總數（含 PLANK / ROCK 方塊）
+const TYPE_COUNT := 10  # 保留既有最高 id + 1，避免舊 .tres 中的 6/7/8/9 位移
 
 # 每種類型對應的顏色
 const COLORS = {
 	Type.RED: Color(0.91, 0.26, 0.21),
 	Type.BLUE: Color(0.25, 0.47, 0.85),
 	Type.GREEN: Color(0.30, 0.69, 0.31),
-	Type.YELLOW: Color(1.0, 0.84, 0.0),
-	Type.PURPLE: Color(0.61, 0.15, 0.69),
-	Type.ORANGE: Color(1.0, 0.60, 0.0),
 	Type.LIGHT: Color(1.0, 0.92, 0.23),
 	Type.DARK: Color(0.30, 0.20, 0.45),
 	Type.PLANK: Color(0.55, 0.36, 0.18),  # 木色（備用；有貼圖時不顯示）
@@ -36,9 +33,6 @@ const ICONS = {
 	Type.RED: "♥",
 	Type.BLUE: "♦",
 	Type.GREEN: "♣",
-	Type.YELLOW: "★",
-	Type.PURPLE: "●",
-	Type.ORANGE: "▲",
 	Type.LIGHT: "✦",
 	Type.DARK: "☾",
 	Type.PLANK: "■",
@@ -123,9 +117,6 @@ const FUSE_HINT_OUTLINE_COLORS = {
 	Type.BLUE: Color(0.10, 0.20, 0.60),   # 深藍
 	Type.GREEN: Color(0.15, 0.45, 0.15),  # 深綠
 	Type.LIGHT: Color(0.85, 0.65, 0.0),   # 橙黃
-	Type.YELLOW: Color(0.75, 0.55, 0.0),  # 深金
-	Type.PURPLE: Color(0.40, 0.05, 0.50), # 深紫
-	Type.ORANGE: Color(0.70, 0.30, 0.0),  # 深橙
 	Type.DARK: Color(0.20, 0.10, 0.40),   # 深紫黑
 }
 
@@ -154,6 +145,10 @@ var _fuse_hint_stale := false           # 標記為待清理（用於差異更�
 
 func _ready() -> void:
 	update_visual()  # 節點準備完畢後更新外觀
+
+
+static func is_valid_type_value(value: int) -> bool:
+	return COLORS.has(value)
 
 
 ## 是否為高階寶石
@@ -185,10 +180,13 @@ func set_upper_type(ut: UpperType) -> void:
 
 ## 設定基礎寶石類型並更新外觀
 func set_block_type(type) -> void:
-	var prev = block_type
-	block_type = type
+	var prev: int = int(block_type)
+	var next_type: int = int(type)
+	if not is_valid_type_value(next_type):
+		next_type = Type.RED
+	block_type = next_type
 	# 不再為火屬性 → 自動移除 BURNING
-	if prev == Type.RED and type != Type.RED and has_extra(ExtraEffect.BURNING):
+	if prev == Type.RED and next_type != Type.RED and has_extra(ExtraEffect.BURNING):
 		remove_extra(ExtraEffect.BURNING)
 	if visual:
 		update_visual()
@@ -300,12 +298,12 @@ func update_visual() -> void:
 			visual.visible = false
 		else:
 			visual.visible = true
-			visual.color = COLORS[block_type]
+			visual.color = COLORS.get(block_type, Color.WHITE)
 
 	if icon_label:
 		icon_label.visible = not has_gem  # 無貼圖時顯示符號
 		if not has_gem:
-			icon_label.text = ICONS[block_type]
+			icon_label.text = str(ICONS.get(block_type, "?"))
 
 	if gem_sprite:
 		gem_sprite.visible = has_gem  # 有貼圖時顯示精靈圖

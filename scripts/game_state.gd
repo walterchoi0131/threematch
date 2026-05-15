@@ -9,6 +9,7 @@ const SAVE_VERSION := 1
 var selected_stage: StageData = null           # 當前選擇的關卡
 var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
 var detail_character: CharacterData = null      # 要查看詳細資訊的角色
+var stage_edit_mode: bool = false               # 以棋盤編輯模式進入 main.tscn（不持久化）
 
 var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 
@@ -244,7 +245,8 @@ func _ready() -> void:
 
 	# 設定教學模式與固定棋盤佈局
 	_stage_dev.is_tutorial = true
-	_stage_dev.fixed_layout = _build_stage1_layout()
+	if _stage_dev.fixed_layout.is_empty():
+		_stage_dev.fixed_layout = _build_stage1_layout()
 	# 第三波（index 2）三隻史萊姆的初始 CD：2, 3, 1
 	_stage_dev.rounds_init_cd = [[], [], [2, 3, 1], []]
 	# 第一關固定隊伍：husky, dragon, shark, panda
@@ -394,7 +396,7 @@ func _deserialize(d: Dictionary) -> void:
 ## 設計：col 0 為一條 7 顆火寶石的縱向火柱（教融合用），中段 (4,4)/(5,4)/(4,5)
 ## 為 3 顆綠葉相連（教普攻用）。
 static func _build_stage1_layout() -> Array:
-	# R=Fire, B=Water, G=Leaf, L=Gold
+	# R=Fire, B=Water, G=Leaf, L=Light
 	const R := Block.Type.RED
 	const B := Block.Type.BLUE
 	const G := Block.Type.GREEN

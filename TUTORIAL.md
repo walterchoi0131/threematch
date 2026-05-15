@@ -238,9 +238,10 @@ _handle_click(pos)
 | RED | 紅色 | 火 |
 | BLUE | 藍色 | 水 |
 | GREEN | 綠色 | 葉 |
-| YELLOW | 黃色 | — |
-| PURPLE | 紫色 | — |
-| ORANGE | 橙色 | — |
+| LIGHT | 光色 | 光 |
+| DARK | 暗色 | 暗 |
+| PLANK | 木板 | 障礙 |
+| ROCK | 岩石 | 障礙 |
 
 ---
 

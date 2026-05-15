@@ -28,6 +28,8 @@ var _portrait_debug_layer: CanvasLayer = null
 
 
 func _ready() -> void:
+	GameState.fade_in_if_pending(0.25)
+
 	_characters_tab.text = Locale.tr_ui("CHARACTERS")
 	_map_tab.text = Locale.tr_ui("MAP")
 	_inventory_tab.text = Locale.tr_ui("INVENTORY")
@@ -37,6 +39,7 @@ func _ready() -> void:
 	_collect_stage_buttons(_map_page)
 	for sb in _stage_buttons:
 		sb.stage_pressed.connect(_on_stage_button_pressed)
+		sb.stage_edit_pressed.connect(_on_stage_button_edit_pressed)
 	_setup_path_layer()
 
 	# 懶載入 Characters / Inventory 子畫面到對應分頁
@@ -101,7 +104,7 @@ func _refresh_stage_buttons() -> void:
 		sb.refresh_state()
 	var latest: StageButton = null
 	for sb in sorted:
-		if sb.stage != null and sb.visible and not GameState.is_stage_cleared(sb.stage.stage_id):
+		if sb.stage != null and sb.is_unlocked_for_play() and not GameState.is_stage_cleared(sb.stage.stage_id):
 			latest = sb
 			break
 	for sb in _stage_buttons:
@@ -130,7 +133,17 @@ func _on_stage_button_pressed(stage: StageData) -> void:
 	if stage == null:
 		return
 	GameState.selected_stage = stage
+	GameState.stage_edit_mode = false
 	_open_overlay(PrepareScene)
+
+
+func _on_stage_button_edit_pressed(stage: StageData) -> void:
+	if stage == null:
+		return
+	_close_overlay()
+	GameState.selected_stage = stage
+	GameState.stage_edit_mode = true
+	GameState.fade_to_scene("res://scenes/main.tscn", 0.25)
 
 
 # ── 覆蓋層管理（戰前準備）──────────────────────────────────

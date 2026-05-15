@@ -12,7 +12,7 @@ const MAX_VISIBLE_ICONS := 6
 # 顯示順序（其它類型若出現會附在後面）
 const DISPLAY_ORDER: Array[int] = [
 	Block.Type.RED, Block.Type.BLUE, Block.Type.GREEN, Block.Type.LIGHT,
-	Block.Type.DARK, Block.Type.YELLOW, Block.Type.PURPLE, Block.Type.ORANGE,
+	Block.Type.DARK,
 ]
 
 
@@ -32,7 +32,7 @@ func refresh(counts: Dictionary) -> void:
 	# 把不在預設順序裡的也加進來
 	for k in counts.keys():
 		var ti: int = int(k)
-		if int(counts[k]) > 0 and not ordered.has(ti):
+		if int(counts[k]) > 0 and not ordered.has(ti) and Block.is_valid_type_value(ti) and ti != Block.Type.PLANK and ti != Block.Type.ROCK:
 			ordered.append(ti)
 
 	for t in ordered:

@@ -139,7 +139,7 @@ min_match: 2
 
 【戰鬥：黑暗入侵】
 ```
-allowed_types: [RED, BLUE, GREEN, YELLOW, DARK]
+allowed_types: [RED, BLUE, GREEN, LIGHT, DARK]
 盤面: 8×8，五色（首次出現暗色和光色寶石）
 min_match: 2
 敵人:
@@ -623,7 +623,7 @@ BOSS: 暗化古樹精
 
 【戰鬥：最終 BOSS — 國王】
 ```
-allowed_types: [RED, BLUE, GREEN, YELLOW, DARK]
+allowed_types: [RED, BLUE, GREEN, LIGHT, DARK]
 盤面: 8×8，五色全開
 min_match: 2
 玩家隊伍: Fox + Boar + Raccoon + Crow（+ 王女輔助）
@@ -694,9 +694,9 @@ BOSS: 國王
 |------|------------------------|---------|------------|
 | 序章 | RED, BLUE, GREEN | 教學關卡，引導消除與相剋 | Fox, Boar, Raccoon, Husky 登場 |
 | 第一章 | RED, BLUE, GREEN | 多關卡試煉，各屬性出現率變化 | 技能解鎖 |
-| 第二章 | RED, BLUE, GREEN, YELLOW, DARK | 首次出現光/暗寶石 | 黑暗入侵，Husky 犧牲 |
+| 第二章 | RED, BLUE, GREEN, LIGHT, DARK | 首次出現光/暗寶石 | 黑暗入侵，Husky 犧牲 |
 | 第三章 | RED | 全火珠生存關卡，限時消除 | 宿舍大火事件 |
 | 第四章 | RED, BLUE, GREEN, DARK | 暗寶石常駐，BOSS: 黑化 Boar | Boar 回歸，Raccoon 獲救 |
 | 第五章 | RED, BLUE, GREEN, DARK | 暗寶石比例提高 | Crow 加入 |
 | 第六章 | RED, BLUE, GREEN, DARK | 三場BOSS戰，各國特色盤面 | 三國符石破壞 |
-| 終章 | RED, BLUE, GREEN, YELLOW, DARK | 五色全開，BOSS三階段切換 | 王女加入，真相揭露，最終決戰 |
+| 終章 | RED, BLUE, GREEN, LIGHT, DARK | 五色全開，BOSS三階段切換 | 王女加入，真相揭露，最終決戰 |
