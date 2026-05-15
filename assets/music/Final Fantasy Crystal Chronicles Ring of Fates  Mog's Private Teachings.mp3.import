@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dee447dk6xl0b"
+path="res://.godot/imported/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3-238220821d1347bfe64f38d5d349260e.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3"
+dest_files=["res://.godot/imported/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3-238220821d1347bfe64f38d5d349260e.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
