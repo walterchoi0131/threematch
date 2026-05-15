@@ -2068,8 +2068,8 @@ func _end_player_turn() -> void:
 	var will_attack: bool = battle_manager.has_enemies_to_attack()
 	if will_attack:
 		board.is_busy = true
-		# 敵人攻擊期間暗化棋盤（與長按預覽相同色）
-		board.darken_all_gems(0.3)
+		# 暫時停用：敵人攻擊期間不暗化棋盤。
+		# board.darken_all_gems(0.3)
 		await get_tree().create_timer(0.35).timeout
 
 	var did_attack: bool = await battle_manager.do_enemy_phase()
@@ -2086,9 +2086,9 @@ func _end_player_turn() -> void:
 		if board.deferred_clicks.is_empty() and _attack_queue.is_empty():
 			battle_manager.resync_logic_state()
 			board.resync_logic_from_visual()
-		if will_attack:
-			# 敵人攻擊結束 — 棋盤淡回正常顏色
-			board.brighten_all_gems(0.3)
+		# 暫時停用：敵人攻擊結束時不需要恢復亮度。
+		# if will_attack:
+		# 	board.brighten_all_gems(0.3)
 		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
 		board.is_busy = false
 		# Stage 1-4 急難事件：在玩家下一個回合開始前該發
