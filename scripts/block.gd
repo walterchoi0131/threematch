@@ -6,8 +6,9 @@ extends Node2D
 # ── 寶石類型列舉 ──
 # PLANK：無屬性方塊（block）— 不參與 BFS / 連鎖 / 融合；被相鄰一般爆破或高階爆破波及時會無聲被消除（無攻擊力）
 # ROCK：無屬性障礙 — 不參與 BFS / 連鎖 / 融合；不可移除且不會掉落。
-enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給
+# WOOD_STRUCTURE：stationary + breakable obstacle.
+enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下
 
 # 額外效果（可同時掛載多個於單一寶石上）
 # X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
@@ -15,7 +16,7 @@ enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF
 # BURNING：每次消除後新寶石生成前扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
 enum ExtraEffect { X5, BURNING, X3 }
 
-const TYPE_COUNT := 10  # 保留既有最高 id + 1，避免舊 .tres 中的 6/7/8/9 位移
+const TYPE_COUNT := 11  # 保留既有最高 id + 1，避免舊 .tres 中的 6/7/8/9 位移
 
 # 每種類型對應的顏色
 const COLORS = {
@@ -26,6 +27,7 @@ const COLORS = {
 	Type.DARK: Color(0.30, 0.20, 0.45),
 	Type.PLANK: Color(0.55, 0.36, 0.18),  # 木色（備用；有貼圖時不顯示）
 	Type.ROCK: Color(0.34, 0.36, 0.38),
+	Type.WOOD_STRUCTURE: Color(0.50, 0.30, 0.13),
 }
 
 # 每種類型對應的圖示符號（無貼圖時的備用顯示）
@@ -37,6 +39,7 @@ const ICONS = {
 	Type.DARK: "☾",
 	Type.PLANK: "■",
 	Type.ROCK: "R",
+	Type.WOOD_STRUCTURE: "W",
 }
 
 # 有美術貼圖的寶石類型；未列出的類型會退回使用圖示符號
@@ -48,7 +51,12 @@ const GEM_TEXTURES: Dictionary = {
 	Type.DARK: preload("res://assets/gems/gem_moon.png"),
 	Type.PLANK: preload("res://assets/blocks/wood.png"),
 	Type.ROCK: preload("res://assets/blocks/rock.png"),
+	Type.WOOD_STRUCTURE: preload("res://assets/blocks/middle_platform.png"),
 }
+
+const WOOD_STRUCTURE_LEFT_TEXTURE: Texture2D = preload("res://assets/blocks/left_platform.png")
+const WOOD_STRUCTURE_MID_TEXTURE: Texture2D = preload("res://assets/blocks/middle_platform.png")
+const WOOD_STRUCTURE_RIGHT_TEXTURE: Texture2D = preload("res://assets/blocks/right_platform.png")
 
 # 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
 const UPPER_GEM_TEXTURES: Dictionary = {
@@ -62,6 +70,8 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.PORCUPINE: preload("res://assets/gems/arrowpig.png"),
 	UpperType.TURTLE: preload("res://assets/gems/turtle.png"),
 	UpperType.BAMBOO_SUPPLY: preload("res://assets/gems/gem_bamboo.png"),
+	UpperType.WOOD_SPEAR_UP: preload("res://assets/gems/gem_wood_spear.png"),
+	UpperType.WOOD_SPEAR_DOWN: preload("res://assets/gems/gem_wood_spear.png"),
 }
 
 # 消除動畫精靈圖表（3 列 × 3 行 = 9 幀）
@@ -82,6 +92,8 @@ const BREAK_COLS := 3   # 精靈圖表列數
 const BREAK_ROWS := 3   # 精靈圖表行數
 const BREAK_FRAMES := 9 # 消除動畫總幀數
 
+const DEFAULT_GEM_SPRITE_SCALE := Vector2(1.15, 1.15)
+
 # 高階寶石「內識元素計數」— 被爆破時，除了他抹除的區域以外，本身亦貢獻這么多顆同元素
 # 定義為「融合門檻」— 例如火球炸需 9 顆火寶石融合 → 被爆時內識為 9
 const UPPER_INTRINSIC_VALUE: Dictionary = {
@@ -95,6 +107,8 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.PORCUPINE: 9,
 	UpperType.TURTLE: 5,
 	UpperType.BAMBOO_SUPPLY: 3,
+	UpperType.WOOD_SPEAR_UP: 7,
+	UpperType.WOOD_SPEAR_DOWN: 7,
 }
 
 # 高階寶石的「正規元素」：融合成高階寶石時強制設定 block_type，避免被誤指定
@@ -109,6 +123,8 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.PORCUPINE: Type.GREEN,
 	UpperType.TURTLE: Type.GREEN,
 	UpperType.BAMBOO_SUPPLY: Type.GREEN,
+	UpperType.WOOD_SPEAR_UP: Type.GREEN,
+	UpperType.WOOD_SPEAR_DOWN: Type.GREEN,
 }
 
 # 融合提示描邊色（較深色，避免與白色文字混淆）
@@ -127,6 +143,7 @@ const BOUNCE_DUR := 0.16    # 彈跳持續時間（秒）
 var block_type = Type.RED              # 目前的寶石類型
 var upper_type: UpperType = UpperType.NONE  # 高階寶石類型（無 = 普通寶石）
 var grid_pos := Vector2i.ZERO          # 在棋盤網格中的座標 (x, y)
+var board_columns: int = 8             # 棋盤欄數（woodStructure 選擇左右貼圖用）
 
 # 額外效果列表（儲存 ExtraEffect 列舉值，避免 typed enum array 的型別推論問題）
 var extra_effects: Array[int] = []
@@ -151,6 +168,20 @@ static func is_valid_type_value(value: int) -> bool:
 	return COLORS.has(value)
 
 
+static func is_obstacle_type_value(value: int) -> bool:
+	return value == Type.PLANK or value == Type.ROCK or value == Type.WOOD_STRUCTURE
+
+
+static func is_random_gem_type_value(value: int) -> bool:
+	return is_valid_type_value(value) and not is_obstacle_type_value(value)
+
+
+func set_board_columns(value: int) -> void:
+	board_columns = maxi(1, value)
+	if visual:
+		update_visual()
+
+
 ## 是否為高階寶石
 func is_upper_gem() -> bool:
 	return upper_type != UpperType.NONE
@@ -164,6 +195,26 @@ func is_block() -> bool:
 ## 是否為不可移除、不可掉落的岩石障礙
 func is_rock() -> bool:
 	return upper_type == UpperType.NONE and block_type == Type.ROCK
+
+
+## 是否為可破壞但不可掉落的木結構
+func is_wood_structure() -> bool:
+	return upper_type == UpperType.NONE and block_type == Type.WOOD_STRUCTURE
+
+
+## 是否為會阻擋配對/轉色/點擊的障礙物
+func is_obstacle() -> bool:
+	return is_block() or is_rock() or is_wood_structure()
+
+
+## 是否為可被爆破靜默拆除的障礙物
+func is_breakable_structure() -> bool:
+	return upper_type == UpperType.NONE and (block_type == Type.PLANK or block_type == Type.WOOD_STRUCTURE)
+
+
+## 是否為不會被重力移動的障礙物
+func is_stationary_obstacle() -> bool:
+	return upper_type == UpperType.NONE and (block_type == Type.ROCK or block_type == Type.WOOD_STRUCTURE)
 
 
 ## 設定高階寶石類型並更新外觀
@@ -226,7 +277,7 @@ func clear_extras() -> void:
 ##   - X3：3
 ##   - 一般：1
 func get_blast_value() -> int:
-	if is_block() or is_rock():
+	if is_obstacle():
 		return 0
 	if is_upper_gem():
 		return UPPER_INTRINSIC_VALUE.get(upper_type, 1)
@@ -291,7 +342,8 @@ func _refresh_extra_visuals() -> void:
 
 ## 更新寶石的視覺外觀（背景色、圖示、貼圖、高階覆蓋層）
 func update_visual() -> void:
-	var has_gem: bool = GEM_TEXTURES.has(block_type)  # 是否有美術貼圖
+	var base_texture: Texture2D = get_base_texture()
+	var has_gem: bool = base_texture != null  # 是否有美術貼圖
 
 	if visual:
 		if has_gem:
@@ -308,10 +360,31 @@ func update_visual() -> void:
 	if gem_sprite:
 		gem_sprite.visible = has_gem  # 有貼圖時顯示精靈圖
 		if has_gem:
-			gem_sprite.texture = GEM_TEXTURES[block_type]
+			_apply_base_texture_to_sprite(base_texture)
 
 	# 更新高階寶石覆蓋層
 	_update_upper_overlay()
+
+
+func get_base_texture() -> Texture2D:
+	if block_type == Type.WOOD_STRUCTURE:
+		if grid_pos.x <= 0:
+			return WOOD_STRUCTURE_LEFT_TEXTURE
+		if grid_pos.x >= board_columns - 1:
+			return WOOD_STRUCTURE_RIGHT_TEXTURE
+		return WOOD_STRUCTURE_MID_TEXTURE
+	var texture: Texture2D = GEM_TEXTURES.get(block_type, null)
+	return texture
+
+
+func _apply_base_texture_to_sprite(texture: Texture2D) -> void:
+	if gem_sprite == null or texture == null:
+		return
+	gem_sprite.texture = texture
+	if block_type == Type.WOOD_STRUCTURE:
+		gem_sprite.scale = Vector2.ONE
+	else:
+		gem_sprite.scale = DEFAULT_GEM_SPRITE_SCALE
 
 
 ## 更新高階寶石的覆蓋層顯示
@@ -323,12 +396,18 @@ func _update_upper_overlay() -> void:
 		if _ray_burst != null:
 			_ray_burst.queue_free()
 			_ray_burst = null
+		var base_texture: Texture2D = get_base_texture()
+		var has_gem: bool = base_texture != null
 		if gem_sprite:
-			gem_sprite.visible = GEM_TEXTURES.has(block_type)
+			gem_sprite.visible = has_gem
+			if has_gem:
+				_apply_base_texture_to_sprite(base_texture)
 		if visual:
-			visual.visible = not GEM_TEXTURES.has(block_type)
+			visual.visible = not has_gem
 		if icon_label:
-			icon_label.visible = not GEM_TEXTURES.has(block_type)
+			icon_label.visible = not has_gem
+			if not has_gem:
+				icon_label.text = str(ICONS.get(block_type, "?"))
 		return
 
 	# 高階寶石 — 顯示對應元素底色
@@ -336,7 +415,7 @@ func _update_upper_overlay() -> void:
 	match upper_type:
 		UpperType.SAINT_CROSS:
 			upper_base_color = COLORS[Type.LIGHT]
-		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY:
+		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN:
 			upper_base_color = COLORS[Type.GREEN]
 		UpperType.SNOWBALL:
 			upper_base_color = COLORS[Type.BLUE]
@@ -372,7 +451,7 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(1.0, 0.95, 0.40, 0.60)
 		UpperType.LEAF_SHIELD:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY:
+		UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.SNOWBALL:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
@@ -384,8 +463,12 @@ func _update_upper_overlay() -> void:
 
 	_upper_sprite.visible = true
 	_upper_sprite.texture = UPPER_GEM_TEXTURES.get(upper_type)
-	# 橫向火柱旋轉 90°
-	_upper_sprite.rotation = deg_to_rad(90) if upper_type == UpperType.FIRE_PILLAR_X else 0.0
+	_upper_sprite.flip_h = false
+	_upper_sprite.flip_v = upper_type == UpperType.WOOD_SPEAR_DOWN
+	if upper_type == UpperType.FIRE_PILLAR_X:
+		_upper_sprite.rotation = deg_to_rad(90)
+	else:
+		_upper_sprite.rotation = 0.0
 
 
 ## 播放消除動畫（精靈圖表逐幀播放，或縮放＋淡出的備用動畫）

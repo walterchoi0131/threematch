@@ -100,6 +100,16 @@ static func _ensure_init() -> void:
 		Color(0.30, 0.80, 0.35),
 		"Bamboo Supply",
 	)
+	_defs[Block.UpperType.WOOD_SPEAR_UP] = Def.new(
+		Block.Type.GREEN,
+		Color(0.30, 0.85, 0.42),
+		"Wood Spear Up",
+	)
+	_defs[Block.UpperType.WOOD_SPEAR_DOWN] = Def.new(
+		Block.Type.GREEN,
+		Color(0.30, 0.85, 0.42),
+		"Wood Spear Down",
+	)
 	_defs[Block.UpperType.SNOWBALL] = Def.new(
 		Block.Type.BLUE,
 		Color(0.35, 0.60, 1.0),

@@ -235,6 +235,7 @@ func _ready() -> void:
 		preload("res://characters/char_polar.tres"),
 		preload("res://characters/char_shark.tres"),
 		preload("res://characters/char_dragon.tres"),
+		preload("res://characters/char_gory.tres"),
 	]
 
 	# 為關卡設定對話（程式碼建構）
@@ -259,6 +260,7 @@ func _ready() -> void:
 
 	# 嘗試載入持久化存檔（覆寫 owned_characters / inventory / gold / cleared_stages）
 	load_game()
+	_ensure_default_characters_owned()
 
 
 # ── 持久化存檔 ───────────────────────────────────────────────
@@ -317,12 +319,42 @@ func clear_save() -> void:
 		preload("res://characters/char_polar.tres"),
 		preload("res://characters/char_shark.tres"),
 		preload("res://characters/char_dragon.tres"),
+		preload("res://characters/char_gory.tres"),
 	]
 	# 將每個角色的等級/經驗重置為預設值（避免快取中的舊值殘留）
 	for c: CharacterData in owned_characters:
 		if c != null:
 			c.level = 5
 			c.current_exp = 0
+
+
+func _ensure_default_characters_owned() -> void:
+	var default_characters: Array[CharacterData] = [
+		preload("res://characters/char_boar.tres"),
+		preload("res://characters/char_raccoon.tres"),
+		preload("res://characters/char_fox.tres"),
+		preload("res://characters/char_husky.tres"),
+		preload("res://characters/char_panda.tres"),
+		preload("res://characters/char_polar.tres"),
+		preload("res://characters/char_shark.tres"),
+		preload("res://characters/char_dragon.tres"),
+		preload("res://characters/char_gory.tres"),
+	]
+	var owned_paths: Dictionary = {}
+	for c: CharacterData in owned_characters:
+		if c != null and c.resource_path != "":
+			owned_paths[c.resource_path] = true
+	var changed: bool = false
+	for default_char: CharacterData in default_characters:
+		if default_char == null or default_char.resource_path == "":
+			continue
+		if owned_paths.has(default_char.resource_path):
+			continue
+		owned_characters.append(default_char)
+		owned_paths[default_char.resource_path] = true
+		changed = true
+	if changed:
+		save_game()
 
 
 func _serialize() -> Dictionary:

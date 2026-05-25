@@ -43,12 +43,14 @@ var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點�
 #   LOGIC_UPPER：高階寶石（BFS 不會匹配普通爆破）
 #   LOGIC_PLANK：block（PLANK）— 不參與 BFS
 #   LOGIC_ROCK：rock（ROCK）— 不參與 BFS、不移動、不被消除
+#   LOGIC_WOOD_STRUCTURE：woodStructure — 不參與 BFS、不移動、可被爆破拆除
 #   LOGIC_SPAWNED_UNKNOWN：只在掉落預測中暫用；落定後轉回 LOGIC_UNKNOWN
 const LOGIC_UNKNOWN := 999
 const LOGIC_SPAWNED_UNKNOWN := 998
 const LOGIC_UPPER := -1
 const LOGIC_PLANK := -2
 const LOGIC_ROCK := -3
+const LOGIC_WOOD_STRUCTURE := -4
 const EDIT_RANDOM := -1
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
@@ -196,6 +198,8 @@ func _init_logic_grid_from_visual() -> void:
 				logic_grid[x][y] = LOGIC_PLANK
 			elif b.is_rock():
 				logic_grid[x][y] = LOGIC_ROCK
+			elif b.is_wood_structure():
+				logic_grid[x][y] = LOGIC_WOOD_STRUCTURE
 			else:
 				logic_grid[x][y] = b.block_type
 
@@ -214,6 +218,8 @@ func _sync_logic_unknowns_from_visual() -> void:
 						logic_grid[x][y] = LOGIC_PLANK
 					elif b.is_rock():
 						logic_grid[x][y] = LOGIC_ROCK
+					elif b.is_wood_structure():
+						logic_grid[x][y] = LOGIC_WOOD_STRUCTURE
 					else:
 						logic_grid[x][y] = int(b.block_type)
 
@@ -305,8 +311,9 @@ func brighten_all_gems(duration: float = 0.4) -> void:
 ## 在指定格子建立一個新寶石
 func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_pos: bool = false) -> Block:
 	var block: Block = BlockScene.instantiate()
-	block.set_block_type(_random_type())
 	block.grid_pos = Vector2i(x, y)
+	block.set_board_columns(columns)
+	block.set_block_type(_random_type())
 	# Set position BEFORE add_child so it never flashes at the wrong spot.
 	block.position = start_pos if use_start_pos else grid_to_world(Vector2i(x, y))
 	add_child(block)
@@ -341,7 +348,7 @@ func _random_type() -> int:
 	var candidates: Array[int] = []
 	for value: Block.Type in allowed_types:
 		var type_value: int = int(value)
-		if Block.is_valid_type_value(type_value) and type_value != Block.Type.PLANK and type_value != Block.Type.ROCK:
+		if Block.is_random_gem_type_value(type_value):
 			candidates.append(type_value)
 	if candidates.is_empty():
 		return Block.Type.RED
@@ -370,7 +377,7 @@ func _is_no_enemy_mode() -> bool:
 
 
 func _is_static_obstacle(block: Block) -> bool:
-	return block != null and (block.is_block() or block.is_rock())
+	return block != null and block.is_obstacle()
 
 
 func _shake_block(block: Block) -> void:
@@ -531,6 +538,7 @@ func _set_edit_cell_visual(pos: Vector2i, value: int) -> void:
 	if block == null:
 		block = _create_block(pos.x, pos.y)
 	block.grid_pos = pos
+	block.set_board_columns(columns)
 	block.position = grid_to_world(pos)
 	block.scale = Vector2.ONE
 	block.modulate = Color(1, 1, 1, 1)
@@ -557,6 +565,8 @@ func _sync_edit_logic_cell(pos: Vector2i, value: int) -> void:
 		logic_grid[pos.x][pos.y] = LOGIC_PLANK
 	elif normalized == Block.Type.ROCK:
 		logic_grid[pos.x][pos.y] = LOGIC_ROCK
+	elif normalized == Block.Type.WOOD_STRUCTURE:
+		logic_grid[pos.x][pos.y] = LOGIC_WOOD_STRUCTURE
 	else:
 		logic_grid[pos.x][pos.y] = normalized
 
@@ -667,7 +677,7 @@ func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
 	if not _is_valid(start):
 		return []
 	var target: int = logic_grid[start.x][start.y]
-	if target == LOGIC_UNKNOWN or target == LOGIC_UPPER or target == LOGIC_PLANK or target == LOGIC_ROCK:
+	if _logic_value_blocks_matching(target):
 		return []
 	var visited := {}
 	var connected: Array[Vector2i] = []
@@ -695,14 +705,14 @@ func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
 func _logic_destroy_and_collapse(positions: Array[Vector2i]) -> void:
 	for p in positions:
 		logic_grid[p.x][p.y] = LOGIC_UNKNOWN
-	# 鄰格 PLANK 也視為被消除
+	# 鄰格可破壞障礙也視為被消除
 	const NEIGHBOR_DIRS: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for p in positions:
 		for d in NEIGHBOR_DIRS:
 			var np: Vector2i = p + d
 			if not _is_valid(np):
 				continue
-			if logic_grid[np.x][np.y] == LOGIC_PLANK:
+			if _logic_value_is_breakable_structure(int(logic_grid[np.x][np.y])):
 				logic_grid[np.x][np.y] = LOGIC_UNKNOWN
 	_settle_logic_grid_with_rocks()
 
@@ -775,17 +785,17 @@ func _logic_can_slide_under_rock(source_x: int, source_y: int, direction: int) -
 		return false
 	if int(logic_grid[target_x][target_y]) != LOGIC_UNKNOWN:
 		return false
-	return _logic_target_has_rock_roof(target_x, target_y)
+	return _logic_target_has_stationary_roof(target_x, target_y)
 
 
-func _logic_target_has_rock_roof(target_x: int, target_y: int) -> bool:
+func _logic_target_has_stationary_roof(target_x: int, target_y: int) -> bool:
 	var row_index: int = target_y - 1
 	while row_index >= 0:
 		var value: int = int(logic_grid[target_x][row_index])
 		if value == LOGIC_UNKNOWN:
 			row_index -= 1
 			continue
-		return value == LOGIC_ROCK
+		return _logic_value_is_stationary_obstacle(value)
 	return false
 
 
@@ -800,7 +810,23 @@ func _logic_spawn_top_unknowns() -> bool:
 
 
 func _logic_cell_can_move(value: int) -> bool:
-	return value != LOGIC_UNKNOWN and value != LOGIC_ROCK
+	return value != LOGIC_UNKNOWN and not _logic_value_is_stationary_obstacle(value)
+
+
+func _logic_value_is_stationary_obstacle(value: int) -> bool:
+	return value == LOGIC_ROCK or value == LOGIC_WOOD_STRUCTURE
+
+
+func _logic_value_is_breakable_structure(value: int) -> bool:
+	return value == LOGIC_PLANK or value == LOGIC_WOOD_STRUCTURE
+
+
+func _logic_value_blocks_matching(value: int) -> bool:
+	return value == LOGIC_UNKNOWN \
+		or value == LOGIC_UPPER \
+		or value == LOGIC_PLANK \
+		or value == LOGIC_ROCK \
+		or value == LOGIC_WOOD_STRUCTURE
 
 
 ## 預測：此次爆破是否會觸發任何融合（回應）技能
@@ -833,7 +859,7 @@ func _try_queue_click(pos: Vector2i) -> void:
 		deferred_clicks.append(pos)
 		return
 	var t: int = logic_grid[pos.x][pos.y]
-	if t == LOGIC_UNKNOWN or t == LOGIC_UPPER or t == LOGIC_PLANK or t == LOGIC_ROCK:
+	if _logic_value_blocks_matching(t):
 		return
 	var matches := _find_connected_logic(pos)
 	if matches.size() < min_match:
@@ -952,8 +978,8 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 	var block: Block = grid[start.x][start.y]
 	if block == null:
 		return []
-	# PLANK / ROCK 不參與任何配對
-	if block.is_block() or block.is_rock():
+	# 障礙物不參與任何配對
+	if block.is_obstacle():
 		return []
 
 	var target_type = block.block_type
@@ -976,8 +1002,8 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 		# 高階寶石不參與普通配對 — 跳過
 		if cur_block.is_upper_gem():
 			continue
-		# PLANK / ROCK 不參與 — 跳過
-		if cur_block.is_block() or cur_block.is_rock():
+		# 障礙物不參與 — 跳過
+		if cur_block.is_obstacle():
 			continue
 
 		visited[current] = true
@@ -992,7 +1018,7 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 
 
 ## 消除指定位置的寶石：計算得分、發出信號、播放動畫、延遲釋放節點
-## 同時掃描鄰格，若有 PLANK（block）則靜默移除（無得分、無信號、無攻擊）
+## 同時掃描鄰格，若有可破壞障礙則靜默移除（無得分、無信號、無攻擊）
 func _destroy_blocks(positions: Array[Vector2i]) -> void:
 	var gem_type: Block.Type = grid[positions[0].x][positions[0].y].block_type
 	var blocks: Array = []
@@ -1006,7 +1032,7 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 			grid[pos.x][pos.y] = null
 			blocks.append(block)
 
-	# 鄰格 PLANK 靜默移除（不計分、不發信號）
+	# 鄰格可破壞障礙靜默移除（不計分、不發信號）
 	var planks_to_remove: Array = []
 	var plank_seen: Dictionary = {}
 	const NEIGHBOR_DIRS: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
@@ -1019,7 +1045,7 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 			if plank_seen.has(key):
 				continue
 			var nb: Block = grid[np.x][np.y]
-			if nb != null and nb.is_block():
+			if nb != null and nb.is_breakable_structure():
 				plank_seen[key] = true
 				grid[np.x][np.y] = null
 				planks_to_remove.append(nb)
@@ -1113,12 +1139,14 @@ func _build_collapse_plan() -> Dictionary:
 			if cell is Block:
 				var block: Block = cell as Block
 				grid[column_index][row_index] = block
-				if block.is_rock():
+				if block.is_stationary_obstacle():
 					block.grid_pos = target_grid_pos
+					block.set_board_columns(columns)
 					block.position = grid_to_world(target_grid_pos)
 					continue
 				var original_grid_pos: Vector2i = block.grid_pos
 				block.grid_pos = target_grid_pos
+				block.set_board_columns(columns)
 				if original_grid_pos != target_grid_pos:
 					fall_moves.append({
 						block = block,
@@ -1218,17 +1246,17 @@ func _visual_can_slide_under_rock(state: Array, source_x: int, source_y: int, di
 		return false
 	if state[target_x][target_y] != null:
 		return false
-	return _visual_target_has_rock_roof(state, target_x, target_y)
+	return _visual_target_has_stationary_roof(state, target_x, target_y)
 
 
-func _visual_target_has_rock_roof(state: Array, target_x: int, target_y: int) -> bool:
+func _visual_target_has_stationary_roof(state: Array, target_x: int, target_y: int) -> bool:
 	var row_index: int = target_y - 1
 	while row_index >= 0:
 		var cell: Variant = state[target_x][row_index]
 		if cell == null:
 			row_index -= 1
 			continue
-		return _variant_cell_is_rock(cell)
+		return _variant_cell_is_stationary_obstacle(cell)
 	return false
 
 
@@ -1248,11 +1276,11 @@ func _visual_spawn_top_blocks(state: Array, spawn_counts: Array) -> bool:
 
 
 func _variant_cell_can_move(cell: Variant) -> bool:
-	return cell != null and not _variant_cell_is_rock(cell)
+	return cell != null and not _variant_cell_is_stationary_obstacle(cell)
 
 
-func _variant_cell_is_rock(cell: Variant) -> bool:
-	return cell is Block and (cell as Block).is_rock()
+func _variant_cell_is_stationary_obstacle(cell: Variant) -> bool:
+	return cell is Block and (cell as Block).is_stationary_obstacle()
 
 
 ## 重新開始：清除棋盤並重新初始化
@@ -1330,7 +1358,7 @@ func convert_gems(to_type: Block.Type, count: int, priority_types: Array[Block.T
 	for x in columns:
 		for y in rows:
 			var block: Block = grid[x][y]
-			if block == null or block.block_type == to_type:
+			if block == null or block.block_type == to_type or block.is_obstacle():
 				continue
 			if block.block_type in priority_types:
 				candidates.append(Vector2i(x, y))
@@ -1368,7 +1396,7 @@ func get_random_rock_transmutation_target() -> Vector2i:
 			var block: Block = grid[x][y]
 			if block == null:
 				continue
-			if block.is_upper_gem() or block.is_block() or block.is_rock():
+			if block.is_upper_gem() or block.is_obstacle():
 				continue
 			candidates.append(Vector2i(x, y))
 
@@ -1386,7 +1414,7 @@ func transmute_cell_to_rock(pos: Vector2i) -> bool:
 	var block: Block = grid[pos.x][pos.y]
 	if block == null:
 		return false
-	if block.is_upper_gem() or block.is_block() or block.is_rock():
+	if block.is_upper_gem() or block.is_obstacle():
 		return false
 
 	block.clear_extras()
@@ -1418,7 +1446,7 @@ func convert_all_of_type(from_type: Block.Type, to_type: Block.Type) -> int:
 	for x in columns:
 		for y in rows:
 			var block: Block = grid[x][y]
-			if block != null and block.block_type == from_type:
+			if block != null and block.block_type == from_type and not block.is_obstacle():
 				_animate_gem_morph(block, to_type)
 				count += 1
 	return count
@@ -1435,7 +1463,7 @@ func blast_all_of_type(type: Block.Type) -> int:
 	for x in columns:
 		for y in rows:
 			var b: Block = grid[x][y]
-			if b != null and b.block_type == type and not b.is_upper_gem():
+			if b != null and b.block_type == type and not b.is_upper_gem() and not b.is_obstacle():
 				positions.append(Vector2i(x, y))
 				blocks.append(b)
 				effective_count += b.get_blast_value()
@@ -1480,7 +1508,7 @@ func play_fuse_animation(block: Block) -> void:
 
 ## 寶石變身動畫：縮小 → 替換類型 → 放大 + 融合闃光/彈跳 → 更新融合提示
 func _animate_gem_morph(block: Block, new_type: Block.Type) -> void:
-	if block == null or block.is_rock():
+	if block == null or block.is_obstacle():
 		return
 	var tween := create_tween()
 	# 縮小
@@ -1500,12 +1528,12 @@ func _animate_gem_morph(block: Block, new_type: Block.Type) -> void:
 	tween.tween_callback(_update_fuse_hints)
 
 
-## 靜默移除指定位置的 PLANK（無得分、無信號）— 供具有 BREAK 屬性的技能使用
-func silently_destroy_plank(pos: Vector2i) -> bool:
+## 靜默移除指定位置的可破壞障礙（無得分、無信號）— 供具有 BREAK 屬性的技能使用
+func silently_destroy_breakable_structure(pos: Vector2i) -> bool:
 	if pos.x < 0 or pos.x >= columns or pos.y < 0 or pos.y >= rows:
 		return false
 	var b: Block = grid[pos.x][pos.y]
-	if b == null or not b.is_block():
+	if b == null or not b.is_breakable_structure():
 		return false
 	var origin: Vector2 = b.global_position
 	grid[pos.x][pos.y] = null
@@ -1517,6 +1545,11 @@ func silently_destroy_plank(pos: Vector2i) -> bool:
 			b.queue_free()
 	, CONNECT_ONE_SHOT)
 	return true
+
+
+## 靜默移除指定位置的 PLANK / woodStructure（舊 API 名稱保留給既有技能呼叫）
+func silently_destroy_plank(pos: Vector2i) -> bool:
+	return silently_destroy_breakable_structure(pos)
 
 
 ## 在指定全域座標生成「3D 風格」木屑爆裂飛散動畫
@@ -1591,8 +1624,8 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 		var valid: Array[Vector2i] = []
 		for p in row_positions:
 			var pb: Block = grid[p.x][p.y]
-			# PLANK / ROCK 非 BREAK 屬性技能不可影響；ROCK 永遠不可影響
-			if pb != null and not pb.is_block() and not pb.is_rock():
+			# 非 BREAK 屬性技能不可影響障礙物；ROCK 永遠不可影響
+			if pb != null and not pb.is_obstacle():
 				valid.append(p)
 		if valid.is_empty():
 			continue
@@ -1645,7 +1678,7 @@ func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = 
 	if not _is_valid(pos):
 		return
 	var block: Block = grid[pos.x][pos.y]
-	if block != null and block.is_rock():
+	if block != null and block.is_obstacle():
 		return
 	if block == null:
 		block = _create_block(pos.x, pos.y)
@@ -1663,7 +1696,7 @@ func debug_spawn_firebombs(count: int) -> void:
 	for x in columns:
 		for y in rows:
 			var b: Block = grid[x][y]
-			if b != null and not b.is_upper_gem() and not b.is_block() and not b.is_rock():
+			if b != null and not b.is_upper_gem() and not b.is_obstacle():
 				candidates.append(b)
 	candidates.shuffle()
 	var n: int = mini(count, candidates.size())
@@ -1723,7 +1756,7 @@ func _handle_upper_click(pos: Vector2i) -> void:
 func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, total_blasted_by_type: Dictionary) -> void:
 	# 收集要消除的寶石和被波及的其他高階寶石
 	var to_destroy: Array[Vector2i] = []
-	var planks_in_blast: Array[Vector2i] = []  # 範圍內的 PLANK（靜默移除）
+	var planks_in_blast: Array[Vector2i] = []  # 範圍內的可破壞障礙（靜默移除）
 	var chained_uppers: Array[Dictionary] = []  # { pos, upper_type }
 
 	for p in positions:
@@ -1738,8 +1771,8 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		if b.is_upper_gem():
 			chained_uppers.append({"pos": p, "upper_type": b.upper_type})
 			continue
-		# block（PLANK）— 靜默移除（不計分、不發信號、不貢獻攻擊）
-		if b.is_block():
+		# 可破壞障礙 — 靜默移除（不計分、不發信號、不貢獻攻擊）
+		if b.is_breakable_structure():
 			planks_in_blast.append(p)
 			continue
 		to_destroy.append(p)
@@ -1771,7 +1804,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		blocks_to_free.append(b)
 		b.play_destroy_animation()
 
-	# 靜默消除 PLANK（無得分、無信號）
+	# 靜默消除可破壞障礙（無得分、無信號）
 	var planks_to_free: Array = []
 	for p in planks_in_blast:
 		var pb: Block = grid[p.x][p.y]
@@ -1959,8 +1992,8 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 					deferred_seen[key] = true
 					deferred_uppers.append({"pos": c, "upper_type": b.upper_type})
 				continue
-			# block（PLANK）— 靜默移除（不計分、不發信號、不貢獻攻擊）
-			if b.is_block():
+			# 可破壞障礙 — 靜默移除（不計分、不發信號、不貢獻攻擊）
+			if b.is_breakable_structure():
 				grid[c.x][c.y] = null
 				logic_grid[c.x][c.y] = LOGIC_UNKNOWN
 				blocks_to_free.append(b)
@@ -2149,7 +2182,43 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return _get_surrounding_positions(pos)
 		Block.UpperType.WATER_SLASH:
 			return _get_col_positions(pos.x)
+		Block.UpperType.WOOD_SPEAR_UP:
+			return _get_wood_spear_positions(pos, -1)
+		Block.UpperType.WOOD_SPEAR_DOWN:
+			return _get_wood_spear_positions(pos, 1)
 	return [pos]
+
+
+func _append_unique_valid_position(result: Array[Vector2i], pos: Vector2i) -> void:
+	if _is_valid(pos) and not result.has(pos):
+		result.append(pos)
+
+
+func _append_wood_spear_head(result: Array[Vector2i], center: Vector2i) -> void:
+	_append_unique_valid_position(result, center)
+	_append_unique_valid_position(result, Vector2i(center.x - 1, center.y))
+	_append_unique_valid_position(result, Vector2i(center.x + 1, center.y))
+
+
+func _get_wood_spear_positions(origin: Vector2i, direction_y: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	_append_unique_valid_position(result, origin)
+
+	var terminal: Vector2i = origin
+	var current: Vector2i = origin + Vector2i(0, direction_y)
+	while _is_valid(current):
+		_append_unique_valid_position(result, current)
+		terminal = current
+		var block: Block = grid[current.x][current.y]
+		if block != null and block.is_obstacle():
+			var beyond: Vector2i = current + Vector2i(0, direction_y)
+			_append_unique_valid_position(result, beyond)
+			_append_wood_spear_head(result, current)
+			return result
+		current += Vector2i(0, direction_y)
+
+	_append_wood_spear_head(result, terminal)
+	return result
 
 
 ## 取得火球爆炸位置：中心 3×3 + 四個方向各延伸1格
@@ -2321,6 +2390,29 @@ func get_line_direction(positions: Array[Vector2i]) -> String:
 	if max_h_run >= max_v_run:
 		return "horizontal"
 	return "vertical"
+
+
+func get_wood_spear_type_for_positions(positions: Array[Vector2i]) -> Block.UpperType:
+	var min_y: int = last_tapped_pos.y
+	var max_y: int = last_tapped_pos.y
+	var has_valid_position: bool = false
+	for p: Vector2i in positions:
+		if not _is_valid(p):
+			continue
+		if not has_valid_position:
+			min_y = p.y
+			max_y = p.y
+			has_valid_position = true
+		else:
+			min_y = mini(min_y, p.y)
+			max_y = maxi(max_y, p.y)
+	if not has_valid_position:
+		return Block.UpperType.WOOD_SPEAR_UP
+
+	var midpoint_y: float = (float(min_y) + float(max_y)) * 0.5
+	if float(last_tapped_pos.y) <= midpoint_y:
+		return Block.UpperType.WOOD_SPEAR_UP
+	return Block.UpperType.WOOD_SPEAR_DOWN
 
 
 func has_line_match(positions: Array[Vector2i], threshold: int) -> bool:
@@ -2654,7 +2746,7 @@ func _find_connected_in_grid(start: Vector2i, sim_grid: Array) -> Array[Vector2i
 	if cell == null or cell is not Block:
 		return []
 	var block: Block = cell as Block
-	if block.is_upper_gem() or block.is_block() or block.is_rock():
+	if block.is_upper_gem() or block.is_obstacle():
 		return []
 
 	var target_type: Block.Type = block.block_type as Block.Type
@@ -2674,7 +2766,7 @@ func _find_connected_in_grid(start: Vector2i, sim_grid: Array) -> Array[Vector2i
 		var cur_block: Block = cur_cell as Block
 		if cur_block.block_type != target_type:
 			continue
-		if cur_block.is_upper_gem() or cur_block.is_block() or cur_block.is_rock():
+		if cur_block.is_upper_gem() or cur_block.is_obstacle():
 			continue
 
 		visited[current] = true
@@ -2709,7 +2801,7 @@ func _would_trigger_fuse(gem_type: Block.Type, group: Array[Vector2i]) -> bool:
 ## 驗證：1) 模擬掉落後棋盤仍可行 2) 真實棋盤也可行 → 立即消除並發出信號。
 func _try_concurrent_fuse(click_pos: Vector2i) -> void:
 	var block: Block = grid[click_pos.x][click_pos.y]
-	if block == null or block.is_upper_gem() or block.is_block() or block.is_rock():
+	if block == null or block.is_upper_gem() or block.is_obstacle():
 		return
 
 	# 1. 在模擬掉落後的棋盤中驗證可行性

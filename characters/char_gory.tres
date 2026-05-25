@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/gory.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Gory"
+gem_type = 2
+level = 15
+base_atk = 3
+atk_growth = 0.7
+hp_growth = 7.5
+base_magic = 3
+magic_growth = 0.6
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(0.3, 0.69, 0.31, 1)
+portrait_scale = 1.2
+portrait_offset = Vector2(-121, -41)
+dialog_square_scale = 1.45
+dialog_square_offset = Vector2(-139, -34)
+square_scale = 1.4000000000000001
+square_offset = Vector2(-154, -26)
+rectangular_scale = 0.5
+rectangular_offset = Vector2(-153, 390)
+has_break_essence = true
+responding_skills = Array[Dictionary]([{
+"desc": "create a Wood Spear gem at tapped cell. Upper-half fusions create an up spear; lower-half fusions create a down spear. The spear pierces toward its direction and breaks breakable obstacles.",
+"fuse_label": "7",
+"name": "Wood Spear",
+"priority": 1,
+"threshold": 7,
+"trigger_type": "count"
+}])

@@ -50,6 +50,7 @@ const CHAR_HUSKY := preload("res://characters/char_husky.tres")
 const CHAR_POLAR := preload("res://characters/char_polar.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
+const CHAR_GORY := preload("res://characters/char_gory.tres")
 
 var party: Array[CharacterData] = []
 var current_stage: StageData = null
@@ -101,6 +102,8 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
 	Block.UpperType.WATER_SLASH: "res://assets/gems/gem_shark.png",
 	Block.UpperType.BAMBOO_SUPPLY: "res://assets/gems/gem_bamboo.png",
+	Block.UpperType.WOOD_SPEAR_UP: "res://assets/gems/gem_wood_spear.png",
+	Block.UpperType.WOOD_SPEAR_DOWN: "res://assets/gems/gem_wood_spear.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -133,6 +136,7 @@ const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 	Block.Type.DARK,
 	Block.Type.PLANK,
 	Block.Type.ROCK,
+	Block.Type.WOOD_STRUCTURE,
 ]
 const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
 const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
@@ -217,7 +221,8 @@ func _ready() -> void:
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
-	return_button.visible = false
+	return_button.text = Locale.tr_ui("EXIT")
+	return_button.visible = true
 	_setup_boss_bar()
 	_setup_kill_all_button()
 	_setup_escape_hud()
@@ -1274,6 +1279,8 @@ func _stage_editor_type_name(value: int) -> String:
 			return "Plank"
 		Block.Type.ROCK:
 			return "Rock"
+		Block.Type.WOOD_STRUCTURE:
+			return "woodStructure"
 		_:
 			return "Gem"
 
@@ -1778,7 +1785,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	# 先檢查回應技能以決定流程
 	var responses := battle_manager.check_responding_skills(board)
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 
 	if is_fuse:
@@ -1788,7 +1795,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 		battle_manager.last_blast_positions = saved_positions
 		battle_manager.turn_gem_blasts_changed.emit()
 		board.is_busy = true
-		await _execute_fuse_pipeline(gem_type, global_positions, responses)
+		await _execute_fuse_pipeline(gem_type, count, global_positions, grid_positions, responses)
 		return
 
 	# 還原 turn_gem_blasts，等到 worker 處理此筆時再 set
@@ -1956,7 +1963,7 @@ func _play_skill_animation_phase(params: Variant) -> void:
 
 ## 融合管線：放置高階寶石（不消耗回合）
 ## 粒子飛向點擊位置 → 放置高階寶石 → 處理並行融合 → 掉落填充 → 清除消除資料 → 解鎖棋盤
-func _execute_fuse_pipeline(gem_type: Block.Type, global_positions: Array, responses: Array) -> void:
+func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: Array, grid_positions: Array[Vector2i], responses: Array) -> void:
 	board.skip_collapse = true
 	board.is_fusing = true
 	_fuse_pipeline_active = true
@@ -1978,6 +1985,8 @@ func _execute_fuse_pipeline(gem_type: Block.Type, global_positions: Array, respo
 
 	# 放置第一個融合的高階寶石
 	board.last_tapped_pos = first_tapped_pos
+	battle_manager.turn_gem_blasts = { gem_type: count }
+	battle_manager.last_blast_positions = grid_positions
 	for resp in responses:
 		await _execute_responding_skill(resp)
 
@@ -2027,7 +2036,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	battle_manager.turn_gem_blasts = saved_blasts
 	battle_manager.last_blast_positions = saved_positions
 
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply"]
+	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear"]
 	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
 	if not is_fuse:
 		return
@@ -2550,6 +2559,15 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _bc_count: int = int(battle_manager.turn_gem_blasts.get(_bc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_bc.gem_type, _bc_count, Block.UpperType.BAMBOO_SUPPLY), _bc.gem_type, _bc)
 			await get_tree().create_timer(0.15).timeout
+		"Wood Spear":
+			var pos: Vector2i = board.last_tapped_pos
+			var spear_type: Block.UpperType = board.get_wood_spear_type_for_positions(battle_manager.last_blast_positions)
+			board.place_upper_gem(pos, spear_type, Block.Type.GREEN)
+			_play_sfx(_se_freeze)
+			var _gc: CharacterData = party[resp.char_index]
+			var _gc_count: int = int(battle_manager.turn_gem_blasts.get(_gc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_gc.gem_type, _gc_count, spear_type), _gc.gem_type, _gc)
+			await get_tree().create_timer(0.15).timeout
 
 
 # ── upper gem handlers ───────────────────────────────────────────────
@@ -2870,10 +2888,12 @@ func _handle_active_skill(char_index: int) -> void:
 				var tb: Block = board.grid[p.x][p.y]
 				if tb == null:
 					continue
-				if tb.is_block():
-					# BREAK 屬性：龍焰領域可連同 PLANK 一併側除
-					if c.has_break_essence and board.silently_destroy_plank(p):
+				if tb.is_breakable_structure():
+					# BREAK 屬性：龍焰領域可連同可破壞障礙一併側除
+					if c.has_break_essence and board.silently_destroy_breakable_structure(p):
 						planks_broken += 1
+					continue
+				if tb.is_obstacle():
 					continue
 				if tb.block_type != Block.Type.RED:
 					board._animate_gem_morph(tb, Block.Type.RED)
@@ -2896,7 +2916,7 @@ func _handle_active_skill(char_index: int) -> void:
 			for pos in positions:
 				var p: Vector2i = pos as Vector2i
 				var tb: Block = board.grid[p.x][p.y]
-				if tb == null or tb.is_block():
+				if tb == null or tb.is_obstacle():
 					continue
 				if tb.block_type != Block.Type.LIGHT:
 					board._animate_gem_morph(tb, Block.Type.LIGHT)
@@ -2994,7 +3014,7 @@ func _handle_active_skill(char_index: int) -> void:
 				if not board._is_valid(np):
 					continue
 				var nb: Block = board.grid[np.x][np.y]
-				if nb == null or nb.is_upper_gem() or nb.is_block():
+				if nb == null or nb.is_upper_gem() or nb.is_obstacle():
 					continue
 				if nb.block_type == target_element:
 					continue
@@ -4042,21 +4062,33 @@ func _setup_boss_bar() -> void:
 	bar.add_child(_boss_bar_label)
 
 
-## 在 Restart 右側建立「Kill All」「Combo Test」「Skill Reset」偵錯按鈕，四顆水平排成一列
+## 建立「Exit / Restart / Kill All / Combo Test / Skill Reset」按鈕列。
 func _setup_kill_all_button() -> void:
 	var ui_layer: CanvasLayer = $UILayer
+	var exit_btn: Node = ui_layer.get_node_or_null("ReturnButton")
 	var restart_btn: Node = ui_layer.get_node_or_null("RestartButton")
 
-	# 三顆按鈕同寬 (140px)，間距 8px，整組以 anchor 0.5 置中：
-	#   Restart: -226 to -86
-	#   Kill All: -78 to +62
-	#   Combo Test: +70 to +210
+	# 五顆按鈕同寬，間距 6px，整組以 anchor 0.5 置中。
 	var top_off: float = -96.0
 	var bot_off: float = -56.0
 	if restart_btn is Button:
 		var rb: Button = restart_btn as Button
 		top_off = rb.offset_top
 		bot_off = rb.offset_bottom
+		rb.offset_left = -162.0
+		rb.offset_right = -58.0
+	if exit_btn is Button:
+		var eb: Button = exit_btn as Button
+		eb.text = Locale.tr_ui("EXIT")
+		eb.visible = true
+		eb.anchor_left = 0.5
+		eb.anchor_top = 1.0
+		eb.anchor_right = 0.5
+		eb.anchor_bottom = 1.0
+		eb.offset_left = -272.0
+		eb.offset_right = -168.0
+		eb.offset_top = top_off
+		eb.offset_bottom = bot_off
 
 	_kill_all_btn = Button.new()
 	_kill_all_btn.name = "KillAllButton"
@@ -4066,8 +4098,8 @@ func _setup_kill_all_button() -> void:
 	_kill_all_btn.anchor_top = 1.0
 	_kill_all_btn.anchor_right = 0.5
 	_kill_all_btn.anchor_bottom = 1.0
-	_kill_all_btn.offset_left = -78.0
-	_kill_all_btn.offset_right = 62.0
+	_kill_all_btn.offset_left = -52.0
+	_kill_all_btn.offset_right = 52.0
 	_kill_all_btn.offset_top = top_off
 	_kill_all_btn.offset_bottom = bot_off
 	_kill_all_btn.pressed.connect(_on_kill_all_pressed)
@@ -4081,8 +4113,8 @@ func _setup_kill_all_button() -> void:
 	combo_btn.anchor_top = 1.0
 	combo_btn.anchor_right = 0.5
 	combo_btn.anchor_bottom = 1.0
-	combo_btn.offset_left = 70.0
-	combo_btn.offset_right = 210.0
+	combo_btn.offset_left = 58.0
+	combo_btn.offset_right = 162.0
 	combo_btn.offset_top = top_off
 	combo_btn.offset_bottom = bot_off
 	combo_btn.pressed.connect(_on_combo_test_pressed.bind(combo_btn))
@@ -4096,8 +4128,8 @@ func _setup_kill_all_button() -> void:
 	skill_reset_btn.anchor_top = 1.0
 	skill_reset_btn.anchor_right = 0.5
 	skill_reset_btn.anchor_bottom = 1.0
-	skill_reset_btn.offset_left = 218.0
-	skill_reset_btn.offset_right = 358.0
+	skill_reset_btn.offset_left = 168.0
+	skill_reset_btn.offset_right = 272.0
 	skill_reset_btn.offset_top = top_off
 	skill_reset_btn.offset_bottom = bot_off
 	skill_reset_btn.pressed.connect(_on_skill_reset_pressed)
@@ -4306,6 +4338,7 @@ func _debug_spawn_upper(skill_name: String) -> void:
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,
 		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
+		"Wood Spear": Block.UpperType.WOOD_SPEAR_UP,
 	}
 	if not ut_map.has(skill_name):
 		# 倒回旧行為

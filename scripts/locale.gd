@@ -79,6 +79,8 @@ var _translations: Dictionary = {
 	"Turtle DESC": {"zh": "在點擊處召喚烏龜寶石。爆炸時只消除自身。每回合所有角色攻擊後,以全隊魔力 × 0.8 為玩家回血。", "en": "Summon a Turtle gem at the tapped cell. Self-blast only. After all party attacks each turn, heals the player for ΣTeamMagic × 0.8."},
 	"Bamboo Supply": {"zh": "竹葉補給", "en": "Bamboo Supply"},
 	"Bamboo Supply DESC": {"zh": "在點擊處生成竹葉補給寶石；爆炸時消除周圍 8 格並回復 Panda 魔力 × 1.6 HP。", "en": "Create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 1.6."},
+	"Wood Spear": {"zh": "木槍", "en": "Wood Spear"},
+	"Wood Spear DESC": {"zh": "7 顆以上葉寶石合成時，在點擊處生成木槍寶石；點擊位置位於連通群上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse 7+ leaf gems to create a Wood Spear gem at the tapped cell. Upper-half fusions point up; lower-half fusions point down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
 
 	# ── 角色名稱 ──
 	"Boar": {"zh": "野豬", "en": "Boar"},
@@ -90,6 +92,7 @@ var _translations: Dictionary = {
 	"Polar": {"zh": "阿極", "en": "Polar"},
 	"Dragon": {"zh": "小焰", "en": "Dragon"},
 	"Shark": {"zh": "鯊魚", "en": "Shark"},
+	"Gory": {"zh": "戈爾", "en": "Gory"},
 	"Flame": {"zh": "炎", "en": "Flame"},
 	"Tide": {"zh": "潮", "en": "Tide"},
 	"Hero": {"zh": "英雄", "en": "Hero"},
@@ -103,6 +106,7 @@ var _translations: Dictionary = {
 	"DIALOG_panda":   {"zh": "阿潘",       "en": "Panda"},
 	"DIALOG_dragon":  {"zh": "小焰",       "en": "Dragon"},
 	"DIALOG_shark":   {"zh": "鯊鯊",       "en": "Shark"},
+	"DIALOG_gory":    {"zh": "戈爾",       "en": "Gory"},
 
 	# ── 主動技能名稱與描述 ──
 	"Attack Form": {"zh": "攻擊形態", "en": "Attack Form"},

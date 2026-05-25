@@ -32,7 +32,7 @@ func refresh(counts: Dictionary) -> void:
 	# 把不在預設順序裡的也加進來
 	for k in counts.keys():
 		var ti: int = int(k)
-		if int(counts[k]) > 0 and not ordered.has(ti) and Block.is_valid_type_value(ti) and ti != Block.Type.PLANK and ti != Block.Type.ROCK:
+		if int(counts[k]) > 0 and not ordered.has(ti) and Block.is_random_gem_type_value(ti):
 			ordered.append(ti)
 
 	for t in ordered:
