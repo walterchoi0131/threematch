@@ -1,12 +1,185 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://dyafoiu2m3dke"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
 [ext_resource type="AudioStream" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
-[ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_jsm3v"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="Texture2D" path="res://assets/background/classroom.png" id="2_fjo77"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
+[ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
+[ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
+[ext_resource type="AudioStream" path="res://assets/music/Wild Arms 2 - The Town to the Western Winds.mp3" id="4_tq0q5"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="7_jsm3v"]
+[ext_resource type="Resource" path="res://characters/char_husky.tres" id="12_o6cdy"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="13_7x61u"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="14_epvkr"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
+
+[sub_resource type="Resource" id="Resource_smhwd"]
+script = ExtResource("3_6yv1j")
+text_zh = "元素學院——古老的石造教室裡，陽光透過彩繪玻璃灑落。空氣中瀰漫著微弱的魔力氣息。
+新生們坐得筆直，緊張地望向講台。"
+text_en = "The Elemental Academy — sunlight filters through stained glass into the ancient stone classroom.
+The freshmen sit upright, staring nervously at the podium."
+music = ExtResource("4_tq0q5")
+
+[sub_resource type="Resource" id="Resource_jg7yr"]
+script = ExtResource("3_6yv1j")
+character_id = "husky"
+text_zh = "歡迎來到元素學院。我們的世界由四大元素構成——火、水、草、光。"
+text_en = "Welcome to the Elemental Academy. Our world is shaped by four elements — Fire, Water, Leaf, and Light."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_lyr6i"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "老師老師！所以我們可以噴火對嗎！！我超會噴火的！！"
+text_en = "Professor, professor! So we get to breathe fire, right?! I'm SO good at breathing fire!!"
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_piard"]
+script = ExtResource("3_6yv1j")
+character_id = "shark"
+position = "right"
+text_zh = "……那是你個人的事。別打斷上課。"
+text_en = "...That's your own business. Don't interrupt the lesson."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_5oni6"]
+script = ExtResource("3_6yv1j")
+character_id = "panda"
+position = "right"
+text_zh = "鯊鯊只是說話直接一點嘛～其實他是為了讓大家認真上課哦。"
+text_en = "Shark just sounds blunt—he only says it because he wants everyone to take class seriously."
+
+[sub_resource type="Resource" id="Resource_et6yt"]
+script = ExtResource("3_6yv1j")
+character_id = "husky"
+text_zh = "元素之間存在相剋關係。火焚草、草吸水、水滅火。記住這些，戰場上會救你一命。"
+text_en = "Elements counter each other — Fire burns Leaf, Leaf absorbs Water, Water douses Fire. Remember this."
+
+[sub_resource type="Resource" id="Resource_f0mht"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "所以水剋草、草剋火、火剋水？！對嗎老師！我答對了嗎！"
+text_en = "So Water beats Leaf, Leaf beats Fire, Fire beats Water?! Right?! Did I get it right, Professor?!"
+
+[sub_resource type="Resource" id="Resource_4g8bb"]
+script = ExtResource("3_6yv1j")
+character_id = "shark"
+position = "right"
+text_zh = "完全反過來。"
+text_en = "You got it completely backwards."
+
+[sub_resource type="Resource" id="Resource_pqxqm"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "啊！？"
+text_en = "Huh?!"
+
+[sub_resource type="Resource" id="Resource_fitqk"]
+script = ExtResource("3_6yv1j")
+character_id = "panda"
+position = "right"
+text_zh = "老師剛才說過哦～火焚草，所以火剛草。小龍一定是太興奮了，下次慎慎來就可以了。"
+text_en = "Professor said it just now—fire burns leaf, so fire beats leaf. Dragon was just too excited; take it slow next time and you'll get it."
+
+[sub_resource type="Resource" id="Resource_yi8km"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "喔喔喔！！對！！我早就知道了！！"
+text_en = "Ohhhh!! Right!! I knew that all along!!"
+
+[sub_resource type="Resource" id="Resource_qfcwp"]
+script = ExtResource("3_6yv1j")
+character_id = "shark"
+position = "right"
+text_zh = "（嘆氣）"
+text_en = "(sighs)"
+
+[sub_resource type="Resource" id="Resource_xmigc"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "老師老師！那「光」元素呢？"
+text_en = "Professor, professor! What about the 'Light' element?"
+
+[sub_resource type="Resource" id="Resource_yj5ux"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "光！！光是最強的吧！！因為光可以照亮黑暗！！"
+text_en = "Light!! Light is definitely the strongest!! Because light shines through darkness!!"
+
+[sub_resource type="Resource" id="Resource_033xj"]
+script = ExtResource("3_6yv1j")
+character_id = "shark"
+position = "right"
+text_zh = "……目前沒有已知的剋制元素。這不等於「最強」，只是尚未解明。"
+text_en = "...There is currently no known counter element. That does not mean 'strongest.' It means unexplained."
+
+[sub_resource type="Resource" id="Resource_6if1r"]
+script = ExtResource("3_6yv1j")
+character_id = "panda"
+position = "right"
+text_zh = "老師的表情⋯⋯看起來有點難過。是不是勾起了什麼難過的回憶呢？"
+text_en = "Professor's expression... looks a little sad. Did something painful come back to him?"
+
+[sub_resource type="Resource" id="Resource_ubk7d"]
+script = ExtResource("3_6yv1j")
+character_id = "husky"
+text_zh = "⋯⋯"
+text_en = "..."
+
+[sub_resource type="Resource" id="Resource_k41va"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "老師你沒事吧！！臉色好白！！"
+text_en = "Professor, are you okay?! Your face went pale!!"
+
+[sub_resource type="Resource" id="Resource_idwy2"]
+script = ExtResource("3_6yv1j")
+character_id = "husky"
+text_zh = "⋯⋯我沒事。"
+text_en = "...I'm fine."
+
+[sub_resource type="Resource" id="Resource_5j6eb"]
+script = ExtResource("3_6yv1j")
+character_id = "husky"
+text_zh = "好了。今天是你們第一堂實戰課。前往指定地點，消滅出沒的魔物。"
+text_en = "Anyway, that's enough. Today is your first practical combat lesson. Proceed to the designated area and eliminate the monsters."
+
+[sub_resource type="Resource" id="Resource_udkyh"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+position = "right"
+text_zh = "耶耶耶！！終於可以打架了！！衝啊！！"
+text_en = "YES YES YES!! Finally we get to fight!! CHARGE!!"
+
+[sub_resource type="Resource" id="Resource_03d32"]
+script = ExtResource("3_6yv1j")
+character_id = "shark"
+position = "right"
+text_zh = "……先等隊形好嗎。"
+text_en = "...Can you wait for formation first?"
+
+[sub_resource type="Resource" id="Resource_ccp7f"]
+script = ExtResource("3_6yv1j")
+character_id = "panda"
+position = "right"
+text_zh = "我跟在大家身後好好支援，請放心快去吧～"
+text_en = "I'll stay close behind and keep you all supported—go on, don't worry about me."
+
+[sub_resource type="Resource" id="Resource_ogy0i"]
+script = ExtResource("5_vmepe")
+lines = Array[ExtResource("3_6yv1j")]([SubResource("Resource_smhwd"), SubResource("Resource_jg7yr"), SubResource("Resource_lyr6i"), SubResource("Resource_piard"), SubResource("Resource_5oni6"), SubResource("Resource_et6yt"), SubResource("Resource_f0mht"), SubResource("Resource_4g8bb"), SubResource("Resource_pqxqm"), SubResource("Resource_fitqk"), SubResource("Resource_yi8km"), SubResource("Resource_qfcwp"), SubResource("Resource_xmigc"), SubResource("Resource_yj5ux"), SubResource("Resource_033xj"), SubResource("Resource_6if1r"), SubResource("Resource_ubk7d"), SubResource("Resource_k41va"), SubResource("Resource_idwy2"), SubResource("Resource_5j6eb"), SubResource("Resource_udkyh"), SubResource("Resource_03d32"), SubResource("Resource_ccp7f")])
+background = ExtResource("2_fjo77")
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")
@@ -87,6 +260,12 @@ script = ExtResource("1_script")
 stage_id = "1-1"
 stage_name = "Stage 1-1"
 allowed_types = Array[int]([0, 1, 2, 6])
+area = "iceberg"
 rounds = Array[Array]([[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]])
+rounds_init_cd = Array[Array]([[0], [0, 0], [2, 3, 1], [0]])
 background = 1
 bgm = ExtResource("1_lvgyu")
+pre_dialog = SubResource("Resource_ogy0i")
+is_tutorial = true
+set_party = Array[ExtResource("7_jsm3v")]([ExtResource("12_o6cdy"), ExtResource("13_7x61u"), ExtResource("14_epvkr"), ExtResource("15_wrajf")])
+fixed_layout = [[0, 0, 0, 0, 0, 0, 0, 6], [1, 1, 6, 6, 6, 6, 0, 6], [1, 1, 6, 6, 2, 0, 0, 6], [1, 6, 1, 6, 0, 0, 1, 0], [2, 1, 1, 0, 2, 2, 6, 1], [2, 1, 1, 6, 2, 1, 6, 6], [6, 1, 6, 6, 0, 0, 6, 6], [6, 2, 2, 6, 6, 6, 6, 2]]

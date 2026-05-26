@@ -64,6 +64,7 @@ script = ExtResource("1_script")
 stage_id = "1-5"
 prerequisite_stage_id = "1-4"
 stage_name = "Stage 1-5 (Dark Test)"
+area = "ruin"
 allowed_types = Array[int]([0, 1, 2, 7])
 rounds = Array[Array]([[ExtResource("6_bonewizard"), ExtResource("6_bonewizard")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
 rounds_init_cd = Array[Array]([[1, 2], [], []])

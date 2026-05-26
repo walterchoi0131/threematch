@@ -146,6 +146,11 @@ var _stage_editor_root_box: VBoxContainer = null
 var _stage_editor_status: Label = null
 var _stage_editor_value_buttons: Dictionary = {}
 var _stage_editor_selected_value: int = Block.Type.RED
+var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
+var _stage_editor_area_option: OptionButton = null
+var _stage_editor_area_spot_preview: TextureRect = null
+var _stage_editor_area_battle_preview: TextureRect = null
+var _stage_editor_area_summary: Label = null
 var _stage_editor_enemy_area_panel: Control = null
 var _stage_editor_prev_round_button: Button = null
 var _stage_editor_next_round_button: Button = null
@@ -245,16 +250,20 @@ func _ready() -> void:
 	_play_stage_intro()
 
 
-## 套用關卡背景圖片（NONE 則隱藏）。
+## 套用關卡地區背景圖片。
 func _apply_stage_background() -> void:
-	if current_stage == null or current_stage.background == StageData.Background.NONE:
+	if current_stage == null:
 		_battle_bg_rect.visible = false
 		return
-	var path: String = StageData.BACKGROUND_PATHS.get(current_stage.background, "")
+	var path: String = StageData.get_battle_background_path(current_stage.area)
 	if path.is_empty():
 		_battle_bg_rect.visible = false
 		return
-	_battle_bg_rect.texture = load(path)
+	var texture: Texture2D = load(path) as Texture2D
+	if texture == null:
+		_battle_bg_rect.visible = false
+		return
+	_battle_bg_rect.texture = texture
 	_battle_bg_rect.visible = true
 
 
@@ -320,6 +329,7 @@ func _setup_stage_edit_mode() -> void:
 	_hide_battle_ui_for_stage_editor()
 	board.set_edit_mode(true)
 	board.set_edit_paint_value(_stage_editor_selected_value)
+	_stage_editor_load_area_state()
 	_stage_editor_load_round_state()
 	_apply_stage_background()
 	_layout_board()
@@ -396,6 +406,8 @@ func _build_stage_editor_ui() -> void:
 	_stage_editor_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(_stage_editor_status)
 
+	_build_stage_editor_area_panel(root_box)
+
 	var button_grid := GridContainer.new()
 	button_grid.columns = 7
 	button_grid.add_theme_constant_override("h_separation", 6)
@@ -416,7 +428,84 @@ func _build_stage_editor_ui() -> void:
 	button_grid.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
 
 	_refresh_stage_editor_value_buttons()
+	_refresh_stage_editor_area_panel()
 	_layout_stage_editor_ui()
+
+
+func _stage_editor_load_area_state() -> void:
+	if current_stage == null:
+		_stage_editor_selected_area = StageData.DEFAULT_AREA
+		return
+	_stage_editor_selected_area = StageData.normalize_area(current_stage.area)
+	current_stage.area = _stage_editor_selected_area
+
+
+func _build_stage_editor_area_panel(parent: VBoxContainer) -> void:
+	var area_panel := PanelContainer.new()
+	area_panel.name = "StageEditorAreaPanel"
+	area_panel.custom_minimum_size = Vector2(0, 62)
+	area_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
+	parent.add_child(area_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 6)
+	area_panel.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(row)
+
+	var selector_box := VBoxContainer.new()
+	selector_box.add_theme_constant_override("separation", 3)
+	selector_box.custom_minimum_size = Vector2(138, 0)
+	row.add_child(selector_box)
+
+	var title := Label.new()
+	title.text = "Map Area"
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	selector_box.add_child(title)
+
+	_stage_editor_area_option = OptionButton.new()
+	_stage_editor_area_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_area_option.custom_minimum_size = Vector2(130, 32)
+	_stage_editor_area_option.add_theme_font_size_override("font_size", 12)
+	for area_key: String in StageData.AREA_KEYS:
+		var item_index: int = _stage_editor_area_option.item_count
+		_stage_editor_area_option.add_item(area_key)
+		_stage_editor_area_option.set_item_metadata(item_index, area_key)
+	_stage_editor_area_option.item_selected.connect(_on_stage_editor_area_selected)
+	selector_box.add_child(_stage_editor_area_option)
+
+	_stage_editor_area_spot_preview = _make_stage_editor_area_preview("Spot")
+	row.add_child(_stage_editor_area_spot_preview)
+
+	_stage_editor_area_battle_preview = _make_stage_editor_area_preview("Battle BG")
+	row.add_child(_stage_editor_area_battle_preview)
+
+	_stage_editor_area_summary = Label.new()
+	_stage_editor_area_summary.add_theme_font_size_override("font_size", 11)
+	_stage_editor_area_summary.add_theme_color_override("font_color", Color(0.78, 0.84, 0.92, 1.0))
+	_stage_editor_area_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stage_editor_area_summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_area_summary.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_stage_editor_area_summary)
+
+
+func _make_stage_editor_area_preview(label_text: String) -> TextureRect:
+	var preview := TextureRect.new()
+	preview.name = label_text.replace(" ", "")
+	preview.custom_minimum_size = Vector2(72, 48)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview.tooltip_text = label_text
+	return preview
 
 
 func _make_stage_editor_value_button(value: int, label_text: String) -> Button:
@@ -1298,6 +1387,44 @@ func _refresh_stage_editor_value_buttons() -> void:
 		button.set_pressed_no_signal(int(key) == _stage_editor_selected_value)
 
 
+func _refresh_stage_editor_area_panel() -> void:
+	if current_stage != null:
+		_stage_editor_selected_area = StageData.normalize_area(current_stage.area)
+	else:
+		_stage_editor_selected_area = StageData.DEFAULT_AREA
+	if _stage_editor_area_option != null:
+		for item_index in _stage_editor_area_option.item_count:
+			var item_area: String = String(_stage_editor_area_option.get_item_metadata(item_index))
+			if item_area == _stage_editor_selected_area:
+				_stage_editor_area_option.select(item_index)
+				break
+	var spot_path: String = StageData.get_stage_spot_path(_stage_editor_selected_area)
+	var battle_path: String = StageData.get_battle_background_path(_stage_editor_selected_area)
+	if _stage_editor_area_spot_preview != null:
+		_stage_editor_area_spot_preview.texture = load(spot_path) as Texture2D
+		_stage_editor_area_spot_preview.tooltip_text = spot_path
+	if _stage_editor_area_battle_preview != null:
+		_stage_editor_area_battle_preview.texture = load(battle_path) as Texture2D
+		_stage_editor_area_battle_preview.tooltip_text = battle_path
+	if _stage_editor_area_summary != null:
+		_stage_editor_area_summary.text = "Spot: %s\nBattle: %s" % [spot_path.get_file(), battle_path.get_file()]
+
+
+func _on_stage_editor_area_selected(item_index: int) -> void:
+	if _stage_editor_area_option == null:
+		return
+	var item_area: String = String(_stage_editor_area_option.get_item_metadata(item_index))
+	_stage_editor_selected_area = StageData.normalize_area(item_area)
+	if current_stage != null:
+		current_stage.area = _stage_editor_selected_area
+	_refresh_stage_editor_area_panel()
+	_apply_stage_background()
+	_layout_board()
+	_layout_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+	_set_stage_editor_status("Area: %s" % _stage_editor_selected_area)
+
+
 func _on_stage_editor_clear_pressed() -> void:
 	board.clear_fixed_layout()
 	_set_stage_editor_status("Cleared")
@@ -1311,6 +1438,7 @@ func _on_stage_editor_save_pressed() -> void:
 	if not validation_error.is_empty():
 		_set_stage_editor_status(validation_error, false)
 		return
+	current_stage.area = StageData.normalize_area(_stage_editor_selected_area)
 	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
 	current_stage.rounds = _stage_editor_get_rounds_snapshot()
 	current_stage.rounds_init_cd = _stage_editor_get_round_cds_snapshot()
@@ -1384,7 +1512,7 @@ func _layout_stage_editor_ui() -> void:
 	var insets: Vector4 = ViewportUtils.get_safe_insets()
 	var board_rows: int = current_stage.rows if current_stage != null else 8
 	var board_height: float = float(board_rows) * 64.0 * board.scale.y
-	var base_panel_height: float = 132.0
+	var base_panel_height: float = 208.0
 	var max_panel_height: float = maxf(180.0, viewport_size.y - insets.x - insets.z - 16.0)
 	var panel_height: float = minf(base_panel_height, max_panel_height)
 	var preferred_top: float = board.position.y + board_height + 12.0

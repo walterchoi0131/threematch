@@ -53,6 +53,7 @@ script = ExtResource("2_stage")
 stage_id = "8x8-5C"
 connects_to = Array[String](["9x9-5C"])
 stage_name = "Research 8x8 / 5 Colors"
+area = "ruin"
 allowed_types = Array[int]([0, 1, 2, 6, 7])
 rounds = Array[Array]([[SubResource("slime_a"), SubResource("slime_b")], [SubResource("slime_boss")]])
 background = 1

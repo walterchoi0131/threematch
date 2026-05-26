@@ -83,6 +83,7 @@ stage_id = "1-2"
 prerequisite_stage_id = "1-1"
 stage_name = "Stage 1-2"
 allowed_types = Array[int]([0, 1, 2, 6])
+area = "underwater"
 rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2"), ExtResource("5_8ceh8")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
 rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0, 0], [0]])
 background = 1

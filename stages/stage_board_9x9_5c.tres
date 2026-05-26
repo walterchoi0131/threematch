@@ -52,6 +52,7 @@ loot_table = Array[ExtResource("6_loot")]([SubResource("gold_loot")])
 script = ExtResource("2_stage")
 stage_id = "9x9-5C"
 stage_name = "Research 9x9 / 5 Colors"
+area = "ruin"
 allowed_types = Array[int]([0, 1, 2, 6, 7])
 columns = 9
 rows = 9

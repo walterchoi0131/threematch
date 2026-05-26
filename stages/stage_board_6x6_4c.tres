@@ -53,6 +53,7 @@ script = ExtResource("2_stage")
 stage_id = "6x6-4C"
 connects_to = Array[String](["7x7-4C"])
 stage_name = "Research 6x6 / 4 Colors"
+area = "ruin"
 allowed_types = Array[int]([0, 1, 2, 6])
 columns = 6
 rows = 6
