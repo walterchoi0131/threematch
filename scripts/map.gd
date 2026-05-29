@@ -283,18 +283,28 @@ func _toggle_debug_panel() -> void:
 	)
 
 
-# ── Portrait Debug 浮動按鈕 ─────────────────────────────────
+# ── Debug 浮動按鈕 ──────────────────────────────────────────
 
 func _build_portrait_debug_btn() -> void:
 	_portrait_debug_layer = CanvasLayer.new()
 	_portrait_debug_layer.layer = 12
 	add_child(_portrait_debug_layer)
 
+	var stat_btn: Button = _make_debug_launcher_button("ST", "Stat Debug", 16, -250.0, -196.0)
+	stat_btn.pressed.connect(_open_stat_debug)
+	_portrait_debug_layer.add_child(stat_btn)
+
+	var portrait_btn: Button = _make_debug_launcher_button("🖼", "Portrait Debug", 26, -190.0, -136.0)
+	portrait_btn.pressed.connect(_open_portrait_debug)
+	_portrait_debug_layer.add_child(portrait_btn)
+
+
+func _make_debug_launcher_button(label_text: String, tooltip: String, font_size: int, top_offset: float, bottom_offset: float) -> Button:
 	var btn := Button.new()
-	btn.text = "🖼"
-	btn.add_theme_font_size_override("font_size", 26)
+	btn.text = label_text
+	btn.add_theme_font_size_override("font_size", font_size)
 	btn.custom_minimum_size = Vector2(54, 54)
-	btn.tooltip_text = "Portrait Debug"
+	btn.tooltip_text = tooltip
 
 	var sbox := StyleBoxFlat.new()
 	sbox.bg_color = Color(0.12, 0.14, 0.22, 0.90)
@@ -312,12 +322,11 @@ func _build_portrait_debug_btn() -> void:
 	btn.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	btn.grow_vertical   = Control.GROW_DIRECTION_BEGIN
 	btn.offset_left   = -76.0
-	btn.offset_top    = -190.0
+	btn.offset_top    = top_offset
 	btn.offset_right  = -22.0
-	btn.offset_bottom = -136.0
+	btn.offset_bottom = bottom_offset
 
-	btn.pressed.connect(_open_portrait_debug)
-	_portrait_debug_layer.add_child(btn)
+	return btn
 
 
 func _open_portrait_debug() -> void:
@@ -331,4 +340,17 @@ func _open_portrait_debug() -> void:
 	var screen: Control = load("res://scripts/portrait_debug_screen.gd").new() as Control
 	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	screen.tree_exiting.connect(func() -> void: pass)  # 保留佔位
+	_portrait_debug_layer.add_child(screen)
+
+
+func _open_stat_debug() -> void:
+	if _portrait_debug_layer == null:
+		return
+	# 只允許一個
+	for child in _portrait_debug_layer.get_children():
+		if child.get_script() != null and \
+				child.get_script().resource_path == "res://scripts/stat_debug_screen.gd":
+			return
+	var screen: Control = load("res://scripts/stat_debug_screen.gd").new() as Control
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_portrait_debug_layer.add_child(screen)
