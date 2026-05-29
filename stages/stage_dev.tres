@@ -189,7 +189,7 @@ amount_max = 20
 [sub_resource type="Resource" id="slime_1"]
 script = ExtResource("2_enemy")
 enemy_level = 3
-max_hp = 80
+max_hp = 800
 attack_damage = 12
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
@@ -197,7 +197,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_2"]
 script = ExtResource("2_enemy")
 enemy_level = 3
-max_hp = 90
+max_hp = 900
 attack_damage = 14
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
@@ -205,7 +205,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_3"]
 script = ExtResource("2_enemy")
 enemy_level = 3
-max_hp = 90
+max_hp = 900
 attack_damage = 14
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
@@ -213,7 +213,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_4"]
 script = ExtResource("2_enemy")
 enemy_level = 3
-max_hp = 100
+max_hp = 1000
 attack_damage = 14
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
@@ -222,7 +222,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_5"]
 script = ExtResource("2_enemy")
 enemy_level = 3
-max_hp = 100
+max_hp = 1000
 attack_damage = 14
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
@@ -231,7 +231,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_6"]
 script = ExtResource("2_enemy")
 enemy_level = 3
-max_hp = 100
+max_hp = 1000
 attack_damage = 14
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
@@ -246,7 +246,7 @@ drop_chance = 0.7
 script = ExtResource("2_enemy")
 enemy_name = "Slime Boss"
 enemy_level = 4
-max_hp = 400
+max_hp = 4000
 attack_damage = 35
 attack_interval = 1
 portrait_color = Color(0.25, 0.47, 0.85, 1)

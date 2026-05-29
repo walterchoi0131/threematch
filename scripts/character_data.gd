@@ -4,17 +4,24 @@ class_name CharacterData
 extends Resource
 
 enum SkillType { NONE, PASSIVE, ACTIVE, RESPONDING }  # 技能類型列舉
+enum GrowthMode { LINEAR, WEAK_EARLY_STRONG_LATE, STRONG_EARLY_WEAK_LATE }
+
+const STAT_LEVEL_MIN: int = 1
+const STAT_LEVEL_MAX: int = 99
 
 @export var character_name: String = "Hero"  # 角色名稱
 @export var gem_type: Block.Type = Block.Type.RED  # 對應的寶石類型（決定哪種寶石觸發攻擊）
 @export var level: int = 5            # 等級（玩家角色預設 Lv5）
 var current_exp: int = 0              # 當前累積經驗值（不存入 .tres，執行時管理）
 @export var base_atk: int = 2         # 基礎攻擊力
-@export var atk_growth: float = 0.6   # 每級攻擊力成長
+@export var atk_growth: float = 6.0   # 每級攻擊力成長係數
+@export var atk_growth_mode: GrowthMode = GrowthMode.LINEAR
 @export var base_hp: int = 50         # 基礎血量
 @export var hp_growth: float = 8.0    # 每級血量成長
+@export var hp_growth_mode: GrowthMode = GrowthMode.LINEAR
 @export var base_magic: int = 2       # 基礎魔力（部分主動技倍率以此計算）
-@export var magic_growth: float = 0.5 # 每級魔力成長
+@export var magic_growth: float = 5.0 # 每級魔力成長係數
+@export var magic_growth_mode: GrowthMode = GrowthMode.LINEAR
 @export var portrait_texture: Texture2D  # 頭像貼圖
 @export var portrait_color: Color = Color(0.91, 0.26, 0.21)  # 頭像備用顏色
 @export var portrait_scale: float = 1.0          # 頭像縮放（相對於卡片容器）
@@ -44,17 +51,48 @@ var current_exp: int = 0              # 當前累積經驗值（不存入 .tres�
 
 ## 計算當前等級的攻擊力
 func get_atk() -> int:
-	return base_atk + int(floor(level * atk_growth))
+	return get_atk_at_level(level)
+
+
+## 計算指定等級的攻擊力
+func get_atk_at_level(level_value: int) -> int:
+	return _calc_stat_at_level(base_atk, atk_growth, atk_growth_mode, level_value)
 
 
 ## 計算當前等級的最大血量
 func get_max_hp() -> int:
-	return base_hp + int(floor(level * hp_growth))
+	return get_max_hp_at_level(level)
+
+
+## 計算指定等級的最大血量
+func get_max_hp_at_level(level_value: int) -> int:
+	return _calc_stat_at_level(base_hp, hp_growth, hp_growth_mode, level_value)
 
 
 ## 計算當前等級的魔力（用於部分主動技傷害倍率）
 func get_magic() -> int:
-	return base_magic + int(floor(level * magic_growth))
+	return get_magic_at_level(level)
+
+
+## 計算指定等級的魔力（用於部分主動技傷害倍率）
+func get_magic_at_level(level_value: int) -> int:
+	return _calc_stat_at_level(base_magic, magic_growth, magic_growth_mode, level_value)
+
+
+## 使用同一套成長曲線計算數值，確保 Debug 預覽與實戰一致。
+func _calc_stat_at_level(base_value: int, growth_value: float, mode: GrowthMode, level_value: int) -> int:
+	var clamped_level: int = clampi(level_value, STAT_LEVEL_MIN, STAT_LEVEL_MAX)
+	var progress: float = float(clamped_level) / float(STAT_LEVEL_MAX)
+	var curve: float = progress
+	match mode:
+		GrowthMode.WEAK_EARLY_STRONG_LATE:
+			curve = progress * progress
+		GrowthMode.STRONG_EARLY_WEAK_LATE:
+			curve = 1.0 - pow(1.0 - progress, 2.0)
+		_:
+			curve = progress
+	var total_growth: float = float(STAT_LEVEL_MAX) * growth_value
+	return base_value + int(floor(total_growth * curve))
 
 
 ## 升到下一級所需的總經驗值

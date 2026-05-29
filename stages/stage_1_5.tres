@@ -17,7 +17,7 @@ amount_max = 45
 [sub_resource type="Resource" id="slime_b1"]
 script = ExtResource("2_enemy")
 enemy_level = 7
-max_hp = 240
+max_hp = 2400
 attack_damage = 30
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
@@ -26,7 +26,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_b2"]
 script = ExtResource("2_enemy")
 enemy_level = 7
-max_hp = 240
+max_hp = 2400
 attack_damage = 30
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
@@ -35,7 +35,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 [sub_resource type="Resource" id="slime_b3"]
 script = ExtResource("2_enemy")
 enemy_level = 7
-max_hp = 240
+max_hp = 2400
 attack_damage = 30
 attack_interval = 2
 portrait_texture = ExtResource("3_slimetex")
@@ -50,7 +50,7 @@ drop_chance = 0.95
 script = ExtResource("2_enemy")
 enemy_name = "Dark Slime Lord"
 enemy_level = 8
-max_hp = 900
+max_hp = 9000
 attack_damage = 65
 attack_interval = 1
 portrait_color = Color(0.35, 0.2, 0.55, 1)

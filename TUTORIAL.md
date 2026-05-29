@@ -113,16 +113,20 @@ Main (Node2D)
 | `character_name` | 名稱（如 "Boar"、"Raccoon"、"Fox"） |
 | `gem_type` | 對應的寶石類型（決定哪種寶石觸發攻擊） |
 | `level` | 等級 |
-| `base_atk / atk_growth` | 基礎攻擊力與每級成長 |
-| `base_hp / hp_growth` | 基礎血量與每級成長 |
-| `base_magic / magic_growth` | 基礎魔力與每級成長（部分主動技以魔力倍率計算傷害） |
+| `base_atk / atk_growth / atk_growth_mode` | 基礎攻擊力、攻擊成長係數與成長曲線 |
+| `base_hp / hp_growth / hp_growth_mode` | 基礎血量、血量成長係數與成長曲線 |
+| `base_magic / magic_growth / magic_growth_mode` | 基礎魔力、魔力成長係數與成長曲線（部分主動技以魔力倍率計算傷害） |
 | `passive_skill_name` | 被動技能名稱 |
 | `active_skill_name / active_skill_cd` | 主動技能名稱與冷卻回合數 |
 | `responding_skills` | 回應技能清單（陣列） |
 
-**攻擊力公式**：`ATK = base_atk + floor(level × atk_growth)`
-**血量公式**：`HP = base_hp + floor(level × hp_growth)`
-**魔力公式**：`MAG = base_magic + floor(level × magic_growth)`
+角色數值由 `CharacterData` 的成長曲線計算。三種模式的 Lv99 終點相同，只改變前中後期分布：
+
+- `LINEAR`：平均成長，等同 `base + floor(level × growth)`。
+- `WEAK_EARLY_STRONG_LATE`：前期較弱，後期追上 Lv99 終點。
+- `STRONG_EARLY_WEAK_LATE`：前期較強，後期趨緩至 Lv99 終點。
+
+目前 ATK/MAG 的 `growth` 係數採用放大後尺度（約為舊值的 10 倍），讓 Lv99 的 HP、MAG、ATK 在調試時更容易比較。對應地，第一輪敵人平衡將 EnemyData 的 `max_hp` 約放大 10 倍，但保留 `attack_damage` 與 `attack_coeff` 不變。
 
 ### EnemyData（敵人資料）
 

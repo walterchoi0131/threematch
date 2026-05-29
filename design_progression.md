@@ -7,6 +7,12 @@
 
 ## 1. 成長公式
 
+### 1.0 目前實作狀態
+
+目前 `CharacterData` 採用可選成長曲線，而非單一固定指數公式。HP、MAG、ATK 各自可選：`LINEAR`、`WEAK_EARLY_STRONG_LATE`、`STRONG_EARLY_WEAK_LATE`。三種曲線的 Lv99 終點相同，只改變前中後期分布，方便在 Portrait Debug 中比較角色總潛力。
+
+ATK/MAG 的 growth 係數已改為約舊尺度 10 倍，讓 Lv99 的 HP、MAG、ATK 更容易放在同一個 total stat 指標下比較。對應第一輪怪物平衡只將 EnemyData `max_hp` 約放大 10 倍，暫不放大敵人攻擊，避免玩家 HP 未同步放大時被秒殺。
+
 ### 1.1 角色（單隻）
 
 | 屬性 | 公式 | 說明 |
@@ -16,9 +22,9 @@
 | **MAG(L)** | `floor(6 × 1.065^(L−1))` | 魔力值。部分主動技傷害以 `MAG × 倍率` 計算（取代 ATK） |
 | **累積 EXP(L→L+1)** | `floor(80 × L^1.5)` | 多項式成長，後期升級漸慢 |
 
-> **與現有系統差異**：目前 `get_atk()` / `get_max_hp()` 為線性公式（`base + level × growth`）。  
-> 建議改為指數公式以確保 5 級差距始終產生足夠的戰力落差。  
-> 實作方式：在 `CharacterData` 加入 `atk_base_coeff` (8) 與 `growth_rate` (1.065) 等欄位。
+> **歷史提案**：本段原本建議改為固定指數公式，以確保 5 級差距始終產生足夠的戰力落差。
+> 目前實作改採可選成長曲線，並讓三種曲線共享 Lv99 終點；固定指數公式保留作為後續平衡參考。
+> 若未來要回到指數公式，可在 `CharacterData` 加入 `atk_base_coeff` (8) 與 `growth_rate` (1.065) 等欄位。
 
 ### 1.2 敵人（單隻）
 

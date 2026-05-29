@@ -9,8 +9,203 @@ extends Control
 
 const _SCALE_STEP: float    = 0.05
 const _RECT_IMG_SIZE: float = 1200.0  # battle_result 使用 300×4
+const _STAT_LEVEL_MIN: int = 1
+const _STAT_LEVEL_MAX: int = 99
+const _STAT_HP_COLOR: Color = Color(0.36, 0.82, 0.96, 1.0)
+const _STAT_MAGIC_COLOR: Color = Color(0.78, 0.58, 1.0, 1.0)
+const _STAT_ATK_COLOR: Color = Color(1.0, 0.50, 0.42, 1.0)
 ## 遊戲 viewport 實際寬度（由 ViewportUtils.get_size().x 動態設定，預設等於專案基準 720px）
 var _VP_W: float = 720.0
+
+
+class _StatChart extends Control:
+	signal hover_level(level_value: int)
+
+	const CURRENT_COLOR: Color = Color(1.0, 0.85, 0.24, 0.95)
+	const GRID_COLOR: Color = Color(0.35, 0.38, 0.48, 0.22)
+	const AXIS_COLOR: Color = Color(0.75, 0.78, 0.88, 0.55)
+	const PAD_LEFT: float = 24.0
+	const PAD_TOP: float = 12.0
+	const PAD_RIGHT: float = 10.0
+	const PAD_BOTTOM: float = 20.0
+	const GRID_LINES: int = 4
+
+	var _levels: Array[int] = []
+	var _values: Array[int] = []
+	var _stat_label: String = ""
+	var _line_color: Color = Color.WHITE
+	var _min_level: int = 1
+	var _max_level: int = 99
+	var _current_level: int = 1
+	var _max_value: float = 1.0
+	var _hover_idx: int = -1
+
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+	func setup(stat_label: String, line_color: Color) -> void:
+		_stat_label = stat_label
+		_line_color = line_color
+		queue_redraw()
+
+
+	func clear() -> void:
+		_levels.clear()
+		_values.clear()
+		_hover_idx = -1
+		tooltip_text = ""
+		queue_redraw()
+
+
+	func set_series(values: Array[int], min_level: int, max_level: int, current_level: int) -> void:
+		_levels.clear()
+		_values.clear()
+		_hover_idx = -1
+		tooltip_text = ""
+		_min_level = maxi(min_level, 1)
+		_max_level = maxi(max_level, _min_level)
+		_current_level = clampi(current_level, _min_level, _max_level)
+		var raw_max_value: float = 1.0
+
+		for value_index: int in values.size():
+			var level_value: int = _min_level + value_index
+			if level_value > _max_level:
+				break
+			var stat_value: int = values[value_index]
+			_levels.append(level_value)
+			_values.append(stat_value)
+			raw_max_value = maxf(raw_max_value, float(stat_value))
+
+		_max_value = _nice_ceiling(raw_max_value)
+		queue_redraw()
+
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseMotion:
+			var motion: InputEventMouseMotion = event as InputEventMouseMotion
+			_set_hover_from_position(motion.position)
+
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_MOUSE_EXIT:
+			_clear_hover()
+
+
+	func _draw() -> void:
+		var bg_rect: Rect2 = Rect2(Vector2.ZERO, size)
+		draw_rect(bg_rect, Color(0.055, 0.065, 0.095, 1.0), true)
+		if _levels.is_empty():
+			return
+
+		var plot_rect: Rect2 = _get_plot_rect()
+		draw_rect(plot_rect, Color(0.075, 0.085, 0.125, 1.0), true)
+		_draw_grid(plot_rect)
+		_draw_series(plot_rect, _values, _line_color, 2.8)
+		_draw_current_marker(plot_rect)
+		_draw_hover_marker(plot_rect)
+
+
+	func _get_plot_rect() -> Rect2:
+		var plot_w: float = maxf(1.0, size.x - PAD_LEFT - PAD_RIGHT)
+		var plot_h: float = maxf(1.0, size.y - PAD_TOP - PAD_BOTTOM)
+		return Rect2(Vector2(PAD_LEFT, PAD_TOP), Vector2(plot_w, plot_h))
+
+
+	func _draw_grid(plot_rect: Rect2) -> void:
+		for i: int in GRID_LINES + 1:
+			var ratio: float = float(i) / float(GRID_LINES)
+			var y: float = plot_rect.position.y + plot_rect.size.y * ratio
+			draw_line(Vector2(plot_rect.position.x, y), Vector2(plot_rect.end.x, y), GRID_COLOR, 1.0)
+
+		for i: int in GRID_LINES + 1:
+			var ratio: float = float(i) / float(GRID_LINES)
+			var x: float = plot_rect.position.x + plot_rect.size.x * ratio
+			draw_line(Vector2(x, plot_rect.position.y), Vector2(x, plot_rect.end.y), GRID_COLOR, 1.0)
+
+		draw_line(plot_rect.position, Vector2(plot_rect.position.x, plot_rect.end.y), AXIS_COLOR, 1.5)
+		draw_line(Vector2(plot_rect.position.x, plot_rect.end.y), plot_rect.end, AXIS_COLOR, 1.5)
+
+
+	func _draw_series(plot_rect: Rect2, values: Array[int], color: Color, width: float) -> void:
+		if values.size() < 2:
+			return
+		var points: PackedVector2Array = PackedVector2Array()
+		for i: int in values.size():
+			points.append(_point_for(plot_rect, i, float(values[i])))
+		draw_polyline(points, Color(0, 0, 0, 0.35), width + 2.0, true)
+		draw_polyline(points, color, width, true)
+
+
+	func _draw_current_marker(plot_rect: Rect2) -> void:
+		var idx: int = clampi(_current_level - _min_level, 0, _levels.size() - 1)
+		var x: float = _x_for_index(plot_rect, idx)
+		draw_line(Vector2(x, plot_rect.position.y), Vector2(x, plot_rect.end.y), CURRENT_COLOR, 1.4)
+		draw_circle(_point_for(plot_rect, idx, float(_values[idx])), 4.0, _line_color)
+
+
+	func _draw_hover_marker(plot_rect: Rect2) -> void:
+		if _hover_idx < 0 or _hover_idx >= _levels.size():
+			return
+		var x: float = _x_for_index(plot_rect, _hover_idx)
+		draw_line(Vector2(x, plot_rect.position.y), Vector2(x, plot_rect.end.y), Color(1, 1, 1, 0.55), 1.2)
+		draw_circle(_point_for(plot_rect, _hover_idx, float(_values[_hover_idx])), 5.0, _line_color)
+
+
+	func _point_for(plot_rect: Rect2, idx: int, value: float) -> Vector2:
+		var x: float = _x_for_index(plot_rect, idx)
+		var y_ratio: float = clampf(value / maxf(_max_value, 1.0), 0.0, 1.0)
+		var y: float = plot_rect.end.y - plot_rect.size.y * y_ratio
+		return Vector2(x, y)
+
+
+	func _x_for_index(plot_rect: Rect2, idx: int) -> float:
+		if _levels.size() <= 1:
+			return plot_rect.position.x
+		var ratio: float = float(idx) / float(_levels.size() - 1)
+		return plot_rect.position.x + plot_rect.size.x * ratio
+
+
+	func _set_hover_from_position(pos: Vector2) -> void:
+		if _levels.is_empty():
+			_clear_hover()
+			return
+		var plot_rect: Rect2 = _get_plot_rect()
+		if not plot_rect.has_point(pos):
+			_clear_hover()
+			return
+		var ratio: float = clampf((pos.x - plot_rect.position.x) / maxf(plot_rect.size.x, 1.0), 0.0, 1.0)
+		var idx: int = clampi(int(round(ratio * float(_levels.size() - 1))), 0, _levels.size() - 1)
+		if idx == _hover_idx:
+			return
+		_hover_idx = idx
+		tooltip_text = "%s Lv.%d: %d" % [_stat_label, _levels[idx], _values[idx]]
+		hover_level.emit(_levels[idx])
+		queue_redraw()
+
+
+	func _clear_hover() -> void:
+		if _hover_idx == -1:
+			return
+		_hover_idx = -1
+		tooltip_text = ""
+		queue_redraw()
+
+
+	func _nice_ceiling(value: float) -> float:
+		if value <= 10.0:
+			return 10.0
+		var magnitude: float = pow(10.0, floor(log(value) / log(10.0)))
+		var normalized: float = value / magnitude
+		var nice: float = 10.0
+		if normalized <= 1.0:
+			nice = 1.0
+		elif normalized <= 2.0:
+			nice = 2.0
+		elif normalized <= 5.0:
+			nice = 5.0
+		return nice * magnitude
 
 ## [scale_prop, offset_prop, column_label]
 const _SYS: Array = [
@@ -37,6 +232,20 @@ var _drag_active: Array[bool]         = [false, false, false, false]
 var _drag_start_mouse: Array[Vector2] = []
 var _drag_start_offset: Array[Vector2] = []
 var _char_btns: Array[Button]         = []
+var _hp_chart: _StatChart = null
+var _magic_chart: _StatChart = null
+var _atk_chart: _StatChart = null
+var _hp_growth_edit: LineEdit = null
+var _magic_growth_edit: LineEdit = null
+var _atk_growth_edit: LineEdit = null
+var _hp_growth_mode_opt: OptionButton = null
+var _magic_growth_mode_opt: OptionButton = null
+var _atk_growth_mode_opt: OptionButton = null
+var _stat_max_lbl: Label = null
+var _stat_hover_panel_lbl: Label = null
+var _stat_detail_level: int = _STAT_LEVEL_MIN
+var _syncing_growth_edits: bool = false
+var _syncing_growth_mode_options: bool = false
 
 
 func _ready() -> void:
@@ -117,6 +326,8 @@ func _build() -> void:
 	preview_vbox.add_theme_constant_override("separation", 4)
 	preview_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_scroll.add_child(preview_vbox)
+
+	_build_stats_section(preview_vbox)
 
 	for i: int in 4:
 		_build_preview_col(preview_vbox, i)
@@ -236,6 +447,419 @@ func _build_preview_col(parent: VBoxContainer, sys_idx: int) -> void:
 		_on_preview_input(ev, captured)
 	)
 	wrapper.add_child(overlay)
+
+
+# ─────────────────────────────────────────────────────────────
+# 潛力數值折線圖（Lv → HP / MAG / ATK）
+# ─────────────────────────────────────────────────────────────
+func _build_stats_section(parent: VBoxContainer) -> void:
+	var section := PanelContainer.new()
+	section.custom_minimum_size = Vector2(0.0, 340.0)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.075, 0.085, 0.125, 1.0)
+	style.set_border_width_all(1)
+	style.border_color = Color(0.28, 0.30, 0.40, 1.0)
+	style.set_content_margin_all(10)
+	section.add_theme_stylebox_override("panel", style)
+	parent.add_child(section)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.add_child(box)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(header)
+
+	var title_lbl := Label.new()
+	title_lbl.text = "Potential Stats"
+	title_lbl.add_theme_font_size_override("font_size", 16)
+	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(title_lbl)
+
+	_stat_max_lbl = Label.new()
+	_stat_max_lbl.text = "Max Lv99: -"
+	_stat_max_lbl.add_theme_font_size_override("font_size", 13)
+	_stat_max_lbl.add_theme_color_override("font_color", Color(0.86, 0.90, 1.0))
+	_stat_max_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_stat_max_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stat_max_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(_stat_max_lbl)
+
+	var chart_area := Control.new()
+	chart_area.custom_minimum_size = Vector2(0.0, 286.0)
+	chart_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chart_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(chart_area)
+
+	var charts_row := HBoxContainer.new()
+	charts_row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	charts_row.add_theme_constant_override("separation", 8)
+	chart_area.add_child(charts_row)
+
+	var hp_nodes: Dictionary = _build_stat_chart_column(charts_row, "HP", _STAT_HP_COLOR, 0)
+	_hp_chart = hp_nodes["chart"] as _StatChart
+	_hp_growth_edit = hp_nodes["edit"] as LineEdit
+	_hp_growth_mode_opt = hp_nodes["mode"] as OptionButton
+
+	var magic_nodes: Dictionary = _build_stat_chart_column(charts_row, "MAG", _STAT_MAGIC_COLOR, 1)
+	_magic_chart = magic_nodes["chart"] as _StatChart
+	_magic_growth_edit = magic_nodes["edit"] as LineEdit
+	_magic_growth_mode_opt = magic_nodes["mode"] as OptionButton
+
+	var atk_nodes: Dictionary = _build_stat_chart_column(charts_row, "ATK", _STAT_ATK_COLOR, 2)
+	_atk_chart = atk_nodes["chart"] as _StatChart
+	_atk_growth_edit = atk_nodes["edit"] as LineEdit
+	_atk_growth_mode_opt = atk_nodes["mode"] as OptionButton
+
+	_build_stat_hover_panel(chart_area)
+
+
+func _build_stat_chart_column(parent: HBoxContainer, stat_label: String, color: Color, stat_idx: int) -> Dictionary:
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 5)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(column)
+
+	var title_lbl := Label.new()
+	title_lbl.text = stat_label
+	title_lbl.add_theme_font_size_override("font_size", 15)
+	title_lbl.add_theme_color_override("font_color", color)
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(title_lbl)
+
+	var chart := _StatChart.new()
+	chart.setup(stat_label, color)
+	chart.custom_minimum_size = Vector2(0.0, 202.0)
+	chart.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chart.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	chart.hover_level.connect(_on_stat_chart_hover_level)
+	column.add_child(chart)
+
+	var coff_row := HBoxContainer.new()
+	coff_row.add_theme_constant_override("separation", 6)
+	coff_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(coff_row)
+
+	var coff_lbl := Label.new()
+	coff_lbl.text = "%s COFF" % stat_label
+	coff_lbl.add_theme_font_size_override("font_size", 11)
+	coff_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
+	coff_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	coff_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coff_row.add_child(coff_lbl)
+
+	var edit := _make_growth_edit(stat_idx)
+	coff_row.add_child(edit)
+
+	var mode_opt := _make_growth_mode_option(stat_idx)
+	column.add_child(mode_opt)
+
+	return {"chart": chart, "edit": edit, "mode": mode_opt}
+
+
+func _make_growth_edit(stat_idx: int) -> LineEdit:
+	var edit := LineEdit.new()
+	edit.placeholder_text = "0.000"
+	edit.custom_minimum_size = Vector2(72.0, 30.0)
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.add_theme_font_size_override("font_size", 12)
+	edit.add_theme_color_override("font_color", Color(0.96, 0.98, 1.0))
+	edit.add_theme_color_override("font_placeholder_color", Color(0.55, 0.58, 0.68))
+	edit.text_changed.connect(_on_growth_text_changed.bind(stat_idx))
+	edit.text_submitted.connect(_on_growth_text_submitted.bind(stat_idx))
+	edit.focus_exited.connect(_on_growth_focus_exited.bind(stat_idx))
+	return edit
+
+
+func _make_growth_mode_option(stat_idx: int) -> OptionButton:
+	var option := OptionButton.new()
+	option.custom_minimum_size = Vector2(0.0, 30.0)
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	option.add_theme_font_size_override("font_size", 11)
+	option.add_item("Linear", CharacterData.GrowthMode.LINEAR)
+	option.add_item("Weak Early / Strong Late", CharacterData.GrowthMode.WEAK_EARLY_STRONG_LATE)
+	option.add_item("Strong Early / Weak Late", CharacterData.GrowthMode.STRONG_EARLY_WEAK_LATE)
+	option.item_selected.connect(_on_growth_mode_selected.bind(stat_idx))
+	return option
+
+
+func _build_stat_hover_panel(parent: Control) -> void:
+	var detail_panel := PanelContainer.new()
+	detail_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	detail_panel.anchor_left = 1.0
+	detail_panel.anchor_right = 1.0
+	detail_panel.anchor_top = 0.0
+	detail_panel.anchor_bottom = 0.0
+	detail_panel.offset_left = -286.0
+	detail_panel.offset_right = -8.0
+	detail_panel.offset_top = 30.0
+	detail_panel.offset_bottom = 82.0
+	var detail_style := StyleBoxFlat.new()
+	detail_style.bg_color = Color(0.05, 0.06, 0.09, 0.92)
+	detail_style.set_border_width_all(1)
+	detail_style.border_color = Color(0.72, 0.76, 0.90, 0.38)
+	detail_style.set_corner_radius_all(6)
+	detail_style.set_content_margin_all(8)
+	detail_panel.add_theme_stylebox_override("panel", detail_style)
+	parent.add_child(detail_panel)
+
+	_stat_hover_panel_lbl = Label.new()
+	_stat_hover_panel_lbl.text = "Lv.-\nHP -  MAG -  ATK -"
+	_stat_hover_panel_lbl.add_theme_font_size_override("font_size", 12)
+	_stat_hover_panel_lbl.add_theme_color_override("font_color", Color(0.94, 0.96, 1.0))
+	_stat_hover_panel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	detail_panel.add_child(_stat_hover_panel_lbl)
+
+
+func _refresh_stats_section() -> void:
+	if _hp_chart == null or _magic_chart == null or _atk_chart == null:
+		return
+	if _char_data == null:
+		_hp_chart.clear()
+		_magic_chart.clear()
+		_atk_chart.clear()
+		_syncing_growth_edits = true
+		if _hp_growth_edit != null:
+			_hp_growth_edit.text = ""
+		if _magic_growth_edit != null:
+			_magic_growth_edit.text = ""
+		if _atk_growth_edit != null:
+			_atk_growth_edit.text = ""
+		_syncing_growth_edits = false
+		_syncing_growth_mode_options = true
+		_select_growth_mode_option(_hp_growth_mode_opt, CharacterData.GrowthMode.LINEAR)
+		_select_growth_mode_option(_magic_growth_mode_opt, CharacterData.GrowthMode.LINEAR)
+		_select_growth_mode_option(_atk_growth_mode_opt, CharacterData.GrowthMode.LINEAR)
+		_syncing_growth_mode_options = false
+		if _stat_max_lbl != null:
+			_stat_max_lbl.text = "Max Lv99: -"
+		if _stat_hover_panel_lbl != null:
+			_stat_hover_panel_lbl.text = "Lv.-\nHP -  MAG -  ATK -"
+		return
+
+	_sync_growth_edit_texts()
+	_sync_growth_mode_options()
+	_stat_detail_level = clampi(_char_data.level, _STAT_LEVEL_MIN, _STAT_LEVEL_MAX)
+	_refresh_stat_charts_from_data(true)
+
+
+func _sync_growth_edit_texts() -> void:
+	if _char_data == null:
+		return
+	_syncing_growth_edits = true
+	if _hp_growth_edit != null:
+		_hp_growth_edit.text = _format_growth_value(_char_data.hp_growth)
+	if _magic_growth_edit != null:
+		_magic_growth_edit.text = _format_growth_value(_char_data.magic_growth)
+	if _atk_growth_edit != null:
+		_atk_growth_edit.text = _format_growth_value(_char_data.atk_growth)
+	_syncing_growth_edits = false
+
+
+func _sync_growth_mode_options() -> void:
+	if _char_data == null:
+		return
+	_syncing_growth_mode_options = true
+	_select_growth_mode_option(_hp_growth_mode_opt, _char_data.hp_growth_mode)
+	_select_growth_mode_option(_magic_growth_mode_opt, _char_data.magic_growth_mode)
+	_select_growth_mode_option(_atk_growth_mode_opt, _char_data.atk_growth_mode)
+	_syncing_growth_mode_options = false
+
+
+func _select_growth_mode_option(option: OptionButton, mode_value: int) -> void:
+	if option == null:
+		return
+	for item_idx: int in option.item_count:
+		if option.get_item_id(item_idx) == mode_value:
+			option.select(item_idx)
+			return
+
+
+func _refresh_stat_charts_from_data(reset_detail: bool) -> void:
+	if _char_data == null:
+		return
+	if _hp_chart == null or _magic_chart == null or _atk_chart == null:
+		return
+
+	var hp_values: Array[int] = []
+	var magic_values: Array[int] = []
+	var atk_values: Array[int] = []
+	for level_value: int in range(_STAT_LEVEL_MIN, _STAT_LEVEL_MAX + 1):
+		hp_values.append(_char_data.get_max_hp_at_level(level_value))
+		magic_values.append(_char_data.get_magic_at_level(level_value))
+		atk_values.append(_char_data.get_atk_at_level(level_value))
+
+	var current_level: int = clampi(_char_data.level, _STAT_LEVEL_MIN, _STAT_LEVEL_MAX)
+	_hp_chart.set_series(hp_values, _STAT_LEVEL_MIN, _STAT_LEVEL_MAX, current_level)
+	_magic_chart.set_series(magic_values, _STAT_LEVEL_MIN, _STAT_LEVEL_MAX, current_level)
+	_atk_chart.set_series(atk_values, _STAT_LEVEL_MIN, _STAT_LEVEL_MAX, current_level)
+	_update_max_stat_indicator()
+	if reset_detail:
+		_stat_detail_level = current_level
+	_update_stat_detail_panel(_stat_detail_level)
+
+
+func _on_stat_chart_hover_level(level_value: int) -> void:
+	_update_stat_detail_panel(level_value)
+
+
+func _update_stat_detail_panel(level_value: int) -> void:
+	if _stat_hover_panel_lbl == null or _char_data == null:
+		return
+	_stat_detail_level = clampi(level_value, _STAT_LEVEL_MIN, _STAT_LEVEL_MAX)
+	var hp_value: int = _char_data.get_max_hp_at_level(_stat_detail_level)
+	var magic_value: int = _char_data.get_magic_at_level(_stat_detail_level)
+	var atk_value: int = _char_data.get_atk_at_level(_stat_detail_level)
+	_stat_hover_panel_lbl.text = "Lv.%d\nHP %d  MAG %d  ATK %d" % [_stat_detail_level, hp_value, magic_value, atk_value]
+
+
+func _update_max_stat_indicator() -> void:
+	if _stat_max_lbl == null or _char_data == null:
+		return
+	var hp_value: int = _char_data.get_max_hp_at_level(_STAT_LEVEL_MAX)
+	var magic_value: int = _char_data.get_magic_at_level(_STAT_LEVEL_MAX)
+	var atk_value: int = _char_data.get_atk_at_level(_STAT_LEVEL_MAX)
+	var total_value: int = hp_value + magic_value + atk_value
+	_stat_max_lbl.text = "Max Lv%d  HP %d  MAG %d  ATK %d  Total %d" % [_STAT_LEVEL_MAX, hp_value, magic_value, atk_value, total_value]
+
+
+func _on_growth_mode_selected(item_idx: int, stat_idx: int) -> void:
+	if _syncing_growth_mode_options or _char_data == null:
+		return
+	var option: OptionButton = _growth_mode_option_for_stat(stat_idx)
+	if option == null:
+		return
+	var mode_value: int = option.get_item_id(item_idx)
+	_set_growth_mode_for_stat(stat_idx, mode_value)
+	_refresh_stat_charts_from_data(false)
+
+
+func _on_growth_text_changed(new_text: String, stat_idx: int) -> void:
+	_apply_growth_edit_text(new_text, stat_idx, false)
+
+
+func _on_growth_text_submitted(new_text: String, stat_idx: int) -> void:
+	_apply_growth_edit_text(new_text, stat_idx, true)
+
+
+func _on_growth_focus_exited(stat_idx: int) -> void:
+	_normalize_growth_edit(stat_idx)
+
+
+func _apply_growth_edit_text(new_text: String, stat_idx: int, normalize: bool) -> void:
+	if _syncing_growth_edits or _char_data == null:
+		return
+	var clean_text: String = new_text.strip_edges()
+	if clean_text == "" or clean_text == "." or clean_text == "-" or clean_text == "-.":
+		return
+	if not clean_text.is_valid_float():
+		return
+	var growth_value: float = maxf(float(clean_text), 0.0)
+	_set_growth_for_stat(stat_idx, growth_value)
+	if normalize:
+		var edit: LineEdit = _growth_edit_for_stat(stat_idx)
+		if edit != null:
+			_syncing_growth_edits = true
+			edit.text = _format_growth_value(growth_value)
+			_syncing_growth_edits = false
+	_refresh_stat_charts_from_data(false)
+
+
+func _normalize_growth_edit(stat_idx: int) -> void:
+	if _char_data == null:
+		return
+	var edit: LineEdit = _growth_edit_for_stat(stat_idx)
+	if edit == null:
+		return
+	var clean_text: String = edit.text.strip_edges()
+	var growth_value: float = _get_growth_for_stat(stat_idx)
+	if clean_text.is_valid_float():
+		growth_value = maxf(float(clean_text), 0.0)
+		_set_growth_for_stat(stat_idx, growth_value)
+	_syncing_growth_edits = true
+	edit.text = _format_growth_value(growth_value)
+	_syncing_growth_edits = false
+	_refresh_stat_charts_from_data(false)
+
+
+func _commit_growth_edits() -> void:
+	if _char_data == null:
+		return
+	_normalize_growth_edit(0)
+	_normalize_growth_edit(1)
+	_normalize_growth_edit(2)
+
+
+func _growth_edit_for_stat(stat_idx: int) -> LineEdit:
+	match stat_idx:
+		0:
+			return _hp_growth_edit
+		1:
+			return _magic_growth_edit
+		2:
+			return _atk_growth_edit
+	return null
+
+
+func _get_growth_for_stat(stat_idx: int) -> float:
+	if _char_data == null:
+		return 0.0
+	match stat_idx:
+		0:
+			return _char_data.hp_growth
+		1:
+			return _char_data.magic_growth
+		2:
+			return _char_data.atk_growth
+	return 0.0
+
+
+func _set_growth_for_stat(stat_idx: int, growth_value: float) -> void:
+	if _char_data == null:
+		return
+	match stat_idx:
+		0:
+			_char_data.hp_growth = growth_value
+		1:
+			_char_data.magic_growth = growth_value
+		2:
+			_char_data.atk_growth = growth_value
+
+
+func _growth_mode_option_for_stat(stat_idx: int) -> OptionButton:
+	match stat_idx:
+		0:
+			return _hp_growth_mode_opt
+		1:
+			return _magic_growth_mode_opt
+		2:
+			return _atk_growth_mode_opt
+	return null
+
+
+func _set_growth_mode_for_stat(stat_idx: int, mode_value: int) -> void:
+	if _char_data == null:
+		return
+	match stat_idx:
+		0:
+			_char_data.hp_growth_mode = mode_value as CharacterData.GrowthMode
+		1:
+			_char_data.magic_growth_mode = mode_value as CharacterData.GrowthMode
+		2:
+			_char_data.atk_growth_mode = mode_value as CharacterData.GrowthMode
+
+
+func _format_growth_value(growth_value: float) -> String:
+	return "%.3f" % growth_value
 
 
 # ─────────────────────────────────────────────────────────────
@@ -643,6 +1267,7 @@ func _select_char(idx: int) -> void:
 			(sel as Control).visible = (j == idx)
 	for i: int in 4:
 		_rebuild_preview(i)
+	_refresh_stats_section()
 
 
 func _on_preview_input(ev: InputEvent, idx: int) -> void:
@@ -720,6 +1345,7 @@ func _set_offset(idx: int, v: Vector2) -> void:
 func _save() -> void:
 	if _char_data == null or _char_data.resource_path == "":
 		return
+	_commit_growth_edits()
 	var err: int = ResourceSaver.save(_char_data, _char_data.resource_path)
 	if err != OK:
 		push_warning("PortraitDebugScreen: save failed for %s (err=%d)" % [_char_data.resource_path, err])

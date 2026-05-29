@@ -1,4 +1,4 @@
-﻿{
+{
     "version":  1,
     "manual_names_required":  false,
     "generated_enemy_root":  "res://enemies/generated",
@@ -20,7 +20,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -59,7 +59,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -98,7 +98,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -137,7 +137,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -176,7 +176,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -215,7 +215,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -254,7 +254,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -293,7 +293,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -332,7 +332,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -371,7 +371,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -410,7 +410,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -449,7 +449,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -488,7 +488,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -527,7 +527,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -566,7 +566,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -605,7 +605,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -644,7 +644,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -683,7 +683,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -722,7 +722,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -761,7 +761,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -800,7 +800,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -839,7 +839,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -878,7 +878,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -917,7 +917,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  160,
+                        "max_hp":  1600,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -956,7 +956,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -995,7 +995,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1034,7 +1034,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1073,7 +1073,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1112,7 +1112,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1151,7 +1151,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1190,7 +1190,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1229,7 +1229,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1268,7 +1268,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1307,7 +1307,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1346,7 +1346,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1385,7 +1385,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1424,7 +1424,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1463,7 +1463,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1502,7 +1502,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1541,7 +1541,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1580,7 +1580,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1619,7 +1619,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  130,
+                        "max_hp":  1300,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1658,7 +1658,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1697,7 +1697,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1736,7 +1736,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1775,7 +1775,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1814,7 +1814,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1853,7 +1853,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1892,7 +1892,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1931,7 +1931,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -1970,7 +1970,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2009,7 +2009,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2048,7 +2048,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2087,7 +2087,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2126,7 +2126,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2165,7 +2165,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2204,7 +2204,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2243,7 +2243,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2282,7 +2282,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2321,7 +2321,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2360,7 +2360,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2399,7 +2399,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2438,7 +2438,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2477,7 +2477,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2516,7 +2516,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2555,7 +2555,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2594,7 +2594,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2633,7 +2633,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2672,7 +2672,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2711,7 +2711,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2750,7 +2750,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2789,7 +2789,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2828,7 +2828,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2867,7 +2867,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2906,7 +2906,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2945,7 +2945,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -2984,7 +2984,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3023,7 +3023,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3062,7 +3062,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3101,7 +3101,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3140,7 +3140,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3179,7 +3179,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3218,7 +3218,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3257,7 +3257,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3296,7 +3296,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3335,7 +3335,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3374,7 +3374,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3413,7 +3413,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3452,7 +3452,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3491,7 +3491,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3530,7 +3530,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3569,7 +3569,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3608,7 +3608,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3647,7 +3647,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3686,7 +3686,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3725,7 +3725,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3764,7 +3764,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3803,7 +3803,7 @@
                                                1
                                            ],
                         "enemy_level":  4,
-                        "max_hp":  170,
+                        "max_hp":  1700,
                         "attack_damage":  22,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3842,7 +3842,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3881,7 +3881,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3920,7 +3920,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3959,7 +3959,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -3998,7 +3998,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4037,7 +4037,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4076,7 +4076,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4115,7 +4115,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4154,7 +4154,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4193,7 +4193,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4232,7 +4232,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4271,7 +4271,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4310,7 +4310,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4349,7 +4349,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4388,7 +4388,7 @@
                                                1
                                            ],
                         "enemy_level":  5,
-                        "max_hp":  190,
+                        "max_hp":  1900,
                         "attack_damage":  26,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4427,7 +4427,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4466,7 +4466,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4505,7 +4505,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4544,7 +4544,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4583,7 +4583,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4622,7 +4622,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4661,7 +4661,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4700,7 +4700,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4739,7 +4739,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4778,7 +4778,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4817,7 +4817,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4856,7 +4856,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4895,7 +4895,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4934,7 +4934,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -4973,7 +4973,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -5012,7 +5012,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -5051,7 +5051,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
@@ -5090,7 +5090,7 @@
                                                1
                                            ],
                         "enemy_level":  3,
-                        "max_hp":  140,
+                        "max_hp":  1400,
                         "attack_damage":  18,
                         "attack_coeff":  1,
                         "attack_interval":  2,
