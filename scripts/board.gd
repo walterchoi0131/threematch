@@ -6,6 +6,12 @@ const FALL_SPEED := 800.0      # 掉落速度（像素/秒）— 掉落與填充
 var chain_blast_interval := 0.2  # 連鎖爆炸之間的間隔（秒）
 
 const BlockScene := preload("res://scenes/block.tscn")  # 寶石場景預載
+const PLANK_DEBRIS_TEXTURE := preload("res://assets/blocks/wood.png")
+const GEM_DEBRIS_Z_INDEX := 90
+const OBSTACLE_DEBRIS_Z_INDEX := 100
+const NORMAL_GEM_DEBRIS_SHARDS := 5
+const UPPER_GEM_DEBRIS_SHARDS := 7
+const OBSTACLE_DEBRIS_SHARDS := 8
 
 @export var stage: StageData  # 當前關卡資料
 
@@ -1059,7 +1065,7 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 	gems_blasted.emit(gem_type, effective_count, blast_positions)
 
 	for block in blocks:
-		block.play_destroy_animation()
+		_play_gem_break_debris(block)
 
 	# 動畫結束後釋放寶石節點 — 非阻塞，讓掉落立即開始
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
@@ -1473,7 +1479,7 @@ func blast_all_of_type(type: Block.Type) -> int:
 		return 0
 
 	for b in blocks:
-		b.play_destroy_animation()
+		_play_gem_break_debris(b)
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
 		for b in blocks:
 			if is_instance_valid(b):
@@ -1552,58 +1558,41 @@ func silently_destroy_plank(pos: Vector2i) -> bool:
 	return silently_destroy_breakable_structure(pos)
 
 
-## 在指定全域座標生成「3D 風格」木屑爆裂飛散動畫
-## 8~10 片小木板紋理向四面飛濺，受重力下墜、旋轉、淡出，到達畫面底部後自動 free
-func _spawn_plank_debris(world_pos: Vector2) -> void:
-	const PLANK_TEX_PATH := "res://assets/blocks/wood.png"
-	if not ResourceLoader.exists(PLANK_TEX_PATH):
-		return
-	var tex: Texture2D = load(PLANK_TEX_PATH)
-	# 用一個獨立 Node2D 容器掛在最頂層，避免被棋盤節點 free 影響
+func _get_debris_host() -> Node:
 	var host: Node = get_tree().current_scene
 	if host == null:
 		host = self
-	var debris_root := Node2D.new()
-	debris_root.z_index = 100
-	host.add_child(debris_root)
-	debris_root.global_position = world_pos
+	return host
 
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var count: int = rng.randi_range(8, 10)
-	var vp_h: float = get_viewport().get_visible_rect().size.y
-	var fall_target_y: float = vp_h - world_pos.y + 80.0  # 相對於 debris_root 本地座標
-	var max_lifetime: float = 0.0
-	for i in count:
-		var s := Sprite2D.new()
-		s.texture = tex
-		var sc: float = rng.randf_range(0.18, 0.32)
-		s.scale = Vector2(sc, sc)
-		s.rotation = rng.randf_range(0.0, TAU)
-		debris_root.add_child(s)
-		# 初速：朝四面散開，略偏向上
-		var angle: float = rng.randf_range(-PI, 0)  # 上半圈
-		var speed: float = rng.randf_range(120.0, 260.0)
-		var dx: float = cos(angle) * speed
-		var dy: float = sin(angle) * speed * 0.6 - rng.randf_range(80.0, 160.0)
-		var lifetime: float = rng.randf_range(0.9, 1.3)
-		max_lifetime = maxf(max_lifetime, lifetime)
-		# 用 Tween 模擬：水平等速 + 拋物線（用 trans cubic ease in 模擬重力）
-		var target_x: float = dx * lifetime
-		var target_y: float = fall_target_y
-		var spin: float = rng.randf_range(-TAU * 1.5, TAU * 1.5)
-		var tw: Tween = s.create_tween().set_parallel(true)
-		tw.tween_property(s, "position:x", target_x, lifetime).set_trans(Tween.TRANS_LINEAR)
-		tw.tween_property(s, "position:y", target_y, lifetime).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tw.tween_property(s, "rotation", s.rotation + spin, lifetime)
-		tw.tween_property(s, "modulate:a", 0.0, lifetime).set_delay(lifetime * 0.5)
-		# 套用初始小幅向上偏移當作起跳
-		s.position = Vector2(0, dy * 0.05)
-	# 整個容器在最長壽命後 free
-	get_tree().create_timer(max_lifetime + 0.1).timeout.connect(func() -> void:
-		if is_instance_valid(debris_root):
-			debris_root.queue_free()
-	, CONNECT_ONE_SHOT)
+
+func _play_gem_break_debris(block: Block, is_upper_break: bool = false) -> void:
+	if block == null:
+		return
+	var break_texture: Texture2D = null
+	var shard_count: int = NORMAL_GEM_DEBRIS_SHARDS
+	var scale_range: Vector2 = Vector2(0.70, 1.10)
+	var lifetime_range: Vector2 = Vector2(0.55, 0.85)
+	if is_upper_break or block.is_upper_gem():
+		break_texture = Block.UPPER_GEM_TEXTURES.get(block.upper_type, null)
+		if break_texture == null:
+			break_texture = block.get_base_texture()
+		shard_count = UPPER_GEM_DEBRIS_SHARDS
+		scale_range = Vector2(0.78, 1.18)
+		lifetime_range = Vector2(0.65, 0.95)
+	else:
+		break_texture = block.get_base_texture()
+
+	if break_texture == null:
+		block.play_destroy_animation()
+		return
+
+	DebrisVfx.play(_get_debris_host(), break_texture, block.global_position, shard_count, scale_range, lifetime_range, GEM_DEBRIS_Z_INDEX)
+	block.visible = false
+
+
+## 在指定全域座標生成木屑飛散動畫；由 pooled DebrisVfx 控制總量。
+func _spawn_plank_debris(world_pos: Vector2) -> void:
+	DebrisVfx.play(_get_debris_host(), PLANK_DEBRIS_TEXTURE, world_pos, OBSTACLE_DEBRIS_SHARDS, Vector2(0.68, 1.10), Vector2(0.90, 1.30), OBSTACLE_DEBRIS_Z_INDEX)
 
 
 # ── 高階寶石系統 ─────────────────────────────────────────────────────
@@ -1650,7 +1639,7 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 			if b:
 				grid[p.x][p.y] = null
 				blocks_to_free.append(b)
-				b.play_destroy_animation()
+				_play_gem_break_debris(b)
 
 		score += valid.size() * 10
 		score_changed.emit(score)
@@ -1737,7 +1726,7 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	total_blasted_by_type[bt] = bv
 	gems_blasted.emit(bt, bv, [block.global_position])
 	grid[pos.x][pos.y] = null
-	block.play_destroy_animation()
+	_play_gem_break_debris(block, true)
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
 		if is_instance_valid(block):
 			block.queue_free()
@@ -1802,7 +1791,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			continue
 		grid[p.x][p.y] = null
 		blocks_to_free.append(b)
-		b.play_destroy_animation()
+		_play_gem_break_debris(b)
 
 	# 靜默消除可破壞障礙（無得分、無信號）
 	var planks_to_free: Array = []
@@ -1868,7 +1857,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + ub_bv
 		gems_blasted.emit(ub_type, ub_bv, [ub.global_position])
 		grid[cp.x][cp.y] = null
-		ub.play_destroy_animation()
+		_play_gem_break_debris(ub, true)
 		get_tree().create_timer(0.2).timeout.connect(func() -> void:
 			if is_instance_valid(ub):
 				ub.queue_free()
@@ -2009,7 +1998,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 			total_blasted_by_type[bt] = total_blasted_by_type.get(bt, 0) + bv
 			grid[c.x][c.y] = null
 			blocks_to_free.append(b)
-			b.play_destroy_animation()
+			_play_gem_break_debris(b)
 
 		score += blocks_to_free.size() * 10
 		score_changed.emit(score)
@@ -2053,7 +2042,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 		total_blasted_by_type[dub_type] = total_blasted_by_type.get(dub_type, 0) + dub_bv
 		gems_blasted.emit(dub_type, dub_bv, [dub.global_position])
 		grid[dp.x][dp.y] = null
-		dub.play_destroy_animation()
+		_play_gem_break_debris(dub, true)
 		get_tree().create_timer(0.2).timeout.connect(func() -> void:
 			if is_instance_valid(dub):
 				dub.queue_free()
@@ -2270,17 +2259,12 @@ func destroy_upper_gem_at(pos: Vector2i) -> void:
 	var block: Block = grid[pos.x][pos.y]
 	if block == null:
 		return
-	var was_leaf_shield: bool = block.upper_type == Block.UpperType.LEAF_SHIELD
 	grid[pos.x][pos.y] = null
-
-	if was_leaf_shield:
-		_play_shield_break_anim(block)
-	else:
-		block.play_destroy_animation()
-		get_tree().create_timer(0.2).timeout.connect(func() -> void:
-			if is_instance_valid(block):
-				block.queue_free()
-		, CONNECT_ONE_SHOT)
+	_play_gem_break_debris(block, true)
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		if is_instance_valid(block):
+			block.queue_free()
+	, CONNECT_ONE_SHOT)
 
 
 ## 葉盾破碎動畫：先放大閃爍 → 拋物線跳起再跌落 + 漸層淡出
