@@ -160,9 +160,8 @@ func _build_tap_hint() -> void:
 # ── 角色卡片 ──────────────────────────────────────────────────
 
 func _make_char_card(c: CharacterData) -> Dictionary:
-	# 一整列為 HBoxContainer：左側矩形頭像（絕對定位底-左，可上/右溢出），右側 名字 + Lv + EXP 條
+	# 一整列：角色圖作為 overlay，文字/EXP 從整列 33% x 位置開始。
 	const ROW_HEIGHT := 96.0
-	const PORTRAIT_W := 96.0
 	var row := PanelContainer.new()
 	row.custom_minimum_size = Vector2(0, ROW_HEIGHT + 8)
 	var row_style := StyleBoxFlat.new()
@@ -171,18 +170,6 @@ func _make_char_card(c: CharacterData) -> Dictionary:
 	row_style.set_content_margin_all(6)
 	row.add_theme_stylebox_override("panel", row_style)
 	row.clip_contents = true
-
-	var hbox := HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 12)
-	row.add_child(hbox)
-
-	# 左側：佔位控件（寬度保留 PORTRAIT_W 讓右側文字不從最左邊開始）
-	var placeholder := Control.new()
-	placeholder.custom_minimum_size = Vector2(PORTRAIT_W, ROW_HEIGHT)
-	placeholder.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	placeholder.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hbox.add_child(placeholder)
 
 	# 角色圖 overlay：plain Control，PanelContainer 會把它 fit 到全 row 大小，
 	# 但不會干涉其子節點的 anchor/offset
@@ -216,12 +203,23 @@ func _make_char_card(c: CharacterData) -> Dictionary:
 		row.set_meta("_portrait", portrait)
 		portrait_ref = portrait
 
-	# 右側：名字 + Lv + EXP 條
+	var content_overlay := Control.new()
+	content_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.add_child(content_overlay)
+
+	# 右側：名字 + Lv + EXP 條，從整列 33% x 開始。
 	var right_box := VBoxContainer.new()
-	right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_box.anchor_left = 0.33
+	right_box.anchor_top = 0.0
+	right_box.anchor_right = 1.0
+	right_box.anchor_bottom = 1.0
+	right_box.offset_left = 6.0
+	right_box.offset_top = 8.0
+	right_box.offset_right = -8.0
+	right_box.offset_bottom = -8.0
 	right_box.add_theme_constant_override("separation", 6)
-	hbox.add_child(right_box)
+	content_overlay.add_child(right_box)
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 12)

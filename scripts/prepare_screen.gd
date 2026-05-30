@@ -24,6 +24,7 @@ var _roster_grid: Control = null
 
 # ── UI 節點 ──
 var _confirm_btn: Button = null
+var _auto_team_btn: Button = null
 var _team_summary: VBoxContainer = null   # 頂部隊伍縮圖列
 var _team_summary_cards: Array[Control] = []
 var _debug_panel: Control = null
@@ -58,19 +59,19 @@ func _toggle_debug_panel() -> void:
 	_debug_panel = SquareDebugPanel.build(self, chars, _apply_square_to_cards)
 
 
-## 將 c.square_scale / square_offset 套用到目前畫面上「所有」顯示該角色的卡片頭像
+## 將 c.square_scale / square_offset 套用到目前畫面上的角色選擇格；隊伍縮圖維持戰鬥面板姿勢。
 func _apply_square_to_cards(c: CharacterData) -> void:
 	# 角色選擇格 — 由 owned_characters 索引對應
 	var idx: int = GameState.owned_characters.find(c)
 	if idx >= 0 and idx < _card_panels.size():
-		_apply_to_panel(_card_panels[idx], c)
-	# 隊伍縮圖 — 任何顯示此角色的 slot 卡片
+		_apply_square_pose_to_panel(_card_panels[idx], c)
+	# 隊伍縮圖 — 任何顯示此角色的 slot 卡片，使用 battle panel pose
 	for i in _selected_indices.size():
 		if _selected_indices[i] == idx and i < _team_summary_cards.size():
-			_apply_to_panel(_team_summary_cards[i] as Control, c)
+			_apply_battle_pose_to_panel(_team_summary_cards[i] as Control, c)
 
 
-func _apply_to_panel(card: Control, c: CharacterData) -> void:
+func _apply_square_pose_to_panel(card: Control, c: CharacterData) -> void:
 	if card == null or not card.has_meta("_portrait"):
 		return
 	var p: TextureRect = card.get_meta("_portrait") as TextureRect
@@ -78,6 +79,16 @@ func _apply_to_panel(card: Control, c: CharacterData) -> void:
 		return
 	p.scale = Vector2(c.square_scale, c.square_scale)
 	p.position = c.square_offset
+
+
+func _apply_battle_pose_to_panel(card: Control, c: CharacterData) -> void:
+	if card == null or not card.has_meta("_portrait"):
+		return
+	var p: TextureRect = card.get_meta("_portrait") as TextureRect
+	if p == null:
+		return
+	p.scale = Vector2(c.portrait_scale, c.portrait_scale)
+	p.position = c.portrait_offset
 
 
 # ── UI 建構 ──────────────────────────────────────────────────
@@ -243,9 +254,26 @@ func _build_team_summary(parent: HBoxContainer) -> void:
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(vbox)
 
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(header)
+
 	var title := _make_label(Locale.tr_ui("PARTY"), 20, Color(0.85, 0.85, 0.9))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	vbox.add_child(title)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	_auto_team_btn = Button.new()
+	_auto_team_btn.text = Locale.tr_ui("AUTO_TEAM")
+	_auto_team_btn.custom_minimum_size = Vector2(94, 30)
+	_auto_team_btn.disabled = _is_party_locked()
+	_auto_team_btn.focus_mode = Control.FOCUS_NONE
+	_auto_team_btn.add_theme_font_override("font", _font)
+	_auto_team_btn.add_theme_font_size_override("font_size", 14)
+	_apply_solid_button_style(_auto_team_btn, Color(0.35, 0.42, 0.55))
+	_auto_team_btn.pressed.connect(_on_auto_team_pressed)
+	header.add_child(_auto_team_btn)
 
 	_team_summary = VBoxContainer.new()
 	_team_summary.add_theme_constant_override("separation", 4)
@@ -278,7 +306,7 @@ func _refresh_team_summary() -> void:
 			var elem_color: Color = Block.COLORS.get(c.gem_type, c.portrait_color)
 			row.add_theme_stylebox_override("panel", _make_team_row_style(elem_color))
 
-			# 左：純頭像（無邊框、無元素圖示），套用 square_scale / square_offset
+			# 左：純頭像（無邊框、無元素圖示），套用 battle panel pose
 			var portrait_card: Control = _make_team_portrait(c, row_h)
 			portrait_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var idx_in_owned: int = _selected_indices[i]
@@ -344,7 +372,7 @@ func _refresh_team_summary() -> void:
 		_confirm_btn.disabled = _selected_indices.is_empty()
 
 
-## 建立隊伍欄列左側純頭像：無邊框，套用 square_scale / square_offset，固定方形大小。
+## 建立隊伍欄列左側純頭像：無邊框，套用 battle panel pose，固定方形大小。
 func _make_team_portrait(c: CharacterData, s: float) -> Control:
 	var clip := Control.new()
 	clip.custom_minimum_size = Vector2(s, s)
@@ -360,11 +388,11 @@ func _make_team_portrait(c: CharacterData, s: float) -> Control:
 		portrait.custom_minimum_size = Vector2(300, 300)
 		portrait.size = Vector2(300, 300)
 		portrait.pivot_offset = Vector2.ZERO
-		portrait.scale = Vector2(c.square_scale, c.square_scale)
-		portrait.position = c.square_offset
+		portrait.scale = Vector2(c.portrait_scale, c.portrait_scale)
+		portrait.position = c.portrait_offset
 		clip.add_child(portrait)
 		clip.set_meta("_portrait", portrait)
-		clip.set_meta("_is_square", true)
+		clip.set_meta("_is_battle_panel_pose", true)
 	else:
 		var rect := ColorRect.new()
 		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -664,6 +692,7 @@ func _build_roster_grid(parent: ScrollContainer) -> void:
 		_card_lv_labels.append(data.get("lv_label"))
 		if fixed_set.has(c):
 			_add_fixed_overlay(panel)
+			panel.set_meta("_has_fixed_overlay", true)
 		var badge: Control = _add_selection_badge(panel)
 		_card_selection_badges.append(badge)
 
@@ -702,13 +731,17 @@ func _apply_solid_button_style(btn: Button, base_color: Color) -> void:
 
 
 func _add_fixed_overlay(panel: PanelContainer) -> void:
+	_add_state_overlay(panel, Locale.tr_ui("FIXED"))
+
+
+func _add_state_overlay(panel: PanelContainer, text: String) -> Control:
 	var overlay := Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(overlay)
 
 	var lbl := Label.new()
-	lbl.text = Locale.tr_ui("FIXED")
+	lbl.text = text
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# 仿粗體：用 FontVariation 增加筆畫粗細
@@ -727,6 +760,7 @@ func _add_fixed_overlay(panel: PanelContainer) -> void:
 	var tw := lbl.create_tween().set_loops()
 	tw.tween_property(lbl, "modulate:a", 0.35, 0.7)
 	tw.tween_property(lbl, "modulate:a", 1.0, 0.7)
+	return overlay
 
 
 func _on_sort_changed(mode: int, ascending: bool) -> void:
@@ -758,6 +792,100 @@ func _apply_sort() -> void:
 			"is_fixed": fixed_set.has(ch),
 		})
 	RosterLayout.apply(_roster_grid, entries, _sort_mode, 6, _sort_ascending, _element_filter)
+
+
+func _on_auto_team_pressed() -> void:
+	if _is_party_locked():
+		return
+	var indices: Array[int] = _build_auto_team_indices()
+	if indices.is_empty():
+		return
+	_replace_selected_indices(indices)
+
+
+func _build_auto_team_indices() -> Array[int]:
+	var candidates: Array[Dictionary] = []
+	var allowed: Array = _stage.allowed_types if _stage != null else []
+	for raw_type in allowed:
+		var gem_type: Block.Type = raw_type as Block.Type
+		var best_index: int = -1
+		var best_level: int = -1
+		for i in GameState.owned_characters.size():
+			var ch: CharacterData = GameState.owned_characters[i]
+			if ch == null or ch.gem_type != gem_type:
+				continue
+			if ch.level > best_level:
+				best_index = i
+				best_level = ch.level
+		if best_index >= 0:
+			candidates.append({
+				"index": best_index,
+				"level": best_level,
+				"type": gem_type,
+			})
+
+	if candidates.size() > GameState.MAX_PARTY_SIZE:
+		candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			var level_a: int = int(a["level"])
+			var level_b: int = int(b["level"])
+			if level_a == level_b:
+				return int(a["index"]) < int(b["index"])
+			return level_a > level_b
+		)
+
+	var chosen: Array[int] = []
+	var used: Dictionary = {}
+	for entry: Dictionary in candidates:
+		if chosen.size() >= GameState.MAX_PARTY_SIZE:
+			break
+		var index: int = int(entry["index"])
+		if used.has(index):
+			continue
+		chosen.append(index)
+		used[index] = true
+
+	if chosen.size() < GameState.MAX_PARTY_SIZE:
+		var fillers: Array[Dictionary] = []
+		for i in GameState.owned_characters.size():
+			if used.has(i):
+				continue
+			var ch: CharacterData = GameState.owned_characters[i]
+			if ch == null:
+				continue
+			fillers.append({"index": i, "level": ch.level})
+		fillers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			var level_a: int = int(a["level"])
+			var level_b: int = int(b["level"])
+			if level_a == level_b:
+				return int(a["index"]) < int(b["index"])
+			return level_a > level_b
+		)
+		for entry: Dictionary in fillers:
+			if chosen.size() >= GameState.MAX_PARTY_SIZE:
+				break
+			var index: int = int(entry["index"])
+			chosen.append(index)
+			used[index] = true
+
+	return chosen
+
+
+func _replace_selected_indices(indices: Array[int]) -> void:
+	var previous: Array[int] = _selected_indices.duplicate()
+	for index: int in previous:
+		_set_roster_card_selected(index, false)
+	_selected_indices.clear()
+	for index: int in indices:
+		if index < 0 or index >= GameState.owned_characters.size():
+			continue
+		if _selected_indices.has(index):
+			continue
+		if _selected_indices.size() >= GameState.MAX_PARTY_SIZE:
+			break
+		_selected_indices.append(index)
+		_set_roster_card_selected(index, true)
+	_refresh_team_summary()
+	_apply_sort()
 
 
 # ── 選擇邏輯 ──────────────────────────────────────────────────
@@ -801,29 +929,18 @@ func _set_roster_card_selected(index: int, selected: bool) -> void:
 	if index < 0 or index >= _card_panels.size():
 		return
 	var style: StyleBox = _card_styles[index].selected if selected else _card_styles[index].normal
-	_card_panels[index].add_theme_stylebox_override("panel", style)
+	var panel: PanelContainer = _card_panels[index]
+	panel.add_theme_stylebox_override("panel", style)
 	if index < _card_selection_badges.size() and is_instance_valid(_card_selection_badges[index]):
-		_card_selection_badges[index].visible = selected
+		var has_fixed_overlay: bool = panel.has_meta("_has_fixed_overlay") and bool(panel.get_meta("_has_fixed_overlay"))
+		_card_selection_badges[index].visible = selected and not has_fixed_overlay
 
 
 func _add_selection_badge(panel: PanelContainer) -> Control:
-	var overlay := Control.new()
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var overlay: Control = _add_state_overlay(panel, Locale.tr_ui("DEPLOYED"))
 	overlay.z_index = 30
-	panel.add_child(overlay)
-
-	var badge := _SelectionTickBadge.new()
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	badge.offset_left = -30.0
-	badge.offset_top = 0.0
-	badge.offset_right = 0.0
-	badge.offset_bottom = 28.0
-	badge.custom_minimum_size = Vector2(30.0, 28.0)
-	badge.visible = false
-	overlay.add_child(badge)
-	return badge
+	overlay.visible = false
+	return overlay
 
 
 func _on_cancel() -> void:
@@ -936,14 +1053,3 @@ class _PieDrawer extends Control:
 			var angle: float = float(j) / float(seg_count) * TAU - PI * 0.5
 			outline_pts.append(center + Vector2(cos(angle), sin(angle)) * radius)
 		draw_polyline(outline_pts, Color(0.4, 0.4, 0.5, 0.6), 1.5)
-
-
-class _SelectionTickBadge extends Control:
-	func _draw() -> void:
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.55, 0.78, 0.08, 1.0), true)
-		var tick := PackedVector2Array([
-			Vector2(size.x * 0.24, size.y * 0.53),
-			Vector2(size.x * 0.42, size.y * 0.70),
-			Vector2(size.x * 0.78, size.y * 0.30),
-		])
-		draw_polyline(tick, Color.WHITE, 4.0, true)

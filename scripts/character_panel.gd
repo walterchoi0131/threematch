@@ -369,7 +369,7 @@ func _show_char_popup(index: int) -> void:
 		var upper_type: int = FuseTutorialCanvas.NAME_TO_UPPER.get(sk_name, -1)
 		var upper_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
 		var pattern: Array = FuseTutorialCanvas._blast_pattern_for(upper_type)
-		var chain: Control = FuseTutorialCanvas._make_skill_chain(fuse_label, base_gem_tex, upper_tex, pattern, elem_color)
+		var chain: Control = FuseTutorialCanvas._make_skill_chain(fuse_label, base_gem_tex, upper_tex, upper_type, pattern, elem_color)
 		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), Locale.tr_or(sk_name, sk_name), Locale.tr_or(sk_name + " DESC", sk_desc), chain)
 
 	# ── 淡入動畫 ──

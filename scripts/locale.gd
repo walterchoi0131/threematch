@@ -30,6 +30,8 @@ var _translations: Dictionary = {
 	"FUSE": {"zh": "合成", "en": "Fuse"},
 	"STAGE_BOSS": {"zh": "關卡 Boss", "en": "STAGE BOSS"},
 	"SELECT_PARTY": {"zh": "選擇隊員", "en": "SELECT PARTY"},
+	"DEPLOYED": {"zh": "出戰", "en": "DEPLOYED"},
+	"AUTO_TEAM": {"zh": "自動組隊", "en": "Auto Team"},
 	"CONFIRM": {"zh": "確認", "en": "Confirm"},
 	"EMBARK": {"zh": "出發", "en": "Embark"},
 	"CANCEL": {"zh": "取消", "en": "Cancel"},

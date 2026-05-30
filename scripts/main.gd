@@ -2998,6 +2998,7 @@ func _handle_active_skill(char_index: int) -> void:
 			_update_skill_ui()
 			board.enter_selection_mode(Block.Type.RED, "fireball")
 			var positions: Array = await board.selection_confirmed
+			board.is_busy = true
 			# 範圍選擇完成後播放動畫前置（隕石/領域動畫）
 			await _play_skill_animation_phase(_get_active_skill_anim_params(c))
 			# 以範圍中心（positions[0]）作為隕石落下點
@@ -3031,7 +3032,9 @@ func _handle_active_skill(char_index: int) -> void:
 			# 若打破了木板，必須讓上方寶石墜落填補空位
 			if planks_broken > 0:
 				await board._collapse_and_fill()
+				board.is_busy = true
 			await get_tree().create_timer(0.4).timeout
+			board.is_busy = false
 		"There shall be light":
 			# 光輝降臨：進入選擇模式，懸停預覽十字範圍，點擊確認轉換為光寶石
 			battle_manager.use_active_skill(char_index)
