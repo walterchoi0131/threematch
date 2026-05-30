@@ -7,11 +7,15 @@ var chain_blast_interval := 0.2  # 連鎖爆炸之間的間隔（秒）
 
 const BlockScene := preload("res://scenes/block.tscn")  # 寶石場景預載
 const PLANK_DEBRIS_TEXTURE := preload("res://assets/blocks/wood.png")
+const WOOD_SPEAR_THRUST_TEXTURE := preload("res://assets/leafspear.png")
 const GEM_DEBRIS_Z_INDEX := 90
 const OBSTACLE_DEBRIS_Z_INDEX := 100
+const WOOD_SPEAR_THRUST_Z_INDEX := 110
 const NORMAL_GEM_DEBRIS_SHARDS := 5
 const UPPER_GEM_DEBRIS_SHARDS := 7
 const OBSTACLE_DEBRIS_SHARDS := 8
+const WOOD_SPEAR_THRUST_SCALE := 0.18
+const WOOD_SPEAR_ROW_HIT_INTERVAL := 0.075
 
 @export var stage: StageData  # 當前關卡資料
 
@@ -1595,6 +1599,184 @@ func _spawn_plank_debris(world_pos: Vector2) -> void:
 	DebrisVfx.play(_get_debris_host(), PLANK_DEBRIS_TEXTURE, world_pos, OBSTACLE_DEBRIS_SHARDS, Vector2(0.68, 1.10), Vector2(0.90, 1.30), OBSTACLE_DEBRIS_Z_INDEX)
 
 
+func _is_wood_spear_type(ut: Block.UpperType) -> bool:
+	return ut == Block.UpperType.WOOD_SPEAR_UP or ut == Block.UpperType.WOOD_SPEAR_DOWN
+
+
+func _wood_spear_direction(ut: Block.UpperType) -> int:
+	return -1 if ut == Block.UpperType.WOOD_SPEAR_UP else 1
+
+
+func _handle_wood_spear_sequence(start_pos: Vector2i, chain_data: Array = [], total_blasted_by_type: Dictionary = {}, is_initial: bool = true) -> void:
+	if not _is_valid(start_pos):
+		return
+	var start_block: Block = grid[start_pos.x][start_pos.y]
+	if start_block == null:
+		return
+	var ut: Block.UpperType = start_block.upper_type
+	if not _is_wood_spear_type(ut):
+		return
+
+	if is_initial:
+		chain_data.clear()
+		chain_data.append(1)
+		total_blasted_by_type.clear()
+		upper_gem_clicked.emit()
+	elif chain_data.size() > 0:
+		chain_data[0] += 1
+
+	upper_gem_chain_triggered.emit(ut)
+	var direction_y: int = _wood_spear_direction(ut)
+	var positions: Array[Vector2i] = _get_blast_positions_for_upper(start_pos, ut)
+	var row_groups: Array[Array] = _build_wood_spear_row_groups(start_pos, positions, direction_y)
+	var destination: Vector2i = _wood_spear_destination(start_pos, positions, direction_y)
+	var thrust_duration: float = maxf(float(maxi(row_groups.size(), 1)) * WOOD_SPEAR_ROW_HIT_INTERVAL, 0.18)
+	_play_wood_spear_thrust(grid_to_world(start_pos), grid_to_world(destination), direction_y, thrust_duration)
+
+	var start_type: Block.Type = start_block.block_type as Block.Type
+	var start_value: int = start_block.get_blast_value()
+	total_blasted_by_type[start_type] = total_blasted_by_type.get(start_type, 0) + start_value
+	gems_blasted.emit(start_type, start_value, [start_block.global_position])
+	grid[start_pos.x][start_pos.y] = null
+	_play_gem_break_debris(start_block, true)
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		if is_instance_valid(start_block):
+			start_block.queue_free()
+	, CONNECT_ONE_SHOT)
+
+	var chained_positions: Array[Vector2i] = []
+	for group_index in row_groups.size():
+		await get_tree().create_timer(WOOD_SPEAR_ROW_HIT_INTERVAL).timeout
+		var group: Array = row_groups[group_index]
+		_destroy_wood_spear_row_group(group, total_blasted_by_type, chained_positions)
+
+	if row_groups.is_empty():
+		await get_tree().create_timer(thrust_duration).timeout
+
+	if not chained_positions.is_empty():
+		await _execute_upper_blast_chain(chained_positions, chain_data, total_blasted_by_type)
+
+	if is_initial:
+		upper_blast_completed.emit(chain_data[0], total_blasted_by_type, ut)
+
+
+func _build_wood_spear_row_groups(origin: Vector2i, positions: Array[Vector2i], direction_y: int) -> Array[Array]:
+	var by_y: Dictionary = {}
+	for p: Vector2i in positions:
+		if p == origin or not _is_valid(p):
+			continue
+		if not by_y.has(p.y):
+			by_y[p.y] = []
+		(by_y[p.y] as Array).append(p)
+
+	var rows_list: Array[int] = []
+	for row_key in by_y.keys():
+		rows_list.append(int(row_key))
+	rows_list.sort()
+	if direction_y < 0:
+		rows_list.reverse()
+
+	var groups: Array[Array] = []
+	for row_y in rows_list:
+		var raw_positions: Array = by_y[row_y] as Array
+		var ordered_positions: Array[Vector2i] = []
+		var center := Vector2i(origin.x, row_y)
+		if raw_positions.has(center):
+			ordered_positions.append(center)
+		for value in raw_positions:
+			var p: Vector2i = value as Vector2i
+			if p != center:
+				ordered_positions.append(p)
+		groups.append(ordered_positions)
+	return groups
+
+
+func _wood_spear_destination(origin: Vector2i, positions: Array[Vector2i], direction_y: int) -> Vector2i:
+	var destination_y: int = origin.y
+	for p: Vector2i in positions:
+		if not _is_valid(p):
+			continue
+		if direction_y < 0:
+			destination_y = mini(destination_y, p.y)
+		else:
+			destination_y = maxi(destination_y, p.y)
+	return Vector2i(origin.x, destination_y)
+
+
+func _play_wood_spear_thrust(start_local: Vector2, end_local: Vector2, direction_y: int, duration: float) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = WOOD_SPEAR_THRUST_TEXTURE
+	sprite.centered = true
+	sprite.z_index = WOOD_SPEAR_THRUST_Z_INDEX
+	sprite.scale = Vector2(WOOD_SPEAR_THRUST_SCALE, WOOD_SPEAR_THRUST_SCALE)
+	sprite.rotation = 0.0 if direction_y < 0 else PI
+	sprite.position = start_local - Vector2(0.0, float(direction_y) * float(CELL_SIZE) * 0.75)
+	sprite.modulate.a = 0.95
+	add_child(sprite)
+
+	var end_position: Vector2 = end_local + Vector2(0.0, float(direction_y) * float(CELL_SIZE) * 0.45)
+	var tween := sprite.create_tween().set_parallel(true)
+	tween.tween_property(sprite, "position", end_position, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(sprite, "modulate:a", 0.0, duration * 0.28).set_delay(duration * 0.72)
+	tween.finished.connect(func() -> void:
+		if is_instance_valid(sprite):
+			sprite.queue_free()
+	, CONNECT_ONE_SHOT)
+
+
+func _destroy_wood_spear_row_group(group: Array, total_blasted_by_type: Dictionary, chained_positions: Array[Vector2i]) -> void:
+	var blast_positions_by_type: Dictionary = {}
+	var blast_count_by_type: Dictionary = {}
+	var blocks_to_free: Array = []
+	var normal_destroyed: int = 0
+
+	for value in group:
+		var p: Vector2i = value as Vector2i
+		if not _is_valid(p):
+			continue
+		var b: Block = grid[p.x][p.y]
+		if b == null or b.is_rock():
+			continue
+		if b.is_upper_gem():
+			if not chained_positions.has(p):
+				chained_positions.append(p)
+			continue
+		if b.is_breakable_structure():
+			grid[p.x][p.y] = null
+			logic_grid[p.x][p.y] = LOGIC_UNKNOWN
+			blocks_to_free.append(b)
+			b.play_destroy_animation()
+			_spawn_plank_debris(b.global_position)
+			continue
+
+		var bt: Block.Type = b.block_type as Block.Type
+		var bv: int = b.get_blast_value()
+		if not blast_positions_by_type.has(bt):
+			blast_positions_by_type[bt] = []
+		(blast_positions_by_type[bt] as Array).append(b.global_position)
+		blast_count_by_type[bt] = blast_count_by_type.get(bt, 0) + bv
+		total_blasted_by_type[bt] = total_blasted_by_type.get(bt, 0) + bv
+		grid[p.x][p.y] = null
+		blocks_to_free.append(b)
+		normal_destroyed += 1
+		_play_gem_break_debris(b)
+
+	if normal_destroyed > 0:
+		score += normal_destroyed * 10
+		score_changed.emit(score)
+
+	for bt in blast_positions_by_type:
+		gems_blasted.emit(bt as Block.Type, blast_count_by_type[bt] as int, blast_positions_by_type[bt])
+
+	if not blocks_to_free.is_empty():
+		var captured_blocks := blocks_to_free.duplicate()
+		get_tree().create_timer(0.2).timeout.connect(func() -> void:
+			for b in captured_blocks:
+				if is_instance_valid(b):
+					b.queue_free()
+		, CONNECT_ONE_SHOT)
+
+
 # ── 高階寶石系統 ─────────────────────────────────────────────────────
 
 ## 在指定網格位置放置高階寶石。
@@ -1703,6 +1885,9 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	# 水劍專用連鎖序列：不走一般 upper-gem chain 路徑
 	if ut == Block.UpperType.WATER_SLASH:
 		await _handle_water_sword_sequence(pos)
+		return
+	if _is_wood_spear_type(ut):
+		await _handle_wood_spear_sequence(pos)
 		return
 
 	# 根據高階類型決定爆炸位置（使用共用函式）
@@ -1848,6 +2033,9 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		# 水劍：交由專用連鎖序列處理（與點擊同樣規則，且不允許其他 upper 插入）
 		if cut == Block.UpperType.WATER_SLASH:
 			await _handle_water_sword_sequence(cp, chain_data, total_blasted_by_type, false)
+			continue
+		if _is_wood_spear_type(cut):
+			await _handle_wood_spear_sequence(cp, chain_data, total_blasted_by_type, false)
 			continue
 
 		# 播放連鏈爆炸 VFX
@@ -2030,6 +2218,9 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 		# 再次驗證
 		dub = grid[dp.x][dp.y]
 		if dub == null:
+			continue
+		if _is_wood_spear_type(dut):
+			await _handle_wood_spear_sequence(dp, chain_data, total_blasted_by_type, false)
 			continue
 
 		# 交由連鎖路徑處理（由「逘一觸發」路徑代勞）
