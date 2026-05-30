@@ -3,6 +3,7 @@
 extends HBoxContainer
 
 signal active_skill_activated(char_index: int)  # 主動技能觸發信號
+signal active_skill_selection_cancelled(char_index: int)  # 主動技能選格取消信號
 
 var _cards: Array[Control] = []        # 角色卡片陣列
 var _card_orig_y: Dictionary = {}      # 角色卡片原始 Y 座標
@@ -15,6 +16,9 @@ var _portraits: Dictionary = {}        # 角色索引 -> TextureRect（用於即
 var _gem_icons: Dictionary = {}        # 角色索引 -> TextureRect（元素寶石圖示）
 var _gem_rays: Dictionary = {}         # 角色索引 -> Node2D（技能就緒放射光芒）
 var _debug_panel: Control = null       # 即時調整面板
+var _active_selection_cancel_index: int = -1
+var _active_selection_badge: Control = null
+var _active_selection_card_modulates: Dictionary = {}
 
 # 長按觸發（Flutter 風格：按住期間計時，達到閾值立即觸發，不等放手）
 const LONG_PRESS_THRESHOLD: float = 0.5  # 秒
@@ -28,6 +32,7 @@ var _popup_panel: Control = null         # 中央面板（淡入淡出用）
 
 ## 初始化角色面板：為每個角色建立卡片
 func setup(characters: Array[CharacterData]) -> void:
+	exit_active_selection_cancel_mode()
 	_cards.clear()
 	_gem_icons.clear()
 	_gem_rays.clear()
@@ -53,6 +58,67 @@ func get_card(index: int) -> Control:
 	if index < 0 or index >= _cards.size():
 		return null
 	return _cards[index]
+
+
+func enter_active_selection_cancel_mode(index: int) -> void:
+	exit_active_selection_cancel_mode()
+	if index < 0 or index >= _cards.size():
+		return
+	if _popup_layer != null:
+		_close_char_popup()
+	_active_selection_cancel_index = index
+	_active_selection_card_modulates.clear()
+	_show_active_selection_cancel_badge(index)
+
+
+func exit_active_selection_cancel_mode() -> void:
+	if is_instance_valid(_active_selection_badge):
+		_active_selection_badge.queue_free()
+	_active_selection_badge = null
+	for card_key in _active_selection_card_modulates.keys():
+		var card: Control = card_key as Control
+		if is_instance_valid(card):
+			card.modulate = _active_selection_card_modulates[card_key]
+	_active_selection_card_modulates.clear()
+	_active_selection_cancel_index = -1
+	_pressing_index = -1
+	_long_press_fired = false
+
+
+func _show_active_selection_cancel_badge(index: int) -> void:
+	var card: Control = get_card(index)
+	if card == null:
+		return
+	var overlay := Control.new()
+	overlay.name = "ActiveSkillCancelOverlay"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.z_index = 40
+	var badge := PanelContainer.new()
+	badge.name = "ActiveSkillCancelBadge"
+	badge.top_level = false
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	badge.z_index = 40
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = Color(0, 0, 0, 0.24)
+	badge_style.set_corner_radius_all(0)
+	badge.add_theme_stylebox_override("panel", badge_style)
+
+	var label := Label.new()
+	label.text = "← %s" % Locale.tr_ui("CANCEL")
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 3)
+	badge.add_child(label)
+	overlay.add_child(badge)
+	card.add_child(overlay)
+	_active_selection_badge = overlay
 
 
 ## 進場準備：將所有卡片設為透明並推到螢幕底部以下
@@ -176,6 +242,8 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 
 ## _process：Flutter 風格長按 — 按住期間每幀檢查，達閾值立即觸發（不等放手）。
 func _process(_delta: float) -> void:
+	if _active_selection_cancel_index >= 0:
+		return
 	if _pressing_index < 0 or _long_press_fired:
 		return
 	var held: float = (Time.get_ticks_msec() / 1000.0) - _press_start_time
@@ -188,6 +256,20 @@ func _on_card_gui_input(event: InputEvent, index: int) -> void:
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	var mb := event as InputEventMouseButton
+	if _active_selection_cancel_index >= 0:
+		if mb.pressed:
+			if _popup_layer != null:
+				_close_char_popup()
+			_pressing_index = index
+			_press_start_time = Time.get_ticks_msec() / 1000.0
+			_long_press_fired = false
+		else:
+			var was_long := _long_press_fired
+			_pressing_index = -1
+			_long_press_fired = false
+			if not was_long and index == _active_selection_cancel_index:
+				active_skill_selection_cancelled.emit(index)
+		return
 	if mb.pressed:
 		# 如果彈出面板開著，任何按下都關閉它
 		if _popup_layer != null:

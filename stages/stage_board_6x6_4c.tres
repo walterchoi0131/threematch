@@ -11,6 +11,7 @@
 [ext_resource type="Resource" uid="uid://bdbktexrnd1lj" path="res://characters/char_panda.tres" id="9_panda"]
 [ext_resource type="Resource" uid="uid://bgttaela65j0m" path="res://characters/char_dragon.tres" id="10_dragon"]
 [ext_resource type="Resource" uid="uid://p6qx5pm80cmm" path="res://characters/char_husky.tres" id="11_husky"]
+[ext_resource type="Resource" path="res://characters/char_gory.tres" id="12_gory"]
 
 [sub_resource type="Resource" id="gold_loot"]
 script = ExtResource("6_loot")
@@ -60,4 +61,4 @@ rows = 6
 rounds = Array[Array]([[SubResource("slime_a"), SubResource("slime_b")], [SubResource("slime_boss")]])
 background = 1
 bgm = ExtResource("1_bgm")
-set_party = Array[ExtResource("7_char")]([ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_dragon"), ExtResource("11_husky")])
+set_party = Array[ExtResource("7_char")]([ExtResource("8_shark"), ExtResource("12_gory"), ExtResource("10_dragon"), ExtResource("11_husky")])

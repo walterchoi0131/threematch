@@ -6,6 +6,7 @@ const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
+const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.gd")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -61,6 +62,15 @@ var _pending_saint_cross_count: int = 0  # 本次連鏈中累積的聖十字觸�
 var _live_chain_label: Label = null       # 連鏈計數標籤 — "×N!" 動態部分
 var _live_chain_header: Label = null      # 連鏈計數標籤 — "Chain" 靜態部分
 var _live_chain_count: int = 0            # 目前連鏈計數（對應 upper_gem_chain_triggered 次數）
+var _active_board_selection_running: bool = false
+var _active_board_selection_char_index: int = -1
+const ACTIVE_SELECTION_DIM_LAYER := 90
+const ACTIVE_SELECTION_DIM_ALPHA := 0.62
+const ACTIVE_SELECTION_DIM_FADE := 0.16
+var _active_selection_dim_layer: CanvasLayer = null
+var _active_selection_dim_overlay: Control = null
+var _active_selection_dim_tween: Tween = null
+var _active_selection_preview_positions: Array[Vector2i] = []
 
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
@@ -198,6 +208,7 @@ func _ready() -> void:
 	board.upper_gem_clicked.connect(_on_upper_gem_clicked)
 	board.upper_blast_completed.connect(_on_upper_blast_completed)
 	board.upper_gem_chain_triggered.connect(_on_upper_gem_chain_triggered)
+	board.selection_preview_changed.connect(_on_board_selection_preview_changed)
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
 	board.gems_refilled.connect(_on_gems_refilled)
@@ -224,6 +235,7 @@ func _ready() -> void:
 
 	character_panel.setup(party)
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
+	character_panel.active_skill_selection_cancelled.connect(_on_active_skill_selection_cancelled)
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
 	return_button.text = Locale.tr_ui("EXIT")
@@ -286,6 +298,7 @@ func _layout_board() -> void:
 func _on_viewport_changed(_size: Vector2) -> void:
 	_layout_board()
 	_apply_safe_area()
+	_refresh_active_selection_dim_holes()
 	_layout_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
 	_layout_stage_editor_enemy_picker_panel()
@@ -2098,6 +2111,7 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 	_concurrent_fuses.clear()
 
 	var first_tapped_pos: Vector2i = board.last_tapped_pos
+	var first_tapped_local_pos: Vector2 = board.last_tapped_local_pos
 	var fuse_target: Vector2 = board.to_global(board.grid_to_world(first_tapped_pos))
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
@@ -2112,7 +2126,7 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 	await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 
 	# 放置第一個融合的高階寶石
-	board.last_tapped_pos = first_tapped_pos
+	board.set_last_tapped_input(first_tapped_pos, first_tapped_local_pos)
 	battle_manager.turn_gem_blasts = { gem_type: count }
 	battle_manager.last_blast_positions = grid_positions
 	for resp in responses:
@@ -2127,7 +2141,9 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 			var wait_sec: float = float(arrival - now) / 1000.0
 			await get_tree().create_timer(wait_sec).timeout
 		# 設定此並行融合的資料供 _execute_responding_skill 讀取
-		board.last_tapped_pos = cf.tapped_pos as Vector2i
+		var cf_tapped_pos: Vector2i = cf.tapped_pos as Vector2i
+		var cf_tapped_local_pos: Vector2 = cf.get("tapped_local_pos", board.grid_to_world(cf_tapped_pos)) as Vector2
+		board.set_last_tapped_input(cf_tapped_pos, cf_tapped_local_pos)
 		battle_manager.turn_gem_blasts = { cf.gem_type: cf.count }
 		battle_manager.last_blast_positions = cf.grid_positions as Array[Vector2i]
 		for resp in cf.responses:
@@ -2171,7 +2187,8 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 
 	# 立即發射粒子（與第一次融合動畫並行）
 	var tapped_pos: Vector2i = board._concurrent_fuse_tapped_pos
-	board._concurrent_fuse_tapped_pos = Vector2i(-1, -1)
+	var tapped_local_pos: Vector2 = board.get_concurrent_fuse_tapped_local_pos()
+	board.clear_concurrent_fuse_tap()
 	var fuse_target: Vector2 = board.to_global(board.grid_to_world(tapped_pos))
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
@@ -2186,6 +2203,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	var arrival_msec: int = Time.get_ticks_msec() + int((particle_duration / TrailProjectileScript.speed_divisor + 0.05) * 1000)
 	_concurrent_fuses.append({
 		"tapped_pos": tapped_pos,
+		"tapped_local_pos": tapped_local_pos,
 		"responses": responses,
 		"arrival_msec": arrival_msec,
 		"gem_type": gem_type,
@@ -2689,7 +2707,7 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			await get_tree().create_timer(0.15).timeout
 		"Wood Spear":
 			var pos: Vector2i = board.last_tapped_pos
-			var spear_type: Block.UpperType = board.get_wood_spear_type_for_positions(battle_manager.last_blast_positions)
+			var spear_type: Block.UpperType = board.get_wood_spear_type_for_last_tap()
 			board.place_upper_gem(pos, spear_type, Block.Type.GREEN)
 			_play_sfx(_se_freeze)
 			var _gc: CharacterData = party[resp.char_index]
@@ -2941,8 +2959,136 @@ func _on_active_skill_activated(char_index: int) -> void:
 	active_skill_finished.emit(char_index)
 
 
+func _on_active_skill_selection_cancelled(char_index: int) -> void:
+	if not _active_board_selection_running:
+		return
+	if char_index != _active_board_selection_char_index:
+		return
+	board.cancel_selection_mode()
+
+
+func _on_board_selection_preview_changed(positions: Array) -> void:
+	_active_selection_preview_positions.clear()
+	for value in positions:
+		_active_selection_preview_positions.append(value as Vector2i)
+	_refresh_active_selection_dim_holes()
+
+
+func _show_active_selection_dim(char_index: int) -> void:
+	_clear_active_selection_dim_immediate()
+	_active_selection_dim_layer = CanvasLayer.new()
+	_active_selection_dim_layer.layer = ACTIVE_SELECTION_DIM_LAYER
+	add_child(_active_selection_dim_layer)
+
+	var overlay: Control = SelectionDimOverlayScript.new()
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.modulate.a = 0.0
+	overlay.set("dim_color", Color(0, 0, 0, ACTIVE_SELECTION_DIM_ALPHA))
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_active_selection_dim_layer.add_child(overlay)
+	_active_selection_dim_overlay = overlay
+	_refresh_active_selection_dim_holes(char_index)
+
+	_active_selection_dim_tween = create_tween()
+	_active_selection_dim_tween.tween_property(overlay, "modulate:a", 1.0, ACTIVE_SELECTION_DIM_FADE).set_ease(Tween.EASE_OUT)
+
+
+func _hide_active_selection_dim() -> void:
+	if _active_selection_dim_overlay == null and _active_selection_dim_layer == null:
+		return
+	if _active_selection_dim_tween != null and _active_selection_dim_tween.is_valid():
+		_active_selection_dim_tween.kill()
+	var overlay: Control = _active_selection_dim_overlay
+	var layer: CanvasLayer = _active_selection_dim_layer
+	_active_selection_dim_overlay = null
+	_active_selection_dim_layer = null
+	_active_selection_dim_tween = null
+	if overlay == null or not is_instance_valid(overlay):
+		if is_instance_valid(layer):
+			layer.queue_free()
+		return
+	var tween := create_tween()
+	tween.tween_property(overlay, "modulate:a", 0.0, ACTIVE_SELECTION_DIM_FADE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(layer):
+			layer.queue_free()
+	)
+	await tween.finished
+
+
+func _clear_active_selection_dim_immediate() -> void:
+	if _active_selection_dim_tween != null and _active_selection_dim_tween.is_valid():
+		_active_selection_dim_tween.kill()
+	_active_selection_dim_tween = null
+	if is_instance_valid(_active_selection_dim_layer):
+		_active_selection_dim_layer.queue_free()
+	_active_selection_dim_layer = null
+	_active_selection_dim_overlay = null
+
+
+func _refresh_active_selection_dim_holes(char_index: int = -999) -> void:
+	if _active_selection_dim_overlay == null or not is_instance_valid(_active_selection_dim_overlay):
+		return
+	var active_index: int = char_index if char_index != -999 else _active_board_selection_char_index
+	var clear_rects: Array[Rect2] = _get_board_selection_clear_rects()
+	var card_rect: Rect2 = _get_active_selection_card_rect(active_index)
+	if card_rect.size.x > 0.0 and card_rect.size.y > 0.0:
+		clear_rects.append(card_rect.grow(4.0))
+	_active_selection_dim_overlay.call("set_clear_rects", clear_rects)
+
+
+func _get_board_selection_clear_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	if not board.has_method("get_selection_valid_centers"):
+		return rects
+	var centers: Array = board.get_selection_valid_centers()
+	for value in centers:
+		var pos: Vector2i = value as Vector2i
+		rects.append(_board_cell_rect(pos))
+	for preview_pos in _active_selection_preview_positions:
+		rects.append(_board_cell_rect(preview_pos))
+	return rects
+
+
+func _board_cell_rect(pos: Vector2i) -> Rect2:
+	var top_left: Vector2 = board.to_global(Vector2(pos.x * board.CELL_SIZE, pos.y * board.CELL_SIZE))
+	var bottom_right: Vector2 = board.to_global(Vector2((pos.x + 1) * board.CELL_SIZE, (pos.y + 1) * board.CELL_SIZE))
+	var rect_pos: Vector2 = Vector2(minf(top_left.x, bottom_right.x), minf(top_left.y, bottom_right.y))
+	var rect_size: Vector2 = Vector2(absf(bottom_right.x - top_left.x), absf(bottom_right.y - top_left.y))
+	return Rect2(rect_pos, rect_size).grow(1.0)
+
+
+func _get_active_selection_card_rect(char_index: int) -> Rect2:
+	var card: Control = character_panel.get_card(char_index)
+	if card == null:
+		return Rect2(Vector2.ZERO, Vector2.ZERO)
+	return card.get_global_rect()
+
+
+func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type, pattern: String = "cross") -> Dictionary:
+	if _active_board_selection_running:
+		return {"positions": [], "cancelled": true}
+	_active_board_selection_running = true
+	_active_board_selection_char_index = char_index
+	_active_selection_preview_positions.clear()
+	board.enter_selection_mode(convert_type, pattern)
+	character_panel.enter_active_selection_cancel_mode(char_index)
+	_show_active_selection_dim(char_index)
+	var result: Dictionary = await board.selection_finished
+	await _hide_active_selection_dim()
+	character_panel.exit_active_selection_cancel_mode()
+	_active_selection_preview_positions.clear()
+	_active_board_selection_char_index = -1
+	_active_board_selection_running = false
+	if not result.has("positions"):
+		result["positions"] = []
+	if not result.has("cancelled"):
+		result["cancelled"] = false
+	return result
+
+
 func _handle_active_skill(char_index: int) -> void:
-	if board.is_busy:
+	if board.is_busy or _active_board_selection_running:
 		return
 	if not battle_manager.is_active_ready(char_index):
 		return
@@ -2994,10 +3140,14 @@ func _handle_active_skill(char_index: int) -> void:
 			_update_skill_ui()
 		"Dragon Flame Domain":
 			# 龍焰領域：先播放動畫前置，再進入火焰範圍選擇模式
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "fireball")
+			if bool(selection.get("cancelled", false)):
+				return
+			var positions: Array = selection.get("positions", [])
+			if positions.is_empty():
+				return
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
-			board.enter_selection_mode(Block.Type.RED, "fireball")
-			var positions: Array = await board.selection_confirmed
 			board.is_busy = true
 			# 範圍選擇完成後播放動畫前置（隕石/領域動畫）
 			await _play_skill_animation_phase(_get_active_skill_anim_params(c))
@@ -3037,11 +3187,14 @@ func _handle_active_skill(char_index: int) -> void:
 			board.is_busy = false
 		"There shall be light":
 			# 光輝降臨：進入選擇模式，懸停預覽十字範圍，點擊確認轉換為光寶石
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.LIGHT)
+			if bool(selection.get("cancelled", false)):
+				return
+			var positions: Array = selection.get("positions", [])
+			if positions.is_empty():
+				return
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
-			board.enter_selection_mode(Block.Type.LIGHT)
-			# 等待玩家點擊確認
-			var positions: Array = await board.selection_confirmed
 			# 轉換十字範圍內的寶石
 			var converted := 0
 			for pos in positions:
@@ -3054,19 +3207,44 @@ func _handle_active_skill(char_index: int) -> void:
 					converted += 1
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("There shall be light"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 			await get_tree().create_timer(0.4).timeout
+		"Leaf Spear Call":
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.GREEN, "single_top_bottom")
+			if bool(selection.get("cancelled", false)):
+				return
+			var sel_positions: Array = selection.get("positions", [])
+			if sel_positions.is_empty():
+				return
+			var spear_pos: Vector2i = sel_positions[0] as Vector2i
+			var spear_block: Block = board.grid[spear_pos.x][spear_pos.y]
+			if spear_block != null and spear_block.is_obstacle():
+				return
+			var spear_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
+			if spear_pos.y == board.rows - 1:
+				spear_type = Block.UpperType.WOOD_SPEAR_UP
+			var placed: bool = board.place_upper_gem(spear_pos, spear_type, Block.Type.GREEN)
+			if not placed:
+				return
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.resync_logic_from_visual()
+			_play_sfx(_se_freeze)
+			_add_log_entry("%s：%s" % [Locale.tr_ui("Leaf Spear Call"), _upper_gem_bbcode(spear_type)], Block.Type.GREEN, c)
+			await get_tree().create_timer(0.25).timeout
 		"Resurgence", "Resurgence+":
 			# 生息：選一顆寶石，將其上下左右四鄰轉換為相同元素
 			# 生息.強：再額外將被點擊的寶石加上 X5 額外效果
-			battle_manager.use_active_skill(char_index)
-			_update_skill_ui()
-			board.enter_selection_mode(Block.Type.RED, "single")  # convert_type 在 single 模式下未使用
-			var sel_positions: Array = await board.selection_confirmed
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "single")  # convert_type 在 single 模式下未使用
+			if bool(selection.get("cancelled", false)):
+				return
+			var sel_positions: Array = selection.get("positions", [])
 			if sel_positions.is_empty():
 				return
 			var center_p: Vector2i = sel_positions[0] as Vector2i
 			var center_block: Block = board.grid[center_p.x][center_p.y]
 			if center_block == null:
 				return
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
 
 			# ── 狸貓手掌點擊動畫 ────────────────────────────────
 			# 取得元素顏色（波紋用）

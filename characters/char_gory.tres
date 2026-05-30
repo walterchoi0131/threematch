@@ -23,9 +23,12 @@ square_scale = 1.4000000000000001
 square_offset = Vector2(-154, -26)
 rectangular_scale = 0.5
 rectangular_offset = Vector2(-153, 390)
+active_skill_name = "Leaf Spear Call"
+active_skill_desc = "Select one top-row or bottom-row cell to create an inward-facing Wood Spear gem there. CD: 4 turns."
+active_skill_cd = 4
 has_break_essence = true
 responding_skills = Array[Dictionary]([{
-"desc": "create a Wood Spear gem at tapped cell. Upper-half fusions create an up spear; lower-half fusions create a down spear. The spear pierces toward its direction and breaks breakable obstacles.",
+"desc": "create a Wood Spear gem at tapped cell. Tapping the upper half of that cell creates an up spear; tapping the lower half creates a down spear. The spear pierces toward its direction and breaks breakable obstacles.",
 "fuse_label": "7",
 "name": "Wood Spear",
 "priority": 1,

@@ -28,9 +28,12 @@ const AREA_KEYS: Array[String] = [
 	"church",
 	"dessert",
 	"dungeon",
+	"forest",
 	"heaven",
 	"iceberg",
+	"meadow",
 	"ruin",
+	"school",
 	"swamp",
 	"underwater",
 	"volcano",
@@ -40,39 +43,51 @@ const AREA_KEYS: Array[String] = [
 const AREA_INFO: Dictionary = {
 	"aurora": {
 		"spot_path": "res://assets/stage_spot/spot_aurora.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_aurora.png",
 	},
 	"church": {
 		"spot_path": "res://assets/stage_spot/spot_church.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_church.png",
 	},
 	"dessert": {
 		"spot_path": "res://assets/stage_spot/spot_dessert.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_dessert.png",
 	},
 	"dungeon": {
 		"spot_path": "res://assets/stage_spot/spot_dungeon.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_dungeon.png",
+	},
+	"forest": {
+		"spot_path": "res://assets/stage_spot/spot_forest.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_forest.png",
 	},
 	"heaven": {
 		"spot_path": "res://assets/stage_spot/spot_heaven.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_heaven.png",
 	},
 	"iceberg": {
 		"spot_path": "res://assets/stage_spot/spot_iceberg.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_iceberg.png",
+	},
+	"meadow": {
+		"spot_path": "res://assets/stage_spot/spot_meadow.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_meadow.png",
 	},
 	"ruin": {
 		"spot_path": "res://assets/stage_spot/spot_ruin.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_ruin.png",
 	},
+	"school": {
+		"spot_path": "res://assets/stage_spot/spot_school.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_school.png",
+	},
 	"swamp": {
 		"spot_path": "res://assets/stage_spot/spot_swamp.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_swamp.png",
 	},
 	"underwater": {
 		"spot_path": "res://assets/stage_spot/spot_underwater.png",
-		"battle_bg_path": FALLBACK_BATTLE_BG_PATH,
+		"battle_bg_path": "res://assets/battle_background/battle_bg_underwater.png",
 	},
 	"volcano": {
 		"spot_path": "res://assets/stage_spot/spot_volcano.png",
@@ -114,7 +129,7 @@ static func get_battle_background_path(area_key: String) -> String:
 @export var min_match: int = 2   # 最少連接數才可消除
 @export var columns: int = 8     # 棋盤欄位數
 @export var rows: int = 8        # 棋盤行數
-@export_enum("aurora", "church", "dessert", "dungeon", "heaven", "iceberg", "ruin", "swamp", "underwater", "volcano") var area: String = DEFAULT_AREA  # 關卡地區 key
+@export_enum("aurora", "church", "dessert", "dungeon", "forest", "heaven", "iceberg", "meadow", "ruin", "school", "swamp", "underwater", "volcano") var area: String = DEFAULT_AREA  # 關卡地區 key
 
 ## 每一波是一個 EnemyData 陣列。
 ## rounds[0] = 第一波，rounds[1] = 第二波，以此類推。

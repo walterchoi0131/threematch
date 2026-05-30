@@ -82,7 +82,7 @@ var _translations: Dictionary = {
 	"Bamboo Supply": {"zh": "竹葉補給", "en": "Bamboo Supply"},
 	"Bamboo Supply DESC": {"zh": "在點擊處生成竹葉補給寶石；爆炸時消除周圍 8 格並回復 Panda 魔力 × 1.6 HP。", "en": "Create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 1.6."},
 	"Wood Spear": {"zh": "木槍", "en": "Wood Spear"},
-	"Wood Spear DESC": {"zh": "7 顆以上葉寶石合成時，在點擊處生成木槍寶石；點擊位置位於連通群上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse 7+ leaf gems to create a Wood Spear gem at the tapped cell. Upper-half fusions point up; lower-half fusions point down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
+	"Wood Spear DESC": {"zh": "7 顆以上葉寶石合成時，在點擊處生成木槍寶石；點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse 7+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
 
 	# ── 角色名稱 ──
 	"Boar": {"zh": "野豬", "en": "Boar"},
@@ -129,6 +129,8 @@ var _translations: Dictionary = {
 	"Snowball Fight DESC": {"zh": "動員棋盤上所有雪球寶石飛向目標敵人，每顆造成 ATK×10 傷害。CD：5 回合。", "en": "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."},
 	"Blast": {"zh": "爆炸", "en": "Blast"},
 	"Blast DESC": {"zh": "由上至下爆破整個棋盤的每一行。CD：1 回合。", "en": "Blast every row from top to bottom. CD: 1 turn."},
+	"Leaf Spear Call": {"zh": "葉矛喚來", "en": "Leaf Spear Call"},
+	"Leaf Spear Call DESC": {"zh": "選擇頂列或底列 1 格，在該格生成朝棋盤內側刺出的木槍寶石；頂列朝下，底列朝上。CD：4 回合。", "en": "Select one top-row or bottom-row cell to create an inward-facing Wood Spear gem there; top row points down, bottom row points up. CD: 4 turns."},
 
 	# ── 被動技能名稱與描述 ──
 	"Drinking": {"zh": "飲水", "en": "Drinking"},

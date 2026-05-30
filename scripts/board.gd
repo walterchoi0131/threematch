@@ -42,10 +42,12 @@ var is_busy: bool:
 			call_deferred("_drain_deferred_clicks")
 var score: int = 0            # 當前得分
 var last_tapped_pos: Vector2i = Vector2i(-1, -1)  # 最後一次點擊的網格位置
+var last_tapped_local_pos: Vector2 = Vector2(-1.0, -1.0)  # 最後一次點擊在棋盤 local 座標的位置
 var skip_collapse: bool = false   # 融合流程中由 main.gd 設定，跳過自動掉落
 var _fuse_skills: Array[Dictionary] = []  # 融合技能清單 { gem_type, threshold, label, trigger_type }
 var is_fusing: bool = false       # 融合動畫進行中（允許並行點擊下一次融合）
 var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點擊的位置（由 _on_gems_blasted 讀取）
+var _concurrent_fuse_tapped_local_pos: Vector2 = Vector2(-1.0, -1.0)  # 並行融合點擊的 local 座標
 
 # ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
 ## logic_grid[x][y] 儲存 Block.Type（int）或：
@@ -78,6 +80,9 @@ var _selection_mode: bool = false           # 是否處於選擇模式
 var _selection_convert_type: Block.Type = Block.Type.RED  # 選擇模式要轉換的目標類型
 var _selection_pattern: String = "cross"    # 選擇模式的預覽形狀："cross" | "fireball"
 var _preview_overlays: Array[ColorRect] = []  # 預覽覆蓋層節點
+var _selection_valid_centers: Array[Vector2i] = []      # 當前模式可點擊的中心格
+var _selection_preview_positions: Array[Vector2i] = []  # 目前 hover 顯示的影響範圍
+var _selection_finished_emitted: bool = false           # 防止確認/取消重複發出
 var _preview_center: Vector2i = Vector2i(-1, -1)  # 目前預覽的中心格
 
 # ── 長按預覽系統（長按高階寶石顯示爆炸範圍）──
@@ -117,6 +122,8 @@ signal upper_gem_clicked()                # 高階寶石被點擊時發出
 signal upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, triggered_upper: Block.UpperType)  # 高階爆炸完成時發出
 signal upper_gem_chain_triggered(upper_type: Block.UpperType)  # 連鎖中特殊高階寶石被觸發時發出
 signal selection_confirmed(positions: Array)  # 選擇模式確認時發出
+signal selection_finished(result: Dictionary) # 選擇模式完成或取消時發出 {positions, cancelled}
+signal selection_preview_changed(positions: Array) # 選擇模式 hover 範圍變更時發出
 signal blast_preview_entered()               # 長按預覽開始時發出
 signal blast_preview_exited()                # 長按預覽結束時發出
 signal gems_refilled(count: int)             # 從天空填充新寶石時發出（count = 本批新生成數量）
@@ -390,6 +397,20 @@ func _is_static_obstacle(block: Block) -> bool:
 	return block != null and block.is_obstacle()
 
 
+func set_last_tapped_input(pos: Vector2i, local_pos: Vector2) -> void:
+	last_tapped_pos = pos
+	last_tapped_local_pos = local_pos
+
+
+func get_concurrent_fuse_tapped_local_pos() -> Vector2:
+	return _concurrent_fuse_tapped_local_pos
+
+
+func clear_concurrent_fuse_tap() -> void:
+	_concurrent_fuse_tapped_pos = Vector2i(-1, -1)
+	_concurrent_fuse_tapped_local_pos = Vector2(-1.0, -1.0)
+
+
 func _shake_block(block: Block) -> void:
 	if block == null:
 		return
@@ -602,7 +623,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_valid(gp) and gp != _preview_center:
 				_update_selection_preview(gp)
 			elif not _is_valid(gp):
-				_clear_preview_overlays()
+				_clear_selection_preview()
 				_preview_center = Vector2i(-1, -1)
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var local_pos := get_local_mouse_position()
@@ -610,12 +631,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_valid(gp):
 				var clicked_block: Block = grid[gp.x][gp.y]
 				var positions := _get_selection_positions(gp)
+				if positions.is_empty():
+					_clear_selection_preview()
+					_preview_center = Vector2i(-1, -1)
+					return
 				if positions.size() <= 1 and _is_static_obstacle(clicked_block):
 					_shake_block(clicked_block)
 					return
-				_clear_preview_overlays()
-				_selection_mode = false
-				_preview_center = Vector2i(-1, -1)
+				_finish_selection(positions, false)
 				selection_confirmed.emit(positions)
 		return
 
@@ -654,7 +677,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var fuse_local_pos := get_local_mouse_position()
 			var fuse_gp := world_to_grid(fuse_local_pos)
 			if _is_valid(fuse_gp):
-				_try_concurrent_fuse(fuse_gp)
+				_try_concurrent_fuse(fuse_gp, fuse_local_pos)
 			return
 		# 逃脫/無敵人關卡沒有敵人攻擊節奏可吸收預輸入；busy 期間直接忽略點擊。
 		if _is_no_enemy_mode():
@@ -671,6 +694,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var gp := world_to_grid(local_pos)
 		if _is_valid(gp) and grid[gp.x][gp.y] != null:
 			var clicked_block: Block = grid[gp.x][gp.y]
+			set_last_tapped_input(gp, local_pos)
 			if clicked_block.is_upper_gem():
 				# 高階寶石 → 開始長按追蹤（延遲點擊）
 				_longpress_pos = gp
@@ -926,7 +950,10 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 		return
 
 	var block: Block = grid[pos.x][pos.y]
-	last_tapped_pos = pos
+	if last_tapped_pos != pos or last_tapped_local_pos.x < 0.0:
+		set_last_tapped_input(pos, grid_to_world(pos))
+	else:
+		last_tapped_pos = pos
 
 	# PLANK / ROCK — 不响應點擊，不消耗回合；播放抖動表示無效
 	if _is_static_obstacle(block):
@@ -1845,12 +1872,12 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 
 
 ## 在指定位置放置高階寶石（若該格為空則先建立寶石，顏色由 gem_type 決定）
-func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = Block.Type.RED) -> void:
+func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = Block.Type.RED) -> bool:
 	if not _is_valid(pos):
-		return
+		return false
 	var block: Block = grid[pos.x][pos.y]
 	if block != null and block.is_obstacle():
-		return
+		return false
 	if block == null:
 		block = _create_block(pos.x, pos.y)
 		block.set_block_type(gem_type)
@@ -1859,6 +1886,7 @@ func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = 
 	block.set_upper_type(ut)
 	# 統一「融合閃光 + 彈跳」動畫
 	play_fuse_animation(block)
+	return true
 
 
 ## 偵錯：將棋盤上隨機 N 顆普通寶石轉為火炸彈（FIREBALL）
@@ -2567,27 +2595,20 @@ func get_line_direction(positions: Array[Vector2i]) -> String:
 	return "vertical"
 
 
-func get_wood_spear_type_for_positions(positions: Array[Vector2i]) -> Block.UpperType:
-	var min_y: int = last_tapped_pos.y
-	var max_y: int = last_tapped_pos.y
-	var has_valid_position: bool = false
-	for p: Vector2i in positions:
-		if not _is_valid(p):
-			continue
-		if not has_valid_position:
-			min_y = p.y
-			max_y = p.y
-			has_valid_position = true
-		else:
-			min_y = mini(min_y, p.y)
-			max_y = maxi(max_y, p.y)
-	if not has_valid_position:
+func get_wood_spear_type_for_last_tap() -> Block.UpperType:
+	if not _is_valid(last_tapped_pos):
 		return Block.UpperType.WOOD_SPEAR_UP
-
-	var midpoint_y: float = (float(min_y) + float(max_y)) * 0.5
-	if float(last_tapped_pos.y) <= midpoint_y:
+	var cell_top_y: float = float(last_tapped_pos.y * CELL_SIZE)
+	var cell_local_y: float = last_tapped_local_pos.y - cell_top_y
+	if last_tapped_local_pos.x < 0.0 or cell_local_y < 0.0 or cell_local_y > float(CELL_SIZE):
+		cell_local_y = float(CELL_SIZE) * 0.5
+	if cell_local_y < float(CELL_SIZE) * 0.5:
 		return Block.UpperType.WOOD_SPEAR_UP
 	return Block.UpperType.WOOD_SPEAR_DOWN
+
+
+func get_wood_spear_type_for_positions(_positions: Array[Vector2i]) -> Block.UpperType:
+	return get_wood_spear_type_for_last_tap()
 
 
 func has_line_match(positions: Array[Vector2i], threshold: int) -> bool:
@@ -2650,17 +2671,38 @@ func _get_cross_positions(center: Vector2i) -> Array[Vector2i]:
 
 ## 進入選擇模式（由 main.gd 呼叫，玩家懸停預覽，點擊確認轉換）
 func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross") -> void:
+	if _selection_mode:
+		cancel_selection_mode()
 	_selection_mode = true
 	_selection_convert_type = convert_type
 	_selection_pattern = pattern
+	_selection_finished_emitted = false
 	_preview_center = Vector2i(-1, -1)
+	_refresh_selection_valid_centers()
 
 
 ## 離開選擇模式（取消）
 func exit_selection_mode() -> void:
+	cancel_selection_mode()
+
+
+func cancel_selection_mode() -> void:
+	if not _selection_mode:
+		return
+	_finish_selection([], true)
+
+
+func _finish_selection(positions: Array, cancelled: bool) -> void:
+	if _selection_finished_emitted:
+		return
+	_selection_finished_emitted = true
 	_selection_mode = false
-	_clear_preview_overlays()
+	_clear_selection_visuals()
 	_preview_center = Vector2i(-1, -1)
+	selection_finished.emit({
+		"positions": positions,
+		"cancelled": cancelled,
+	})
 
 
 ## 更新十字預覽覆蓋層（黃色半透明方塊顯示在預覽位置上方）
@@ -2673,29 +2715,19 @@ func _update_selection_preview(center: Vector2i) -> void:
 	_clear_preview_overlays()
 	_preview_center = center
 	var positions := _get_selection_positions(center)
-	# 單格選擇（生息）：預覽顏色來自被點選寶石的元素
-	var color: Color
-	if _selection_pattern == "single":
-		var hov: Block = grid[center.x][center.y] if _is_valid(center) else null
-		if hov != null:
-			color = Block.COLORS.get(hov.block_type, Color(1.0, 0.92, 0.23))
-		else:
-			color = Color(1.0, 0.92, 0.23)
-	else:
-		color = Block.COLORS.get(_selection_convert_type, Color(1.0, 0.92, 0.23))
+	_set_selection_preview_positions(positions)
+	if positions.is_empty():
+		return
+	var color: Color = _selection_color_for_center(center)
 	for p in positions:
-		var overlay := ColorRect.new()
-		overlay.color = Color(color.r, color.g, color.b, 0.35)
-		overlay.size = Vector2(CELL_SIZE, CELL_SIZE)
-		overlay.position = Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE)
-		overlay.z_index = 10
-		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(overlay)
+		var overlay: ColorRect = _create_selection_preview_overlay(p, color)
 		_preview_overlays.append(overlay)
 
 
 ## 依目前 _selection_pattern 取得選擇範圍位置
 func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
+	if not _is_selection_center_viable(center):
+		return []
 	if _selection_pattern == "fireball":
 		return _get_area_positions(center)
 	if _selection_pattern == "single":
@@ -2703,7 +2735,74 @@ func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
 		if _is_valid(center):
 			result.append(center)
 		return result
+	if _selection_pattern == "single_top_bottom":
+		var result: Array[Vector2i] = []
+		if _is_valid(center) and (center.y == 0 or center.y == rows - 1):
+			result.append(center)
+		return result
 	return _get_cross_positions(center)
+
+
+func _is_selection_center_viable(center: Vector2i) -> bool:
+	if not _is_valid(center):
+		return false
+	match _selection_pattern:
+		"single":
+			var block: Block = grid[center.x][center.y]
+			return block != null and not _is_static_obstacle(block)
+		"single_top_bottom":
+			if center.y != 0 and center.y != rows - 1:
+				return false
+			var block: Block = grid[center.x][center.y]
+			return not _is_static_obstacle(block)
+		_:
+			return true
+
+
+func _selection_color_for_center(center: Vector2i) -> Color:
+	if _selection_pattern == "single" and _is_valid(center):
+		var block: Block = grid[center.x][center.y]
+		if block != null:
+			return Block.COLORS.get(block.block_type, Color(1.0, 0.92, 0.23))
+	return Block.COLORS.get(_selection_convert_type, Color(1.0, 0.92, 0.23))
+
+
+func _refresh_selection_valid_centers() -> void:
+	_selection_valid_centers.clear()
+	for x in columns:
+		for y in rows:
+			var center: Vector2i = Vector2i(x, y)
+			if _is_selection_center_viable(center):
+				_selection_valid_centers.append(center)
+
+
+func get_selection_valid_centers() -> Array[Vector2i]:
+	return _selection_valid_centers.duplicate()
+
+
+func get_selection_preview_positions() -> Array[Vector2i]:
+	return _selection_preview_positions.duplicate()
+
+
+func _set_selection_preview_positions(positions: Array[Vector2i]) -> void:
+	_selection_preview_positions = positions.duplicate()
+	selection_preview_changed.emit(_selection_preview_positions)
+
+
+func _create_selection_preview_overlay(pos: Vector2i, color: Color) -> ColorRect:
+	var overlay := ColorRect.new()
+	overlay.color = Color(color.r, color.g, color.b, 0.30)
+	overlay.size = Vector2(CELL_SIZE, CELL_SIZE)
+	overlay.position = Vector2(pos.x * CELL_SIZE, pos.y * CELL_SIZE)
+	overlay.z_index = 12
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+	return overlay
+
+
+func _clear_selection_visuals() -> void:
+	_clear_selection_preview()
+	_selection_valid_centers.clear()
 
 
 ## 清除所有預覽覆蓋層
@@ -2712,6 +2811,12 @@ func _clear_preview_overlays() -> void:
 		if is_instance_valid(overlay):
 			overlay.queue_free()
 	_preview_overlays.clear()
+
+
+func _clear_selection_preview() -> void:
+	_clear_preview_overlays()
+	var empty_positions: Array[Vector2i] = []
+	_set_selection_preview_positions(empty_positions)
 
 
 # ── 融合提示系統 ─────────────────────────────────────────────────────
@@ -2974,7 +3079,7 @@ func _would_trigger_fuse(gem_type: Block.Type, group: Array[Vector2i]) -> bool:
 
 ## 嘗試在融合動畫期間立即觸發並行融合。
 ## 驗證：1) 模擬掉落後棋盤仍可行 2) 真實棋盤也可行 → 立即消除並發出信號。
-func _try_concurrent_fuse(click_pos: Vector2i) -> void:
+func _try_concurrent_fuse(click_pos: Vector2i, local_pos: Vector2) -> void:
 	var block: Block = grid[click_pos.x][click_pos.y]
 	if block == null or block.is_upper_gem() or block.is_obstacle():
 		return
@@ -3000,6 +3105,7 @@ func _try_concurrent_fuse(click_pos: Vector2i) -> void:
 
 	# 3. 立即消除（skip_collapse 已為 true）並發出 gems_blasted 信號
 	_concurrent_fuse_tapped_pos = click_pos
+	_concurrent_fuse_tapped_local_pos = local_pos
 	_destroy_blocks(real_matches)
 
 
