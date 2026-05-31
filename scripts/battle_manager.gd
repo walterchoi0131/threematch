@@ -15,7 +15,7 @@ signal enemy_attacked(enemy: Enemy, damage: int)
 signal enemy_stone_magic_cast(enemy: Enemy)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
 signal round_spawned(round_idx: int)  ## 一波敵人已生成完畢
-signal loot_dropped(enemy_data: EnemyData, results: Array)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
+signal loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
 signal turn_gem_blasts_changed()  ## 本回合寶石計數（含 pending_skill_blasts）變動
 # ── references set by Main ────────────────────────────────────────────
 var enemy_container: HBoxContainer
@@ -26,6 +26,8 @@ var characters: Array[CharacterData] = []
 var current_round: int = 0
 var stage_rounds: Array[Array] = []
 var stage_rounds_init_cd: Array[Array] = []
+var stage_rounds_enemy_levels: Array[Array] = []
+var stage_rounds_main_bosses: Array[Array] = []
 var stage_mode: int = 0  # StageData.Mode（0 = NORMAL, 1 = ESCAPE）
 
 var active_enemies: Array[Enemy] = []
@@ -62,6 +64,8 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	characters = chars
 	stage_rounds = stage.rounds
 	stage_rounds_init_cd = stage.rounds_init_cd
+	stage_rounds_enemy_levels = stage.rounds_enemy_levels
+	stage_rounds_main_bosses = stage.rounds_main_bosses
 	stage_mode = stage.mode
 
 	# 玩家總血量 = 所有角色的最大 HP 加總
@@ -112,6 +116,14 @@ func _spawn_round(round_idx: int) -> void:
 	var init_cd_list: Array = []
 	if round_idx < stage_rounds_init_cd.size():
 		init_cd_list = stage_rounds_init_cd[round_idx]
+	var level_list: Array = []
+	if round_idx < stage_rounds_enemy_levels.size():
+		level_list = stage_rounds_enemy_levels[round_idx]
+	var boss_list: Array = []
+	var has_spawn_boss_list: bool = false
+	if round_idx < stage_rounds_main_bosses.size() and stage_rounds_main_bosses[round_idx] is Array:
+		boss_list = stage_rounds_main_bosses[round_idx]
+		has_spawn_boss_list = true
 	for i in enemy_list.size():
 		var ed: EnemyData = enemy_list[i]
 		var enemy: Enemy = EnemyScene.instantiate()
@@ -119,7 +131,18 @@ func _spawn_round(round_idx: int) -> void:
 		var init_cd: int = -1
 		if i < init_cd_list.size():
 			init_cd = int(init_cd_list[i])
-		enemy.setup(ed, init_cd)
+		var spawn_level: int = ed.enemy_level
+		if i < level_list.size():
+			spawn_level = int(level_list[i])
+		spawn_level = clampi(spawn_level, 1, 99)
+		var estimated_team_hp: int = estimate_team_max_hp_for_level(spawn_level)
+		var estimated_max_hp: int = get_enemy_hp_for_level(ed, spawn_level)
+		var main_boss_spawn: bool = false
+		if has_spawn_boss_list:
+			main_boss_spawn = i < boss_list.size() and bool(boss_list[i])
+		else:
+			main_boss_spawn = ed.is_main_boss
+		enemy.setup(ed, init_cd, spawn_level, estimated_team_hp, estimated_max_hp, main_boss_spawn)
 		enemy.pressed.connect(_on_enemy_pressed)
 		enemy.died.connect(_on_enemy_died)
 		active_enemies.append(enemy)
@@ -133,14 +156,14 @@ func _spawn_round(round_idx: int) -> void:
 
 
 ## 取得本波的「主要 Boss」敵人節點。
-## 規則：1) 優先返回 data.is_main_boss == true 的敵人；
+## 規則：1) 優先返回關卡 spawn 標記的敵人；
 ## 2) 若該波是最後一波且無人標記，回傳該波最後生成的敵人；
 ## 3) 否則回傳 null。
 func get_main_boss_for_round(round_idx: int) -> Enemy:
 	for e: Enemy in active_enemies:
 		if not is_instance_valid(e):
 			continue
-		if e.data != null and e.data.is_main_boss:
+		if e.is_main_boss_spawn:
 			return e
 	if round_idx == stage_rounds.size() - 1 and active_enemies.size() > 0:
 		# 最後一波 fallback：最後生成的（陣列尾端）視為主要 Boss
@@ -388,24 +411,60 @@ func do_enemy_phase() -> bool:
 	for i in attacking.size():
 		var enemy: Enemy = attacking[i]
 		var action_type: int = enemy.get_current_action()
-		# 重置下一次攻擊 CD（同步邏輯與視覺）
-		enemy.turns_until_attack = enemy.data.attack_interval
-		logic_enemy_cd[enemy] = enemy.data.attack_interval
-		enemy.flash_action(action_type)
-		_enemy_act(enemy, action_type)
+		var action_percent: int = enemy.get_current_attack_percent()
+		# 重置下一次行動 CD（同步邏輯與視覺），REST 只聚合為 CD 不單獨播放
+		var next_cd: int = enemy.advance_to_next_active_action()
+		enemy.turns_until_attack = next_cd
+		logic_enemy_cd[enemy] = next_cd
+		enemy.flash_action(action_type, action_percent)
+		_enemy_act(enemy, action_type, action_percent)
 		if i < attacking.size() - 1:
 			await get_tree().create_timer(0.2).timeout
 	return true
 
 
 ## 敎人執行目前 pattern 行動
-func _enemy_act(enemy: Enemy, action_type: int) -> void:
-	enemy.advance_action_pattern()
+func _enemy_act(enemy: Enemy, action_type: int, action_percent: int) -> void:
 	match action_type:
 		EnemyData.ActionType.STONE_MAGIC:
 			enemy_stone_magic_cast.emit(enemy)
+		EnemyData.ActionType.REST:
+			pass
 		_:
-			enemy_attacked.emit(enemy, enemy.data.get_attack_damage())
+			enemy_attacked.emit(enemy, get_attack_percent_damage_for_level(enemy.spawn_level, action_percent))
+
+
+func estimate_team_max_hp_for_level(level_value: int) -> int:
+	var total_hp: int = 0
+	var clamped_level: int = clampi(level_value, CharacterData.STAT_LEVEL_MIN, CharacterData.STAT_LEVEL_MAX)
+	for c: CharacterData in characters:
+		if c == null:
+			continue
+		total_hp += c.get_max_hp_at_level(clamped_level)
+	return total_hp
+
+
+func estimate_team_attack_power_for_level(level_value: int) -> int:
+	var total_attack: int = 0
+	var clamped_level: int = clampi(level_value, CharacterData.STAT_LEVEL_MIN, CharacterData.STAT_LEVEL_MAX)
+	for c: CharacterData in characters:
+		if c == null:
+			continue
+		total_attack += c.get_atk_at_level(clamped_level)
+	return total_attack
+
+
+func get_attack_percent_damage_for_level(level_value: int, attack_percent: int) -> int:
+	var estimated_hp: int = estimate_team_max_hp_for_level(level_value)
+	var clamped_percent: int = EnemyData.clamp_attack_percent(attack_percent)
+	return maxi(1, int(round(float(estimated_hp) * float(clamped_percent) / 100.0)))
+
+
+func get_enemy_hp_for_level(enemy_data: EnemyData, level_value: int) -> int:
+	if enemy_data == null:
+		return 1
+	var estimated_attack_power: int = estimate_team_attack_power_for_level(level_value)
+	return enemy_data.get_max_hp_for_attack_power(estimated_attack_power)
 
 
 ## 對玩家造成傷害
@@ -513,7 +572,7 @@ func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
 		if not result.is_empty():
 			loot_results.append(result)
 	if not loot_results.is_empty():
-		loot_dropped.emit(dead_enemy.data, loot_results)
+		loot_dropped.emit(dead_enemy.data, loot_results, dead_enemy.spawn_level)
 	active_enemies.erase(dead_enemy)
 	logic_enemy_hp.erase(dead_enemy)
 	if targeted_enemy == dead_enemy:

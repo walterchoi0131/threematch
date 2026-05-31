@@ -206,6 +206,8 @@ var _stage_editor_enemy_picker_grid: GridContainer = null
 var _stage_editor_enemy_picker_round_index: int = -1
 var _stage_editor_rounds: Array[Array] = []
 var _stage_editor_rounds_init_cd: Array[Array] = []
+var _stage_editor_rounds_enemy_levels: Array[Array] = []
+var _stage_editor_rounds_main_bosses: Array[Array] = []
 var _stage_editor_available_enemies: Array[Dictionary] = []
 
 
@@ -1822,6 +1824,8 @@ func _stage_editor_set_control_rect(control: Control, rect: Rect2) -> void:
 func _stage_editor_load_round_state() -> void:
 	_stage_editor_rounds.clear()
 	_stage_editor_rounds_init_cd.clear()
+	_stage_editor_rounds_enemy_levels.clear()
+	_stage_editor_rounds_main_bosses.clear()
 	if current_stage == null:
 		return
 	for round_index in current_stage.rounds.size():
@@ -1842,6 +1846,34 @@ func _stage_editor_load_round_state() -> void:
 				cd_value = maxi(0, int(source_cd[enemy_index]))
 			cd_copy.append(cd_value)
 		_stage_editor_rounds_init_cd.append(cd_copy)
+
+		var level_copy: Array = []
+		var source_levels: Array = []
+		if round_index < current_stage.rounds_enemy_levels.size() and current_stage.rounds_enemy_levels[round_index] is Array:
+			source_levels = current_stage.rounds_enemy_levels[round_index]
+		for enemy_index in round_copy.size():
+			var enemy_data: EnemyData = round_copy[enemy_index]
+			var level_value: int = enemy_data.enemy_level
+			if enemy_index < source_levels.size():
+				level_value = int(source_levels[enemy_index])
+			level_copy.append(clampi(level_value, 1, 99))
+		_stage_editor_rounds_enemy_levels.append(level_copy)
+
+		var boss_copy: Array = []
+		var source_bosses: Array = []
+		var has_source_bosses: bool = false
+		if round_index < current_stage.rounds_main_bosses.size() and current_stage.rounds_main_bosses[round_index] is Array:
+			source_bosses = current_stage.rounds_main_bosses[round_index]
+			has_source_bosses = true
+		for enemy_index in round_copy.size():
+			var enemy_data: EnemyData = round_copy[enemy_index]
+			var boss_value: bool = false
+			if has_source_bosses:
+				boss_value = enemy_index < source_bosses.size() and bool(source_bosses[enemy_index])
+			else:
+				boss_value = enemy_data.is_main_boss
+			boss_copy.append(boss_value)
+		_stage_editor_rounds_main_bosses.append(boss_copy)
 	_stage_editor_normalize_cd_lists()
 	_stage_editor_clamp_current_round_index()
 
@@ -1851,6 +1883,14 @@ func _stage_editor_normalize_cd_lists() -> void:
 		_stage_editor_rounds_init_cd.append([])
 	while _stage_editor_rounds_init_cd.size() > _stage_editor_rounds.size():
 		_stage_editor_rounds_init_cd.remove_at(_stage_editor_rounds_init_cd.size() - 1)
+	while _stage_editor_rounds_enemy_levels.size() < _stage_editor_rounds.size():
+		_stage_editor_rounds_enemy_levels.append([])
+	while _stage_editor_rounds_enemy_levels.size() > _stage_editor_rounds.size():
+		_stage_editor_rounds_enemy_levels.remove_at(_stage_editor_rounds_enemy_levels.size() - 1)
+	while _stage_editor_rounds_main_bosses.size() < _stage_editor_rounds.size():
+		_stage_editor_rounds_main_bosses.append([])
+	while _stage_editor_rounds_main_bosses.size() > _stage_editor_rounds.size():
+		_stage_editor_rounds_main_bosses.remove_at(_stage_editor_rounds_main_bosses.size() - 1)
 	for round_index in _stage_editor_rounds.size():
 		var round_list: Array = _stage_editor_rounds[round_index]
 		var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
@@ -1859,6 +1899,23 @@ func _stage_editor_normalize_cd_lists() -> void:
 		while cd_list.size() > round_list.size():
 			cd_list.remove_at(cd_list.size() - 1)
 		_stage_editor_rounds_init_cd[round_index] = cd_list
+		var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+		while level_list.size() < round_list.size():
+			var enemy_data: EnemyData = round_list[level_list.size()]
+			level_list.append(clampi(enemy_data.enemy_level, 1, 99))
+		while level_list.size() > round_list.size():
+			level_list.remove_at(level_list.size() - 1)
+		for enemy_index in level_list.size():
+			level_list[enemy_index] = clampi(int(level_list[enemy_index]), 1, 99)
+		_stage_editor_rounds_enemy_levels[round_index] = level_list
+		var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
+		while boss_list.size() < round_list.size():
+			boss_list.append(false)
+		while boss_list.size() > round_list.size():
+			boss_list.remove_at(boss_list.size() - 1)
+		for enemy_index in boss_list.size():
+			boss_list[enemy_index] = bool(boss_list[enemy_index])
+		_stage_editor_rounds_main_bosses[round_index] = boss_list
 
 
 func _stage_editor_clamp_current_round_index() -> void:
@@ -1994,8 +2051,12 @@ func _make_stage_editor_add_enemy_slot(round_index: int) -> Control:
 func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> Control:
 	var enemy_list: Array = _stage_editor_rounds[round_index]
 	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
 	var enemy_data: EnemyData = enemy_list[enemy_index]
 	var cd_value: int = int(cd_list[enemy_index])
+	var level_value: int = int(level_list[enemy_index])
+	var is_boss_spawn: bool = bool(boss_list[enemy_index])
 
 	var card := ColorRect.new()
 	card.color = Color(0.06, 0.07, 0.10, 0.9)
@@ -2015,11 +2076,24 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	name_label.add_theme_color_override("font_color", Color.WHITE)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	card.add_child(name_label)
-	_stage_editor_set_control_rect(name_label, Rect2(50.0, 4.0, 38.0, 42.0))
+	_stage_editor_set_control_rect(name_label, Rect2(50.0, 4.0, 38.0, 24.0))
 
 	var remove_button: Button = _make_stage_editor_small_button("X", _on_stage_editor_remove_enemy_pressed.bind(round_index, enemy_index), Vector2(22, 22))
 	card.add_child(remove_button)
 	_stage_editor_set_control_rect(remove_button, Rect2(90.0, 4.0, 22.0, 22.0))
+
+	var level_label := Label.new()
+	level_label.text = "Lv%d" % level_value
+	level_label.add_theme_font_size_override("font_size", 10)
+	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(level_label)
+	_stage_editor_set_control_rect(level_label, Rect2(50.0, 28.0, 38.0, 20.0))
+
+	var boss_button: Button = _make_stage_editor_small_button("B", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(22, 22))
+	boss_button.tooltip_text = "Main boss spawn"
+	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
+	card.add_child(boss_button)
+	_stage_editor_set_control_rect(boss_button, Rect2(90.0, 28.0, 22.0, 22.0))
 
 	var minus_button: Button = _make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(22, 22))
 	card.add_child(minus_button)
@@ -2198,7 +2272,11 @@ func _make_stage_editor_round_section(round_index: int) -> Control:
 func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control:
 	var enemy_list: Array = _stage_editor_rounds[round_index]
 	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
 	var enemy_data: EnemyData = enemy_list[enemy_index]
+	var level_value: int = int(level_list[enemy_index])
+	var is_boss_spawn: bool = bool(boss_list[enemy_index])
 	var row_panel := PanelContainer.new()
 	row_panel.custom_minimum_size = Vector2(0, 86)
 	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2261,6 +2339,18 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	control_row.add_child(_make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(34, 30)))
 	control_row.add_child(_make_stage_editor_small_button("+", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, 1), Vector2(34, 30)))
 	control_row.add_child(_make_stage_editor_small_button("Auto", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(54, 30)))
+	var level_label := Label.new()
+	level_label.text = "Lv %d" % level_value
+	level_label.custom_minimum_size = Vector2(52, 0)
+	level_label.add_theme_font_size_override("font_size", 11)
+	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	control_row.add_child(level_label)
+	control_row.add_child(_make_stage_editor_small_button("-", _on_stage_editor_level_delta_pressed.bind(round_index, enemy_index, -1), Vector2(34, 30)))
+	control_row.add_child(_make_stage_editor_small_button("+", _on_stage_editor_level_delta_pressed.bind(round_index, enemy_index, 1), Vector2(34, 30)))
+	var boss_button: Button = _make_stage_editor_small_button("Boss", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(58, 30))
+	boss_button.tooltip_text = "Use this spawn as the main boss"
+	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
+	control_row.add_child(boss_button)
 	return row_panel
 
 
@@ -2308,6 +2398,8 @@ func _on_stage_editor_add_round_from_area_pressed() -> void:
 	var insert_index: int = _stage_editor_current_round_index + 1 if not _stage_editor_rounds.is_empty() else 0
 	_stage_editor_rounds.insert(insert_index, [])
 	_stage_editor_rounds_init_cd.insert(insert_index, [])
+	_stage_editor_rounds_enemy_levels.insert(insert_index, [])
+	_stage_editor_rounds_main_bosses.insert(insert_index, [])
 	_stage_editor_current_round_index = insert_index
 	_refresh_stage_editor_enemy_area()
 	_set_stage_editor_status("Round added")
@@ -2318,6 +2410,8 @@ func _on_stage_editor_remove_current_round_pressed() -> void:
 		return
 	_stage_editor_rounds.remove_at(_stage_editor_current_round_index)
 	_stage_editor_rounds_init_cd.remove_at(_stage_editor_current_round_index)
+	_stage_editor_rounds_enemy_levels.remove_at(_stage_editor_current_round_index)
+	_stage_editor_rounds_main_bosses.remove_at(_stage_editor_current_round_index)
 	_stage_editor_clamp_current_round_index()
 	_refresh_stage_editor_enemy_area()
 	_set_stage_editor_status("Round removed")
@@ -2334,6 +2428,8 @@ func _on_stage_editor_rounds_close_pressed() -> void:
 func _on_stage_editor_add_round_pressed() -> void:
 	_stage_editor_rounds.append([])
 	_stage_editor_rounds_init_cd.append([])
+	_stage_editor_rounds_enemy_levels.append([])
+	_stage_editor_rounds_main_bosses.append([])
 	_stage_editor_current_round_index = _stage_editor_rounds.size() - 1
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
@@ -2346,6 +2442,8 @@ func _on_stage_editor_remove_round_pressed(round_index: int) -> void:
 		return
 	_stage_editor_rounds.remove_at(round_index)
 	_stage_editor_rounds_init_cd.remove_at(round_index)
+	_stage_editor_rounds_enemy_levels.remove_at(round_index)
+	_stage_editor_rounds_main_bosses.remove_at(round_index)
 	_stage_editor_clamp_current_round_index()
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
@@ -2371,10 +2469,16 @@ func _on_stage_editor_remove_enemy_pressed(round_index: int, enemy_index: int) -
 		return
 	var enemy_list: Array = _stage_editor_rounds[round_index]
 	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
 	enemy_list.remove_at(enemy_index)
 	cd_list.remove_at(enemy_index)
+	level_list.remove_at(enemy_index)
+	boss_list.remove_at(enemy_index)
 	_stage_editor_rounds[round_index] = enemy_list
 	_stage_editor_rounds_init_cd[round_index] = cd_list
+	_stage_editor_rounds_enemy_levels[round_index] = level_list
+	_stage_editor_rounds_main_bosses[round_index] = boss_list
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
 	_set_stage_editor_status("Enemy removed")
@@ -2398,6 +2502,31 @@ func _on_stage_editor_cd_auto_pressed(round_index: int, enemy_index: int) -> voi
 	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
 	cd_list[enemy_index] = 0
 	_stage_editor_rounds_init_cd[round_index] = cd_list
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_level_delta_pressed(round_index: int, enemy_index: int, delta: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	level_list[enemy_index] = clampi(int(level_list[enemy_index]) + delta, 1, 99)
+	_stage_editor_rounds_enemy_levels[round_index] = level_list
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_boss_toggle_pressed(round_index: int, enemy_index: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
+	var next_value: bool = not bool(boss_list[enemy_index])
+	for i in boss_list.size():
+		boss_list[i] = false
+	boss_list[enemy_index] = next_value
+	_stage_editor_rounds_main_bosses[round_index] = boss_list
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
@@ -2463,24 +2592,34 @@ func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
 
 func _on_stage_editor_enemy_entry_picked(entry: Dictionary) -> void:
 	var enemy_data: EnemyData = entry.get("data", null) as EnemyData
+	var spawn_level: int = enemy_data.enemy_level if enemy_data != null else 1
 	if enemy_data == null and entry.has("manifest_entry"):
-		enemy_data = _stage_editor_make_manifest_enemy(entry["manifest_entry"])
+		var manifest_entry: Dictionary = entry["manifest_entry"]
+		spawn_level = int(manifest_entry.get("enemy_level", 1))
+		enemy_data = _stage_editor_make_manifest_enemy(manifest_entry)
 	if enemy_data == null:
 		_set_stage_editor_status("Enemy load failed", false)
 		return
-	_on_stage_editor_enemy_picked(enemy_data)
+	_on_stage_editor_enemy_picked(enemy_data, spawn_level)
 
 
-func _on_stage_editor_enemy_picked(enemy_data: EnemyData) -> void:
+func _on_stage_editor_enemy_picked(enemy_data: EnemyData, spawn_level: int = -1) -> void:
 	var round_index: int = _stage_editor_enemy_picker_round_index
 	if round_index < 0 or round_index >= _stage_editor_rounds.size():
 		return
 	var enemy_list: Array = _stage_editor_rounds[round_index]
 	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
 	enemy_list.append(enemy_data)
 	cd_list.append(0)
+	var level_value: int = spawn_level if spawn_level > 0 else enemy_data.enemy_level
+	level_list.append(clampi(level_value, 1, 99))
+	boss_list.append(false)
 	_stage_editor_rounds[round_index] = enemy_list
 	_stage_editor_rounds_init_cd[round_index] = cd_list
+	_stage_editor_rounds_enemy_levels[round_index] = level_list
+	_stage_editor_rounds_main_bosses[round_index] = boss_list
 	if _stage_editor_enemy_picker_panel != null:
 		_stage_editor_enemy_picker_panel.visible = false
 	_stage_editor_enemy_picker_round_index = -1
@@ -2569,11 +2708,7 @@ func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
 	if display_name.is_empty():
 		display_name = String(entry.get("provisional_id", image_path.get_file())).strip_edges()
 	enemy_data.enemy_name = display_name
-	enemy_data.enemy_level = int(entry.get("enemy_level", 1))
-	enemy_data.max_hp = int(entry.get("max_hp", 50))
-	enemy_data.attack_damage = int(entry.get("attack_damage", 6))
-	enemy_data.attack_coeff = float(entry.get("attack_coeff", 1.0))
-	enemy_data.attack_interval = int(entry.get("attack_interval", 2))
+	enemy_data.max_hp = EnemyData.clamp_hp_percent(int(entry.get("max_hp", EnemyData.HP_PERCENT_MIN)))
 	enemy_data.element = int(entry.get("element", Block.Type.DARK)) as Block.Type
 	if texture_resource is Texture2D:
 		enemy_data.portrait_texture = texture_resource as Texture2D
@@ -2585,8 +2720,26 @@ func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
 	for action_variant in action_values:
 		var action_value: EnemyData.ActionType = int(action_variant) as EnemyData.ActionType
 		action_pattern.append(action_value)
-	if not action_pattern.is_empty():
-		enemy_data.action_pattern = action_pattern
+	if action_pattern.is_empty():
+		action_pattern.append(EnemyData.ActionType.ATTACK_15)
+	var action_percent_values: Array = entry.get("action_percents", [])
+	var action_percents: Array[int] = []
+	for action_index in action_pattern.size():
+		var percent_value: int = EnemyData.ATTACK_PERCENT_DEFAULT
+		if action_index < action_percent_values.size():
+			percent_value = int(action_percent_values[action_index])
+		action_percents.append(EnemyData.clamp_attack_percent(percent_value))
+	var rest_count: int = maxi(0, int(entry.get("attack_interval", 0)))
+	var timed_pattern: Array[EnemyData.ActionType] = []
+	var timed_percents: Array[int] = []
+	for _rest_index in rest_count:
+		timed_pattern.append(EnemyData.ActionType.REST)
+		timed_percents.append(EnemyData.ATTACK_PERCENT_DEFAULT)
+	for action_index in action_pattern.size():
+		timed_pattern.append(action_pattern[action_index])
+		timed_percents.append(action_percents[action_index])
+	enemy_data.action_pattern = timed_pattern
+	enemy_data.action_percents = timed_percents
 	var loot := LootItem.new()
 	loot.amount_min = int(entry.get("loot_min", 1))
 	loot.amount_max = int(entry.get("loot_max", 1))
@@ -2681,6 +2834,8 @@ func _on_stage_editor_save_pressed() -> void:
 	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
 	current_stage.rounds = _stage_editor_get_rounds_snapshot()
 	current_stage.rounds_init_cd = _stage_editor_get_round_cds_snapshot()
+	current_stage.rounds_enemy_levels = _stage_editor_get_round_levels_snapshot()
+	current_stage.rounds_main_bosses = _stage_editor_get_round_bosses_snapshot()
 	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
 	if err == OK:
 		var file_name: String = current_stage.resource_path.get_file()
@@ -2727,6 +2882,30 @@ func _stage_editor_get_round_cds_snapshot() -> Array[Array]:
 		for cd_variant in source_cd:
 			cd_copy.append(maxi(0, int(cd_variant)))
 		snapshot.append(cd_copy)
+	return snapshot
+
+
+func _stage_editor_get_round_levels_snapshot() -> Array[Array]:
+	_stage_editor_normalize_cd_lists()
+	var snapshot: Array[Array] = []
+	for round_index in _stage_editor_rounds_enemy_levels.size():
+		var source_levels: Array = _stage_editor_rounds_enemy_levels[round_index]
+		var level_copy: Array = []
+		for level_variant in source_levels:
+			level_copy.append(clampi(int(level_variant), 1, 99))
+		snapshot.append(level_copy)
+	return snapshot
+
+
+func _stage_editor_get_round_bosses_snapshot() -> Array[Array]:
+	_stage_editor_normalize_cd_lists()
+	var snapshot: Array[Array] = []
+	for round_index in _stage_editor_rounds_main_bosses.size():
+		var source_bosses: Array = _stage_editor_rounds_main_bosses[round_index]
+		var boss_copy: Array = []
+		for boss_variant in source_bosses:
+			boss_copy.append(bool(boss_variant))
+		snapshot.append(boss_copy)
 	return snapshot
 
 
@@ -5090,9 +5269,9 @@ func _show_boss_intro() -> void:
 
 
 ## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
-func _on_loot_dropped(enemy_data: EnemyData, results: Array) -> void:
+func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int) -> void:
 	# 累計本場經驗值
-	_battle_exp += enemy_data.get_exp_drop()
+	_battle_exp += enemy_data.get_exp_drop_for_level(enemy_level)
 
 	# 找出死亡的敵人節點以取得浮動文字位置（若找不到就用螢幕中央）
 	var popup_pos := Vector2(get_viewport().get_visible_rect().size / 2)
@@ -5786,7 +5965,7 @@ func _bind_boss_bar(boss: Enemy) -> void:
 	_boss_bar_fill.texture = Enemy.make_hp_gradient(elem_color)
 	_boss_bar_bg.color = Color(0, 0, 0, 1)
 	_boss_bar_fill.scale.x = 1.0
-	_boss_bar_label.text = "%d / %d" % [boss.current_hp, boss.data.max_hp]
+	_boss_bar_label.text = "%d / %d" % [boss.current_hp, boss.max_hp]
 	# 預設隗入狀態：隱藏並安置在頂部之上，由 _reveal_boss_bar() 負責漸入
 	_boss_bar.modulate.a = 0.0
 	_boss_bar.offset_top = 4.0 - BOSS_BAR_HEIGHT - 16.0

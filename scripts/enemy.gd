@@ -11,9 +11,13 @@ const MAIN_BOSS_DISPLAY_SCALE := 2.0
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
+var max_hp: int = 1               # 本次生成後計算出的實際最大血量
 var is_targeted: bool = false     # 是否被玩家選中為目標
 var turns_until_attack: int = 0   # 距離下次攻擊的剩餘回合數
 var action_pattern_index: int = 0 # 下一次行動在 action_pattern 中的位置
+var spawn_level: int = 1          # 關卡中此敵人的實際等級
+var estimated_team_hp_for_attack: int = 1     # 由 BattleManager 依 spawn_level 估算，用於 Attack X%
+var is_main_boss_spawn: bool = false
 var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻怪的過殺機制）
 
 @onready var intent_label: Label = $VBox/IntentRow/IntentBG/IntentLabel       # 攻擊意圖標籤
@@ -29,21 +33,40 @@ var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
 
 
 ## 初始化敎人資料
-func setup(enemy_data: EnemyData, init_cd: int = -1) -> void:
+func setup(enemy_data: EnemyData, init_cd: int = -1, level_value: int = 1, estimated_team_hp: int = 1, estimated_max_hp: int = -1, main_boss_spawn: bool = false) -> void:
 	data = enemy_data
-	current_hp = data.max_hp
-	turns_until_attack = init_cd if init_cd > 0 else data.attack_interval
+	spawn_level = clampi(level_value, 1, 99)
+	estimated_team_hp_for_attack = maxi(1, estimated_team_hp)
+	max_hp = maxi(1, estimated_max_hp if estimated_max_hp > 0 else data.get_max_hp_for_attack_power(1))
+	is_main_boss_spawn = main_boss_spawn
+	current_hp = max_hp
 	action_pattern_index = 0
+	turns_until_attack = init_cd if init_cd > 0 else _initial_action_cd()
 	refresh_ui()
 	_style_hp_label()
-	hp_changed.emit(current_hp, data.max_hp)
+	hp_changed.emit(current_hp, max_hp)
 
 
 ## 取得目前輪到的行動類型
 func get_current_action() -> int:
-	if data == null:
-		return EnemyData.ActionType.ATTACK
+	if data == null or not data.has_active_action():
+		return EnemyData.ActionType.ATTACK_15
 	return int(data.get_action_at(action_pattern_index))
+
+
+func get_current_attack_percent() -> int:
+	if data == null or not data.has_active_action():
+		return EnemyData.ATTACK_PERCENT_DEFAULT
+	return data.get_action_percent_at(action_pattern_index)
+
+
+func get_attack_damage_for_percent(attack_percent: int) -> int:
+	var clamped_percent: int = EnemyData.clamp_attack_percent(attack_percent)
+	return maxi(1, int(round(float(estimated_team_hp_for_attack) * float(clamped_percent) / 100.0)))
+
+
+func get_current_attack_damage() -> int:
+	return get_attack_damage_for_percent(get_current_attack_percent())
 
 
 ## 推進到下一個行動
@@ -52,6 +75,54 @@ func advance_action_pattern() -> void:
 		action_pattern_index = 0
 		return
 	action_pattern_index = data.get_next_action_index(action_pattern_index)
+
+
+func advance_to_next_active_action() -> int:
+	if data == null or not data.has_active_action():
+		action_pattern_index = 0
+		return 0
+	if _uses_legacy_interval():
+		action_pattern_index = 0
+		return data.attack_interval
+	var next_index: int = data.get_next_action_index(action_pattern_index)
+	return _seek_next_active_action_from(next_index)
+
+
+func _initial_action_cd() -> int:
+	if _uses_legacy_interval():
+		action_pattern_index = 0
+		return data.attack_interval
+	return _seek_next_active_action_from(0)
+
+
+func _uses_legacy_interval() -> bool:
+	if data == null:
+		return false
+	if data.attack_interval <= 0:
+		return false
+	if data.action_pattern.size() != 1:
+		return false
+	return int(data.action_pattern[0]) == EnemyData.ActionType.ATTACK_15
+
+
+func _seek_next_active_action_from(start_index: int) -> int:
+	if data == null or action_pattern_index < 0:
+		action_pattern_index = 0
+		return 0
+	if data.action_pattern.is_empty() or not data.has_active_action():
+		action_pattern_index = 0
+		return 0
+	var index: int = posmod(start_index, data.action_pattern.size())
+	var rest_count: int = 0
+	for _step in data.action_pattern.size():
+		var action_type: int = int(data.get_action_at(index))
+		if not data.is_rest_action(action_type):
+			action_pattern_index = index
+			return rest_count
+		rest_count += 1
+		index = data.get_next_action_index(index)
+	action_pattern_index = 0
+	return 0
 
 
 ## 隱藏／顯示敵人腳下的 HP 條（當該敵人由頂部 Boss 條顯示時）
@@ -103,8 +174,10 @@ func _refresh_intent() -> void:
 	match action_type:
 		EnemyData.ActionType.STONE_MAGIC:
 			intent_label.text = "ROCK  CD %d" % [turns_until_attack]
+		EnemyData.ActionType.REST:
+			intent_label.text = "REST  CD %d" % [turns_until_attack]
 		_:
-			intent_label.text = "⚔ %d  CD %d" % [data.get_attack_damage(), turns_until_attack]
+			intent_label.text = "⚔ %d  CD %d" % [get_current_attack_damage(), turns_until_attack]
 	intent_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 	intent_label.add_theme_constant_override("shadow_offset_x", 2)
 	intent_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -126,21 +199,25 @@ func update_cd(turns_left: int) -> void:
 
 ## 攻擊閃光提示
 func flash_attack() -> void:
-	flash_action(EnemyData.ActionType.ATTACK)
+	flash_action(EnemyData.ActionType.ATTACK_15)
 
 
 ## 行動閃光提示
-func flash_action(action_type: int) -> void:
+func flash_action(action_type: int, attack_percent: int = -1) -> void:
 	if not intent_label:
 		return
 	match action_type:
 		EnemyData.ActionType.STONE_MAGIC:
 			intent_label.text = "ROCK!"
 			intent_label.modulate = Color(0.65, 0.65, 0.7)
+		EnemyData.ActionType.REST:
+			intent_label.text = "REST"
+			intent_label.modulate = Color(0.7, 0.7, 0.78)
 		_:
-			intent_label.text = "⚔ %d ATTACK!" % [data.get_attack_damage()]
+			var percent: int = get_current_attack_percent() if attack_percent <= 0 else attack_percent
+			intent_label.text = "⚔ %d ATTACK!" % [get_attack_damage_for_percent(percent)]
 			intent_label.modulate = Color(1.0, 0.15, 0.15)
-	# 閃光後刷新顯示（turns_until_attack 已由 battle_manager 重置為 attack_interval）
+	# 閃光後刷新顯示（turns_until_attack 已由 battle_manager 依 REST 序列重置）
 	get_tree().create_timer(0.5).timeout.connect(func() -> void:
 		if is_instance_valid(self) and intent_label:
 			_refresh_intent()
@@ -245,12 +322,12 @@ func _stop_spin() -> void:
 func take_damage(amount: int) -> void:
 	var prev_hp: int = current_hp
 	current_hp = max(0, current_hp - amount)
-	hp_changed.emit(current_hp, data.max_hp)
+	hp_changed.emit(current_hp, max_hp)
 	if hp_bar_label:
 		hp_bar_label.text = "%d" % current_hp
 	if hp_bar_fill:
-		var prev_ratio: float = float(prev_hp) / float(data.max_hp) if data.max_hp > 0 else 0.0
-		var target_ratio: float = float(current_hp) / float(data.max_hp) if data.max_hp > 0 else 0.0
+		var prev_ratio: float = float(prev_hp) / float(max_hp) if max_hp > 0 else 0.0
+		var target_ratio: float = float(current_hp) / float(max_hp) if max_hp > 0 else 0.0
 		var bar_tween := create_tween()
 		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		_play_hp_damage_preview(prev_ratio, target_ratio)

@@ -7,6 +7,7 @@ const REPORT_PATH := "res://assets/enemy/generated/import_report.md"
 const GENERATED_ENEMY_ROOT := "res://enemies/generated"
 
 const ACTION_ATTACK := 0
+const ACTION_ATTACK_PERCENT_DEFAULT := 15
 const ELEMENT_RED := 0
 const ELEMENT_LIGHT := 6
 const ELEMENT_DARK := 7
@@ -177,10 +178,8 @@ func _make_manifest_entry(sheet: Dictionary, row_index: int, column_index: int, 
 		"portrait_color": sheet["portrait_color"],
 		"enemy_level": int(sheet["enemy_level"]),
 		"max_hp": int(sheet["max_hp"]),
-		"attack_damage": int(sheet["attack_damage"]),
-		"attack_coeff": 1.0,
-		"attack_interval": 2,
 		"action_pattern": [ACTION_ATTACK],
+		"action_percents": [ACTION_ATTACK_PERCENT_DEFAULT],
 		"loot_min": int(sheet["loot_min"]),
 		"loot_max": int(sheet["loot_max"]),
 		"crop_rect": {"x": bounds.position.x, "y": bounds.position.y, "w": bounds.size.x, "h": bounds.size.y},
@@ -289,6 +288,7 @@ func _build_enemy_tres(entry: Dictionary) -> String:
 	var image_path: String = String(entry["image_path"])
 	var color_values: Array = entry.get("portrait_color", [1.0, 1.0, 1.0, 1.0])
 	var action_pattern: Array = entry.get("action_pattern", [ACTION_ATTACK])
+	var action_percents: Array = entry.get("action_percents", [ACTION_ATTACK_PERCENT_DEFAULT])
 	return "" + \
 "[gd_resource type=\"Resource\" script_class=\"EnemyData\" load_steps=5 format=3]\n\n" + \
 "[ext_resource type=\"Script\" path=\"res://scripts/enemy_data.gd\" id=\"1_script\"]\n" + \
@@ -303,12 +303,9 @@ func _build_enemy_tres(entry: Dictionary) -> String:
 "[resource]\n" + \
 "script = ExtResource(\"1_script\")\n" + \
 "enemy_name = \"%s\"\n" % display_name + \
-"enemy_level = %d\n" % int(entry.get("enemy_level", 1)) + \
 "max_hp = %d\n" % int(entry.get("max_hp", 50)) + \
-"attack_damage = %d\n" % int(entry.get("attack_damage", 6)) + \
-"attack_coeff = %.3f\n" % float(entry.get("attack_coeff", 1.0)) + \
-"attack_interval = %d\n" % int(entry.get("attack_interval", 2)) + \
 "action_pattern = Array[int](%s)\n" % _format_int_array(action_pattern) + \
+"action_percents = Array[int](%s)\n" % _format_int_array(action_percents) + \
 "portrait_color = Color(%.3f, %.3f, %.3f, %.3f)\n" % [float(color_values[0]), float(color_values[1]), float(color_values[2]), float(color_values[3])] + \
 "portrait_texture = ExtResource(\"2_texture\")\n" + \
 "element = %d\n" % int(entry.get("element", ELEMENT_DARK)) + \

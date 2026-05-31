@@ -140,6 +140,7 @@ allowed_types = Array[int]([0, 1, 2, 6])
 area = "underwater"
 rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2"), ExtResource("5_8ceh8")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
 rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0, 0], [0]])
+rounds_enemy_levels = Array[Array]([[4, 4, 7], [4, 4, 4], [5]])
 background = 1
 bgm = ExtResource("1_lvgyu")
 pre_dialog = SubResource("Resource_no18u")

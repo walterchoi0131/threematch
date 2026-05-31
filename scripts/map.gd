@@ -298,6 +298,10 @@ func _build_portrait_debug_btn() -> void:
 	portrait_btn.pressed.connect(_open_portrait_debug)
 	_portrait_debug_layer.add_child(portrait_btn)
 
+	var enemy_btn: Button = _make_debug_launcher_button("EN", "Monster Debug", 16, -130.0, -76.0)
+	enemy_btn.pressed.connect(_open_enemy_debug)
+	_portrait_debug_layer.add_child(enemy_btn)
+
 
 func _make_debug_launcher_button(label_text: String, tooltip: String, font_size: int, top_offset: float, bottom_offset: float) -> Button:
 	var btn := Button.new()
@@ -352,5 +356,18 @@ func _open_stat_debug() -> void:
 				child.get_script().resource_path == "res://scripts/stat_debug_screen.gd":
 			return
 	var screen: Control = load("res://scripts/stat_debug_screen.gd").new() as Control
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_portrait_debug_layer.add_child(screen)
+
+
+func _open_enemy_debug() -> void:
+	if _portrait_debug_layer == null:
+		return
+	# 只允許一個
+	for child in _portrait_debug_layer.get_children():
+		if child.get_script() != null and \
+				child.get_script().resource_path == "res://scripts/enemy_debug_screen.gd":
+			return
+	var screen: Control = load("res://scripts/enemy_debug_screen.gd").new() as Control
 	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_portrait_debug_layer.add_child(screen)

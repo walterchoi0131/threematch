@@ -137,9 +137,17 @@ static func get_battle_background_path(area_key: String) -> String:
 
 ## 每個敌人生成時的初始 CD（取代 attack_interval）。
 ## 与 rounds 平行的嵌套陣列：rounds_init_cd[round][i] = int。
-## 留空、長度不足或值 ≤ 0 表示使用 EnemyData.attack_interval 預設。
+## 留空、長度不足或值 ≤ 0 表示使用行動序列前置 REST 數量。
 ## 可用來讓使用 action_pattern 的敵人在開場多等待幾回合。
 @export var rounds_init_cd: Array[Array] = []
+
+## 每個敵人生成時的等級，與 rounds 平行。
+## 留空、長度不足或值 ≤ 0 時會 fallback 到舊 EnemyData.enemy_level 或 1。
+@export var rounds_enemy_levels: Array[Array] = []
+
+## 每個敵人生成時是否作為主要 Boss，與 rounds 平行。
+## 留空時舊關卡可 fallback 到 EnemyData.is_main_boss 或最後一波最後一隻。
+@export var rounds_main_bosses: Array[Array] = []
 
 @export var background: Background = Background.NONE  # 關卡背景圖片
 @export var bgm: AudioStream = null  # 關卡背景音樂
