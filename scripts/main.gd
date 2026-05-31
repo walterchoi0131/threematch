@@ -10,6 +10,7 @@ const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
+const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board: Node2D = $Board
@@ -149,17 +150,46 @@ const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 ]
 const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
 const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
+const STAGE_EDITOR_DIALOG_BACKGROUND_ROOT := "res://assets/dialog_background"
+const STAGE_EDITOR_TAB_BEFORE := "before"
+const STAGE_EDITOR_TAB_BOARD := "board"
+const STAGE_EDITOR_TAB_AFTER := "after"
 
 var _stage_editor_panel: PanelContainer = null
 var _stage_editor_root_box: VBoxContainer = null
 var _stage_editor_area_panel: PanelContainer = null
 var _stage_editor_action_panel: PanelContainer = null
+var _stage_editor_tab_panel: PanelContainer = null
+var _stage_editor_dialog_panel: PanelContainer = null
 var _stage_editor_palette_grid: GridContainer = null
 var _stage_editor_value_buttons: Dictionary = {}
+var _stage_editor_tab_buttons: Dictionary = {}
+var _stage_editor_current_tab: String = STAGE_EDITOR_TAB_BOARD
 var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
+var _stage_editor_dialog_target: String = ""
+var _stage_editor_dialog_title_label: Label = null
+var _stage_editor_dialog_line_list: VBoxContainer = null
+var _stage_editor_dialog_cast_list: HBoxContainer = null
+var _stage_editor_dialog_add_cast_option: OptionButton = null
+var _stage_editor_dialog_background_option: OptionButton = null
+var _stage_editor_dialog_exit_cast_option: OptionButton = null
+var _stage_editor_dialog_exit_side_option: CheckButton = null
+var _stage_editor_dialog_selected_index: int = -1
+var _stage_editor_dialog_character_edit: LineEdit = null
+var _stage_editor_dialog_emotion_edit: LineEdit = null
+var _stage_editor_dialog_position_option: OptionButton = null
+var _stage_editor_dialog_action_option: OptionButton = null
+var _stage_editor_dialog_shake_check: CheckBox = null
+var _stage_editor_dialog_text_zh_edit: TextEdit = null
+var _stage_editor_dialog_text_en_edit: TextEdit = null
+var _stage_editor_dialog_refreshing: bool = false
+var _stage_editor_character_catalog: Array[Dictionary] = []
+var _stage_editor_character_by_id: Dictionary = {}
+var _stage_editor_dialog_background_catalog: Array[Dictionary] = []
+var _stage_editor_test_dialog: Control = null
 var _stage_editor_enemy_area_panel: Control = null
 var _stage_editor_prev_round_button: Button = null
 var _stage_editor_next_round_button: Button = null
@@ -350,6 +380,7 @@ func _setup_stage_edit_mode() -> void:
 	_apply_safe_area()
 	_build_stage_editor_enemy_area()
 	_build_stage_editor_ui()
+	_stage_editor_select_tab(STAGE_EDITOR_TAB_BOARD)
 	_set_stage_editor_status("Ready")
 
 
@@ -370,8 +401,12 @@ func _hide_battle_ui_for_stage_editor() -> void:
 
 
 func _build_stage_editor_ui() -> void:
+	_stage_editor_load_character_catalog()
+	_stage_editor_load_dialog_background_catalog()
 	_build_stage_editor_area_panel()
 	_build_stage_editor_action_panel()
+	_build_stage_editor_tab_panel()
+	_build_stage_editor_dialog_panel()
 	if _stage_editor_panel != null:
 		return
 	_stage_editor_panel = PanelContainer.new()
@@ -505,6 +540,1219 @@ func _build_stage_editor_action_panel() -> void:
 	row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
 	row.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
 	row.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
+
+
+func _build_stage_editor_tab_panel() -> void:
+	if _stage_editor_tab_panel != null:
+		return
+	_stage_editor_tab_panel = PanelContainer.new()
+	_stage_editor_tab_panel.name = "StageEditorTabs"
+	_stage_editor_tab_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stage_editor_tab_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.04, 0.05, 0.08, 0.96)))
+	$UILayer.add_child(_stage_editor_tab_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	_stage_editor_tab_panel.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	margin.add_child(row)
+
+	row.add_child(_make_stage_editor_tab_button("Before", STAGE_EDITOR_TAB_BEFORE))
+	row.add_child(_make_stage_editor_tab_button("Board", STAGE_EDITOR_TAB_BOARD))
+	row.add_child(_make_stage_editor_tab_button("After", STAGE_EDITOR_TAB_AFTER))
+
+
+func _make_stage_editor_tab_button(label_text: String, tab_id: String) -> Button:
+	var button := Button.new()
+	button.text = label_text
+	button.toggle_mode = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(104, 38)
+	button.add_theme_font_size_override("font_size", 14)
+	button.pressed.connect(_stage_editor_select_tab.bind(tab_id))
+	_stage_editor_tab_buttons[tab_id] = button
+	return button
+
+
+func _build_stage_editor_dialog_panel() -> void:
+	if _stage_editor_dialog_panel != null:
+		return
+	_stage_editor_dialog_panel = PanelContainer.new()
+	_stage_editor_dialog_panel.name = "StageEditorDialogEditor"
+	_stage_editor_dialog_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stage_editor_dialog_panel.visible = false
+	_stage_editor_dialog_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.04, 0.05, 0.08, 0.97)))
+	$UILayer.add_child(_stage_editor_dialog_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	_stage_editor_dialog_panel.add_child(margin)
+
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 8)
+	margin.add_child(root)
+
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 6)
+	root.add_child(header_row)
+
+	_stage_editor_dialog_title_label = Label.new()
+	_stage_editor_dialog_title_label.text = "Dialog"
+	_stage_editor_dialog_title_label.add_theme_font_size_override("font_size", 16)
+	_stage_editor_dialog_title_label.add_theme_color_override("font_color", Color.WHITE)
+	_stage_editor_dialog_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_row.add_child(_stage_editor_dialog_title_label)
+
+	var bg_label := Label.new()
+	bg_label.text = "BG"
+	bg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bg_label.add_theme_font_size_override("font_size", 12)
+	bg_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	header_row.add_child(bg_label)
+
+	_stage_editor_dialog_background_option = OptionButton.new()
+	_stage_editor_dialog_background_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_dialog_background_option.custom_minimum_size = Vector2(180, 30)
+	_stage_editor_dialog_background_option.item_selected.connect(_on_stage_editor_dialog_background_selected)
+	header_row.add_child(_stage_editor_dialog_background_option)
+
+	header_row.add_child(_make_stage_editor_small_button("Test Play", _on_stage_editor_dialog_test_play_pressed, Vector2(86, 30)))
+
+	var cast_row := HBoxContainer.new()
+	cast_row.add_theme_constant_override("separation", 6)
+	root.add_child(cast_row)
+
+	var cast_label := Label.new()
+	cast_label.text = "Cast"
+	cast_label.custom_minimum_size = Vector2(44, 0)
+	cast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cast_label.add_theme_font_size_override("font_size", 12)
+	cast_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	cast_row.add_child(cast_label)
+
+	_stage_editor_dialog_cast_list = HBoxContainer.new()
+	_stage_editor_dialog_cast_list.add_theme_constant_override("separation", 4)
+	_stage_editor_dialog_cast_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cast_row.add_child(_stage_editor_dialog_cast_list)
+
+	_stage_editor_dialog_add_cast_option = OptionButton.new()
+	_stage_editor_dialog_add_cast_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_dialog_add_cast_option.custom_minimum_size = Vector2(148, 30)
+	cast_row.add_child(_stage_editor_dialog_add_cast_option)
+	cast_row.add_child(_make_stage_editor_small_button("Add Cast", _on_stage_editor_dialog_add_cast_pressed, Vector2(78, 30)))
+
+	var exit_row := HBoxContainer.new()
+	exit_row.add_theme_constant_override("separation", 6)
+	root.add_child(exit_row)
+
+	var exit_label := Label.new()
+	exit_label.text = "Exit"
+	exit_label.custom_minimum_size = Vector2(44, 0)
+	exit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	exit_label.add_theme_font_size_override("font_size", 12)
+	exit_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	exit_row.add_child(exit_label)
+
+	_stage_editor_dialog_exit_cast_option = OptionButton.new()
+	_stage_editor_dialog_exit_cast_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_dialog_exit_cast_option.custom_minimum_size = Vector2(148, 30)
+	exit_row.add_child(_stage_editor_dialog_exit_cast_option)
+
+	_stage_editor_dialog_exit_side_option = CheckButton.new()
+	_stage_editor_dialog_exit_side_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_dialog_exit_side_option.custom_minimum_size = Vector2(92, 30)
+	_stage_editor_dialog_exit_side_option.text = "Left"
+	_stage_editor_dialog_exit_side_option.toggled.connect(_on_stage_editor_dialog_exit_side_toggled)
+	exit_row.add_child(_stage_editor_dialog_exit_side_option)
+	exit_row.add_child(_make_stage_editor_small_button("Add Exit", _on_stage_editor_dialog_add_exit_pressed, Vector2(78, 30)))
+
+	var line_scroll := ScrollContainer.new()
+	line_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	line_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	line_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(line_scroll)
+
+	_stage_editor_dialog_line_list = VBoxContainer.new()
+	_stage_editor_dialog_line_list.add_theme_constant_override("separation", 6)
+	_stage_editor_dialog_line_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line_scroll.add_child(_stage_editor_dialog_line_list)
+
+
+func _stage_editor_make_form_label(label_text: String) -> Label:
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size = Vector2(86, 0)
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return label
+
+
+func _stage_editor_make_line_edit_field(parent: VBoxContainer, label_text: String) -> LineEdit:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	parent.add_child(row)
+	row.add_child(_stage_editor_make_form_label(label_text))
+	var edit := LineEdit.new()
+	edit.focus_mode = Control.FOCUS_CLICK
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(edit)
+	return edit
+
+
+func _stage_editor_make_option_field(parent: VBoxContainer, label_text: String, values: Array[String]) -> OptionButton:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	parent.add_child(row)
+	row.add_child(_stage_editor_make_form_label(label_text))
+	var option := OptionButton.new()
+	option.focus_mode = Control.FOCUS_NONE
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for value: String in values:
+		var item_index: int = option.item_count
+		option.add_item(value)
+		option.set_item_metadata(item_index, value)
+	row.add_child(option)
+	return option
+
+
+func _stage_editor_make_text_edit_field(parent: VBoxContainer, label_text: String) -> TextEdit:
+	var label := _stage_editor_make_form_label(label_text)
+	parent.add_child(label)
+	var edit := TextEdit.new()
+	edit.custom_minimum_size = Vector2(0, 92)
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	parent.add_child(edit)
+	return edit
+
+
+func _stage_editor_select_tab(tab_id: String) -> void:
+	if tab_id != STAGE_EDITOR_TAB_BEFORE and tab_id != STAGE_EDITOR_TAB_BOARD and tab_id != STAGE_EDITOR_TAB_AFTER:
+		return
+	_stage_editor_current_tab = tab_id
+	var board_tab: bool = tab_id == STAGE_EDITOR_TAB_BOARD
+	if board != null and board.has_method("set_edit_input_enabled"):
+		board.set_edit_input_enabled(board_tab)
+	if board_tab:
+		board.set_edit_paint_value(_stage_editor_selected_value)
+		_stage_editor_dialog_target = ""
+	else:
+		_stage_editor_dialog_target = tab_id
+		var sequence: DialogSequence = _stage_editor_get_or_create_dialog_sequence(tab_id)
+		if sequence != null and sequence.lines.size() > 0 and _stage_editor_dialog_selected_index < 0:
+			_stage_editor_dialog_selected_index = 0
+		_refresh_stage_editor_dialog_editor()
+	if _stage_editor_panel != null:
+		_stage_editor_panel.visible = board_tab
+	if _stage_editor_area_panel != null:
+		_stage_editor_area_panel.visible = board_tab
+	if _stage_editor_enemy_area_panel != null:
+		_stage_editor_enemy_area_panel.visible = board_tab
+	if _stage_editor_enemy_picker_panel != null and not board_tab:
+		_stage_editor_enemy_picker_panel.visible = false
+	if _stage_editor_dialog_panel != null:
+		_stage_editor_dialog_panel.visible = not board_tab
+	if _stage_editor_action_panel != null:
+		_stage_editor_action_panel.visible = true
+	_update_stage_editor_tab_buttons()
+	_layout_stage_editor_ui()
+
+
+func _update_stage_editor_tab_buttons() -> void:
+	for key in _stage_editor_tab_buttons.keys():
+		var button: Button = _stage_editor_tab_buttons[key]
+		button.set_pressed_no_signal(String(key) == _stage_editor_current_tab)
+
+
+func _stage_editor_get_or_create_dialog_sequence(target: String) -> DialogSequence:
+	if current_stage == null:
+		return null
+	if target == STAGE_EDITOR_TAB_BEFORE:
+		if current_stage.pre_dialog == null:
+			current_stage.pre_dialog = DialogSequence.new()
+		return current_stage.pre_dialog
+	if target == STAGE_EDITOR_TAB_AFTER:
+		if current_stage.post_dialog == null:
+			current_stage.post_dialog = DialogSequence.new()
+		return current_stage.post_dialog
+	return null
+
+
+func _stage_editor_active_dialog_sequence() -> DialogSequence:
+	if _stage_editor_dialog_target.is_empty():
+		return null
+	return _stage_editor_get_or_create_dialog_sequence(_stage_editor_dialog_target)
+
+
+func _stage_editor_load_character_catalog() -> void:
+	if not _stage_editor_character_catalog.is_empty():
+		return
+	_stage_editor_character_catalog.clear()
+	_stage_editor_character_by_id.clear()
+	var dir := DirAccess.open("res://characters")
+	if dir == null:
+		return
+	var files: PackedStringArray = dir.get_files()
+	files.sort()
+	for file_name: String in files:
+		var extension: String = file_name.get_extension().to_lower()
+		if extension != "tres" and extension != "res":
+			continue
+		var resource_path: String = "res://characters/" + file_name
+		var resource: Resource = load(resource_path)
+		var character: CharacterData = resource as CharacterData
+		if character == null:
+			continue
+		var char_id: String = _stage_editor_character_id_from_path(resource_path)
+		var display_name: String = character.character_name
+		if display_name.strip_edges().is_empty():
+			display_name = char_id.capitalize()
+		var entry: Dictionary = {
+			"id": char_id,
+			"name": display_name,
+			"resource_path": resource_path,
+			"portrait_texture": character.portrait_texture,
+		}
+		_stage_editor_character_catalog.append(entry)
+		_stage_editor_character_by_id[char_id] = entry
+
+
+func _stage_editor_load_dialog_background_catalog() -> void:
+	if not _stage_editor_dialog_background_catalog.is_empty():
+		return
+	_stage_editor_dialog_background_catalog.clear()
+	var dir := DirAccess.open(STAGE_EDITOR_DIALOG_BACKGROUND_ROOT)
+	if dir == null:
+		return
+	var files: PackedStringArray = dir.get_files()
+	files.sort()
+	for file_name: String in files:
+		var extension: String = file_name.get_extension().to_lower()
+		if extension != "png" and extension != "jpg" and extension != "jpeg" and extension != "webp":
+			continue
+		var resource_path: String = STAGE_EDITOR_DIALOG_BACKGROUND_ROOT + "/" + file_name
+		if not ResourceLoader.exists(resource_path):
+			continue
+		_stage_editor_dialog_background_catalog.append({
+			"name": _stage_editor_dialog_background_display_name(resource_path),
+			"resource_path": resource_path,
+		})
+
+
+func _stage_editor_dialog_background_display_name(resource_path: String) -> String:
+	var file_base: String = resource_path.get_file().get_basename()
+	if file_base.begins_with("dialog_bg_"):
+		file_base = file_base.substr(10)
+	return file_base.replace("_", " ").capitalize()
+
+
+func _stage_editor_character_id_from_path(resource_path: String) -> String:
+	var file_base: String = resource_path.get_file().get_basename()
+	if file_base.begins_with("char_"):
+		return file_base.substr(5)
+	return file_base
+
+
+func _stage_editor_character_display_name(char_id: String) -> String:
+	if char_id.is_empty():
+		return "旁白"
+	var entry: Dictionary = _stage_editor_character_by_id.get(char_id, {})
+	if not entry.is_empty():
+		return String(entry.get("name", char_id.capitalize()))
+	return Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
+
+
+func _stage_editor_ensure_dialog_cast(sequence: DialogSequence) -> void:
+	if sequence == null:
+		return
+	var known: Dictionary = {}
+	for cast_variant in sequence.cast:
+		var cast_id: String = String(cast_variant).strip_edges()
+		if cast_id.is_empty() or known.has(cast_id):
+			continue
+		known[cast_id] = true
+	for line: DialogLine in sequence.lines:
+		var char_id: String = line.character_id.strip_edges()
+		if char_id.is_empty() or known.has(char_id):
+			continue
+		sequence.cast.append(char_id)
+		known[char_id] = true
+
+
+func _stage_editor_first_cast_id(sequence: DialogSequence) -> String:
+	if sequence != null and not sequence.cast.is_empty():
+		return String(sequence.cast[0])
+	if not _stage_editor_character_catalog.is_empty():
+		var entry: Dictionary = _stage_editor_character_catalog[0]
+		return String(entry.get("id", ""))
+	return ""
+
+
+func _stage_editor_dialog_line_references_cast(sequence: DialogSequence, char_id: String) -> bool:
+	if sequence == null or char_id.is_empty():
+		return false
+	for line: DialogLine in sequence.lines:
+		if line.character_id == char_id:
+			return true
+	return false
+
+
+func _stage_editor_add_option_item(option: OptionButton, label_text: String, value: String) -> void:
+	var item_index: int = option.item_count
+	option.add_item(label_text)
+	option.set_item_metadata(item_index, value)
+
+
+func _stage_editor_make_dialog_line() -> DialogLine:
+	var line := DialogLine.new()
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	line.character_id = _stage_editor_first_cast_id(sequence)
+	line.emotion = "normal"
+	line.position = "left"
+	line.text_zh = ""
+	line.text_en = ""
+	line.action = "none"
+	line.shake = true
+	return line
+
+
+func _stage_editor_copy_dialog_line(source: DialogLine) -> DialogLine:
+	var line := DialogLine.new()
+	line.character_id = source.character_id
+	line.emotion = source.emotion
+	line.position = source.position
+	line.text_zh = source.text_zh
+	line.text_en = source.text_en
+	line.action = source.action
+	line.shake = source.shake
+	line.music = source.music
+	return line
+
+
+func _stage_editor_get_selected_dialog_line() -> DialogLine:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return null
+	if _stage_editor_dialog_selected_index < 0 or _stage_editor_dialog_selected_index >= sequence.lines.size():
+		return null
+	return sequence.lines[_stage_editor_dialog_selected_index]
+
+
+func _refresh_stage_editor_dialog_editor() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if _stage_editor_dialog_title_label != null:
+		var title: String = "Board"
+		if _stage_editor_dialog_target == STAGE_EDITOR_TAB_BEFORE:
+			title = "Before Dialog"
+		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_AFTER:
+			title = "After Dialog"
+		_stage_editor_dialog_title_label.text = title
+	_stage_editor_ensure_dialog_cast(sequence)
+	_refresh_stage_editor_dialog_background_option(sequence)
+	_refresh_stage_editor_dialog_cast_controls(sequence)
+	_refresh_stage_editor_dialog_line_list()
+
+
+func _refresh_stage_editor_dialog_background_option(sequence: DialogSequence) -> void:
+	if _stage_editor_dialog_background_option == null:
+		return
+	_stage_editor_dialog_refreshing = true
+	_stage_editor_dialog_background_option.clear()
+	_stage_editor_add_option_item(_stage_editor_dialog_background_option, "None", "")
+	for entry: Dictionary in _stage_editor_dialog_background_catalog:
+		_stage_editor_add_option_item(_stage_editor_dialog_background_option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
+	var selected_path: String = ""
+	if sequence != null and sequence.background != null:
+		selected_path = sequence.background.resource_path
+	_stage_editor_select_option_value(_stage_editor_dialog_background_option, selected_path)
+	_stage_editor_dialog_background_option.disabled = sequence == null
+	_stage_editor_dialog_refreshing = false
+
+
+func _refresh_stage_editor_dialog_cast_controls(sequence: DialogSequence) -> void:
+	if _stage_editor_dialog_cast_list != null:
+		for child in _stage_editor_dialog_cast_list.get_children():
+			_stage_editor_dialog_cast_list.remove_child(child)
+			child.queue_free()
+	if sequence == null:
+		return
+	for cast_variant in sequence.cast:
+		var char_id: String = String(cast_variant)
+		var button := Button.new()
+		button.text = _stage_editor_character_display_name(char_id) + " x"
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(82, 28)
+		button.add_theme_font_size_override("font_size", 11)
+		var is_referenced: bool = _stage_editor_dialog_line_references_cast(sequence, char_id)
+		button.tooltip_text = "Drag to row" if is_referenced else "Drag to row / click to remove"
+		button.set_drag_forwarding(
+			Callable(self, "_stage_editor_get_cast_drag_data").bind(button, char_id),
+			Callable(self, "_stage_editor_no_drop_data"),
+			Callable(self, "_stage_editor_ignore_drop_data"))
+		button.pressed.connect(_on_stage_editor_dialog_remove_cast_pressed.bind(char_id))
+		_stage_editor_dialog_cast_list.add_child(button)
+
+	if _stage_editor_dialog_add_cast_option != null:
+		_stage_editor_dialog_add_cast_option.clear()
+		for entry in _stage_editor_character_catalog:
+			var entry_id: String = String(entry.get("id", ""))
+			if entry_id.is_empty() or sequence.cast.has(entry_id):
+				continue
+			_stage_editor_add_option_item(_stage_editor_dialog_add_cast_option, String(entry.get("name", entry_id.capitalize())), entry_id)
+		_stage_editor_dialog_add_cast_option.disabled = _stage_editor_dialog_add_cast_option.item_count == 0
+
+	if _stage_editor_dialog_exit_cast_option != null:
+		_stage_editor_dialog_exit_cast_option.clear()
+		for cast_variant in sequence.cast:
+			var char_id: String = String(cast_variant)
+			_stage_editor_add_option_item(_stage_editor_dialog_exit_cast_option, _stage_editor_character_display_name(char_id), char_id)
+		_stage_editor_dialog_exit_cast_option.disabled = _stage_editor_dialog_exit_cast_option.item_count == 0
+	if _stage_editor_dialog_exit_side_option != null:
+		_stage_editor_dialog_exit_side_option.disabled = sequence.cast.is_empty()
+
+
+func _refresh_stage_editor_dialog_line_list() -> void:
+	if _stage_editor_dialog_line_list == null:
+		return
+	for child in _stage_editor_dialog_line_list.get_children():
+		_stage_editor_dialog_line_list.remove_child(child)
+		child.queue_free()
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	if sequence.lines.is_empty():
+		_stage_editor_dialog_selected_index = -1
+		var empty_label := Label.new()
+		empty_label.text = "No rows yet. Use + to add the first line."
+		empty_label.add_theme_color_override("font_color", Color(0.78, 0.84, 0.92, 1.0))
+		_stage_editor_dialog_line_list.add_child(empty_label)
+		_stage_editor_dialog_line_list.add_child(_stage_editor_make_dialog_add_row())
+		return
+	_stage_editor_dialog_selected_index = clampi(_stage_editor_dialog_selected_index, 0, sequence.lines.size() - 1)
+	for line_index in sequence.lines.size():
+		var line: DialogLine = sequence.lines[line_index]
+		_stage_editor_dialog_line_list.add_child(_stage_editor_make_dialog_row(line_index, line, sequence))
+	_stage_editor_dialog_line_list.add_child(_stage_editor_make_dialog_add_row())
+
+
+func _stage_editor_make_dialog_add_row() -> Control:
+	var button := Button.new()
+	button.text = "+"
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(0, 38)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.add_theme_font_size_override("font_size", 20)
+	button.pressed.connect(_on_stage_editor_dialog_add_line_pressed)
+	button.set_drag_forwarding(
+		Callable(self, "_stage_editor_no_drag_data"),
+		Callable(self, "_stage_editor_can_drop_on_dialog_add_row"),
+		Callable(self, "_stage_editor_drop_on_dialog_add_row"))
+	return button
+
+
+func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: DialogSequence) -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.07, 0.08, 0.12, 0.88)))
+	panel.set_drag_forwarding(
+		Callable(self, "_stage_editor_get_row_drag_data").bind(panel, line_index),
+		Callable(self, "_stage_editor_can_drop_on_dialog_row").bind(line_index),
+		Callable(self, "_stage_editor_drop_on_dialog_row").bind(line_index))
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 7)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 7)
+	panel.add_child(margin)
+
+	var row_box := VBoxContainer.new()
+	row_box.add_theme_constant_override("separation", 6)
+	margin.add_child(row_box)
+
+	var controls := HBoxContainer.new()
+	controls.add_theme_constant_override("separation", 5)
+	row_box.add_child(controls)
+
+	var drag_handle := Label.new()
+	drag_handle.text = "::"
+	drag_handle.custom_minimum_size = Vector2(22, 30)
+	drag_handle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	drag_handle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	drag_handle.add_theme_font_size_override("font_size", 14)
+	drag_handle.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	drag_handle.mouse_filter = Control.MOUSE_FILTER_STOP
+	drag_handle.set_drag_forwarding(
+		Callable(self, "_stage_editor_get_row_drag_data").bind(drag_handle, line_index),
+		Callable(self, "_stage_editor_can_drop_on_dialog_row").bind(line_index),
+		Callable(self, "_stage_editor_drop_on_dialog_row").bind(line_index))
+	controls.add_child(drag_handle)
+
+	var number_label := Label.new()
+	number_label.text = "%02d" % [line_index + 1]
+	number_label.custom_minimum_size = Vector2(34, 30)
+	number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	number_label.add_theme_font_size_override("font_size", 12)
+	number_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	controls.add_child(number_label)
+
+	var speaker_option := OptionButton.new()
+	speaker_option.focus_mode = Control.FOCUS_NONE
+	speaker_option.custom_minimum_size = Vector2(142, 30)
+	_stage_editor_populate_cast_dropdown(speaker_option, sequence, line.character_id)
+	speaker_option.item_selected.connect(_on_stage_editor_dialog_row_speaker_selected.bind(line_index, speaker_option))
+	_stage_editor_forward_dialog_row_drop(speaker_option, line_index)
+	controls.add_child(speaker_option)
+
+	var side_switch := CheckButton.new()
+	side_switch.focus_mode = Control.FOCUS_NONE
+	side_switch.custom_minimum_size = Vector2(96, 30)
+	side_switch.button_pressed = line.position == "right"
+	side_switch.text = "Right" if side_switch.button_pressed else "Left"
+	side_switch.toggled.connect(_on_stage_editor_dialog_row_side_toggled.bind(line_index, side_switch))
+	_stage_editor_forward_dialog_row_drop(side_switch, line_index)
+	controls.add_child(side_switch)
+
+	var action_option := OptionButton.new()
+	action_option.focus_mode = Control.FOCUS_NONE
+	action_option.custom_minimum_size = Vector2(86, 30)
+	_stage_editor_add_option_item(action_option, "none", "none")
+	_stage_editor_add_option_item(action_option, "enter", "enter")
+	_stage_editor_add_option_item(action_option, "exit", "exit")
+	_stage_editor_select_option_value(action_option, line.action)
+	action_option.item_selected.connect(_on_stage_editor_dialog_row_action_selected.bind(line_index, action_option))
+	_stage_editor_forward_dialog_row_drop(action_option, line_index)
+	controls.add_child(action_option)
+
+	var shake_check := CheckBox.new()
+	shake_check.text = "Shake"
+	shake_check.focus_mode = Control.FOCUS_NONE
+	shake_check.button_pressed = line.shake
+	shake_check.custom_minimum_size = Vector2(82, 30)
+	shake_check.toggled.connect(_on_stage_editor_dialog_row_shake_toggled.bind(line_index))
+	controls.add_child(shake_check)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	controls.add_child(spacer)
+
+	controls.add_child(_make_stage_editor_small_button("Dup", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(44, 30)))
+	controls.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(42, 30)))
+
+	var text_row := HBoxContainer.new()
+	text_row.add_theme_constant_override("separation", 6)
+	row_box.add_child(text_row)
+
+	text_row.add_child(_stage_editor_make_character_indicator(line.character_id))
+	if _stage_editor_dialog_line_is_exit(line):
+		var exit_label := Label.new()
+		exit_label.text = "Exit animation only"
+		exit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		exit_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		exit_label.add_theme_font_size_override("font_size", 13)
+		exit_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+		text_row.add_child(exit_label)
+	else:
+		var zh_edit: TextEdit = _stage_editor_make_row_text_edit(line.text_zh, "zh")
+		zh_edit.text_changed.connect(_on_stage_editor_dialog_row_text_zh_changed.bind(zh_edit, line_index))
+		_stage_editor_forward_dialog_row_drop(zh_edit, line_index)
+		text_row.add_child(zh_edit)
+
+		var en_edit: TextEdit = _stage_editor_make_row_text_edit(line.text_en, "en")
+		en_edit.text_changed.connect(_on_stage_editor_dialog_row_text_en_changed.bind(en_edit, line_index))
+		_stage_editor_forward_dialog_row_drop(en_edit, line_index)
+		text_row.add_child(en_edit)
+
+	return panel
+
+
+func _stage_editor_forward_dialog_row_drop(control: Control, line_index: int) -> void:
+	control.set_drag_forwarding(
+		Callable(self, "_stage_editor_no_drag_data"),
+		Callable(self, "_stage_editor_can_drop_on_dialog_row").bind(line_index),
+		Callable(self, "_stage_editor_drop_on_dialog_row").bind(line_index))
+
+
+func _stage_editor_make_character_indicator(char_id: String) -> Control:
+	if char_id.is_empty():
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(64, 64)
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.tooltip_text = _stage_editor_character_display_name(char_id)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.10, 0.10, 0.13, 0.88)
+		style.border_color = Color(0.42, 0.42, 0.50, 0.9)
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(6)
+		style.set_content_margin_all(4)
+		panel.add_theme_stylebox_override("panel", style)
+		var label := Label.new()
+		label.text = _stage_editor_character_display_name(char_id)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", Color(0.85, 0.88, 0.95, 1.0))
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(label)
+		return panel
+	var indicator := TextureRect.new()
+	indicator.custom_minimum_size = Vector2(64, 64)
+	indicator.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	indicator.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	indicator.texture = _stage_editor_character_portrait_texture(char_id)
+	indicator.tooltip_text = _stage_editor_character_display_name(char_id)
+	return indicator
+
+
+func _stage_editor_character_portrait_texture(char_id: String) -> Texture2D:
+	var entry: Dictionary = _stage_editor_character_by_id.get(char_id, {})
+	if entry.is_empty():
+		return null
+	return entry.get("portrait_texture", null) as Texture2D
+
+
+func _stage_editor_dialog_line_is_exit(line: DialogLine) -> bool:
+	return line != null and line.action == "exit"
+
+
+func _stage_editor_make_row_text_edit(text_value: String, placeholder: String) -> TextEdit:
+	var edit := TextEdit.new()
+	edit.text = text_value
+	edit.placeholder_text = placeholder
+	edit.custom_minimum_size = Vector2(0, 64)
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	return edit
+
+
+func _stage_editor_populate_cast_dropdown(option: OptionButton, sequence: DialogSequence, selected_id: String) -> void:
+	option.clear()
+	if sequence == null:
+		option.disabled = true
+		return
+	_stage_editor_add_option_item(option, _stage_editor_character_display_name(""), "")
+	for cast_variant in sequence.cast:
+		var char_id: String = String(cast_variant)
+		_stage_editor_add_option_item(option, _stage_editor_character_display_name(char_id), char_id)
+	option.disabled = option.item_count == 0
+	if option.item_count > 0:
+		_stage_editor_select_option_value(option, selected_id)
+
+
+func _stage_editor_dialog_line_button_text(line_index: int, line: DialogLine) -> String:
+	var speaker: String = _stage_editor_character_display_name(line.character_id)
+	var preview: String = line.text_zh.strip_edges()
+	if preview.is_empty():
+		preview = line.text_en.strip_edges()
+	preview = preview.replace("\n", " ")
+	if preview.length() > 42:
+		preview = preview.substr(0, 42) + "..."
+	return "%02d  %s  %s\n%s" % [line_index + 1, speaker, line.position, preview]
+
+
+func _refresh_stage_editor_dialog_form() -> void:
+	_stage_editor_dialog_refreshing = true
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	var has_line: bool = line != null
+	if _stage_editor_dialog_title_label != null:
+		var title: String = "Board"
+		if _stage_editor_dialog_target == STAGE_EDITOR_TAB_BEFORE:
+			title = "Before Dialog"
+		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_AFTER:
+			title = "After Dialog"
+		_stage_editor_dialog_title_label.text = title
+	_stage_editor_set_dialog_form_enabled(has_line)
+	if not has_line:
+		_stage_editor_dialog_character_edit.text = ""
+		_stage_editor_dialog_emotion_edit.text = ""
+		_stage_editor_select_option_value(_stage_editor_dialog_position_option, "left")
+		_stage_editor_select_option_value(_stage_editor_dialog_action_option, "none")
+		_stage_editor_dialog_shake_check.button_pressed = false
+		_stage_editor_dialog_text_zh_edit.text = ""
+		_stage_editor_dialog_text_en_edit.text = ""
+		_stage_editor_dialog_refreshing = false
+		return
+	_stage_editor_dialog_character_edit.text = line.character_id
+	_stage_editor_dialog_emotion_edit.text = line.emotion
+	_stage_editor_select_option_value(_stage_editor_dialog_position_option, line.position)
+	_stage_editor_select_option_value(_stage_editor_dialog_action_option, line.action)
+	_stage_editor_dialog_shake_check.button_pressed = line.shake
+	_stage_editor_dialog_text_zh_edit.text = line.text_zh
+	_stage_editor_dialog_text_en_edit.text = line.text_en
+	_stage_editor_dialog_refreshing = false
+
+
+func _stage_editor_set_dialog_form_enabled(enabled: bool) -> void:
+	if _stage_editor_dialog_character_edit != null:
+		_stage_editor_dialog_character_edit.editable = enabled
+	if _stage_editor_dialog_emotion_edit != null:
+		_stage_editor_dialog_emotion_edit.editable = enabled
+	if _stage_editor_dialog_position_option != null:
+		_stage_editor_dialog_position_option.disabled = not enabled
+	if _stage_editor_dialog_action_option != null:
+		_stage_editor_dialog_action_option.disabled = not enabled
+	if _stage_editor_dialog_shake_check != null:
+		_stage_editor_dialog_shake_check.disabled = not enabled
+	if _stage_editor_dialog_text_zh_edit != null:
+		_stage_editor_dialog_text_zh_edit.editable = enabled
+	if _stage_editor_dialog_text_en_edit != null:
+		_stage_editor_dialog_text_en_edit.editable = enabled
+
+
+func _stage_editor_select_option_value(option: OptionButton, value: String) -> void:
+	if option == null:
+		return
+	for item_index in option.item_count:
+		if String(option.get_item_metadata(item_index)) == value:
+			option.select(item_index)
+			return
+	if option.item_count > 0:
+		option.select(0)
+
+
+func _stage_editor_get_option_value(option: OptionButton) -> String:
+	if option == null or option.selected < 0:
+		return ""
+	return String(option.get_item_metadata(option.selected))
+
+
+func _stage_editor_no_drag_data(_at_position: Vector2) -> Variant:
+	return null
+
+
+func _stage_editor_no_drop_data(_at_position: Vector2, _data: Variant) -> bool:
+	return false
+
+
+func _stage_editor_ignore_drop_data(_at_position: Vector2, _data: Variant) -> void:
+	pass
+
+
+func _stage_editor_get_cast_drag_data(_at_position: Vector2, source_control: Control, char_id: String) -> Variant:
+	if char_id.is_empty():
+		return null
+	source_control.set_drag_preview(_stage_editor_make_drag_preview(_stage_editor_character_display_name(char_id), _stage_editor_character_portrait_texture(char_id)))
+	return {"type": "cast_character", "char_id": char_id}
+
+
+func _stage_editor_get_row_drag_data(_at_position: Vector2, source_control: Control, line_index: int) -> Variant:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line == null:
+		return null
+	var label_text: String = "%02d %s" % [line_index + 1, _stage_editor_character_display_name(line.character_id)]
+	source_control.set_drag_preview(_stage_editor_make_drag_preview(label_text, _stage_editor_character_portrait_texture(line.character_id)))
+	return {"type": "dialog_row", "line_index": line_index}
+
+
+func _stage_editor_make_drag_preview(label_text: String, texture: Texture2D = null) -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.08, 0.09, 0.12, 0.96)))
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	panel.add_child(margin)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	margin.add_child(row)
+	if texture != null:
+		var icon := TextureRect.new()
+		icon.texture = texture
+		icon.custom_minimum_size = Vector2(34, 34)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		row.add_child(icon)
+	var label := Label.new()
+	label.text = label_text
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	row.add_child(label)
+	return panel
+
+
+func _stage_editor_can_drop_on_dialog_row(_at_position: Vector2, data: Variant, _line_index: int) -> bool:
+	if not (data is Dictionary):
+		return false
+	var drag_data: Dictionary = data
+	return drag_data.get("type", "") == "cast_character" or drag_data.get("type", "") == "dialog_row"
+
+
+func _stage_editor_drop_on_dialog_row(_at_position: Vector2, data: Variant, target_index: int) -> void:
+	if not (data is Dictionary):
+		return
+	var drag_data: Dictionary = data
+	var drag_type: String = String(drag_data.get("type", ""))
+	if drag_type == "cast_character":
+		_stage_editor_set_dialog_line_character(target_index, String(drag_data.get("char_id", "")))
+	elif drag_type == "dialog_row":
+		_stage_editor_reorder_dialog_line(int(drag_data.get("line_index", -1)), target_index)
+
+
+func _stage_editor_can_drop_on_dialog_add_row(_at_position: Vector2, data: Variant) -> bool:
+	if not (data is Dictionary):
+		return false
+	var drag_data: Dictionary = data
+	return drag_data.get("type", "") == "cast_character" or drag_data.get("type", "") == "dialog_row"
+
+
+func _stage_editor_drop_on_dialog_add_row(_at_position: Vector2, data: Variant) -> void:
+	if not (data is Dictionary):
+		return
+	var drag_data: Dictionary = data
+	var drag_type: String = String(drag_data.get("type", ""))
+	if drag_type == "cast_character":
+		_stage_editor_add_dialog_line_for_character(String(drag_data.get("char_id", "")))
+	elif drag_type == "dialog_row":
+		var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+		if sequence != null:
+			_stage_editor_reorder_dialog_line(int(drag_data.get("line_index", -1)), sequence.lines.size())
+
+
+func _stage_editor_ensure_default_cast(sequence: DialogSequence) -> void:
+	if sequence == null or not sequence.cast.is_empty():
+		return
+	var char_id: String = _stage_editor_first_cast_id(sequence)
+	if not char_id.is_empty():
+		sequence.cast.append(char_id)
+
+
+func _stage_editor_get_dialog_line_at(line_index: int) -> DialogLine:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or line_index < 0 or line_index >= sequence.lines.size():
+		return null
+	return sequence.lines[line_index]
+
+
+func _stage_editor_set_dialog_line_character(line_index: int, char_id: String) -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if sequence == null or line == null:
+		return
+	if not char_id.is_empty() and not sequence.cast.has(char_id):
+		sequence.cast.append(char_id)
+	line.character_id = char_id
+	line.emotion = "normal"
+	_refresh_stage_editor_dialog_editor()
+
+
+func _stage_editor_add_dialog_line_for_character(char_id: String) -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or char_id.is_empty():
+		return
+	if not sequence.cast.has(char_id):
+		sequence.cast.append(char_id)
+	var line: DialogLine = _stage_editor_make_dialog_line()
+	line.character_id = char_id
+	line.action = "none"
+	sequence.lines.append(line)
+	_stage_editor_dialog_selected_index = sequence.lines.size() - 1
+	_refresh_stage_editor_dialog_editor()
+
+
+func _stage_editor_reorder_dialog_line(source_index: int, target_index: int) -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	if source_index < 0 or source_index >= sequence.lines.size():
+		return
+	var clamped_target: int = clampi(target_index, 0, sequence.lines.size())
+	if source_index == clamped_target or source_index + 1 == clamped_target:
+		return
+	var line: DialogLine = sequence.lines[source_index]
+	sequence.lines.remove_at(source_index)
+	var insert_index: int = clamped_target
+	if source_index < clamped_target:
+		insert_index -= 1
+	insert_index = clampi(insert_index, 0, sequence.lines.size())
+	sequence.lines.insert(insert_index, line)
+	_stage_editor_dialog_selected_index = insert_index
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_add_cast_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or _stage_editor_dialog_add_cast_option == null:
+		return
+	var char_id: String = _stage_editor_get_option_value(_stage_editor_dialog_add_cast_option)
+	if char_id.is_empty() or sequence.cast.has(char_id):
+		return
+	sequence.cast.append(char_id)
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_remove_cast_pressed(char_id: String) -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or _stage_editor_dialog_line_references_cast(sequence, char_id):
+		return
+	sequence.cast.erase(char_id)
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_background_selected(_item_index: int) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	var resource_path: String = _stage_editor_get_option_value(_stage_editor_dialog_background_option)
+	if resource_path.is_empty():
+		sequence.background = null
+		return
+	var texture: Texture2D = load(resource_path) as Texture2D
+	sequence.background = texture
+
+
+func _on_stage_editor_dialog_exit_side_toggled(button_pressed: bool) -> void:
+	if _stage_editor_dialog_exit_side_option != null:
+		_stage_editor_dialog_exit_side_option.text = "Right" if button_pressed else "Left"
+
+
+func _on_stage_editor_dialog_add_exit_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	_stage_editor_ensure_default_cast(sequence)
+	var char_id: String = _stage_editor_get_option_value(_stage_editor_dialog_exit_cast_option)
+	if char_id.is_empty():
+		char_id = _stage_editor_first_cast_id(sequence)
+	if char_id.is_empty():
+		return
+	var line: DialogLine = _stage_editor_make_dialog_line()
+	line.character_id = char_id
+	line.position = "right" if _stage_editor_dialog_exit_side_option != null and _stage_editor_dialog_exit_side_option.button_pressed else "left"
+	line.action = "exit"
+	line.shake = false
+	line.text_zh = ""
+	line.text_en = ""
+	sequence.lines.append(line)
+	_stage_editor_dialog_selected_index = sequence.lines.size() - 1
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_test_play_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	_stage_editor_ensure_dialog_cast(sequence)
+	if _stage_editor_test_dialog != null and is_instance_valid(_stage_editor_test_dialog):
+		_stage_editor_test_dialog.queue_free()
+	var dialog_control: Control = _DialogBoxScene.instantiate() as Control
+	if dialog_control == null:
+		return
+	_stage_editor_test_dialog = dialog_control
+	dialog_control.set("auto_start", false)
+	dialog_control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dialog_control.z_index = 500
+	dialog_control.connect("dialog_finished", Callable(self, "_on_stage_editor_dialog_test_play_finished"))
+	$UILayer.add_child(dialog_control)
+	dialog_control.call("start", sequence, true)
+
+
+func _on_stage_editor_dialog_test_play_finished() -> void:
+	_stage_editor_test_dialog = null
+
+
+func _on_stage_editor_dialog_row_speaker_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
+	_stage_editor_set_dialog_line_character(line_index, _stage_editor_get_option_value(option))
+
+
+func _on_stage_editor_dialog_row_side_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line != null:
+		line.position = _stage_editor_get_option_value(option)
+
+
+func _on_stage_editor_dialog_row_side_toggled(button_pressed: bool, line_index: int, switch_button: CheckButton) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line == null:
+		return
+	line.position = "right" if button_pressed else "left"
+	switch_button.text = "Right" if button_pressed else "Left"
+
+
+func _on_stage_editor_dialog_row_action_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line == null:
+		return
+	line.action = _stage_editor_get_option_value(option)
+	if line.action == "exit":
+		line.text_zh = ""
+		line.text_en = ""
+		line.shake = false
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_row_shake_toggled(button_pressed: bool, line_index: int) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line != null:
+		line.shake = button_pressed
+
+
+func _on_stage_editor_dialog_row_text_zh_changed(edit: TextEdit, line_index: int) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line != null:
+		line.text_zh = edit.text
+
+
+func _on_stage_editor_dialog_row_text_en_changed(edit: TextEdit, line_index: int) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line != null:
+		line.text_en = edit.text
+
+
+func _on_stage_editor_dialog_row_duplicate_pressed(line_index: int) -> void:
+	_stage_editor_dialog_selected_index = line_index
+	_on_stage_editor_dialog_duplicate_line_pressed()
+
+
+func _on_stage_editor_dialog_row_delete_pressed(line_index: int) -> void:
+	_stage_editor_dialog_selected_index = line_index
+	_on_stage_editor_dialog_delete_line_pressed()
+
+
+func _on_stage_editor_dialog_row_move_up_pressed(line_index: int) -> void:
+	_stage_editor_dialog_selected_index = line_index
+	_on_stage_editor_dialog_move_line_up_pressed()
+
+
+func _on_stage_editor_dialog_row_move_down_pressed(line_index: int) -> void:
+	_stage_editor_dialog_selected_index = line_index
+	_on_stage_editor_dialog_move_line_down_pressed()
+
+
+func _on_stage_editor_dialog_line_selected(line_index: int) -> void:
+	_stage_editor_dialog_selected_index = line_index
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_add_line_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	_stage_editor_ensure_default_cast(sequence)
+	var line: DialogLine = _stage_editor_make_dialog_line()
+	sequence.lines.append(line)
+	_stage_editor_dialog_selected_index = sequence.lines.size() - 1
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_duplicate_line_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	var source: DialogLine = _stage_editor_get_selected_dialog_line()
+	if sequence == null or source == null:
+		return
+	var line: DialogLine = _stage_editor_copy_dialog_line(source)
+	var insert_index: int = _stage_editor_dialog_selected_index + 1
+	sequence.lines.insert(insert_index, line)
+	_stage_editor_dialog_selected_index = insert_index
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_delete_line_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	if _stage_editor_dialog_selected_index < 0 or _stage_editor_dialog_selected_index >= sequence.lines.size():
+		return
+	sequence.lines.remove_at(_stage_editor_dialog_selected_index)
+	if sequence.lines.is_empty():
+		_stage_editor_dialog_selected_index = -1
+	else:
+		_stage_editor_dialog_selected_index = mini(_stage_editor_dialog_selected_index, sequence.lines.size() - 1)
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_move_line_up_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or _stage_editor_dialog_selected_index <= 0:
+		return
+	var line: DialogLine = sequence.lines[_stage_editor_dialog_selected_index]
+	sequence.lines.remove_at(_stage_editor_dialog_selected_index)
+	_stage_editor_dialog_selected_index -= 1
+	sequence.lines.insert(_stage_editor_dialog_selected_index, line)
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_move_line_down_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	if _stage_editor_dialog_selected_index < 0 or _stage_editor_dialog_selected_index >= sequence.lines.size() - 1:
+		return
+	var line: DialogLine = sequence.lines[_stage_editor_dialog_selected_index]
+	sequence.lines.remove_at(_stage_editor_dialog_selected_index)
+	_stage_editor_dialog_selected_index += 1
+	sequence.lines.insert(_stage_editor_dialog_selected_index, line)
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_dialog_character_changed(new_text: String) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.character_id = new_text.strip_edges()
+
+
+func _on_stage_editor_dialog_emotion_changed(new_text: String) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.emotion = new_text.strip_edges()
+
+
+func _on_stage_editor_dialog_position_selected(_item_index: int) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.position = _stage_editor_get_option_value(_stage_editor_dialog_position_option)
+
+
+func _on_stage_editor_dialog_action_selected(_item_index: int) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.action = _stage_editor_get_option_value(_stage_editor_dialog_action_option)
+
+
+func _on_stage_editor_dialog_shake_toggled(button_pressed: bool) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.shake = button_pressed
+
+
+func _on_stage_editor_dialog_text_zh_changed() -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.text_zh = _stage_editor_dialog_text_zh_edit.text
+
+
+func _on_stage_editor_dialog_text_en_changed() -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var line: DialogLine = _stage_editor_get_selected_dialog_line()
+	if line != null:
+		line.text_en = _stage_editor_dialog_text_en_edit.text
 
 
 func _make_stage_editor_value_button(value: int, label_text: String) -> Button:
@@ -1500,6 +2748,14 @@ func _layout_stage_editor_ui() -> void:
 	var right_margin: float = 12.0 + insets.y
 	var horizontal_gap: float = 12.0
 	var action_width: float = 0.0
+	var bottom_margin: float = 8.0 + insets.z
+	var tab_height: float = 58.0
+	var tab_width: float = minf(maxf(340.0, viewport_size.x * 0.54), maxf(260.0, viewport_size.x - insets.w - insets.y - 24.0))
+	var tab_left: float = insets.w + (viewport_size.x - insets.w - insets.y - tab_width) * 0.5
+	var tab_top: float = viewport_size.y - bottom_margin - tab_height
+
+	if _stage_editor_tab_panel != null:
+		_stage_editor_set_control_rect(_stage_editor_tab_panel, Rect2(tab_left, tab_top, tab_width, tab_height))
 
 	if _stage_editor_action_panel != null:
 		var action_min_size: Vector2 = _stage_editor_action_panel.get_combined_minimum_size()
@@ -1516,6 +2772,13 @@ func _layout_stage_editor_ui() -> void:
 		var area_width: float = minf(maxf(area_min_size.x, 260.0), maxf(160.0, available_area_width))
 		var area_height: float = maxf(area_min_size.y, 74.0)
 		_stage_editor_set_control_rect(_stage_editor_area_panel, Rect2(left_margin, top_margin, area_width, area_height))
+
+	if _stage_editor_dialog_panel != null:
+		var dialog_top: float = top_margin + 86.0
+		var dialog_bottom: float = tab_top - 8.0
+		var dialog_height: float = maxf(160.0, dialog_bottom - dialog_top)
+		var dialog_width: float = maxf(260.0, viewport_size.x - left_margin - right_margin)
+		_stage_editor_set_control_rect(_stage_editor_dialog_panel, Rect2(left_margin, dialog_top, dialog_width, dialog_height))
 
 	if _stage_editor_panel == null:
 		return
@@ -1537,7 +2800,7 @@ func _layout_stage_editor_ui() -> void:
 		_stage_editor_palette_grid.custom_minimum_size = Vector2(inner_width, button_size)
 	var panel_height: float = button_size + 16.0
 	var preferred_top: float = board.position.y + board_height + 12.0
-	var max_top: float = viewport_size.y - panel_height - insets.z - 8.0
+	var max_top: float = minf(viewport_size.y - panel_height - insets.z - 8.0, tab_top - panel_height - 8.0)
 	var min_top: float = 8.0 + insets.x
 	if max_top < min_top:
 		max_top = min_top
@@ -4184,10 +5447,18 @@ func _apply_burning_tick() -> void:
 	board.brighten_all_gems(0.2)
 
 
+func _ensure_battle_dialog() -> _BattleDialog:
+	if _battle_dialog == null:
+		_battle_dialog = _BattleDialog.new()
+		_battle_dialog.set_anchors_preset(Control.PRESET_FULL_RECT)
+		$UILayer.add_child(_battle_dialog)
+	return _battle_dialog
+
+
 ## 戰鬥勝利
 func _on_battle_won() -> void:
 	board.is_busy = true
-	# ── 最後一隻敵人死亡 → 立刻交叉淡入勝利音樂（在收尾對話之前）──
+	# ── 最後一隻敵人死亡 → 立刻交叉淡入勝利音樂 ──
 	GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")
 	_bgm_player = GameState.bgm_player
 	# ── 教學：Boss 擊敗後收尾對話（勝利橫幅前）──
@@ -4502,7 +5773,8 @@ func _bind_boss_bar(boss: Enemy) -> void:
 			_boss_bar_enemy.hp_changed.disconnect(_on_boss_hp_changed)
 		if _boss_bar_enemy.died.is_connected(_on_boss_died):
 			_boss_bar_enemy.died.disconnect(_on_boss_died)
-		_boss_bar_enemy.set_main_boss_mode(false)
+		if _boss_bar_enemy.current_hp > 0:
+			_boss_bar_enemy.set_main_boss_mode(false)
 	_boss_bar_enemy = boss
 	if boss == null or not is_instance_valid(boss) or boss.data == null:
 		_boss_bar.visible = false
@@ -4521,6 +5793,7 @@ func _bind_boss_bar(boss: Enemy) -> void:
 	_boss_bar.offset_bottom = _boss_bar.offset_top + BOSS_BAR_HEIGHT
 	_boss_bar.visible = true
 	boss.set_main_boss_mode(true)
+	boss.modulate.a = 0.0 if battle_manager != null and battle_manager.is_round_transitioning else 1.0
 
 	boss.hp_changed.connect(_on_boss_hp_changed)
 	boss.died.connect(_on_boss_died)
@@ -4539,6 +5812,9 @@ func _reveal_boss_bar() -> void:
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_bottom", 4.0 + BOSS_BAR_HEIGHT, 0.4) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	if is_instance_valid(_boss_bar_enemy):
+		_boss_bar_reveal_tween.tween_property(_boss_bar_enemy, "modulate:a", 1.0, 0.4) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 
 func _on_boss_hp_changed(current: int, maximum: int) -> void:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bvpludeobp8j3"
-path="res://.godot/imported/dialog_bg_school.png-86069a58e0b0f024aad61ef0fd4be70a.ctex"
+uid="uid://cckoggk0dkocx"
+path="res://.godot/imported/dialog_bg_aurora.png-ab8752249d7776ee9084fa06a46bacd7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/dialog_background/dialog_bg_school.png"
-dest_files=["res://.godot/imported/dialog_bg_school.png-86069a58e0b0f024aad61ef0fd4be70a.ctex"]
+source_file="res://assets/dialog_background/dialog_bg_aurora.png"
+dest_files=["res://.godot/imported/dialog_bg_aurora.png-ab8752249d7776ee9084fa06a46bacd7.ctex"]
 
 [params]
 

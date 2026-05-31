@@ -7,6 +7,8 @@ signal pressed(enemy: Enemy)  # 被點擊時發出
 signal died(enemy: Enemy)     # 死亡時發出
 signal hp_changed(current: int, maximum: int)  # 血量變動時發出（含初始與受傷）
 
+const MAIN_BOSS_DISPLAY_SCALE := 2.0
+
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
 var is_targeted: bool = false     # 是否被玩家選中為目標
@@ -22,6 +24,8 @@ var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻�
 @onready var hp_bar_label: Label = $VBox/HPRow/HPBar/HPLabel      # 血量數字
 
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
+var _base_minimum_size: Vector2 = Vector2.ZERO
+var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
 
 
 ## 初始化敎人資料
@@ -57,6 +61,25 @@ func set_main_boss_mode(active: bool) -> void:
 	var hp_row: Node = $VBox/HPRow
 	if hp_row is Control:
 		(hp_row as Control).visible = not active
+	_apply_main_boss_display_scale(active)
+
+
+func _apply_main_boss_display_scale(active: bool) -> void:
+	_cache_base_display_sizes()
+	var display_scale: float = MAIN_BOSS_DISPLAY_SCALE if active else 1.0
+	custom_minimum_size = _base_minimum_size * display_scale
+	size = custom_minimum_size
+	if portrait != null:
+		portrait.custom_minimum_size = _base_portrait_minimum_size * display_scale
+	if target_indicator != null and target_indicator.visible:
+		_position_target_marker()
+
+
+func _cache_base_display_sizes() -> void:
+	if _base_minimum_size == Vector2.ZERO:
+		_base_minimum_size = custom_minimum_size
+	if portrait != null and _base_portrait_minimum_size == Vector2.ZERO:
+		_base_portrait_minimum_size = portrait.custom_minimum_size
 
 
 ## 更新 UI 顯示（頭像、血條、目標標記等）

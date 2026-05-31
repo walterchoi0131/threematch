@@ -3,6 +3,7 @@
 extends Control
 
 const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 
 # ── 階段列舉 ──
 enum Phase { GOLD, LOOT, EXP, DONE }
@@ -500,18 +501,42 @@ func _show_tap_hint() -> void:
 func _go_to_map() -> void:
 	# 防重複觸發
 	_tap_button.disabled = true
+	var played_post_dialog: bool = await _play_post_dialog_after_result()
 	# 漸隱勝利音樂（存於 GameState）
 	GameState.fade_out_bgm(0.5)
+	GameState.fade_to_scene("res://scenes/map.tscn", 0.05 if played_post_dialog else 0.4)
+
+
+func _play_post_dialog_after_result() -> bool:
+	var stage: StageData = GameState.selected_stage
+	if stage == null or stage.post_dialog == null:
+		return false
+	if stage.post_dialog.lines.is_empty():
+		return false
+	GameState.fade_out_bgm(0.4)
+	await _fade_out_before_post_dialog()
+	var dialog_control: Control = _DialogBoxScene.instantiate() as Control
+	if dialog_control == null:
+		return false
+	dialog_control.set("auto_start", false)
+	dialog_control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dialog_control.z_index = 500
+	add_child(dialog_control)
+	dialog_control.call("start", stage.post_dialog, true, true, true)
+	await dialog_control.tree_exited
+	return true
+
+
+func _fade_out_before_post_dialog() -> void:
 	var black := ColorRect.new()
 	black.color = Color(0, 0, 0, 0)
 	black.set_anchors_preset(Control.PRESET_FULL_RECT)
 	black.mouse_filter = Control.MOUSE_FILTER_STOP
+	black.z_index = 400
 	add_child(black)
 	var tw := create_tween()
-	tw.tween_property(black, "color:a", 1.0, 0.4)
-	tw.tween_callback(func() -> void:
-		get_tree().change_scene_to_file("res://scenes/map.tscn")
-	)
+	tw.tween_property(black, "color:a", 1.0, 0.35)
+	await tw.finished
 
 
 # ── F9 角色矩形偏移 Debug 面板 ────────────────────────────────

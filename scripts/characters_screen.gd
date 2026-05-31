@@ -83,10 +83,10 @@ func _build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
-	var element_bar: HBoxContainer = CharacterSorter.make_element_filter_bar(_element_filter, _on_element_filter_changed, GameState.owned_characters)
+	var element_bar: HBoxContainer = CharacterSorter.make_element_filter_bar(_element_filter, _on_element_filter_changed, GameState.owned_characters, false, true)
 	header.add_child(element_bar)
 
-	var sort_row: Button = CharacterSorter.make_sort_dropdown(_sort_mode, _on_sort_changed, _sort_ascending)
+	var sort_row: Button = CharacterSorter.make_sort_dropdown(_sort_mode, _on_sort_changed, _sort_ascending, true)
 	header.add_child(sort_row)
 
 	# Scroll container + host（RosterLayout 清空並重建內部佈局）

@@ -105,6 +105,7 @@ var _hand_tween: Tween = null                # 手指浮動動畫
 var _edit_mode: bool = false
 var _edit_paint_value: int = Block.Type.RED
 var _edit_drag_paint_value: int = Block.Type.RED
+var _edit_input_enabled: bool = true
 var _edit_dragging: bool = false
 var _edit_last_painted: Vector2i = Vector2i(-1, -1)
 var _edit_layout_values: Array = []
@@ -424,6 +425,7 @@ func _shake_block(block: Block) -> void:
 
 func set_edit_mode(enabled: bool) -> void:
 	_edit_mode = enabled
+	_edit_input_enabled = enabled
 	_edit_dragging = false
 	_edit_last_painted = Vector2i(-1, -1)
 	if enabled:
@@ -440,6 +442,13 @@ func set_edit_mode(enabled: bool) -> void:
 		_apply_edit_layout_to_visuals()
 	else:
 		_edit_layout_values.clear()
+
+
+func set_edit_input_enabled(enabled: bool) -> void:
+	_edit_input_enabled = enabled
+	if not enabled:
+		_edit_dragging = false
+		_edit_last_painted = Vector2i(-1, -1)
 
 
 func set_edit_paint_value(value: int) -> void:
@@ -489,6 +498,8 @@ func save_fixed_layout_to_stage() -> int:
 
 
 func _handle_edit_input(event: InputEvent) -> void:
+	if not _edit_input_enabled:
+		return
 	if event is InputEventMouseButton:
 		var mouse_button: InputEventMouseButton = event as InputEventMouseButton
 		if mouse_button.button_index != MOUSE_BUTTON_LEFT and mouse_button.button_index != MOUSE_BUTTON_RIGHT:

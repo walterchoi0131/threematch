@@ -151,6 +151,7 @@ static func get_battle_background_path(area_key: String) -> String:
 
 const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 @export var pre_dialog: _DialogSequence = null  # 戰鬥前 AVG 對話（可選）
+@export var post_dialog: _DialogSequence = null  # 戰鬥後 AVG 對話（可選）
 
 ## 教學模式：啟用後使用固定棋盤並觸發教學流程
 @export var is_tutorial: bool = false

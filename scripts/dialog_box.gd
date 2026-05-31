@@ -15,6 +15,10 @@ const PORTRAIT_Y_RATIO := 0.527        # 立繪頂端 Y / viewport_h
 const LEFT_X_RATIO := 0.064            # 左側立繪 X / viewport_w
 const RIGHT_X_RATIO := 0.625           # 右側立繪 X / viewport_w
 const SLIDE_OFFSET_RATIO := 0.41       # 滑入/滑出偏移量 / viewport_w
+const ACTIVE_PORTRAIT_Z := 100         # 目前說話者永遠畫在最前方
+const ROTARY_X_RADIUS := 92.0          # 多角色同側旋轉展示的水平半徑
+const ROTARY_Y_RADIUS := 48.0          # 多角色同側旋轉展示的垂直半徑
+const BACK_PORTRAIT_SCALE := 0.86      # 非說話角色稍微縮小，讓後排更不擁擠
 
 # 動畫時間
 const SLIDE_IN_DUR := 0.35
@@ -28,10 +32,11 @@ const ACTIVE_COLOR := Color(1.0, 1.0, 1.0, 1.0)
 const INACTIVE_COLOR := Color(0.3, 0.3, 0.35, 1.0)
 
 # 對話框樣式
-const PANEL_HEIGHT := 220.0
+const PANEL_HEIGHT := 300.0
 const PANEL_MARGIN := 24.0
-const NAME_FONT_SIZE := 22
-const TEXT_FONT_SIZE := 20
+const NAME_FONT_SIZE := 28
+const TEXT_FONT_SIZE := 26
+const SKIP_FONT_SIZE := 20
 
 # 音樂淡入淡出
 const BGM_FADE_DUR := 0.8
@@ -62,6 +67,7 @@ var _bg_rect: TextureRect
 var _bg_color: ColorRect
 var _portrait_left: TextureRect
 var _portrait_right: TextureRect
+var _portrait_layer: Control
 var _name_label: Label
 var _text_label: RichTextLabel
 var _tap_zone: Button
@@ -74,6 +80,14 @@ var _sequence: _DialogSequence
 var _line_index: int = -1
 var _left_char_id: String = ""
 var _right_char_id: String = ""
+var _side_characters: Dictionary = {"left": [], "right": []}
+var _portrait_nodes: Dictionary = {}
+var _last_speaker_id: String = ""
+var _side_speaker_ids: Dictionary = {"left": "", "right": ""}
+var auto_start: bool = true
+var _preview_mode: bool = false
+var _finish_with_fade: bool = false
+var _start_with_fade: bool = false
 var _typing: bool = false
 var _type_tween: Tween = null
 var _texture_cache: Dictionary = {}  # path -> Texture2D
@@ -86,24 +100,35 @@ func _ready() -> void:
 	_tap_zone.pressed.connect(_advance)
 	# 從準備畫面淡入
 	var gs: Node = get_node_or_null("/root/GameState")
-	if gs != null:
+	if auto_start and gs != null:
 		gs.fade_in_if_pending(0.4)
 	# 漸隱前一場景的 BGM（例如地圖音樂）
-	if gs != null:
+	if auto_start and gs != null:
 		gs.fade_out_bgm(0.4)
 	# 獨立場景模式：自動讀取 GameState 的對話資料並播放
-	if gs != null and gs.selected_stage != null and gs.selected_stage.pre_dialog != null:
+	if auto_start and gs != null and gs.selected_stage != null and gs.selected_stage.pre_dialog != null:
 		start(gs.selected_stage.pre_dialog)
 
 
 # ── 公開 API ─────────────────────────────────────────────────
 
 ## 開始播放對話序列
-func start(sequence: _DialogSequence) -> void:
+func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fade: bool = false, start_with_fade: bool = false) -> void:
 	_sequence = sequence
+	_preview_mode = preview_mode
+	_finish_with_fade = finish_with_fade
+	_start_with_fade = start_with_fade
 	_line_index = -1
 	_left_char_id = ""
 	_right_char_id = ""
+	_side_characters = {"left": [], "right": []}
+	_last_speaker_id = ""
+	_side_speaker_ids = {"left": "", "right": ""}
+	for node_variant in _portrait_nodes.values():
+		var portrait_node: TextureRect = node_variant as TextureRect
+		if portrait_node != null:
+			portrait_node.queue_free()
+	_portrait_nodes.clear()
 	_set_auto_skip(false)
 	_portrait_left.visible = false
 	_portrait_right.visible = false
@@ -117,7 +142,22 @@ func start(sequence: _DialogSequence) -> void:
 		_bg_rect.visible = false
 		_bg_color.visible = true
 
+	if _start_with_fade:
+		_play_start_fade_in()
+
 	_advance()
+
+
+func _play_start_fade_in() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 1)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 200
+	add_child(overlay)
+	var tw := create_tween()
+	tw.tween_property(overlay, "color:a", 0.0, 0.35)
+	tw.tween_callback(overlay.queue_free)
 
 
 # ── UI 建構 ──────────────────────────────────────────────────
@@ -145,6 +185,11 @@ func _build_ui() -> void:
 	dim_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim_overlay)
+
+	_portrait_layer = Control.new()
+	_portrait_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_portrait_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_portrait_layer)
 
 	# 立繪尺寸（以放大倍率擴張 rect，避免 squeeze bounce 重設 transform.scale 影響大小）
 	var p_w: float = 300.0 * (PORTRAIT_SCALE / 4.0)
@@ -223,7 +268,7 @@ func _build_ui() -> void:
 	_skip_btn.text = Locale.tr_ui("SKIP")
 	_skip_btn.focus_mode = Control.FOCUS_NONE
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_skip_btn.add_theme_font_size_override("font_size", TEXT_FONT_SIZE)
+	_skip_btn.add_theme_font_size_override("font_size", SKIP_FONT_SIZE)
 	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
 	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 1.0, 1.0, 0.7))
 	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 1.0, 1.0, 0.5))
@@ -323,9 +368,7 @@ func _set_auto_skip(enabled: bool) -> void:
 
 func _show_line(line: _DialogLine) -> void:
 	var char_id: String = line.character_id
-	var is_left: bool = line.position == "left"
-	var portrait: TextureRect = _portrait_left if is_left else _portrait_right
-	var other_portrait: TextureRect = _portrait_right if is_left else _portrait_left
+	var side: String = _normalize_dialog_side(line.position)
 
 	# ── 音樂切換 ──
 	if line.music != null:
@@ -333,39 +376,35 @@ func _show_line(line: _DialogLine) -> void:
 
 	# ── 旁白行（無角色）──
 	if char_id.is_empty():
-		_set_portrait_dim(_portrait_left, true)
-		_set_portrait_dim(_portrait_right, true)
+		_set_all_portraits_dim("")
 		_name_label.text = ""
 	else:
 		# ── 處理動作：enter / exit ──
-		if line.action == "enter":
-			_do_enter(char_id, line.emotion, is_left, portrait)
-		elif line.action == "exit":
-			_do_exit(is_left, portrait)
+		if line.action == "exit":
+			_last_speaker_id = char_id
+			var exit_side: String = _get_character_side(char_id)
+			_do_exit_character(char_id)
+			if exit_side.is_empty():
+				exit_side = side
+			_set_side_portraits_dim(exit_side, "")
+			_name_label.text = ""
+			_text_label.text = ""
+			_text_label.visible_ratio = 1.0
+			_typing = false
+			get_tree().create_timer(SLIDE_OUT_DUR).timeout.connect(func() -> void:
+				if is_inside_tree():
+					_advance()
+			, CONNECT_ONE_SHOT)
+			return
 		else:
-			_update_portrait_texture(portrait, char_id, line.emotion, is_left)
-
-		# 更新角色追蹤
-		if is_left:
-			if line.action != "exit":
-				_left_char_id = char_id
-			else:
-				_left_char_id = ""
-		else:
-			if line.action != "exit":
-				_right_char_id = char_id
-			else:
-				_right_char_id = ""
-
-		# ── 說話者高亮 / 非說話者暗化 ──
-		if line.action != "exit":
-			_set_portrait_dim(portrait, false)
-			_set_portrait_dim(other_portrait, true)
-		else:
-			_set_portrait_dim(portrait, true)
+			_last_speaker_id = char_id
+			_side_speaker_ids[side] = char_id
+			_ensure_character_entered(char_id, side, line.emotion)
+			_set_side_portraits_dim(side, char_id)
 
 		# ── 擠壓彈跳說話動畫 ──
-		if line.shake and line.action != "exit" and portrait.visible:
+		var portrait: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
+		if line.shake and line.action != "exit" and portrait != null and portrait.visible:
 			_play_squeeze_bounce(portrait)
 
 		# ── 名稱 ──
@@ -405,6 +444,14 @@ func _on_typing_done() -> void:
 
 
 func _finish_dialog() -> void:
+	if _preview_mode:
+		if _finish_with_fade:
+			_finish_preview_with_fade()
+		else:
+			dialog_finished.emit()
+			queue_free()
+		return
+
 	# 淡出音樂
 	if _bgm_player.playing:
 		var fade := create_tween()
@@ -424,6 +471,22 @@ func _finish_dialog() -> void:
 	tw.tween_callback(func() -> void:
 		dialog_finished.emit()
 		get_tree().change_scene_to_file("res://scenes/main.tscn")
+	)
+
+
+func _finish_preview_with_fade() -> void:
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 100
+	add_child(overlay)
+
+	var tw := create_tween()
+	tw.tween_property(overlay, "color:a", 1.0, 0.35)
+	tw.tween_callback(func() -> void:
+		dialog_finished.emit()
+		queue_free()
 	)
 
 
@@ -449,6 +512,192 @@ func _change_bgm(stream: AudioStream) -> void:
 
 
 # ── 立繪管理 ─────────────────────────────────────────────────
+
+func _normalize_dialog_side(side: String) -> String:
+	return "right" if side == "right" else "left"
+
+
+func _get_portrait_size() -> Vector2:
+	return Vector2(300.0 * (PORTRAIT_SCALE / 4.0), 400.0 * (PORTRAIT_SCALE / 4.0))
+
+
+func _portrait_anchor_position(side: String) -> Vector2:
+	var portrait_size: Vector2 = _get_portrait_size()
+	var vp: Vector2 = ViewportUtils.get_size()
+	var portrait_y: float = vp.y * PORTRAIT_Y_RATIO
+	var anchor_x: float
+	if side == "right":
+		anchor_x = vp.x * RIGHT_X_RATIO - (portrait_size.x - 300.0) * 0.5 - 30.0
+	else:
+		anchor_x = vp.x * LEFT_X_RATIO - (portrait_size.x - 300.0) * 0.5 - 50.0
+	return Vector2(anchor_x, portrait_y - (portrait_size.y - 400.0))
+
+
+func _portrait_target_position(side: String, side_index: int, side_count: int = 1, active_index: int = -1) -> Vector2:
+	var anchor_position: Vector2 = _portrait_anchor_position(side)
+	if side_count <= 1:
+		return anchor_position
+	var display_index: int = side_index
+	if active_index >= 0:
+		display_index = posmod(side_index - active_index, side_count)
+	var angle: float = -PI * 0.5 + TAU * float(display_index) / float(side_count)
+	var offset := Vector2(cos(angle) * ROTARY_X_RADIUS, -sin(angle) * ROTARY_Y_RADIUS)
+	return anchor_position + offset
+
+
+func _side_active_speaker_id(side: String) -> String:
+	return String(_side_speaker_ids.get(side, ""))
+
+
+func _portrait_target_scale(char_id: String, side: String) -> Vector2:
+	if char_id == _side_active_speaker_id(side):
+		return Vector2(1.0, 1.0)
+	return Vector2(BACK_PORTRAIT_SCALE, BACK_PORTRAIT_SCALE)
+
+
+func _make_dynamic_portrait(char_id: String) -> TextureRect:
+	var portrait := TextureRect.new()
+	portrait.name = "Portrait_" + char_id
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var portrait_size: Vector2 = _get_portrait_size()
+	portrait.custom_minimum_size = portrait_size
+	portrait.size = portrait_size
+	portrait.pivot_offset = Vector2(portrait_size.x * 0.5, portrait_size.y)
+	portrait.visible = false
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait.modulate = ACTIVE_COLOR
+	_portrait_layer.add_child(portrait)
+	return portrait
+
+
+func _get_dynamic_portrait(char_id: String) -> TextureRect:
+	var existing: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
+	if existing != null:
+		return existing
+	var portrait: TextureRect = _make_dynamic_portrait(char_id)
+	_portrait_nodes[char_id] = portrait
+	return portrait
+
+
+func _get_character_side(char_id: String) -> String:
+	for side_variant in _side_characters.keys():
+		var side: String = String(side_variant)
+		var side_list: Array = _side_characters[side]
+		if side_list.has(char_id):
+			return side
+	return ""
+
+
+func _remove_character_from_sides(char_id: String) -> void:
+	for side_variant in _side_characters.keys():
+		var side: String = String(side_variant)
+		var side_list: Array = _side_characters[side]
+		while side_list.has(char_id):
+			side_list.erase(char_id)
+
+
+func _layout_portraits(animated: bool, skip_char_id: String = "") -> void:
+	for side_name in ["left", "right"]:
+		var side_list: Array = _side_characters[side_name]
+		var side_count: int = side_list.size()
+		var side_speaker_id: String = _side_active_speaker_id(side_name)
+		var active_index: int = side_list.find(side_speaker_id)
+		for side_index in side_list.size():
+			var char_id: String = String(side_list[side_index])
+			if char_id == skip_char_id:
+				continue
+			var portrait: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
+			if portrait == null or not portrait.visible:
+				continue
+			portrait.flip_h = side_name == "left"
+			portrait.z_index = ACTIVE_PORTRAIT_Z if char_id == _last_speaker_id else 60 if char_id == side_speaker_id else side_index
+			var target_position: Vector2 = _portrait_target_position(side_name, side_index, side_count, active_index)
+			var target_scale: Vector2 = _portrait_target_scale(char_id, side_name)
+			portrait.set_meta("home_x", target_position.x)
+			if animated:
+				var tw := create_tween()
+				tw.tween_property(portrait, "position", target_position, 0.18) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+				tw.parallel().tween_property(portrait, "scale", target_scale, 0.18) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			else:
+				portrait.position = target_position
+				portrait.scale = target_scale
+
+
+func _ensure_character_entered(char_id: String, side: String, emotion: String) -> void:
+	side = _normalize_dialog_side(side)
+	var portrait: TextureRect = _get_dynamic_portrait(char_id)
+	_update_portrait_texture(portrait, char_id, emotion, side == "left")
+	var current_side: String = _get_character_side(char_id)
+	if current_side == side and portrait.visible:
+		_layout_portraits(true)
+		return
+
+	_remove_character_from_sides(char_id)
+	var side_list: Array = _side_characters[side]
+	side_list.append(char_id)
+	portrait.visible = true
+	portrait.modulate = ACTIVE_COLOR
+	portrait.flip_h = side == "left"
+	portrait.z_index = ACTIVE_PORTRAIT_Z
+	portrait.scale = Vector2(1.0, 1.0)
+	var active_index: int = side_list.find(char_id)
+	var target_position: Vector2 = _portrait_target_position(side, side_list.size() - 1, side_list.size(), active_index)
+	portrait.set_meta("home_x", target_position.x)
+	var slide_offset: float = ViewportUtils.get_size().x * SLIDE_OFFSET_RATIO
+	portrait.position = Vector2(target_position.x - slide_offset if side == "left" else target_position.x + slide_offset, target_position.y)
+	_layout_portraits(true, char_id)
+	var tw := create_tween()
+	tw.tween_property(portrait, "position", target_position, SLIDE_IN_DUR) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+
+func _do_exit_character(char_id: String) -> void:
+	var side: String = _get_character_side(char_id)
+	var portrait: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
+	if side.is_empty() or portrait == null or not portrait.visible:
+		return
+	portrait.z_index = ACTIVE_PORTRAIT_Z
+	_remove_character_from_sides(char_id)
+	if _last_speaker_id == char_id:
+		_last_speaker_id = ""
+	if _side_active_speaker_id(side) == char_id:
+		_side_speaker_ids[side] = ""
+	_layout_portraits(true, char_id)
+	var slide_offset: float = ViewportUtils.get_size().x * SLIDE_OFFSET_RATIO
+	var target_x: float = portrait.position.x - slide_offset if side == "left" else portrait.position.x + slide_offset
+	var tw := create_tween()
+	tw.tween_property(portrait, "position:x", target_x, SLIDE_OUT_DUR) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.parallel().tween_property(portrait, "modulate:a", 0.0, SLIDE_OUT_DUR)
+	tw.tween_callback(func() -> void:
+		portrait.visible = false
+		portrait.modulate = ACTIVE_COLOR
+	)
+
+
+func _set_all_portraits_dim(active_char_id: String) -> void:
+	for char_variant in _portrait_nodes.keys():
+		var char_id: String = String(char_variant)
+		var portrait: TextureRect = _portrait_nodes[char_id]
+		if portrait == null or not portrait.visible:
+			continue
+		_set_portrait_dim(portrait, char_id != active_char_id)
+
+
+func _set_side_portraits_dim(side: String, active_char_id: String) -> void:
+	if not _side_characters.has(side):
+		return
+	var side_list: Array = _side_characters[side]
+	for char_variant in side_list:
+		var char_id: String = String(char_variant)
+		var portrait: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
+		if portrait == null or not portrait.visible:
+			continue
+		_set_portrait_dim(portrait, char_id != active_char_id)
+
 
 func _do_enter(char_id: String, emotion: String, is_left: bool, portrait: TextureRect) -> void:
 	# 如果同側已有不同角色，先快速滑出

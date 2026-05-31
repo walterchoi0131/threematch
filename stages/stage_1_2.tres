@@ -3,11 +3,65 @@
 [ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="2_s56y8"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="3_21e67"]
 [ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
 [ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
 [ext_resource type="Resource" path="res://enemies/bone_wizard.tres" id="5_8ceh8"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="7_8hubh"]
+
+[sub_resource type="Resource" id="Resource_s56y8"]
+script = ExtResource("2_s56y8")
+character_id = "boar"
+text_zh = "123"
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_sqaa3"]
+script = ExtResource("2_s56y8")
+character_id = "boar"
+action = "exit"
+shake = false
+
+[sub_resource type="Resource" id="Resource_21e67"]
+script = ExtResource("3_21e67")
+lines = Array[ExtResource("2_s56y8")]([SubResource("Resource_s56y8"), SubResource("Resource_sqaa3")])
+cast = Array[String](["boar"])
+
+[sub_resource type="Resource" id="Resource_m1ng8"]
+script = ExtResource("2_s56y8")
+character_id = "husky"
+text_zh = "hi1"
+
+[sub_resource type="Resource" id="Resource_2sd5u"]
+script = ExtResource("2_s56y8")
+character_id = "husky"
+action = "exit"
+shake = false
+
+[sub_resource type="Resource" id="Resource_o30ma"]
+script = ExtResource("2_s56y8")
+character_id = "panda"
+text_zh = "yo1"
+
+[sub_resource type="Resource" id="Resource_06egh"]
+script = ExtResource("2_s56y8")
+character_id = "raccoon"
+text_zh = "yo2"
+
+[sub_resource type="Resource" id="Resource_41gpv"]
+script = ExtResource("2_s56y8")
+character_id = "husky"
+text_zh = "yi1"
+
+[sub_resource type="Resource" id="Resource_5rlrb"]
+script = ExtResource("2_s56y8")
+character_id = "boar"
+
+[sub_resource type="Resource" id="Resource_no18u"]
+script = ExtResource("3_21e67")
+lines = Array[ExtResource("2_s56y8")]([SubResource("Resource_m1ng8"), SubResource("Resource_2sd5u"), SubResource("Resource_o30ma"), SubResource("Resource_06egh"), SubResource("Resource_41gpv"), SubResource("Resource_5rlrb")])
+cast = Array[String](["boar", "panda", "raccoon", "husky", "dragon"])
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")
@@ -88,4 +142,6 @@ rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2"), ExtRes
 rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0, 0], [0]])
 background = 1
 bgm = ExtResource("1_lvgyu")
+pre_dialog = SubResource("Resource_no18u")
+post_dialog = SubResource("Resource_21e67")
 fixed_layout = [[-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1]]

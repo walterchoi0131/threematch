@@ -89,7 +89,7 @@ static func make_sort_buttons(initial_mode: int, on_changed: Callable, initial_a
 
 ## 建立「下拉式」排序選擇器：單一按鈕，點擊彈出選單。
 ## 行為：點選與當前相同模式 → 切換升降冪；點選不同模式 → 切到該模式並重設預設冪。
-static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_ascending: bool = false) -> Button:
+static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_ascending: bool = false, compact: bool = false) -> Button:
 	var entries: Array = [
 		{"k": "SORT_LEVEL", "m": Mode.LEVEL},
 		{"k": "SORT_ATK", "m": Mode.ATK},
@@ -101,7 +101,7 @@ static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_
 
 	var btn := Button.new()
 	btn.toggle_mode = false
-	btn.custom_minimum_size = Vector2(120, 32)
+	btn.custom_minimum_size = Vector2(88, 30) if compact else Vector2(120, 32)
 	btn.focus_mode = Control.FOCUS_NONE
 
 	# 深色圓角按鈕樣式（仿圖示風格）
@@ -116,7 +116,10 @@ static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_
 		sb.set_corner_radius_all(10)
 		sb.set_border_width_all(2)
 		sb.border_color = Color(0.45, 0.35, 0.55, 0.95)
-		sb.set_content_margin_all(8)
+		sb.content_margin_left = 3.0 if compact else 8.0
+		sb.content_margin_right = 3.0 if compact else 8.0
+		sb.content_margin_top = 5.0 if compact else 8.0
+		sb.content_margin_bottom = 5.0 if compact else 8.0
 		btn.add_theme_stylebox_override(st, sb)
 	btn.add_theme_color_override("font_color", Color(0.92, 0.92, 0.96))
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
@@ -150,9 +153,9 @@ static func make_sort_dropdown(initial_mode: int, on_changed: Callable, initial_
 	return btn
 
 
-## 建立獨立元素篩選列：全部 + 目前名冊中存在的元素圖示。
+## 建立獨立元素篩選列：目前名冊中存在的元素圖示，可選擇是否顯示「全部」。
 ## on_changed 接收 (element_filter: int)，ELEMENT_FILTER_ALL 代表不篩選。
-static func make_element_filter_bar(initial_filter: int, on_changed: Callable, characters: Array = []) -> HBoxContainer:
+static func make_element_filter_bar(initial_filter: int, on_changed: Callable, characters: Array = [], show_all_button: bool = true, toggle_selected_to_all: bool = false) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	row.size_flags_horizontal = Control.SIZE_SHRINK_END
@@ -160,13 +163,14 @@ static func make_element_filter_bar(initial_filter: int, on_changed: Callable, c
 	var state: Dictionary = {"filter": initial_filter}
 	var btns: Array[Dictionary] = []
 
-	var all_btn := Button.new()
-	all_btn.text = Locale.tr_ui("ALL")
-	all_btn.toggle_mode = true
-	all_btn.focus_mode = Control.FOCUS_NONE
-	all_btn.custom_minimum_size = Vector2(52, 32)
-	row.add_child(all_btn)
-	btns.append({"btn": all_btn, "filter": ELEMENT_FILTER_ALL, "color": Color(0.22, 0.22, 0.28, 1.0)})
+	if show_all_button:
+		var all_btn := Button.new()
+		all_btn.text = Locale.tr_ui("ALL")
+		all_btn.toggle_mode = true
+		all_btn.focus_mode = Control.FOCUS_NONE
+		all_btn.custom_minimum_size = Vector2(52, 32)
+		row.add_child(all_btn)
+		btns.append({"btn": all_btn, "filter": ELEMENT_FILTER_ALL, "color": Color(0.22, 0.22, 0.28, 1.0)})
 
 	for element_type: int in get_element_filter_order(characters):
 		var btn := Button.new()
@@ -194,9 +198,12 @@ static func make_element_filter_bar(initial_filter: int, on_changed: Callable, c
 		var btn: Button = info.btn
 		var filter_value: int = int(info.filter)
 		btn.pressed.connect(func() -> void:
-			state.filter = filter_value
+			if toggle_selected_to_all and int(state.filter) == filter_value:
+				state.filter = ELEMENT_FILTER_ALL
+			else:
+				state.filter = filter_value
 			refresh.call()
-			on_changed.call(filter_value)
+			on_changed.call(int(state.filter))
 		)
 
 	refresh.call()

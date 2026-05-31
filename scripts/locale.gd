@@ -51,7 +51,7 @@ var _translations: Dictionary = {
 	"FIXED": {"zh": "固定", "en": "FIXED"},
 	"SKIP": {"zh": "跳過", "en": "Skip"},
 	"COOLDOWN": {"zh": "冷卻回合", "en": "Cooldown"},
-	"FUSE_HINT": {"zh": "合成提示", "en": "Fuse"},
+	"FUSE_HINT": {"zh": "符石合成", "en": "Gem Fuse"},
 	"BLAST_AREA": {"zh": "爆發範圍", "en": "Blast"},
 	"COMBO": {"zh": "連擊", "en": "Combo"},
 	"UPPER_GEM": {"zh": "上級寶石", "en": "Upper Gem"},
