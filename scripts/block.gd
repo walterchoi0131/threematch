@@ -46,8 +46,8 @@ const ICONS = {
 const GEM_TEXTURES: Dictionary = {
 	Type.RED: preload("res://assets/gems/gem_red.png"),
 	Type.BLUE: preload("res://assets/gems/gem_blue.png"),
-	Type.GREEN: preload("res://assets/gems/gem_leaf2.png"),
-	Type.LIGHT: preload("res://assets/gems/gem_light2.png"),
+	Type.GREEN: preload("res://assets/gems/gem_leaf3.png"),
+	Type.LIGHT: preload("res://assets/gems/gem_light.png"),
 	Type.DARK: preload("res://assets/gems/gem_moon.png"),
 	Type.PLANK: preload("res://assets/blocks/wood.png"),
 	Type.ROCK: preload("res://assets/blocks/rock.png"),

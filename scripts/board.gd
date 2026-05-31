@@ -104,6 +104,7 @@ var _hand_tween: Tween = null                # 手指浮動動畫
 # ── 關卡棋盤編輯模式 ───────────────────────────────────────
 var _edit_mode: bool = false
 var _edit_paint_value: int = Block.Type.RED
+var _edit_drag_paint_value: int = Block.Type.RED
 var _edit_dragging: bool = false
 var _edit_last_painted: Vector2i = Vector2i(-1, -1)
 var _edit_layout_values: Array = []
@@ -490,14 +491,15 @@ func save_fixed_layout_to_stage() -> int:
 func _handle_edit_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mouse_button: InputEventMouseButton = event as InputEventMouseButton
-		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT and mouse_button.button_index != MOUSE_BUTTON_RIGHT:
 			return
 		if mouse_button.pressed:
 			var press_pos: Vector2i = world_to_grid(get_local_mouse_position())
 			_edit_dragging = _is_valid(press_pos)
 			_edit_last_painted = Vector2i(-1, -1)
+			_edit_drag_paint_value = EDIT_RANDOM if mouse_button.button_index == MOUSE_BUTTON_RIGHT else _edit_paint_value
 			if _edit_dragging:
-				paint_cell(press_pos, _edit_paint_value)
+				paint_cell(press_pos, _edit_drag_paint_value)
 		else:
 			_edit_dragging = false
 			_edit_last_painted = Vector2i(-1, -1)
@@ -505,7 +507,7 @@ func _handle_edit_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and _edit_dragging:
 		var drag_pos: Vector2i = world_to_grid(get_local_mouse_position())
 		if _is_valid(drag_pos) and drag_pos != _edit_last_painted:
-			paint_cell(drag_pos, _edit_paint_value)
+			paint_cell(drag_pos, _edit_drag_paint_value)
 
 
 func _build_edit_layout_from_stage() -> void:

@@ -99,7 +99,7 @@ const GAME_X_OFFSET := 0  # 遊戲內容向右偏移量（日誌面板已隱藏�
 const GEM_ICON_PATHS := {
 	Block.Type.RED: "res://assets/gems/gem_red.png",
 	Block.Type.BLUE: "res://assets/gems/gem_blue.png",
-	Block.Type.GREEN: "res://assets/gems/gem_green.png",
+	Block.Type.GREEN: "res://assets/gems/gem_leaf3.png",
 	Block.Type.LIGHT: "res://assets/gems/gem_light.png",
 	Block.Type.DARK: "res://assets/gems/gem_moon.png",
 }
@@ -137,7 +137,6 @@ const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
 const BGM_PREVIEW_PITCH := 1               # 預覽模式BGM播放速度
 const BGM_PREVIEW_TIME_SCALE := 0.6          # 預覽模式遊戲速度
 const BGM_FADE_DUR := 0.25                   # 音量/速度漸變時間
-const STAGE_EDITOR_RANDOM := -1
 const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 	Block.Type.RED,
 	Block.Type.BLUE,
@@ -153,14 +152,14 @@ const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_man
 
 var _stage_editor_panel: PanelContainer = null
 var _stage_editor_root_box: VBoxContainer = null
-var _stage_editor_status: Label = null
+var _stage_editor_area_panel: PanelContainer = null
+var _stage_editor_action_panel: PanelContainer = null
+var _stage_editor_palette_grid: GridContainer = null
 var _stage_editor_value_buttons: Dictionary = {}
 var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
-var _stage_editor_area_battle_preview: TextureRect = null
-var _stage_editor_area_summary: Label = null
 var _stage_editor_enemy_area_panel: Control = null
 var _stage_editor_prev_round_button: Button = null
 var _stage_editor_next_round_button: Button = null
@@ -371,6 +370,8 @@ func _hide_battle_ui_for_stage_editor() -> void:
 
 
 func _build_stage_editor_ui() -> void:
+	_build_stage_editor_area_panel()
+	_build_stage_editor_action_panel()
 	if _stage_editor_panel != null:
 		return
 	_stage_editor_panel = PanelContainer.new()
@@ -396,49 +397,22 @@ func _build_stage_editor_ui() -> void:
 	_stage_editor_panel.add_child(margin)
 
 	var root_box := VBoxContainer.new()
-	root_box.add_theme_constant_override("separation", 6)
+	root_box.add_theme_constant_override("separation", 0)
 	margin.add_child(root_box)
 	_stage_editor_root_box = root_box
 
-	var header_row := HBoxContainer.new()
-	header_row.add_theme_constant_override("separation", 10)
-	root_box.add_child(header_row)
-
-	var stage_label := Label.new()
-	stage_label.text = "Edit %s" % current_stage.stage_id if current_stage != null else "Edit Stage"
-	stage_label.add_theme_font_size_override("font_size", 16)
-	stage_label.add_theme_color_override("font_color", Color.WHITE)
-	stage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_row.add_child(stage_label)
-
-	_stage_editor_status = Label.new()
-	_stage_editor_status.text = ""
-	_stage_editor_status.add_theme_font_size_override("font_size", 14)
-	_stage_editor_status.add_theme_color_override("font_color", Color(0.75, 0.9, 1.0, 1.0))
-	_stage_editor_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_stage_editor_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_row.add_child(_stage_editor_status)
-
-	_build_stage_editor_area_panel(root_box)
-
 	var button_grid := GridContainer.new()
-	button_grid.columns = 7
+	button_grid.columns = STAGE_EDITOR_GEM_TYPES.size()
 	button_grid.add_theme_constant_override("h_separation", 6)
 	button_grid.add_theme_constant_override("v_separation", 6)
+	button_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root_box.add_child(button_grid)
+	_stage_editor_palette_grid = button_grid
 
 	for gem_type: int in STAGE_EDITOR_GEM_TYPES:
 		var value_button: Button = _make_stage_editor_value_button(gem_type, _stage_editor_type_name(gem_type))
 		button_grid.add_child(value_button)
 		_stage_editor_value_buttons[gem_type] = value_button
-
-	var eraser_button: Button = _make_stage_editor_value_button(STAGE_EDITOR_RANDOM, "Erase")
-	button_grid.add_child(eraser_button)
-	_stage_editor_value_buttons[STAGE_EDITOR_RANDOM] = eraser_button
-
-	button_grid.add_child(_make_stage_editor_command_button("Clear All", _on_stage_editor_clear_pressed))
-	button_grid.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
-	button_grid.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
 
 	_refresh_stage_editor_value_buttons()
 	_refresh_stage_editor_area_panel()
@@ -453,29 +427,31 @@ func _stage_editor_load_area_state() -> void:
 	current_stage.area = _stage_editor_selected_area
 
 
-func _build_stage_editor_area_panel(parent: VBoxContainer) -> void:
-	var area_panel := PanelContainer.new()
-	area_panel.name = "StageEditorAreaPanel"
-	area_panel.custom_minimum_size = Vector2(0, 62)
-	area_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
-	parent.add_child(area_panel)
+func _build_stage_editor_area_panel() -> void:
+	if _stage_editor_area_panel != null:
+		return
+	_stage_editor_area_panel = PanelContainer.new()
+	_stage_editor_area_panel.name = "StageEditorAreaPanel"
+	_stage_editor_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stage_editor_area_panel.custom_minimum_size = Vector2(260, 62)
+	_stage_editor_area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
+	$UILayer.add_child(_stage_editor_area_panel)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 8)
 	margin.add_theme_constant_override("margin_top", 6)
 	margin.add_theme_constant_override("margin_right", 8)
 	margin.add_theme_constant_override("margin_bottom", 6)
-	area_panel.add_child(margin)
+	_stage_editor_area_panel.add_child(margin)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	margin.add_child(row)
 
 	var selector_box := VBoxContainer.new()
 	selector_box.add_theme_constant_override("separation", 3)
 	selector_box.custom_minimum_size = Vector2(138, 0)
+	selector_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(selector_box)
 
 	var title := Label.new()
@@ -493,49 +469,57 @@ func _build_stage_editor_area_panel(parent: VBoxContainer) -> void:
 		_stage_editor_area_option.add_item(area_key)
 		_stage_editor_area_option.set_item_metadata(item_index, area_key)
 	_stage_editor_area_option.item_selected.connect(_on_stage_editor_area_selected)
+	_stage_editor_area_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	selector_box.add_child(_stage_editor_area_option)
 
-	_stage_editor_area_spot_preview = _make_stage_editor_area_preview("Spot")
+	_stage_editor_area_spot_preview = TextureRect.new()
+	_stage_editor_area_spot_preview.name = "SpotPreview"
+	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(72, 48)
+	_stage_editor_area_spot_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_stage_editor_area_spot_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_stage_editor_area_spot_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stage_editor_area_spot_preview.tooltip_text = "Spot"
 	row.add_child(_stage_editor_area_spot_preview)
 
-	_stage_editor_area_battle_preview = _make_stage_editor_area_preview("Battle BG")
-	row.add_child(_stage_editor_area_battle_preview)
 
-	_stage_editor_area_summary = Label.new()
-	_stage_editor_area_summary.add_theme_font_size_override("font_size", 11)
-	_stage_editor_area_summary.add_theme_color_override("font_color", Color(0.78, 0.84, 0.92, 1.0))
-	_stage_editor_area_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_stage_editor_area_summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stage_editor_area_summary.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(_stage_editor_area_summary)
+func _build_stage_editor_action_panel() -> void:
+	if _stage_editor_action_panel != null:
+		return
+	_stage_editor_action_panel = PanelContainer.new()
+	_stage_editor_action_panel.name = "StageEditorActions"
+	_stage_editor_action_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_stage_editor_action_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
+	$UILayer.add_child(_stage_editor_action_panel)
 
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	_stage_editor_action_panel.add_child(margin)
 
-func _make_stage_editor_area_preview(label_text: String) -> TextureRect:
-	var preview := TextureRect.new()
-	preview.name = label_text.replace(" ", "")
-	preview.custom_minimum_size = Vector2(72, 48)
-	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	preview.tooltip_text = label_text
-	return preview
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	margin.add_child(row)
+
+	row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
+	row.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
+	row.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
 
 
 func _make_stage_editor_value_button(value: int, label_text: String) -> Button:
 	var button := Button.new()
 	button.toggle_mode = true
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(58, 42)
+	button.custom_minimum_size = Vector2(58, 58)
 	button.tooltip_text = label_text
 	button.add_theme_font_size_override("font_size", 13)
-	if value == STAGE_EDITOR_RANDOM:
-		button.text = label_text
-	elif Block.GEM_TEXTURES.has(value):
+	if Block.GEM_TEXTURES.has(value):
 		var icon_texture: Texture2D = Block.GEM_TEXTURES[value]
 		button.icon = icon_texture
 		button.expand_icon = true
 	else:
-		button.text = str(Block.ICONS.get(value, label_text))
+		button.text = ""
 		button.add_theme_color_override("font_color", Block.COLORS.get(value, Color.WHITE))
 	button.pressed.connect(_on_stage_editor_value_selected.bind(value))
 	return button
@@ -1391,7 +1375,7 @@ func _on_stage_editor_value_selected(value: int) -> void:
 	_stage_editor_selected_value = value
 	board.set_edit_paint_value(value)
 	_refresh_stage_editor_value_buttons()
-	_set_stage_editor_status(_stage_editor_type_name(value) if value != STAGE_EDITOR_RANDOM else "Erase")
+	_set_stage_editor_status(_stage_editor_type_name(value))
 
 
 func _refresh_stage_editor_value_buttons() -> void:
@@ -1411,16 +1395,10 @@ func _refresh_stage_editor_area_panel() -> void:
 			if item_area == _stage_editor_selected_area:
 				_stage_editor_area_option.select(item_index)
 				break
-	var spot_path: String = StageData.get_stage_spot_path(_stage_editor_selected_area)
-	var battle_path: String = StageData.get_battle_background_path(_stage_editor_selected_area)
 	if _stage_editor_area_spot_preview != null:
+		var spot_path: String = StageData.get_stage_spot_path(_stage_editor_selected_area)
 		_stage_editor_area_spot_preview.texture = load(spot_path) as Texture2D
 		_stage_editor_area_spot_preview.tooltip_text = spot_path
-	if _stage_editor_area_battle_preview != null:
-		_stage_editor_area_battle_preview.texture = load(battle_path) as Texture2D
-		_stage_editor_area_battle_preview.tooltip_text = battle_path
-	if _stage_editor_area_summary != null:
-		_stage_editor_area_summary.text = "Spot: %s\nBattle: %s" % [spot_path.get_file(), battle_path.get_file()]
 
 
 func _on_stage_editor_area_selected(item_index: int) -> void:
@@ -1511,37 +1489,61 @@ func _on_stage_editor_back_pressed() -> void:
 
 
 func _set_stage_editor_status(message: String, ok: bool = true) -> void:
-	if _stage_editor_status == null:
-		return
-	_stage_editor_status.text = message
-	var status_color: Color = Color(0.75, 0.9, 1.0, 1.0) if ok else Color(1.0, 0.55, 0.5, 1.0)
-	_stage_editor_status.add_theme_color_override("font_color", status_color)
+	pass
 
 
 func _layout_stage_editor_ui() -> void:
-	if _stage_editor_panel == null:
-		return
 	var viewport_size: Vector2 = ViewportUtils.get_size()
 	var insets: Vector4 = ViewportUtils.get_safe_insets()
+	var top_margin: float = 8.0 + insets.x
+	var left_margin: float = 12.0 + insets.w
+	var right_margin: float = 12.0 + insets.y
+	var horizontal_gap: float = 12.0
+	var action_width: float = 0.0
+
+	if _stage_editor_action_panel != null:
+		var action_min_size: Vector2 = _stage_editor_action_panel.get_combined_minimum_size()
+		action_width = minf(maxf(action_min_size.x, 292.0), maxf(120.0, viewport_size.x - left_margin - right_margin))
+		var action_height: float = maxf(action_min_size.y, 58.0)
+		var action_left: float = viewport_size.x - right_margin - action_width
+		_stage_editor_set_control_rect(_stage_editor_action_panel, Rect2(action_left, top_margin, action_width, action_height))
+
+	if _stage_editor_area_panel != null:
+		var available_area_width: float = viewport_size.x - left_margin - right_margin
+		if action_width > 0.0:
+			available_area_width -= action_width + horizontal_gap
+		var area_min_size: Vector2 = _stage_editor_area_panel.get_combined_minimum_size()
+		var area_width: float = minf(maxf(area_min_size.x, 260.0), maxf(160.0, available_area_width))
+		var area_height: float = maxf(area_min_size.y, 74.0)
+		_stage_editor_set_control_rect(_stage_editor_area_panel, Rect2(left_margin, top_margin, area_width, area_height))
+
+	if _stage_editor_panel == null:
+		return
+	var board_columns: int = current_stage.columns if current_stage != null else 8
 	var board_rows: int = current_stage.rows if current_stage != null else 8
+	var board_width: float = float(board_columns) * 64.0 * board.scale.x
 	var board_height: float = float(board_rows) * 64.0 * board.scale.y
-	var base_panel_height: float = 208.0
-	var max_panel_height: float = maxf(180.0, viewport_size.y - insets.x - insets.z - 16.0)
-	var panel_height: float = minf(base_panel_height, max_panel_height)
+	var panel_width: float = maxf(240.0, board_width)
+	var gap: float = 6.0
+	var palette_columns: int = maxi(1, STAGE_EDITOR_GEM_TYPES.size())
+	var inner_width: float = maxf(64.0, panel_width - 16.0)
+	var button_size: float = floor((inner_width - gap * float(palette_columns - 1)) / float(palette_columns))
+	button_size = maxf(24.0, button_size)
+	for button_variant in _stage_editor_value_buttons.values():
+		var button: Button = button_variant as Button
+		if button != null:
+			button.custom_minimum_size = Vector2(button_size, button_size)
+	if _stage_editor_palette_grid != null:
+		_stage_editor_palette_grid.custom_minimum_size = Vector2(inner_width, button_size)
+	var panel_height: float = button_size + 16.0
 	var preferred_top: float = board.position.y + board_height + 12.0
 	var max_top: float = viewport_size.y - panel_height - insets.z - 8.0
 	var min_top: float = 8.0 + insets.x
 	if max_top < min_top:
 		max_top = min_top
 	var panel_top: float = clampf(preferred_top, min_top, max_top)
-	_stage_editor_panel.anchor_left = 0.0
-	_stage_editor_panel.anchor_top = 0.0
-	_stage_editor_panel.anchor_right = 0.0
-	_stage_editor_panel.anchor_bottom = 0.0
-	_stage_editor_panel.offset_left = 16.0
-	_stage_editor_panel.offset_right = viewport_size.x - 16.0
-	_stage_editor_panel.offset_top = panel_top
-	_stage_editor_panel.offset_bottom = panel_top + panel_height
+	var panel_left: float = board.position.x
+	_stage_editor_set_control_rect(_stage_editor_panel, Rect2(panel_left, panel_top, panel_width, panel_height))
 
 
 ## 設定融合提示：從隊伍角色中收集融合技能並傳遞給棋盤
