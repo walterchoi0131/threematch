@@ -40,12 +40,14 @@ var current_exp: int = 0              # 當前累積經驗值（不存入 .tres�
 @export var active_skill_desc: String = ""    # 主動技能描述
 @export var active_skill_cd: int = 0          # 主動技能冷卻回合數
 @export var has_break_essence: bool = false   # 主動技能是否具「BREAK」屬性（可連同 PLANK 一併拆除）
+@export var active_skill_upgrades: Array[Dictionary] = []  # 主動技能寶石強化定義（玩家進度存在 GameState）
 
 ## 回應技能陣列。每個項目：
 ##   { "name": 名稱, "desc": 描述, "threshold": 觸發門檻,
 ##     "priority": 優先級, "trigger_type": 觸發方式 }
 ## trigger_type = "count"（N+ 同類寶石）或 "line"（N+ 連續排列）。
 ## 優先級數字越小，同時觸發時越優先執行。
+## 可選 upgrade_effects = Array[Dictionary]，用於合成技能寶石強化定義。
 @export var responding_skills: Array[Dictionary] = []
 
 

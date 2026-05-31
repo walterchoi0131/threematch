@@ -389,27 +389,23 @@ func _build_skills_section(parent: VBoxContainer, _card_w: float) -> void:
 
 	# Active — 不顯示寶石
 	if _char.active_skill_name != "":
-		_add_skill_entry(parent, Locale.tr_ui("ACTIVE"), Locale.tr_or(_char.active_skill_name, _char.active_skill_name), Locale.tr_or(_char.active_skill_name + " DESC", _char.active_skill_desc), _char.active_skill_cd, null, "", [])
+		_add_skill_entry(parent, Locale.tr_ui("ACTIVE"), Locale.tr_or(_char.active_skill_name, _char.active_skill_name), SkillUpgradeUtils.get_active_description(_char), SkillUpgradeUtils.effective_active_cd(_char), null, "", [], SkillUpgradeUtils.KIND_ACTIVE, 0)
 
 	# Responding — 顯示對應融合寶石、合成提示與爆發範圍
-	for skill: Dictionary in _char.responding_skills:
+	for skill_index in range(_char.responding_skills.size()):
+		var skill: Dictionary = _char.responding_skills[skill_index]
 		var sname: String = skill.get("name", "")
-		var sdesc: String = skill.get("desc", "")
 		if sname == "":
 			continue
 		# 查找本地化名稱與描述（以 sname 為鍵，沒找到則使用原始字串）
 		var display_name: String = Locale.tr_ui(sname)
 		if display_name == sname or display_name == "":
 			display_name = sname
-		var desc_key: String = sname + " DESC"
-		var display_desc: String = Locale.tr_ui(desc_key)
-		if display_desc == desc_key:
-			display_desc = sdesc
 		var upper_type: int = _resolve_responding_upper(sname)
 		var gem_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
-		var fuse_label: String = str(skill.get("fuse_label", skill.get("threshold", "")))
+		var fuse_label: String = SkillUpgradeUtils.responding_fuse_label(_char, skill_index, skill)
 		var pattern: Array = _blast_pattern_for(upper_type)
-		_add_skill_entry(parent, Locale.tr_ui("RESPONDING"), display_name, display_desc, 0, gem_tex, fuse_label, pattern)
+		_add_skill_entry(parent, Locale.tr_ui("RESPONDING"), display_name, SkillUpgradeUtils.get_responding_description(_char, skill_index, skill), 0, gem_tex, fuse_label, pattern, SkillUpgradeUtils.KIND_RESPONDING, skill_index)
 
 
 ## 由回應技能名稱對應到 UpperType（無對應時回傳 -1）。
@@ -476,7 +472,7 @@ func _blast_pattern_for(upper_type: int) -> Array:
 	return []
 
 
-func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: String, desc: String, cooldown: int, gem_override: Texture2D, fuse_label: String, blast_pattern: Array) -> void:
+func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: String, desc: String, cooldown: int, gem_override: Texture2D, fuse_label: String, blast_pattern: Array, upgrade_kind: String = "", upgrade_index: int = 0) -> void:
 	var elem_color: Color = Block.COLORS.get(_char.gem_type, Color(0.4, 0.6, 1.0))
 
 	var card := PanelContainer.new()
@@ -537,6 +533,9 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 	nm.add_theme_constant_override("outline_size", 3)
 	name_row.add_child(nm)
 
+	if upgrade_kind != "" and SkillUpgradeUtils.has_upgrades(_char, upgrade_kind, upgrade_index):
+		name_row.add_child(_make_upgrade_slots(upgrade_kind, upgrade_index, 22.0))
+
 	if cooldown > 0:
 		var cd_inline := Label.new()
 		cd_inline.text = "⏱︎ %d" % cooldown
@@ -554,6 +553,181 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 		desc_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.92))
 		desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		info.add_child(desc_lbl)
+
+
+func _make_upgrade_slots(kind: String, skill_index: int, slot_size: float) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var elem_color: Color = Block.COLORS.get(_char.gem_type, Color(0.4, 0.6, 1.0))
+	var max_level: int = SkillUpgradeUtils.get_max_level(_char, kind, skill_index)
+	var current_level: int = SkillUpgradeUtils.get_unlocked_level(_char, kind, skill_index)
+	for i in range(max_level):
+		var slot := _make_upgrade_slot_button(i < current_level, elem_color, slot_size)
+		slot.pressed.connect(func() -> void:
+			_show_upgrade_dialog(kind, skill_index)
+		)
+		row.add_child(slot)
+	return row
+
+
+func _make_upgrade_slot_button(lit: bool, elem_color: Color, slot_size: float) -> Button:
+	var btn := Button.new()
+	btn.text = ""
+	btn.custom_minimum_size = Vector2(slot_size, slot_size)
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.flat = false
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var style := StyleBoxFlat.new()
+	style.bg_color = elem_color if lit else Color.BLACK
+	style.border_color = Color(1.0, 0.86, 0.18)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(int(slot_size * 0.5))
+	var hover := style.duplicate() as StyleBoxFlat
+	hover.bg_color = style.bg_color.lightened(0.15)
+	var pressed := style.duplicate() as StyleBoxFlat
+	pressed.bg_color = style.bg_color.darkened(0.12)
+	btn.add_theme_stylebox_override("normal", style)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return btn
+
+
+func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
+	var defs: Array[Dictionary] = SkillUpgradeUtils.get_upgrade_defs(_char, kind, skill_index)
+	if defs.is_empty():
+		return
+	var current_level: int = SkillUpgradeUtils.get_unlocked_level(_char, kind, skill_index)
+	var elem_color: Color = Block.COLORS.get(_char.gem_type, Color(0.4, 0.6, 1.0))
+	var layer := CanvasLayer.new()
+	layer.layer = 95
+	add_child(layer)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.58)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			layer.queue_free()
+	)
+	layer.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -230.0
+	panel.offset_right = 230.0
+	panel.offset_top = -190.0
+	panel.offset_bottom = 190.0
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.12, 0.2, 0.98)
+	style.border_color = Color(0.85, 0.72, 0.35)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	style.content_margin_top = 16
+	style.content_margin_bottom = 16
+	panel.add_theme_stylebox_override("panel", style)
+	layer.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = Locale.tr_ui("SKILL_UPGRADE_TITLE")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(1.0, 0.86, 0.35))
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 3)
+	vbox.add_child(title)
+
+	for i in range(defs.size()):
+		var upgrade: Dictionary = defs[i]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if i > current_level:
+			row.modulate.a = 0.45
+		vbox.add_child(row)
+
+		var slot := _make_upgrade_slot_button(i < current_level, elem_color, 30.0)
+		if i == current_level:
+			slot.pressed.connect(func() -> void:
+				_show_upgrade_confirm(kind, skill_index, layer)
+			)
+		row.add_child(slot)
+
+		var info := Label.new()
+		info.text = SkillUpgradeUtils.get_upgrade_text(upgrade)
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_font_size_override("font_size", 16)
+		info.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
+		row.add_child(info)
+
+	var cost := Label.new()
+	if current_level >= defs.size():
+		cost.text = Locale.tr_ui("SKILL_UPGRADE_MAXED")
+	else:
+		cost.text = Locale.tr_ui("SKILL_UPGRADE_COST") % [Locale.tr_ui("ITEM_SAPPHIRE"), SkillUpgradeUtils.COST_ITEM_AMOUNT]
+	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cost.add_theme_font_size_override("font_size", 14)
+	cost.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0))
+	vbox.add_child(cost)
+
+
+func _show_upgrade_confirm(kind: String, skill_index: int, dialog_layer: CanvasLayer) -> void:
+	var item_name: String = Locale.tr_ui("ITEM_SAPPHIRE")
+	if GameState.get_inventory_count(SkillUpgradeUtils.COST_ITEM_TYPE) < SkillUpgradeUtils.COST_ITEM_AMOUNT:
+		_show_message_dialog(Locale.tr_ui("SKILL_UPGRADE_NOT_ENOUGH") % item_name)
+		return
+	var confirm := ConfirmationDialog.new()
+	confirm.title = Locale.tr_ui("SKILL_UPGRADE_CONFIRM_TITLE")
+	confirm.dialog_text = Locale.tr_ui("SKILL_UPGRADE_CONFIRM_BODY") % item_name
+	confirm.ok_button_text = Locale.tr_ui("CONFIRM")
+	confirm.cancel_button_text = Locale.tr_ui("CANCEL")
+	confirm.confirmed.connect(func() -> void:
+		var result: Dictionary = GameState.try_upgrade_skill(_char, kind, skill_index)
+		if bool(result.get("ok", false)):
+			if is_instance_valid(dialog_layer):
+				dialog_layer.queue_free()
+			_rebuild_ui()
+		else:
+			_show_message_dialog(_upgrade_error_text(str(result.get("reason", ""))))
+	)
+	add_child(confirm)
+	confirm.popup_centered(Vector2i(360, 160))
+
+
+func _show_message_dialog(message: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = Locale.tr_ui("SKILL_UPGRADE_TITLE")
+	dialog.dialog_text = message
+	dialog.ok_button_text = Locale.tr_ui("CONFIRM")
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(320, 140))
+
+
+func _upgrade_error_text(reason: String) -> String:
+	if reason == "MAX_LEVEL":
+		return Locale.tr_ui("SKILL_UPGRADE_MAXED")
+	if reason == "NOT_ENOUGH_ITEM":
+		return Locale.tr_ui("SKILL_UPGRADE_NOT_ENOUGH") % Locale.tr_ui("ITEM_SAPPHIRE")
+	return reason
+
+
+func _rebuild_ui() -> void:
+	for child in get_children():
+		child.queue_free()
+	_build_ui()
 
 
 # ── 技能條輔助元件 ─────────────────────────────────────────

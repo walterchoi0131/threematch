@@ -2995,12 +2995,12 @@ func _setup_fuse_hints() -> void:
 		var c: CharacterData = party[char_index]
 		for skill_index in c.responding_skills.size():
 			var skill: Dictionary = c.responding_skills[skill_index]
-			var fuse_label: String = skill.get("fuse_label", "")
+			var fuse_label: String = SkillUpgradeUtils.responding_fuse_label(c, skill_index, skill)
 			if fuse_label.is_empty():
 				continue
 			fuse_skills.append({
 				"gem_type": c.gem_type,
-				"threshold": skill.get("threshold", 0),
+				"threshold": SkillUpgradeUtils.responding_threshold(c, skill_index, skill),
 				"label": fuse_label,
 				"trigger_type": skill.get("trigger_type", "count"),
 				"priority": skill.get("priority", 99),
@@ -4157,8 +4157,12 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var pos: Vector2i = board.last_tapped_pos
 			var spear_type: Block.UpperType = board.get_wood_spear_type_for_last_tap()
 			board.place_upper_gem(pos, spear_type, Block.Type.GREEN)
-			_play_sfx(_se_freeze)
 			var _gc: CharacterData = party[resp.char_index]
+			var skill_order: int = int(resp.get("skill_order", 0))
+			var spear_block: Block = board.grid[pos.x][pos.y]
+			if spear_block != null:
+				spear_block.intrinsic_bonus = SkillUpgradeUtils.wood_spear_intrinsic_bonus(_gc, skill_order)
+			_play_sfx(_se_freeze)
 			var _gc_count: int = int(battle_manager.turn_gem_blasts.get(_gc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_gc.gem_type, _gc_count, spear_type), _gc.gem_type, _gc)
 			await get_tree().create_timer(0.15).timeout
@@ -4513,13 +4517,13 @@ func _get_active_selection_card_rect(char_index: int) -> Rect2:
 	return card.get_global_rect()
 
 
-func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type, pattern: String = "cross") -> Dictionary:
+func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type, pattern: String = "cross", max_count: int = 1) -> Dictionary:
 	if _active_board_selection_running:
 		return {"positions": [], "cancelled": true}
 	_active_board_selection_running = true
 	_active_board_selection_char_index = char_index
 	_active_selection_preview_positions.clear()
-	board.enter_selection_mode(convert_type, pattern)
+	board.enter_selection_mode(convert_type, pattern, max_count)
 	character_panel.enter_active_selection_cancel_mode(char_index)
 	_show_active_selection_dim(char_index)
 	var result: Dictionary = await board.selection_finished
@@ -4541,7 +4545,7 @@ func _handle_active_skill(char_index: int) -> void:
 	if not battle_manager.is_active_ready(char_index):
 		return
 
-	var c := party[char_index]
+	var c: CharacterData = party[char_index]
 	match c.active_skill_name:
 		"Attack Form":
 			# 攻擊形態：將所有火寶石轉為水寶石
@@ -4656,27 +4660,33 @@ func _handle_active_skill(char_index: int) -> void:
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("There shall be light"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 			await get_tree().create_timer(0.4).timeout
 		"Leaf Spear Call":
-			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.GREEN, "single_top_bottom")
+			var selection_count: int = 1 + SkillUpgradeUtils.leaf_spear_extra_cells(c)
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.GREEN, "single_top_bottom", selection_count)
 			if bool(selection.get("cancelled", false)):
 				return
 			var sel_positions: Array = selection.get("positions", [])
 			if sel_positions.is_empty():
 				return
-			var spear_pos: Vector2i = sel_positions[0] as Vector2i
-			var spear_block: Block = board.grid[spear_pos.x][spear_pos.y]
-			if spear_block != null and spear_block.is_obstacle():
-				return
-			var spear_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
-			if spear_pos.y == board.rows - 1:
-				spear_type = Block.UpperType.WOOD_SPEAR_UP
-			var placed: bool = board.place_upper_gem(spear_pos, spear_type, Block.Type.GREEN)
-			if not placed:
+			var placed_count := 0
+			var last_spear_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
+			for pos in sel_positions:
+				var spear_pos: Vector2i = pos as Vector2i
+				var spear_block: Block = board.grid[spear_pos.x][spear_pos.y]
+				if spear_block != null and spear_block.is_obstacle():
+					continue
+				var spear_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
+				if spear_pos.y == board.rows - 1:
+					spear_type = Block.UpperType.WOOD_SPEAR_UP
+				if board.place_upper_gem(spear_pos, spear_type, Block.Type.GREEN):
+					placed_count += 1
+					last_spear_type = spear_type
+			if placed_count <= 0:
 				return
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
 			board.resync_logic_from_visual()
 			_play_sfx(_se_freeze)
-			_add_log_entry("%s：%s" % [Locale.tr_ui("Leaf Spear Call"), _upper_gem_bbcode(spear_type)], Block.Type.GREEN, c)
+			_add_log_entry("%s：%s ×%d" % [Locale.tr_ui("Leaf Spear Call"), _upper_gem_bbcode(last_spear_type), placed_count], Block.Type.GREEN, c)
 			await get_tree().create_timer(0.25).timeout
 		"Resurgence", "Resurgence+":
 			# 生息：選一顆寶石，將其上下左右四鄰轉換為相同元素

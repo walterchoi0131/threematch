@@ -438,21 +438,21 @@ func _show_char_popup(index: int) -> void:
 	skills_margin.add_child(skills_vbox)
 
 	_add_popup_skill(skills_vbox, Locale.tr_ui("PASSIVE"), Locale.tr_or(c.passive_skill_name, c.passive_skill_name), Locale.tr_or(c.passive_skill_name + " DESC", c.passive_skill_desc), null)
-	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"),  Locale.tr_or(c.active_skill_name, c.active_skill_name),  Locale.tr_or(c.active_skill_name + " DESC", c.active_skill_desc),  null, c.active_skill_cd)
+	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"), Locale.tr_or(c.active_skill_name, c.active_skill_name), SkillUpgradeUtils.get_active_description(c), null, SkillUpgradeUtils.effective_active_cd(c), c, SkillUpgradeUtils.KIND_ACTIVE, 0)
 
 	var elem_color: Color = Block.COLORS.get(c.gem_type, Color(0.4, 0.6, 1.0))
 	var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type, null)
-	for sk: Dictionary in c.responding_skills:
+	for skill_index in range(c.responding_skills.size()):
+		var sk: Dictionary = c.responding_skills[skill_index]
 		var sk_name: String = sk.get("name", "")
-		var sk_desc: String = sk.get("desc", "")
-		var fuse_label: String = str(sk.get("fuse_label", sk.get("threshold", "")))
+		var fuse_label: String = SkillUpgradeUtils.responding_fuse_label(c, skill_index, sk)
 		if sk_name == "":
 			continue
 		var upper_type: int = FuseTutorialCanvas.NAME_TO_UPPER.get(sk_name, -1)
 		var upper_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
 		var pattern: Array = FuseTutorialCanvas._blast_pattern_for(upper_type)
 		var chain: Control = FuseTutorialCanvas._make_skill_chain(fuse_label, base_gem_tex, upper_tex, upper_type, pattern, elem_color)
-		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), Locale.tr_or(sk_name, sk_name), Locale.tr_or(sk_name + " DESC", sk_desc), chain)
+		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), Locale.tr_or(sk_name, sk_name), SkillUpgradeUtils.get_responding_description(c, skill_index, sk), chain, 0, c, SkillUpgradeUtils.KIND_RESPONDING, skill_index)
 
 	# ── 淡入動畫 ──
 	dim.modulate.a = 0.0
@@ -469,7 +469,7 @@ func _show_char_popup(index: int) -> void:
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 
-func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, desc: String, fuse_chain: Control, cooldown: int = 0) -> void:
+func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, desc: String, fuse_chain: Control, cooldown: int = 0, character: CharacterData = null, upgrade_kind: String = "", upgrade_index: int = 0) -> void:
 	if skill_name == "":
 		return
 	var entry := VBoxContainer.new()
@@ -546,6 +546,9 @@ func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, de
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(nm)
 
+	if character != null and upgrade_kind != "" and SkillUpgradeUtils.has_upgrades(character, upgrade_kind, upgrade_index):
+		row.add_child(_make_popup_upgrade_slots(character, upgrade_kind, upgrade_index, 18.0))
+
 	if cooldown > 0:
 		var cd_lbl := Label.new()
 		cd_lbl.text = "⏱︎ %d" % cooldown
@@ -567,6 +570,28 @@ func _add_popup_skill(parent: VBoxContainer, tag: String, skill_name: String, de
 
 	if fuse_chain != null:
 		entry.add_child(fuse_chain)
+
+
+func _make_popup_upgrade_slots(character: CharacterData, kind: String, skill_index: int, slot_size: float) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var elem_color: Color = Block.COLORS.get(character.gem_type, Color(0.4, 0.6, 1.0))
+	var max_level: int = SkillUpgradeUtils.get_max_level(character, kind, skill_index)
+	var current_level: int = SkillUpgradeUtils.get_unlocked_level(character, kind, skill_index)
+	for i in range(max_level):
+		var dot := PanelContainer.new()
+		dot.custom_minimum_size = Vector2(slot_size, slot_size)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := StyleBoxFlat.new()
+		style.bg_color = elem_color if i < current_level else Color.BLACK
+		style.border_color = Color(1.0, 0.86, 0.18)
+		style.set_border_width_all(2)
+		style.set_corner_radius_all(int(slot_size * 0.5))
+		dot.add_theme_stylebox_override("panel", style)
+		row.add_child(dot)
+	return row
 
 
 func _close_char_popup() -> void:

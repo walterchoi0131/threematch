@@ -78,8 +78,9 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	# 初始化技能冷卻
 	skill_cooldowns.clear()
 	for i in characters.size():
-		if characters[i].active_skill_cd > 0:
-			skill_cooldowns[i] = characters[i].active_skill_cd
+		var active_cd: int = SkillUpgradeUtils.effective_active_cd(characters[i])
+		if active_cd > 0:
+			skill_cooldowns[i] = active_cd
 
 	turn_gem_blasts.clear()
 	pending_skill_blasts.clear()
@@ -279,11 +280,11 @@ func apply_heal(amount: int) -> void:
 func check_responding_skills(board_ref: Node2D = null) -> Array:
 	var candidates := []
 	for i in characters.size():
-		var c := characters[i]
+		var c: CharacterData = characters[i]
 		for skill_index in c.responding_skills.size():
 			var skill: Dictionary = c.responding_skills[skill_index]
 			var skill_name: String = skill.get("name", "")
-			var threshold: int = skill.get("threshold", 0)
+			var threshold: int = SkillUpgradeUtils.responding_threshold(c, skill_index, skill)
 			var priority: int = skill.get("priority", 99)
 			var trigger_type: String = skill.get("trigger_type", "count")
 
@@ -339,8 +340,8 @@ func is_active_ready(char_index: int) -> bool:
 
 ## 使用主動技能，重置冷卻
 func use_active_skill(char_index: int) -> void:
-	var c := characters[char_index]
-	skill_cooldowns[char_index] = c.active_skill_cd
+	var c: CharacterData = characters[char_index]
+	skill_cooldowns[char_index] = SkillUpgradeUtils.effective_active_cd(c)
 
 
 ## 取得角色的當前冷卻回合數

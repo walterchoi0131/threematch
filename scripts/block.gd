@@ -147,6 +147,7 @@ var board_columns: int = 8             # 棋盤欄數（woodStructure 選擇左�
 
 # 額外效果列表（儲存 ExtraEffect 列舉值，避免 typed enum array 的型別推論問題）
 var extra_effects: Array[int] = []
+var intrinsic_bonus: int = 0
 var _x5_badge: Label = null            # X5 標記（右上角紅色 "x5"）
 var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 
@@ -220,6 +221,7 @@ func is_stationary_obstacle() -> bool:
 ## 設定高階寶石類型並更新外觀
 func set_upper_type(ut: UpperType) -> void:
 	upper_type = ut
+	intrinsic_bonus = 0
 	# 融合為高階寶石時清除所有額外效果（X5 不繼承）
 	if ut != UpperType.NONE:
 		clear_extras()
@@ -280,7 +282,7 @@ func get_blast_value() -> int:
 	if is_obstacle():
 		return 0
 	if is_upper_gem():
-		return UPPER_INTRINSIC_VALUE.get(upper_type, 1)
+		return maxi(1, int(UPPER_INTRINSIC_VALUE.get(upper_type, 1)) + intrinsic_bonus)
 	if has_extra(ExtraEffect.X5):
 		return 5
 	if has_extra(ExtraEffect.X3):

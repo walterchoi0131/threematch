@@ -83,6 +83,7 @@ var _translations: Dictionary = {
 	"Bamboo Supply DESC": {"zh": "在點擊處生成竹葉補給寶石；爆炸時消除周圍 8 格並回復 Panda 魔力 × 1.6 HP。", "en": "Create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 1.6."},
 	"Wood Spear": {"zh": "木槍", "en": "Wood Spear"},
 	"Wood Spear DESC": {"zh": "7 顆以上葉寶石合成時，在點擊處生成木槍寶石；點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse 7+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
+	"Wood Spear DESC DYNAMIC": {"zh": "%d 顆以上葉寶石合成時，在點擊處生成木槍寶石；木槍內在數值為 %d。點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse %d+ leaf gems to create a Wood Spear gem at the tapped cell. The spear's intrinsic value is %d. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
 
 	# ── 角色名稱 ──
 	"Boar": {"zh": "野豬", "en": "Boar"},
@@ -131,6 +132,21 @@ var _translations: Dictionary = {
 	"Blast DESC": {"zh": "由上至下爆破整個棋盤的每一行。CD：1 回合。", "en": "Blast every row from top to bottom. CD: 1 turn."},
 	"Leaf Spear Call": {"zh": "葉矛喚來", "en": "Leaf Spear Call"},
 	"Leaf Spear Call DESC": {"zh": "選擇頂列或底列 1 格，在該格生成朝棋盤內側刺出的木槍寶石；頂列朝下，底列朝上。CD：4 回合。", "en": "Select one top-row or bottom-row cell to create an inward-facing Wood Spear gem there; top row points down, bottom row points up. CD: 4 turns."},
+	"Leaf Spear Call DESC DYNAMIC": {"zh": "選擇頂列或底列 %d 格，在每格生成朝棋盤內側刺出的木槍寶石；頂列朝下，底列朝上。CD：%d 回合。", "en": "Select %d top-row or bottom-row cells to create inward-facing Wood Spear gems there; top row points down, bottom row points up. CD: %d turns."},
+
+	# ── 技能寶石強化 ──
+	"SKILL_UPGRADE_TITLE": {"zh": "寶石強化", "en": "Gem Upgrade"},
+	"SKILL_UPGRADE_CONFIRM_TITLE": {"zh": "確認強化", "en": "Confirm Upgrade"},
+	"SKILL_UPGRADE_CONFIRM_BODY": {"zh": "消耗 1 顆%s強化此技能？", "en": "Spend 1 %s to upgrade this skill?"},
+	"SKILL_UPGRADE_COST": {"zh": "消耗：%s ×%d", "en": "Cost: %s x%d"},
+	"SKILL_UPGRADE_NOT_ENOUGH": {"zh": "%s不足", "en": "Not enough %s"},
+	"SKILL_UPGRADE_MAXED": {"zh": "已強化完成", "en": "Fully upgraded"},
+	"ITEM_SAPPHIRE": {"zh": "藍寶石", "en": "Sapphire"},
+	"UPGRADE_GORY_LEAF_SPEAR_EXTRA_1": {"zh": "可額外選擇 1 格生成木槍。", "en": "Pick 1 extra cell to create a Wood Spear."},
+	"UPGRADE_GORY_LEAF_SPEAR_EXTRA_2": {"zh": "可額外選擇 2 格生成木槍。", "en": "Pick 2 extra cells to create Wood Spears."},
+	"UPGRADE_GORY_LEAF_SPEAR_CD_1": {"zh": "冷卻回合 -1。", "en": "Cooldown -1."},
+	"UPGRADE_GORY_WOOD_SPEAR_VALUE_1": {"zh": "此木槍寶石的內在數值 +1。", "en": "This Wood Spear gem's intrinsic value +1."},
+	"UPGRADE_GORY_WOOD_SPEAR_THRESHOLD_1": {"zh": "合成需求 -1。", "en": "Fusing requirement -1."},
 
 	# ── 被動技能名稱與描述 ──
 	"Drinking": {"zh": "飲水", "en": "Drinking"},

@@ -16,6 +16,7 @@ const UPPER_GEM_DEBRIS_SHARDS := 7
 const OBSTACLE_DEBRIS_SHARDS := 8
 const WOOD_SPEAR_THRUST_SCALE := 0.18
 const WOOD_SPEAR_ROW_HIT_INTERVAL := 0.075
+const SELECTION_ORDER_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 
 @export var stage: StageData  # 當前關卡資料
 
@@ -80,10 +81,13 @@ var _selection_mode: bool = false           # 是否處於選擇模式
 var _selection_convert_type: Block.Type = Block.Type.RED  # 選擇模式要轉換的目標類型
 var _selection_pattern: String = "cross"    # 選擇模式的預覽形狀："cross" | "fireball"
 var _preview_overlays: Array[ColorRect] = []  # 預覽覆蓋層節點
+var _selection_order_labels: Array[Label] = []
 var _selection_valid_centers: Array[Vector2i] = []      # 當前模式可點擊的中心格
 var _selection_preview_positions: Array[Vector2i] = []  # 目前 hover 顯示的影響範圍
 var _selection_finished_emitted: bool = false           # 防止確認/取消重複發出
 var _preview_center: Vector2i = Vector2i(-1, -1)  # 目前預覽的中心格
+var _selection_max_count: int = 1
+var _selection_selected_positions: Array[Vector2i] = []
 
 # ── 長按預覽系統（長按高階寶石顯示爆炸範圍）──
 const LONGPRESS_THRESHOLD := 0.35         # 長按觸發閾值（秒）
@@ -636,7 +640,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _is_valid(gp) and gp != _preview_center:
 				_update_selection_preview(gp)
 			elif not _is_valid(gp):
-				_clear_selection_preview()
+				_clear_selection_hover_preview()
 				_preview_center = Vector2i(-1, -1)
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var local_pos := get_local_mouse_position()
@@ -645,11 +649,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				var clicked_block: Block = grid[gp.x][gp.y]
 				var positions := _get_selection_positions(gp)
 				if positions.is_empty():
-					_clear_selection_preview()
+					_clear_selection_hover_preview()
 					_preview_center = Vector2i(-1, -1)
 					return
 				if positions.size() <= 1 and _is_static_obstacle(clicked_block):
 					_shake_block(clicked_block)
+					return
+				if _selection_max_count > 1:
+					for p in positions:
+						if not _selection_selected_positions.has(p):
+							_selection_selected_positions.append(p)
+					_update_selection_preview(gp)
+					if _selection_selected_positions.size() >= _selection_max_count:
+						var selected: Array = _selection_selected_positions.slice(0, _selection_max_count)
+						_finish_selection(selected, false)
+						selection_confirmed.emit(selected)
 					return
 				_finish_selection(positions, false)
 				selection_confirmed.emit(positions)
@@ -2683,12 +2697,14 @@ func _get_cross_positions(center: Vector2i) -> Array[Vector2i]:
 
 
 ## 進入選擇模式（由 main.gd 呼叫，玩家懸停預覽，點擊確認轉換）
-func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross") -> void:
+func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross", max_count: int = 1) -> void:
 	if _selection_mode:
 		cancel_selection_mode()
 	_selection_mode = true
 	_selection_convert_type = convert_type
 	_selection_pattern = pattern
+	_selection_max_count = maxi(1, max_count)
+	_selection_selected_positions.clear()
 	_selection_finished_emitted = false
 	_preview_center = Vector2i(-1, -1)
 	_refresh_selection_valid_centers()
@@ -2708,9 +2724,19 @@ func cancel_selection_mode() -> void:
 func _finish_selection(positions: Array, cancelled: bool) -> void:
 	if _selection_finished_emitted:
 		return
+	var keep_order_labels: bool = not cancelled and _selection_max_count > 1 and not _selection_order_labels.is_empty()
 	_selection_finished_emitted = true
 	_selection_mode = false
-	_clear_selection_visuals()
+	if keep_order_labels:
+		_clear_preview_overlays(false)
+		_selection_valid_centers.clear()
+		var labels_to_free: Array = _selection_order_labels.duplicate()
+		_selection_order_labels.clear()
+		_free_selection_order_labels_later(labels_to_free)
+	else:
+		_clear_selection_visuals()
+	_selection_selected_positions.clear()
+	_selection_max_count = 1
 	_preview_center = Vector2i(-1, -1)
 	selection_finished.emit({
 		"positions": positions,
@@ -2728,13 +2754,18 @@ func _update_selection_preview(center: Vector2i) -> void:
 	_clear_preview_overlays()
 	_preview_center = center
 	var positions := _get_selection_positions(center)
-	_set_selection_preview_positions(positions)
-	if positions.is_empty():
+	var display_positions: Array[Vector2i] = _selection_selected_positions.duplicate()
+	for p in positions:
+		if not display_positions.has(p):
+			display_positions.append(p)
+	_set_selection_preview_positions(display_positions)
+	if display_positions.is_empty():
 		return
 	var color: Color = _selection_color_for_center(center)
-	for p in positions:
+	for p in display_positions:
 		var overlay: ColorRect = _create_selection_preview_overlay(p, color)
 		_preview_overlays.append(overlay)
+	_refresh_selection_order_labels()
 
 
 ## 依目前 _selection_pattern 取得選擇範圍位置
@@ -2819,17 +2850,69 @@ func _clear_selection_visuals() -> void:
 
 
 ## 清除所有預覽覆蓋層
-func _clear_preview_overlays() -> void:
+func _clear_preview_overlays(clear_order_labels: bool = true) -> void:
 	for overlay in _preview_overlays:
 		if is_instance_valid(overlay):
 			overlay.queue_free()
 	_preview_overlays.clear()
+	if clear_order_labels:
+		_clear_selection_order_labels()
 
 
 func _clear_selection_preview() -> void:
 	_clear_preview_overlays()
 	var empty_positions: Array[Vector2i] = []
 	_set_selection_preview_positions(empty_positions)
+
+
+func _clear_selection_hover_preview() -> void:
+	_clear_preview_overlays(false)
+	_refresh_selection_order_labels()
+	_set_selection_preview_positions(_selection_selected_positions)
+
+
+func _refresh_selection_order_labels() -> void:
+	_clear_selection_order_labels()
+	for i in range(_selection_selected_positions.size()):
+		var selected_pos: Vector2i = _selection_selected_positions[i]
+		var order_label: Label = _create_selection_order_label(selected_pos, i + 1)
+		_selection_order_labels.append(order_label)
+
+
+func _create_selection_order_label(pos: Vector2i, order: int) -> Label:
+	var label := Label.new()
+	label.text = str(order)
+	label.size = Vector2(CELL_SIZE, CELL_SIZE)
+	label.position = Vector2(pos.x * CELL_SIZE, pos.y * CELL_SIZE)
+	label.z_index = 14
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_override("font", SELECTION_ORDER_FONT)
+	label.add_theme_font_size_override("font_size", 30)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 5)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	add_child(label)
+	return label
+
+
+func _clear_selection_order_labels() -> void:
+	for label in _selection_order_labels:
+		if is_instance_valid(label):
+			label.queue_free()
+	_selection_order_labels.clear()
+
+
+func _free_selection_order_labels_later(labels: Array) -> void:
+	get_tree().create_timer(0.45).timeout.connect(func() -> void:
+		for label in labels:
+			if is_instance_valid(label):
+				(label as Label).queue_free()
+	, CONNECT_ONE_SHOT)
 
 
 # ── 融合提示系統 ─────────────────────────────────────────────────────

@@ -2,6 +2,9 @@
 ## 儲存當前選擇的關卡、隊伍、擁有的角色等。
 extends Node
 
+signal inventory_changed
+signal skill_upgrades_changed
+
 const MAX_PARTY_SIZE := 4  # 隊伍最大人數
 const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 1
@@ -15,6 +18,7 @@ var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 
 var gold: int = 0                      # 玩家持有金幣
 var inventory: Dictionary = {}         # 玩家物品庫存，key = ItemDefs.Type，value = int
+var skill_upgrade_levels: Dictionary = {}  # key = SkillUpgradeUtils.get_skill_key(), value = int
 
 ## 已通關的關卡 id 集合（例如 "1-1"）。用於世界地圖解鎖。
 var cleared_stages: Dictionary = {}    # key = stage_id (String), value = true
@@ -216,12 +220,63 @@ func _setup_loop_with_delay(player: AudioStreamPlayer, delay: float) -> void:
 
 ## 新增戰利品到玩家存貨
 func add_loot(type: ItemDefs.Type, amount: int) -> void:
+	if amount <= 0:
+		return
 	if type == ItemDefs.Type.GOLD:
 		gold += amount
 	else:
 		var current: int = inventory.get(type, 0)
 		inventory[type] = current + amount
+	inventory_changed.emit()
 	save_game()
+
+
+func get_inventory_count(type: ItemDefs.Type) -> int:
+	if type == ItemDefs.Type.GOLD:
+		return gold
+	return int(inventory.get(type, 0))
+
+
+func consume_item(type: ItemDefs.Type, amount: int, auto_save: bool = true) -> bool:
+	if amount <= 0:
+		return true
+	if get_inventory_count(type) < amount:
+		return false
+	if type == ItemDefs.Type.GOLD:
+		gold -= amount
+	else:
+		var remaining: int = int(inventory.get(type, 0)) - amount
+		if remaining > 0:
+			inventory[type] = remaining
+		elif inventory.has(type):
+			inventory.erase(type)
+	inventory_changed.emit()
+	if auto_save:
+		save_game()
+	return true
+
+
+func get_skill_upgrade_level(character: CharacterData, kind: String, skill_index: int = 0) -> int:
+	var key: String = SkillUpgradeUtils.get_skill_key(character, kind, skill_index)
+	if key == "":
+		return 0
+	return int(skill_upgrade_levels.get(key, 0))
+
+
+func try_upgrade_skill(character: CharacterData, kind: String, skill_index: int = 0) -> Dictionary:
+	var defs: Array[Dictionary] = SkillUpgradeUtils.get_upgrade_defs(character, kind, skill_index)
+	if defs.is_empty():
+		return {"ok": false, "reason": "NO_UPGRADES"}
+	var current: int = get_skill_upgrade_level(character, kind, skill_index)
+	if current >= defs.size():
+		return {"ok": false, "reason": "MAX_LEVEL"}
+	if not consume_item(SkillUpgradeUtils.COST_ITEM_TYPE, SkillUpgradeUtils.COST_ITEM_AMOUNT, false):
+		return {"ok": false, "reason": "NOT_ENOUGH_ITEM"}
+	var key: String = SkillUpgradeUtils.get_skill_key(character, kind, skill_index)
+	skill_upgrade_levels[key] = current + 1
+	skill_upgrades_changed.emit()
+	save_game()
+	return {"ok": true, "level": current + 1}
 
 
 func _ready() -> void:
@@ -309,6 +364,7 @@ func clear_save() -> void:
 	# 重置記憶體中的持久狀態
 	cleared_stages.clear()
 	inventory.clear()
+	skill_upgrade_levels.clear()
 	gold = 0
 	owned_characters = [
 		preload("res://characters/char_boar.tres"),
@@ -326,6 +382,8 @@ func clear_save() -> void:
 		if c != null:
 			c.level = 5
 			c.current_exp = 0
+	inventory_changed.emit()
+	skill_upgrades_changed.emit()
 
 
 func _ensure_default_characters_owned() -> void:
@@ -374,6 +432,7 @@ func _serialize() -> Dictionary:
 		"gold": gold,
 		"owned_characters": char_entries,
 		"inventory": inv,
+		"skill_upgrade_levels": skill_upgrade_levels.duplicate(),
 		"cleared_stages": cleared_stages.keys(),
 		"last_used_party": Array(last_used_party_paths),
 	}
@@ -412,6 +471,13 @@ func _deserialize(d: Dictionary) -> void:
 	var inv: Dictionary = d.get("inventory", {})
 	for k in inv.keys():
 		inventory[int(k)] = int(inv[k])
+
+	skill_upgrade_levels.clear()
+	var upgrades: Dictionary = d.get("skill_upgrade_levels", {})
+	for k in upgrades.keys():
+		var level: int = int(upgrades[k])
+		if level > 0:
+			skill_upgrade_levels[str(k)] = level
 
 	cleared_stages.clear()
 	for sid in d.get("cleared_stages", []):

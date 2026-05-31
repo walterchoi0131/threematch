@@ -11,6 +11,14 @@ var _font: Font
 
 func _ready() -> void:
 	_font = load(FONT_PATH)
+	if not GameState.inventory_changed.is_connected(_rebuild_ui):
+		GameState.inventory_changed.connect(_rebuild_ui)
+	_build_ui()
+
+
+func _rebuild_ui() -> void:
+	for child in get_children():
+		child.queue_free()
 	_build_ui()
 
 
