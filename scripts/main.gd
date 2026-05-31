@@ -1549,8 +1549,10 @@ func _layout_stage_editor_ui() -> void:
 ## 設定融合提示：從隊伍角色中收集融合技能並傳遞給棋盤
 func _setup_fuse_hints() -> void:
 	var fuse_skills: Array[Dictionary] = []
-	for c in party:
-		for skill: Dictionary in c.responding_skills:
+	for char_index in party.size():
+		var c: CharacterData = party[char_index]
+		for skill_index in c.responding_skills.size():
+			var skill: Dictionary = c.responding_skills[skill_index]
 			var fuse_label: String = skill.get("fuse_label", "")
 			if fuse_label.is_empty():
 				continue
@@ -1560,6 +1562,8 @@ func _setup_fuse_hints() -> void:
 				"label": fuse_label,
 				"trigger_type": skill.get("trigger_type", "count"),
 				"priority": skill.get("priority", 99),
+				"team_index": char_index,
+				"skill_order": skill_index,
 			})
 	board.set_fuse_skills(fuse_skills)
 

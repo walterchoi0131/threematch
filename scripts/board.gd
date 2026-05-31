@@ -44,7 +44,7 @@ var score: int = 0            # 當前得分
 var last_tapped_pos: Vector2i = Vector2i(-1, -1)  # 最後一次點擊的網格位置
 var last_tapped_local_pos: Vector2 = Vector2(-1.0, -1.0)  # 最後一次點擊在棋盤 local 座標的位置
 var skip_collapse: bool = false   # 融合流程中由 main.gd 設定，跳過自動掉落
-var _fuse_skills: Array[Dictionary] = []  # 融合技能清單 { gem_type, threshold, label, trigger_type }
+var _fuse_skills: Array[Dictionary] = []  # 融合技能清單 { gem_type, threshold, label, trigger_type, team_index }
 var is_fusing: bool = false       # 融合動畫進行中（允許並行點擊下一次融合）
 var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點擊的位置（由 _on_gems_blasted 讀取）
 var _concurrent_fuse_tapped_local_pos: Vector2 = Vector2(-1.0, -1.0)  # 並行融合點擊的 local 座標
@@ -2824,7 +2824,7 @@ func _clear_selection_preview() -> void:
 # ── 融合提示系統 ─────────────────────────────────────────────────────
 
 ## 由 main.gd 呼叫，註冊隊伍的融合技能。
-## 每個項目：{ gem_type: Block.Type, threshold: int, label: String, trigger_type: String }
+## 每個項目：{ gem_type: Block.Type, threshold: int, label: String, trigger_type: String, team_index: int }
 func set_fuse_skills(skills: Array[Dictionary]) -> void:
 	_fuse_skills = skills
 	_update_fuse_hints()
@@ -2848,10 +2848,22 @@ func _update_fuse_hints() -> void:
 					block.hide_fuse_hint_if_stale()
 		return
 
-	# 依優先級排序融合技能（數字越小 = 優先級越高）
+	# 與實際融合決策一致：需求寶石數高者優先；同需求時隊伍前排優先。
 	var sorted_skills := _fuse_skills.duplicate()
 	sorted_skills.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return a.get("priority", 99) < b.get("priority", 99)
+		var a_threshold: int = int(a.get("threshold", 0))
+		var b_threshold: int = int(b.get("threshold", 0))
+		if a_threshold != b_threshold:
+			return a_threshold > b_threshold
+		var a_team_index: int = int(a.get("team_index", 999))
+		var b_team_index: int = int(b.get("team_index", 999))
+		if a_team_index != b_team_index:
+			return a_team_index < b_team_index
+		var a_priority: int = int(a.get("priority", 99))
+		var b_priority: int = int(b.get("priority", 99))
+		if a_priority != b_priority:
+			return a_priority < b_priority
+		return int(a.get("skill_order", 999)) < int(b.get("skill_order", 999))
 	)
 
 	# 追蹤已有提示的寶石（最高優先級優先）

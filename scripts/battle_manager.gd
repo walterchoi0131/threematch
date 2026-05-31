@@ -250,13 +250,15 @@ func apply_heal(amount: int) -> void:
 	player_hp_changed.emit(player_current_hp, player_max_hp)
 
 
-## 檢查被動技能觸發，返回最多一個觸發的技能（優先級最高的）。
-## 每個項目：{ char_index, skill_name, priority, skill_dict }
+## 檢查被動技能觸發，返回最多一個觸發的技能。
+## 融合候選優先規則：需求寶石數高者優先；同需求時隊伍前排優先。
+## 每個項目：{ char_index, skill_name, priority, threshold, skill_dict }
 func check_responding_skills(board_ref: Node2D = null) -> Array:
 	var candidates := []
 	for i in characters.size():
 		var c := characters[i]
-		for skill: Dictionary in c.responding_skills:
+		for skill_index in c.responding_skills.size():
+			var skill: Dictionary = c.responding_skills[skill_index]
 			var skill_name: String = skill.get("name", "")
 			var threshold: int = skill.get("threshold", 0)
 			var priority: int = skill.get("priority", 99)
@@ -278,15 +280,30 @@ func check_responding_skills(board_ref: Node2D = null) -> Array:
 					"char_index": i,
 					"skill_name": skill_name,
 					"priority": priority,
+					"threshold": threshold,
+					"skill_order": skill_index,
 					"skill_dict": skill,
 				})
 
 	if candidates.is_empty():
 		return []
 
-	# 依優先級排序 — 數字最小的獲勝
-	candidates.sort_custom(func(a, b): return a.priority < b.priority)
-	# 僅返回優先級最高的單一技能
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_threshold: int = int(a.get("threshold", 0))
+		var b_threshold: int = int(b.get("threshold", 0))
+		if a_threshold != b_threshold:
+			return a_threshold > b_threshold
+		var a_char_index: int = int(a.get("char_index", 999))
+		var b_char_index: int = int(b.get("char_index", 999))
+		if a_char_index != b_char_index:
+			return a_char_index < b_char_index
+		var a_priority: int = int(a.get("priority", 99))
+		var b_priority: int = int(b.get("priority", 99))
+		if a_priority != b_priority:
+			return a_priority < b_priority
+		return int(a.get("skill_order", 999)) < int(b.get("skill_order", 999))
+	)
+	# 僅返回勝出的單一技能
 	return [candidates[0]]
 
 
