@@ -8,6 +8,7 @@ signal died(enemy: Enemy)     # 死亡時發出
 signal hp_changed(current: int, maximum: int)  # 血量變動時發出（含初始與受傷）
 
 const MAIN_BOSS_DISPLAY_SCALE := 2.0
+const CLICK_RECT_PADDING := 4.0
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
@@ -30,6 +31,32 @@ var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻�
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 var _base_minimum_size: Vector2 = Vector2.ZERO
 var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
+
+
+func _has_point(point: Vector2) -> bool:
+	if current_hp <= 0 or modulate.a <= 0.01:
+		return false
+	if portrait == null or not is_node_ready():
+		return Rect2(Vector2.ZERO, size).has_point(point)
+	if _control_rect_in_enemy_space(portrait).grow(CLICK_RECT_PADDING).has_point(point):
+		return true
+	var intent_bg: Control = get_node_or_null("VBox/IntentRow/IntentBG") as Control
+	if intent_bg != null and _control_rect_in_enemy_space(intent_bg).grow(CLICK_RECT_PADDING).has_point(point):
+		return true
+	var hp_row: Control = get_node_or_null("VBox/HPRow") as Control
+	if hp_row != null and hp_row.visible and _control_rect_in_enemy_space(hp_row).grow(CLICK_RECT_PADDING).has_point(point):
+		return true
+	return false
+
+
+func _control_rect_in_enemy_space(control: Control) -> Rect2:
+	var global_rect: Rect2 = control.get_global_rect()
+	var inverse_transform: Transform2D = get_global_transform().affine_inverse()
+	var top_left: Vector2 = inverse_transform * global_rect.position
+	var bottom_right: Vector2 = inverse_transform * (global_rect.position + global_rect.size)
+	var rect_pos: Vector2 = Vector2(minf(top_left.x, bottom_right.x), minf(top_left.y, bottom_right.y))
+	var rect_size: Vector2 = Vector2(absf(bottom_right.x - top_left.x), absf(bottom_right.y - top_left.y))
+	return Rect2(rect_pos, rect_size)
 
 
 ## 初始化敎人資料

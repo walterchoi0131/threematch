@@ -11,11 +11,19 @@ const CARD_BORDER_COLOR := Color(0.45, 0.5, 0.65, 1)
 const CARD_MARGIN := 16.0                            # 卡片到螢幕邊距
 const ENTER_DUR := 0.28
 const EXIT_DUR := 0.22
+const UPGRADE_HOLD_DURATION := 0.9
+const UPGRADE_TEXT_DARK := Color(0.25, 0.26, 0.30, 1.0)
+const UPGRADE_TEXT_LIGHT := Color(0.92, 0.92, 0.96, 1.0)
+const UPGRADE_TEXT_UNLOCKED := Color(0.9, 0.9, 0.95, 1.0)
+const UPGRADE_SLOT_DARK := Color(0.05, 0.055, 0.065, 1.0)
 const SE_OPEN := preload("res://assets/se/card_draw_3.wav")
 
 var _char: CharacterData  # 要顯示的角色資料
 var _card: Control = null
 var _closing: bool = false
+var _upgrade_hold_tween: Tween = null
+var _upgrade_hold_token: int = 0
+var _upgrade_hold_completed: bool = false
 
 
 func _ready() -> void:
@@ -418,6 +426,7 @@ func _resolve_responding_upper(skill_name: String) -> int:
 		"Saint Cross": Block.UpperType.SAINT_CROSS,
 		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 		"Snowball": Block.UpperType.SNOWBALL,
+		"Iceball": Block.UpperType.ICEBALL,
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,
 		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
@@ -452,6 +461,10 @@ func _blast_pattern_for(upper_type: int) -> Array:
 				for y in range(1, 4):
 					cells_b.append(Vector2i(x, y))
 			return cells_b
+		Block.UpperType.ICEBALL:
+			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
+					Vector2i(1, 2),                  Vector2i(3, 2),
+					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 		Block.UpperType.LEAF_SHIELD:
 			# 環形（3x3 外圈）
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
@@ -600,6 +613,10 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 		return
 	var current_level: int = SkillUpgradeUtils.get_unlocked_level(_char, kind, skill_index)
 	var elem_color: Color = Block.COLORS.get(_char.gem_type, Color(0.4, 0.6, 1.0))
+	_upgrade_hold_token += 1
+	_upgrade_hold_completed = false
+	if _upgrade_hold_tween != null and _upgrade_hold_tween.is_valid():
+		_upgrade_hold_tween.kill()
 	var layer := CanvasLayer.new()
 	layer.layer = 95
 	add_child(layer)
@@ -651,27 +668,44 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 
 	for i in range(defs.size()):
 		var upgrade: Dictionary = defs[i]
+		var is_unlocked: bool = i < current_level
+		var is_next_upgrade: bool = i == current_level and current_level < defs.size()
+		var row_panel := PanelContainer.new()
+		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var row_style := StyleBoxFlat.new()
+		row_style.bg_color = Color(0.075, 0.09, 0.14, 0.92) if is_unlocked else Color(0.035, 0.04, 0.05, 0.96)
+		row_style.border_color = Color(0.34, 0.38, 0.48, 0.9) if is_unlocked else Color(0.12, 0.13, 0.16, 1.0)
+		row_style.set_border_width_all(1)
+		row_style.set_corner_radius_all(6)
+		row_style.content_margin_left = 8
+		row_style.content_margin_right = 8
+		row_style.content_margin_top = 7
+		row_style.content_margin_bottom = 7
+		row_panel.add_theme_stylebox_override("panel", row_style)
+		row_panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_next_upgrade else Control.MOUSE_FILTER_IGNORE
+		vbox.add_child(row_panel)
+
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if i > current_level:
-			row.modulate.a = 0.45
-		vbox.add_child(row)
+		row_panel.add_child(row)
 
-		var slot := _make_upgrade_slot_button(i < current_level, elem_color, 30.0)
-		if i == current_level:
-			slot.pressed.connect(func() -> void:
-				_show_upgrade_confirm(kind, skill_index, layer)
-			)
+		var row_info: Dictionary = {
+			"row": row_panel,
+			"fill_ratio": 1.0 if is_unlocked else 0.0,
+		}
+
+		var slot: Control = _make_upgrade_progress_slot(elem_color, 30.0, is_unlocked)
+		row_info["slot"] = slot
 		row.add_child(slot)
 
-		var info := Label.new()
-		info.text = SkillUpgradeUtils.get_upgrade_text(upgrade)
-		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_theme_font_size_override("font_size", 16)
-		info.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
+		var info: Control = _make_upgrade_fill_label(SkillUpgradeUtils.get_upgrade_text(upgrade), is_unlocked)
+		row_info["text"] = info
 		row.add_child(info)
+		_set_upgrade_row_fill_ratio(float(row_info["fill_ratio"]), row_info)
+
+		if is_next_upgrade:
+			row_panel.gui_input.connect(_on_upgrade_hold_row_gui_input.bind(kind, skill_index, layer, row_info, elem_color))
 
 	var cost := Label.new()
 	if current_level >= defs.size():
@@ -684,27 +718,250 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 	vbox.add_child(cost)
 
 
-func _show_upgrade_confirm(kind: String, skill_index: int, dialog_layer: CanvasLayer) -> void:
+func _make_upgrade_slot_style(color: Color, slot_size: float) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.border_color = Color(1.0, 0.86, 0.18)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(int(slot_size * 0.5))
+	return style
+
+
+func _make_upgrade_progress_slot(elem_color: Color, slot_size: float, filled: bool) -> Control:
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(slot_size, slot_size)
+	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var base := PanelContainer.new()
+	base.set_anchors_preset(Control.PRESET_FULL_RECT)
+	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	base.add_theme_stylebox_override("panel", _make_upgrade_slot_style(UPGRADE_SLOT_DARK, slot_size))
+	holder.add_child(base)
+
+	var fill_clip := Control.new()
+	fill_clip.clip_contents = true
+	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(fill_clip)
+
+	var fill_panel := PanelContainer.new()
+	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_slot_style(elem_color, slot_size))
+	fill_clip.add_child(fill_panel)
+
+	holder.set_meta("_fill_clip", fill_clip)
+	holder.set_meta("_fill_panel", fill_panel)
+	holder.resized.connect(func() -> void:
+		_set_upgrade_slot_fill(holder, 1.0 if filled else float(holder.get_meta("_fill_ratio", 0.0)))
+	)
+	_set_upgrade_slot_fill(holder, 1.0 if filled else 0.0)
+	return holder
+
+
+func _set_upgrade_slot_fill(slot: Control, ratio: float) -> void:
+	if slot == null:
+		return
+	slot.set_meta("_fill_ratio", ratio)
+	if not slot.has_meta("_fill_clip") or not slot.has_meta("_fill_panel"):
+		return
+	var fill_clip: Control = slot.get_meta("_fill_clip") as Control
+	var fill_panel: Control = slot.get_meta("_fill_panel") as Control
+	if fill_clip == null or fill_panel == null:
+		return
+	var slot_size: Vector2 = slot.size
+	if slot_size.x <= 0.0 or slot_size.y <= 0.0:
+		slot_size = slot.custom_minimum_size
+	var fill_h: float = slot_size.y * clampf(ratio, 0.0, 1.0)
+	fill_clip.position = Vector2(0.0, slot_size.y - fill_h)
+	fill_clip.size = Vector2(slot_size.x, fill_h)
+	fill_panel.position = Vector2(0.0, -fill_clip.position.y)
+	fill_panel.size = slot_size
+
+
+func _make_upgrade_fill_label(text: String, filled: bool) -> Control:
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(0.0, 48.0)
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var dark_label := Label.new()
+	dark_label.text = text
+	dark_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dark_label.add_theme_font_size_override("font_size", 16)
+	dark_label.add_theme_color_override("font_color", UPGRADE_TEXT_UNLOCKED if filled else UPGRADE_TEXT_DARK)
+	dark_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(dark_label)
+
+	var fill_clip := Control.new()
+	fill_clip.clip_contents = true
+	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(fill_clip)
+
+	var light_label := Label.new()
+	light_label.text = text
+	light_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	light_label.add_theme_font_size_override("font_size", 16)
+	light_label.add_theme_color_override("font_color", UPGRADE_TEXT_LIGHT)
+	light_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fill_clip.add_child(light_label)
+
+	holder.set_meta("_dark_label", dark_label)
+	holder.set_meta("_fill_clip", fill_clip)
+	holder.set_meta("_light_label", light_label)
+	holder.resized.connect(func() -> void:
+		_set_upgrade_text_fill(holder, float(holder.get_meta("_fill_ratio", 1.0 if filled else 0.0)))
+	)
+	_set_upgrade_text_fill(holder, 1.0 if filled else 0.0)
+	return holder
+
+
+func _set_upgrade_text_fill(holder: Control, ratio: float) -> void:
+	if holder == null:
+		return
+	holder.set_meta("_fill_ratio", ratio)
+	if not holder.has_meta("_dark_label") or not holder.has_meta("_fill_clip") or not holder.has_meta("_light_label"):
+		return
+	var dark_label: Label = holder.get_meta("_dark_label") as Label
+	var fill_clip: Control = holder.get_meta("_fill_clip") as Control
+	var light_label: Label = holder.get_meta("_light_label") as Label
+	if dark_label == null or fill_clip == null or light_label == null:
+		return
+	var holder_size: Vector2 = holder.size
+	if holder_size.x <= 0.0 or holder_size.y <= 0.0:
+		holder_size = holder.custom_minimum_size
+	dark_label.position = Vector2.ZERO
+	dark_label.size = holder_size
+	var fill_h: float = holder_size.y * clampf(ratio, 0.0, 1.0)
+	fill_clip.position = Vector2(0.0, holder_size.y - fill_h)
+	fill_clip.size = Vector2(holder_size.x, fill_h)
+	light_label.position = Vector2(0.0, -fill_clip.position.y)
+	light_label.size = holder_size
+
+
+func _set_upgrade_row_fill_ratio(ratio: float, row_info: Dictionary) -> void:
+	var clamped: float = clampf(ratio, 0.0, 1.0)
+	row_info["fill_ratio"] = clamped
+	var slot: Control = row_info.get("slot", null) as Control
+	var text_holder: Control = row_info.get("text", null) as Control
+	_set_upgrade_slot_fill(slot, clamped)
+	_set_upgrade_text_fill(text_holder, clamped)
+
+
+func _on_upgrade_hold_row_gui_input(event: InputEvent, kind: String, skill_index: int, dialog_layer: CanvasLayer, row_info: Dictionary, elem_color: Color) -> void:
+	if _upgrade_hold_completed:
+		return
+	if event is InputEventMouseButton:
+		var mouse_event: InputEventMouseButton = event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse_event.pressed:
+			_start_upgrade_hold(kind, skill_index, dialog_layer, row_info, elem_color)
+		else:
+			_cancel_upgrade_hold(row_info)
+
+
+func _start_upgrade_hold(kind: String, skill_index: int, dialog_layer: CanvasLayer, row_info: Dictionary, elem_color: Color) -> void:
 	var item_name: String = Locale.tr_ui("ITEM_SAPPHIRE")
 	if GameState.get_inventory_count(SkillUpgradeUtils.COST_ITEM_TYPE) < SkillUpgradeUtils.COST_ITEM_AMOUNT:
 		_show_message_dialog(Locale.tr_ui("SKILL_UPGRADE_NOT_ENOUGH") % item_name)
 		return
-	var confirm := ConfirmationDialog.new()
-	confirm.title = Locale.tr_ui("SKILL_UPGRADE_CONFIRM_TITLE")
-	confirm.dialog_text = Locale.tr_ui("SKILL_UPGRADE_CONFIRM_BODY") % item_name
-	confirm.ok_button_text = Locale.tr_ui("CONFIRM")
-	confirm.cancel_button_text = Locale.tr_ui("CANCEL")
-	confirm.confirmed.connect(func() -> void:
-		var result: Dictionary = GameState.try_upgrade_skill(_char, kind, skill_index)
-		if bool(result.get("ok", false)):
-			if is_instance_valid(dialog_layer):
-				dialog_layer.queue_free()
-			_rebuild_ui()
-		else:
-			_show_message_dialog(_upgrade_error_text(str(result.get("reason", ""))))
-	)
-	add_child(confirm)
-	confirm.popup_centered(Vector2i(360, 160))
+	_upgrade_hold_token += 1
+	var token: int = _upgrade_hold_token
+	if _upgrade_hold_tween != null and _upgrade_hold_tween.is_valid():
+		_upgrade_hold_tween.kill()
+	_set_upgrade_row_fill_ratio(0.0, row_info)
+	_upgrade_hold_tween = create_tween()
+	_upgrade_hold_tween.tween_method(Callable(self, "_set_upgrade_row_fill_ratio").bind(row_info), 0.0, 1.0, UPGRADE_HOLD_DURATION) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	_run_upgrade_hold_completion(kind, skill_index, dialog_layer, row_info, elem_color, token)
+
+
+func _cancel_upgrade_hold(row_info: Dictionary) -> void:
+	if _upgrade_hold_completed:
+		return
+	if float(row_info.get("fill_ratio", 0.0)) >= 0.999:
+		return
+	_upgrade_hold_token += 1
+	if _upgrade_hold_tween != null and _upgrade_hold_tween.is_valid():
+		_upgrade_hold_tween.kill()
+	var current_ratio: float = float(row_info.get("fill_ratio", 0.0))
+	_upgrade_hold_tween = create_tween()
+	_upgrade_hold_tween.tween_method(Callable(self, "_set_upgrade_row_fill_ratio").bind(row_info), current_ratio, 0.0, 0.14) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+func _run_upgrade_hold_completion(kind: String, skill_index: int, dialog_layer: CanvasLayer, row_info: Dictionary, elem_color: Color, token: int) -> void:
+	if _upgrade_hold_tween == null:
+		return
+	await _upgrade_hold_tween.finished
+	if token != _upgrade_hold_token or _upgrade_hold_completed:
+		return
+	_upgrade_hold_completed = true
+	var result: Dictionary = GameState.try_upgrade_skill(_char, kind, skill_index)
+	if bool(result.get("ok", false)):
+		_set_upgrade_row_fill_ratio(1.0, row_info)
+		await _play_upgrade_hold_success(row_info, elem_color, dialog_layer)
+		if is_instance_valid(dialog_layer):
+			dialog_layer.queue_free()
+		_rebuild_ui()
+	else:
+		_upgrade_hold_completed = false
+		_set_upgrade_row_fill_ratio(0.0, row_info)
+		_show_message_dialog(_upgrade_error_text(str(result.get("reason", ""))))
+
+
+func _play_upgrade_hold_success(row_info: Dictionary, elem_color: Color, dialog_layer: CanvasLayer) -> void:
+	var slot: Control = row_info.get("slot", null) as Control
+	var text_holder: Control = row_info.get("text", null) as Control
+	if slot != null:
+		slot.pivot_offset = slot.size * 0.5
+	if text_holder != null:
+		text_holder.pivot_offset = text_holder.size * 0.5
+	_spawn_upgrade_confetti(row_info, elem_color, dialog_layer)
+	var tw := create_tween().set_parallel(true)
+	if slot != null:
+		tw.tween_property(slot, "scale", Vector2(1.26, 1.26), 0.13).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(slot, "scale", Vector2.ONE, 0.16).set_delay(0.13).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	if text_holder != null:
+		tw.tween_property(text_holder, "scale", Vector2(1.045, 1.045), 0.13).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(text_holder, "scale", Vector2.ONE, 0.16).set_delay(0.13).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	await get_tree().create_timer(0.55).timeout
+
+
+func _spawn_upgrade_confetti(row_info: Dictionary, elem_color: Color, dialog_layer: CanvasLayer) -> void:
+	if not is_instance_valid(dialog_layer):
+		return
+	var row: Control = row_info.get("row", null) as Control
+	if row == null:
+		return
+	var origin: Vector2 = row.get_global_rect().get_center()
+	var colors: Array[Color] = [
+		elem_color.lightened(0.25),
+		Color(1.0, 0.86, 0.22, 1.0),
+		Color(0.95, 0.95, 1.0, 1.0),
+		elem_color.darkened(0.1),
+	]
+	for i in range(30):
+		var piece := ColorRect.new()
+		piece.color = colors[i % colors.size()]
+		piece.size = Vector2(randf_range(4.0, 8.0), randf_range(8.0, 15.0))
+		piece.position = origin
+		piece.pivot_offset = piece.size * 0.5
+		piece.rotation = randf_range(0.0, TAU)
+		piece.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dialog_layer.add_child(piece)
+
+		var angle: float = randf_range(-PI, 0.0)
+		var distance: float = randf_range(70.0, 160.0)
+		var end_pos: Vector2 = origin + Vector2(cos(angle), sin(angle)) * distance + Vector2(randf_range(-34.0, 34.0), randf_range(-14.0, 70.0))
+		var spin: float = piece.rotation + randf_range(-5.5, 5.5)
+		var tw := piece.create_tween().set_parallel(true)
+		tw.tween_property(piece, "position", end_pos, randf_range(0.42, 0.68)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(piece, "rotation", spin, 0.62).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(piece, "modulate:a", 0.0, 0.24).set_delay(0.36)
+		tw.finished.connect(func() -> void:
+			if is_instance_valid(piece):
+				piece.queue_free()
+		, CONNECT_ONE_SHOT)
 
 
 func _show_message_dialog(message: String) -> void:

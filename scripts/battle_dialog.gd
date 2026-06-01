@@ -30,6 +30,7 @@ const CHAR_NAMES := {
 	"panda":   { "zh": "熊貓",       "en": "Panda" },
 	"dragon":  { "zh": "小龍",       "en": "Dragon" },
 	"shark":   { "zh": "鯊鯊",       "en": "Shark" },
+	"polarz":  { "zh": "極極",       "en": "Polarz" },
 }
 
 const CHAR_NAME_COLORS := {
@@ -41,6 +42,7 @@ const CHAR_NAME_COLORS := {
 	"panda":   Color(0.55, 0.9, 0.5),
 	"dragon":  Color(1.0, 0.45, 0.3),
 	"shark":   Color(0.4, 0.85, 1.0),
+	"polarz":  Color(0.55, 0.85, 1.0),
 }
 
 # ── 節點 ─────────────────────────────────────────────────────

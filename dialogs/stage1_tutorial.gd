@@ -37,6 +37,34 @@ static func make_steps(party: Array = []) -> Array:
 					"Well done! The more gems you destroy, the more damage you deal."),
 			],
 		},
+		# ── 步驟 1.5：教敵人倒數與意圖──
+		{
+			"pre_dialog": [
+				_line("husky", "normal",
+					"接著看看敵人。敵人身上的提示會告訴你它的行動意圖，還有距離攻擊剩下幾回合。",
+					"Now look at the enemy. Its intent tells you what it will do, and how many turns remain before it attacks."),
+			],
+			"spotlight": {
+				"target": "first_enemy",
+				"shape": "circle",
+				"hold": 3.0,
+			},
+			"wait_for_blast": false,
+		},
+		# ── 步驟 1.6：教玩家 HP 與敗北條件──
+		{
+			"pre_dialog": [
+				_line("husky", "normal",
+					"敵人的攻擊會扣你的 HP。當 HP 被打到 0，就會戰敗。",
+					"Enemy attacks damage your HP. If your HP reaches 0, you lose the battle."),
+			],
+			"spotlight": {
+				"target": "player_hp",
+				"shape": "rect",
+				"hold": 3.0,
+			},
+			"wait_for_blast": false,
+		},
 		# ── 步驟 2：教融合（左側一整列紅寶石 → 火焰炸彈）──
 		{
 			"pre_dialog": [

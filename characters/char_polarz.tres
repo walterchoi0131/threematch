@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/character/polarz/polarz.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Polarz"
+gem_type = 1
+level = 15
+atk_growth = 5.5
+base_hp = 46
+hp_growth = 7.5
+base_magic = 4
+magic_growth = 8.0
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(0.25, 0.47, 0.85, 1)
+portrait_scale = 0.6
+portrait_offset = Vector2(-12.092941, 3.9326172)
+dialog_square_scale = 0.75
+dialog_square_offset = Vector2(-36.635696, 9.268188)
+square_scale = 0.85
+square_offset = Vector2(-67.90706, 0.3474121)
+rectangular_scale = 0.3
+rectangular_offset = Vector2(-18.013504, 207.48737)
+active_skill_name = "冰球法印"
+active_skill_desc = "Create two circle splashes of 8 water gems at top-right and bottom-left. CD: 5 turns."
+active_skill_cd = 5
+responding_skills = Array[Dictionary]([{
+"desc": "8+ water gems create an instant Iceball. It immediately flies to the target enemy and deals Polarz MAGIC x10 damage without consuming the turn.",
+"fuse_label": "8",
+"name": "Iceball",
+"priority": 1,
+"threshold": 8,
+"trigger_type": "count"
+}])

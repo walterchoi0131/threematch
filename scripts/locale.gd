@@ -73,6 +73,8 @@ var _translations: Dictionary = {
 	"Water Slash DESC": {"zh": "在點擊處生成狂鯊寶石。點擊後連鎖貫穿所有狂鯊並沿欄縱向爆炸。", "en": "Place a Shark Frenzy gem. On tap, chain through all Shark gems and blast each column."},
 	"Snowball": {"zh": "雪球", "en": "Snowball"},
 	"Snowball DESC": {"zh": "在點擊處生成雪球寶石；點擊後造成 3×3 範圍傷害。", "en": "Create a Snowball gem. 3×3 area blast on click."},
+	"Iceball": {"zh": "冰球", "en": "Iceball"},
+	"Iceball DESC": {"zh": "8 顆以上水寶石合成時，在點擊處生成 INSTANT 冰球。冰球會立刻飛向目標敵人，造成 Polarz 魔力 × 10 傷害，且不消耗回合。", "en": "Fuse 8+ water gems to create an INSTANT Iceball. It immediately flies to the target enemy, deals Polarz magic x10 damage, and does not consume the turn."},
 	"Leaf Shield": {"zh": "葉盾", "en": "Leaf Shield"},
 	"Leaf Shield DESC": {"zh": "在點擊處生成葉盾寶石;點擊回復 ATK×5 HP;吸收敵方攻擊(50%減傷)。", "en": "Create a Leaf Shield gem. Click to heal ATK×5. Absorbs enemy attacks (50% dmg reduction)."},
 	"Porcupine": {"zh": "召喚:豪豬", "en": "Summon: Porcupine"},
@@ -83,7 +85,8 @@ var _translations: Dictionary = {
 	"Bamboo Supply DESC": {"zh": "在點擊處生成竹葉補給寶石；爆炸時消除周圍 8 格並回復 Panda 魔力 × 1.6 HP。", "en": "Create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 1.6."},
 	"Wood Spear": {"zh": "木槍", "en": "Wood Spear"},
 	"Wood Spear DESC": {"zh": "7 顆以上葉寶石合成時，在點擊處生成木槍寶石；點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse 7+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
-	"Wood Spear DESC DYNAMIC": {"zh": "%d 顆以上葉寶石合成時，在點擊處生成木槍寶石；木槍內在數值為 %d。點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse %d+ leaf gems to create a Wood Spear gem at the tapped cell. The spear's intrinsic value is %d. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
+	"Wood Spear DESC DYNAMIC": {"zh": "%d 顆以上葉寶石合成時，在點擊處生成木槍寶石。點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse %d+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
+	"Wood Spear DESC DYNAMIC PIERCE": {"zh": "%d 顆以上葉寶石合成時，在點擊處生成木槍寶石。點擊該格上半部時朝上，下半部時朝下。爆發會破壞可破壞障礙並繼續飛行，直到不可破壞障礙或邊界。", "en": "Fuse %d+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half points it up; tapping the lower half points it down. On blast, it breaks breakable obstacles and keeps flying until an unbreakable obstacle or the edge."},
 
 	# ── 角色名稱 ──
 	"Boar": {"zh": "野豬", "en": "Boar"},
@@ -93,6 +96,7 @@ var _translations: Dictionary = {
 	"Fox": {"zh": "小狐", "en": "Fox"},
 	"Husky": {"zh": "哈士奇", "en": "Husky"},
 	"Polar": {"zh": "阿極", "en": "Polar"},
+	"Polarz": {"zh": "極極", "en": "Polarz"},
 	"Dragon": {"zh": "小焰", "en": "Dragon"},
 	"Shark": {"zh": "鯊魚", "en": "Shark"},
 	"Gory": {"zh": "戈爾", "en": "Gory"},
@@ -104,6 +108,7 @@ var _translations: Dictionary = {
 	"DIALOG_husky":   {"zh": "哈士奇老師", "en": "Prof. Husky"},
 	"DIALOG_fox":     {"zh": "小狐",       "en": "Fox"},
 	"DIALOG_polar":   {"zh": "阿極",       "en": "Polar"},
+	"DIALOG_polarz":  {"zh": "極極",       "en": "Polarz"},
 	"DIALOG_raccoon": {"zh": "小浣",       "en": "Raccoon"},
 	"DIALOG_boar":    {"zh": "山豬",       "en": "Boar"},
 	"DIALOG_panda":   {"zh": "阿潘",       "en": "Panda"},
@@ -128,6 +133,8 @@ var _translations: Dictionary = {
 	"Resurgence+ DESC": {"zh": "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/合成時計為 5 顆）。CD：6 回合。", "en": "Select a gem; convert its four neighbors to the same element and grant the tapped gem X5 (counts as 5 when blasted/chained/fused). CD: 6 turns."},
 	"Snowball Fight": {"zh": "打雪仗", "en": "Snowball Fight"},
 	"Snowball Fight DESC": {"zh": "動員棋盤上所有雪球寶石飛向目標敵人，每顆造成 ATK×10 傷害。CD：5 回合。", "en": "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."},
+	"冰球法印": {"zh": "冰球法印", "en": "Iceball Sigil"},
+	"冰球法印 DESC": {"zh": "在棋盤右上與左下各生成一圈 8 顆水寶石。CD：5 回合。", "en": "Create two 8-gem water circles at the top-right and bottom-left of the board. CD: 5 turns."},
 	"Blast": {"zh": "爆炸", "en": "Blast"},
 	"Blast DESC": {"zh": "由上至下爆破整個棋盤的每一行。CD：1 回合。", "en": "Blast every row from top to bottom. CD: 1 turn."},
 	"Leaf Spear Call": {"zh": "葉矛喚來", "en": "Leaf Spear Call"},
@@ -145,7 +152,7 @@ var _translations: Dictionary = {
 	"UPGRADE_GORY_LEAF_SPEAR_EXTRA_1": {"zh": "可額外選擇 1 格生成木槍。", "en": "Pick 1 extra cell to create a Wood Spear."},
 	"UPGRADE_GORY_LEAF_SPEAR_EXTRA_2": {"zh": "可額外選擇 2 格生成木槍。", "en": "Pick 2 extra cells to create Wood Spears."},
 	"UPGRADE_GORY_LEAF_SPEAR_CD_1": {"zh": "冷卻回合 -1。", "en": "Cooldown -1."},
-	"UPGRADE_GORY_WOOD_SPEAR_VALUE_1": {"zh": "此木槍寶石的內在數值 +1。", "en": "This Wood Spear gem's intrinsic value +1."},
+	"UPGRADE_GORY_WOOD_SPEAR_PIERCE_BREAKABLE": {"zh": "木槍破壞可破壞障礙後，現在會繼續飛行。", "en": "Wood Spear now keeps flying after breaking a breakable obstacle."},
 	"UPGRADE_GORY_WOOD_SPEAR_THRESHOLD_1": {"zh": "合成需求 -1。", "en": "Fusing requirement -1."},
 
 	# ── 被動技能名稱與描述 ──
@@ -161,6 +168,8 @@ var _translations: Dictionary = {
 	"LOG_HEAL": {"zh": "回覆", "en": "Heal"},
 	"LOG_STORE": {"zh": "儲存", "en": "Stored"},
 	"LOG_CONVERT_TO": {"zh": "轉換為", "en": "→"},
+	"SPELL_CHAIN": {"zh": "法術連撃", "en": "Spell Chain"},
+	"SPELL_CHAIN_SHORT": {"zh": "法", "en": "spell"},
 	"TAP_HERO_TO_USE_SKILL": {"zh": "點擊角色使用技能", "en": "Tap the hero to use skill"},
 }
 

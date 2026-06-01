@@ -8,7 +8,7 @@ extends Node2D
 # ROCK：無屬性障礙 — 不參與 BFS / 連鎖 / 融合；不可移除且不會掉落。
 # WOOD_STRUCTURE：stationary + breakable obstacle.
 enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球
 
 # 額外效果（可同時掛載多個於單一寶石上）
 # X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
@@ -66,6 +66,7 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.SAINT_CROSS: preload("res://assets/gems/gem_lightCross2.png"),
 	UpperType.LEAF_SHIELD: preload("res://assets/gems/gem_leafshield.png"),
 	UpperType.SNOWBALL: preload("res://assets/gems/gem_snowball.png"),
+	UpperType.ICEBALL: preload("res://assets/gems/gem_iceball.png"),
 	UpperType.WATER_SLASH: preload("res://assets/gems/gem_shark.png"),
 	UpperType.PORCUPINE: preload("res://assets/gems/arrowpig.png"),
 	UpperType.TURTLE: preload("res://assets/gems/turtle.png"),
@@ -103,6 +104,7 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.SAINT_CROSS: 9,
 	UpperType.LEAF_SHIELD: 4,
 	UpperType.SNOWBALL: 4,
+	UpperType.ICEBALL: 8,
 	UpperType.WATER_SLASH: 4,
 	UpperType.PORCUPINE: 9,
 	UpperType.TURTLE: 5,
@@ -119,12 +121,17 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.SAINT_CROSS: Type.LIGHT,
 	UpperType.LEAF_SHIELD: Type.GREEN,
 	UpperType.SNOWBALL: Type.BLUE,
+	UpperType.ICEBALL: Type.BLUE,
 	UpperType.WATER_SLASH: Type.BLUE,
 	UpperType.PORCUPINE: Type.GREEN,
 	UpperType.TURTLE: Type.GREEN,
 	UpperType.BAMBOO_SUPPLY: Type.GREEN,
 	UpperType.WOOD_SPEAR_UP: Type.GREEN,
 	UpperType.WOOD_SPEAR_DOWN: Type.GREEN,
+}
+
+const UPPER_INSTANT: Dictionary = {
+	UpperType.ICEBALL: true,
 }
 
 # 融合提示描邊色（較深色，避免與白色文字混淆）
@@ -148,6 +155,7 @@ var board_columns: int = 8             # 棋盤欄數（woodStructure 選擇左�
 # 額外效果列表（儲存 ExtraEffect 列舉值，避免 typed enum array 的型別推論問題）
 var extra_effects: Array[int] = []
 var intrinsic_bonus: int = 0
+var wood_spear_pierce_breakable: bool = false
 var _x5_badge: Label = null            # X5 標記（右上角紅色 "x5"）
 var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 
@@ -188,6 +196,14 @@ func is_upper_gem() -> bool:
 	return upper_type != UpperType.NONE
 
 
+static func upper_type_has_instant(ut: UpperType) -> bool:
+	return bool(UPPER_INSTANT.get(ut, false))
+
+
+func has_instant_upper_attribute() -> bool:
+	return upper_type_has_instant(upper_type)
+
+
 ## 是否為 block（無屬性方塊）— 不參與 BFS / 連鎖 / 融合
 func is_block() -> bool:
 	return upper_type == UpperType.NONE and block_type == Type.PLANK
@@ -222,6 +238,7 @@ func is_stationary_obstacle() -> bool:
 func set_upper_type(ut: UpperType) -> void:
 	upper_type = ut
 	intrinsic_bonus = 0
+	wood_spear_pierce_breakable = false
 	# 融合為高階寶石時清除所有額外效果（X5 不繼承）
 	if ut != UpperType.NONE:
 		clear_extras()
@@ -419,7 +436,7 @@ func _update_upper_overlay() -> void:
 			upper_base_color = COLORS[Type.LIGHT]
 		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN:
 			upper_base_color = COLORS[Type.GREEN]
-		UpperType.SNOWBALL:
+		UpperType.SNOWBALL, UpperType.ICEBALL:
 			upper_base_color = COLORS[Type.BLUE]
 		UpperType.WATER_SLASH:
 			upper_base_color = COLORS[Type.BLUE]
@@ -455,7 +472,7 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
 		UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.SNOWBALL:
+		UpperType.SNOWBALL, UpperType.ICEBALL:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		UpperType.WATER_SLASH:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)

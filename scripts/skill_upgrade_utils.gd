@@ -101,9 +101,23 @@ static func wood_spear_intrinsic_bonus(character: CharacterData, skill_index: in
 	return effect_sum(character, KIND_RESPONDING, skill_index, "wood_spear_intrinsic_bonus")
 
 
+static func wood_spear_pierces_breakable(character: CharacterData, skill_index: int) -> bool:
+	return effect_max(character, KIND_RESPONDING, skill_index, "wood_spear_pierce_breakable") > 0
+
+
 static func wood_spear_intrinsic_value(character: CharacterData, skill_index: int) -> int:
 	var base_value: int = int(Block.UPPER_INTRINSIC_VALUE.get(Block.UpperType.WOOD_SPEAR_UP, 7))
 	return maxi(1, base_value + wood_spear_intrinsic_bonus(character, skill_index))
+
+
+static func find_responding_skill_index(character: CharacterData, skill_name: String) -> int:
+	if character == null:
+		return -1
+	for i in range(character.responding_skills.size()):
+		var skill: Dictionary = character.responding_skills[i]
+		if str(skill.get("name", "")) == skill_name:
+			return i
+	return -1
 
 
 static func _get_effects(upgrade: Dictionary) -> Dictionary:
@@ -126,8 +140,9 @@ static func get_responding_description(character: CharacterData, skill_index: in
 	var skill_name: String = str(skill.get("name", ""))
 	if skill_name == "Wood Spear":
 		var threshold: int = responding_threshold(character, skill_index, skill)
-		var value: int = wood_spear_intrinsic_value(character, skill_index)
-		return Locale.tr_ui("Wood Spear DESC DYNAMIC") % [threshold, value]
+		if wood_spear_pierces_breakable(character, skill_index):
+			return Locale.tr_ui("Wood Spear DESC DYNAMIC PIERCE") % threshold
+		return Locale.tr_ui("Wood Spear DESC DYNAMIC") % threshold
 	return Locale.tr_or(skill_name + " DESC", str(skill.get("desc", "")))
 
 

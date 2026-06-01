@@ -34,6 +34,7 @@ const NAME_TO_UPPER: Dictionary = {
 	"Saint Cross": Block.UpperType.SAINT_CROSS,
 	"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 	"Snowball": Block.UpperType.SNOWBALL,
+	"Iceball": Block.UpperType.ICEBALL,
 	"Porcupine": Block.UpperType.PORCUPINE,
 	"Turtle": Block.UpperType.TURTLE,
 	"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
@@ -346,6 +347,10 @@ static func _blast_pattern_for(upper_type: int) -> Array:
 				for y in range(1, 4):
 					cells_b.append(Vector2i(x, y))
 			return cells_b
+		Block.UpperType.ICEBALL:
+			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
+					Vector2i(1, 2),                  Vector2i(3, 2),
+					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 		Block.UpperType.LEAF_SHIELD:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),

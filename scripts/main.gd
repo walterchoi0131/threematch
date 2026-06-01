@@ -50,9 +50,19 @@ const CHAR_PANDA := preload("res://characters/char_panda.tres")
 const CHAR_FOX := preload("res://characters/char_fox.tres")
 const CHAR_HUSKY := preload("res://characters/char_husky.tres")
 const CHAR_POLAR := preload("res://characters/char_polar.tres")
+const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear"]
+const ICEBALL_MAGIC_MULT := 10
+const ICEBALL_DEBRIS_SHARDS := 7
+const COMBO_UI_MARGIN := Vector2(28.0, 92.0)
+const COMBO_UI_SLOT_GAP := 142.0
+const COMBO_UI_VALUE_OFFSET_Y := 20.0
+const COMBO_UI_MIN_TOP_GAP := 46.0
+const SPELL_CHAIN_WAVE_AMPLITUDE := 8.0
+const SPELL_CHAIN_WAVE_PERIOD := 0.62
 
 var party: Array[CharacterData] = []
 var current_stage: StageData = null
@@ -63,6 +73,9 @@ var _pending_saint_cross_count: int = 0  # 本次連鏈中累積的聖十字觸�
 var _live_chain_label: Label = null       # 連鏈計數標籤 — "×N!" 動態部分
 var _live_chain_header: Label = null      # 連鏈計數標籤 — "Chain" 靜態部分
 var _live_chain_count: int = 0            # 目前連鏈計數（對應 upper_gem_chain_triggered 次數）
+var _spell_chain_label: Control = null    # 法術連撃計數標籤 — "×N!" 動態部分
+var _spell_chain_header: Label = null     # 法術連撃計數標籤 — 靜態部分
+var _spell_chain_count: int = 0           # 目前 INSTANT 融合連擊數
 var _active_board_selection_running: bool = false
 var _active_board_selection_char_index: int = -1
 const ACTIVE_SELECTION_DIM_LAYER := 90
@@ -111,6 +124,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.SAINT_CROSS: "res://assets/gems/gem_saint_cross.png",
 	Block.UpperType.LEAF_SHIELD: "res://assets/gems/gem_leafshield.png",
 	Block.UpperType.SNOWBALL: "res://assets/gems/gem_snowball.png",
+	Block.UpperType.ICEBALL: "res://assets/gems/gem_iceball.png",
 	Block.UpperType.WATER_SLASH: "res://assets/gems/gem_shark.png",
 	Block.UpperType.BAMBOO_SUPPLY: "res://assets/gems/gem_bamboo.png",
 	Block.UpperType.WOOD_SPEAR_UP: "res://assets/gems/gem_wood_spear.png",
@@ -333,13 +347,35 @@ func _on_viewport_changed(_size: Vector2) -> void:
 	_layout_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
 	_layout_stage_editor_enemy_picker_panel()
-	# 重新放置 chain header（若已建立）
-	if is_instance_valid(_live_chain_header) and is_instance_valid(_live_chain_label):
-		var board_rows: int = current_stage.rows if current_stage != null else 8
-		var board_h: float = float(board_rows) * 64.0 * board.scale.y
-		var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
-		_live_chain_header.position = bl + Vector2(8.0, -64.0)
-		_live_chain_label.position = bl + Vector2(8.0, -44.0)
+	_position_combo_ui()
+
+
+func _get_combo_ui_origin() -> Vector2:
+	var bg_left: float = _battle_bg_rect.position.x if is_instance_valid(_battle_bg_rect) else 0.0
+	var bg_top: float = _battle_bg_rect.position.y if is_instance_valid(_battle_bg_rect) else 0.0
+	var bg_bottom: float = board.position.y
+	if is_instance_valid(_battle_bg_rect) and _battle_bg_rect.size.y > 0.0:
+		bg_bottom = _battle_bg_rect.position.y + _battle_bg_rect.size.y
+	var y: float = maxf(bg_top + COMBO_UI_MIN_TOP_GAP, bg_bottom - COMBO_UI_MARGIN.y)
+	return Vector2(bg_left + COMBO_UI_MARGIN.x, y)
+
+
+func _position_combo_pair(header: Control, value: Control, origin: Vector2) -> void:
+	if is_instance_valid(header):
+		header.position = origin
+	if is_instance_valid(value):
+		value.position = origin + Vector2(0.0, COMBO_UI_VALUE_OFFSET_Y)
+
+
+func _position_combo_ui() -> void:
+	var origin: Vector2 = _get_combo_ui_origin()
+	var has_normal: bool = is_instance_valid(_live_chain_header) or is_instance_valid(_live_chain_label)
+	var has_spell: bool = is_instance_valid(_spell_chain_header) or is_instance_valid(_spell_chain_label)
+	_position_combo_pair(_live_chain_header, _live_chain_label, origin)
+	var spell_origin: Vector2 = origin
+	if has_normal and has_spell:
+		spell_origin.x += COMBO_UI_SLOT_GAP
+	_position_combo_pair(_spell_chain_header, _spell_chain_label, spell_origin)
 
 
 
@@ -3250,6 +3286,42 @@ func _format_fuse_bbcode(gem_type: Block.Type, gem_count: int, upper_type: Block
 	return "%s%d → %s" % [_gem_bbcode(gem_type), gem_count, _upper_gem_bbcode(upper_type)]
 
 
+func _is_upper_gem_skill(skill_name: String) -> bool:
+	return UPPER_GEM_SKILLS.has(skill_name)
+
+
+func _upper_type_for_response_skill(skill_name: String) -> Block.UpperType:
+	match skill_name:
+		"Fireball":
+			return Block.UpperType.FIREBALL
+		"Fire Pillar":
+			return Block.UpperType.FIRE_PILLAR_X
+		"Justice Slash":
+			return Block.UpperType.SAINT_CROSS
+		"Leaf Shield":
+			return Block.UpperType.LEAF_SHIELD
+		"Snowball":
+			return Block.UpperType.SNOWBALL
+		"Iceball":
+			return Block.UpperType.ICEBALL
+		"Water Slash":
+			return Block.UpperType.WATER_SLASH
+		"Porcupine":
+			return Block.UpperType.PORCUPINE
+		"Turtle":
+			return Block.UpperType.TURTLE
+		"Bamboo Supply":
+			return Block.UpperType.BAMBOO_SUPPLY
+		"Wood Spear":
+			return Block.UpperType.WOOD_SPEAR_UP
+	return Block.UpperType.NONE
+
+
+func _is_instant_response(resp: Dictionary) -> bool:
+	var skill_name: String = str(resp.get("skill_name", ""))
+	return Block.upper_type_has_instant(_upper_type_for_response_skill(skill_name))
+
+
 ## 新增一筆日誌條目（三層結構：元素漸層 + 角色眼部肖像 + 文字）
 func _add_log_entry(bbcode_text: String, gem_type: Block.Type = Block.Type.RED, char_data: CharacterData = null) -> void:
 	if _log_vbox == null:
@@ -3374,10 +3446,15 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 
 	# 先檢查回應技能以決定流程
 	var responses := battle_manager.check_responding_skills(board)
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear"]
-	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
+	var is_fuse: bool = false
+	var first_response: Dictionary = {}
+	if responses.size() > 0:
+		first_response = responses[0] as Dictionary
+		is_fuse = _is_upper_gem_skill(str(first_response.get("skill_name", "")))
 
 	if is_fuse:
+		if not _is_instant_response(first_response):
+			_reset_spell_chain()
 		# ── 融合管線（不消耗回合，整段保留鎖定）──
 		# 融合不計入寶石計量器：還原 saved_blasts（這筆 record_blast 不計）
 		battle_manager.turn_gem_blasts = saved_blasts
@@ -3386,6 +3463,8 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 		board.is_busy = true
 		await _execute_fuse_pipeline(gem_type, count, global_positions, grid_positions, responses)
 		return
+
+	_reset_spell_chain()
 
 	# 還原 turn_gem_blasts，等到 worker 處理此筆時再 set
 	battle_manager.turn_gem_blasts = saved_blasts
@@ -3628,8 +3707,10 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	battle_manager.turn_gem_blasts = saved_blasts
 	battle_manager.last_blast_positions = saved_positions
 
-	var _upper_gem_skills: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear"]
-	var is_fuse: bool = responses.size() > 0 and (responses[0].skill_name as String) in _upper_gem_skills
+	var is_fuse: bool = false
+	if responses.size() > 0:
+		var first_response: Dictionary = responses[0] as Dictionary
+		is_fuse = _is_upper_gem_skill(str(first_response.get("skill_name", "")))
 	if not is_fuse:
 		return
 
@@ -3662,6 +3743,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 
 ## 結束玩家回合管線：turn++ → 1 秒延遲 → 敵人行動 → 被動技能 → 解鎖棋盤
 func _end_player_turn() -> void:
+	_reset_spell_chain()
 	battle_manager.finish_turn()
 
 	# 召喚物每回合行動：豪豬攻擊 / 烏龜回血
@@ -4057,6 +4139,8 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 
 func _execute_responding_skill(resp: Dictionary) -> void:
 	var skill_name: String = resp.skill_name
+	if _is_upper_gem_skill(skill_name) and not _is_instant_response(resp):
+		_reset_spell_chain()
 	match skill_name:
 		"Leaf Storm":
 			# Convert 3 gems → leaf, priority RED > BLUE
@@ -4116,6 +4200,17 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _sc_count: int = int(battle_manager.turn_gem_blasts.get(_sc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_sc.gem_type, _sc_count, Block.UpperType.SNOWBALL), _sc.gem_type, _sc)
 			await get_tree().create_timer(0.15).timeout
+		"Iceball":
+			var pos: Vector2i = board.last_tapped_pos
+			if not board.place_upper_gem(pos, Block.UpperType.ICEBALL, Block.Type.BLUE):
+				return
+			_play_sfx(_se_freeze)
+			var _ic: CharacterData = party[resp.char_index]
+			var _ic_count: int = int(battle_manager.turn_gem_blasts.get(_ic.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_ic.gem_type, _ic_count, Block.UpperType.ICEBALL), _ic.gem_type, _ic)
+			await get_tree().create_timer(0.12).timeout
+			var spell_mult: float = _register_spell_chain()
+			await _resolve_iceball_instant(pos, resp, spell_mult)
 		"Water Slash":
 			# Place a Water Slash upper gem (always vertical type — chain logic ignores X/Y orientation)
 			var pos: Vector2i = board.last_tapped_pos
@@ -4162,10 +4257,195 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var spear_block: Block = board.grid[pos.x][pos.y]
 			if spear_block != null:
 				spear_block.intrinsic_bonus = SkillUpgradeUtils.wood_spear_intrinsic_bonus(_gc, skill_order)
+				spear_block.wood_spear_pierce_breakable = SkillUpgradeUtils.wood_spear_pierces_breakable(_gc, skill_order)
 			_play_sfx(_se_freeze)
 			var _gc_count: int = int(battle_manager.turn_gem_blasts.get(_gc.gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(_gc.gem_type, _gc_count, spear_type), _gc.gem_type, _gc)
 			await get_tree().create_timer(0.15).timeout
+
+
+func _register_spell_chain() -> float:
+	_spell_chain_count += 1
+	if _spell_chain_count >= 2:
+		_update_spell_chain_label(_spell_chain_count)
+		_play_chain_sfx(_spell_chain_count)
+	return 1.0 + float(_spell_chain_count - 1) * 0.10
+
+
+func _reset_spell_chain(fade: bool = true) -> void:
+	if _spell_chain_count == 0 and not is_instance_valid(_spell_chain_label) and not is_instance_valid(_spell_chain_header):
+		return
+	_spell_chain_count = 0
+	_fade_spell_chain_label(_spell_chain_label, fade)
+	_spell_chain_label = null
+	_fade_spell_chain_label(_spell_chain_header, fade)
+	_spell_chain_header = null
+	_position_combo_ui()
+
+
+func _fade_spell_chain_label(label: Control, fade: bool) -> void:
+	if not is_instance_valid(label):
+		return
+	if fade:
+		var fade_tw := create_tween()
+		fade_tw.tween_property(label, "modulate:a", 0.0, 0.25)
+		fade_tw.tween_callback(label.queue_free)
+	else:
+		label.queue_free()
+
+
+func _update_spell_chain_label(count: int) -> void:
+	var base_font_size: int = 44
+	var font_bonus: int = mini((count - 1) * 5, 50)
+	var font_size: int = base_font_size + font_bonus
+
+	if not is_instance_valid(_spell_chain_header):
+		_spell_chain_header = Label.new()
+		_spell_chain_header.text = Locale.tr_ui("SPELL_CHAIN")
+		_spell_chain_header.add_theme_font_size_override("font_size", 22)
+		_spell_chain_header.add_theme_color_override("font_color", Color(0.65, 0.90, 1.0))
+		_spell_chain_header.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		_spell_chain_header.add_theme_constant_override("outline_size", 4)
+		_spell_chain_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_spell_chain_header.z_index = 100
+		fx_layer.add_child(_spell_chain_header)
+
+	if not is_instance_valid(_spell_chain_label):
+		_spell_chain_label = Control.new()
+		_spell_chain_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_spell_chain_label.z_index = 100
+		fx_layer.add_child(_spell_chain_label)
+
+	_build_spell_chain_wavy_value(_spell_chain_label, "×%d!" % count, font_size)
+	_spell_chain_label.modulate.a = 1.0
+	_spell_chain_label.scale = Vector2(0.5, 0.5)
+	_position_combo_ui()
+
+	var tw := create_tween()
+	tw.tween_property(_spell_chain_label, "scale", Vector2(1.4, 1.4), 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(_spell_chain_label, "scale", Vector2(1.0, 1.0), 0.1).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+
+
+func _build_spell_chain_wavy_value(container: Control, text: String, font_size: int) -> void:
+	if container == null:
+		return
+	for child in container.get_children():
+		child.visible = false
+		child.queue_free()
+	var x_offset := 0.0
+	var char_width: float = maxf(float(font_size) * 0.56, 18.0)
+	for i in text.length():
+		var char_label := Label.new()
+		char_label.text = text.substr(i, 1)
+		char_label.add_theme_font_size_override("font_size", font_size)
+		char_label.add_theme_color_override("font_color", Color(0.78, 0.94, 1.0))
+		char_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+		char_label.add_theme_constant_override("outline_size", 8)
+		char_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		char_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		char_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		char_label.position = Vector2(x_offset, 0.0)
+		char_label.size = Vector2(char_width, float(font_size) + SPELL_CHAIN_WAVE_AMPLITUDE * 2.0)
+		container.add_child(char_label)
+		_start_spell_chain_char_wave(char_label, i)
+		x_offset += char_width
+	container.size = Vector2(x_offset, float(font_size) + SPELL_CHAIN_WAVE_AMPLITUDE * 2.0)
+	container.pivot_offset = Vector2(0.0, float(font_size))
+
+
+func _start_spell_chain_char_wave(char_label: Label, index: int) -> void:
+	var delay: float = float(index) * 0.08
+	var rise_time := 0.16
+	var fall_time := 0.20
+	var rest_time: float = maxf(SPELL_CHAIN_WAVE_PERIOD - delay - rise_time - fall_time, 0.04)
+	var tw := char_label.create_tween().set_loops()
+	tw.tween_interval(delay)
+	tw.tween_property(char_label, "position:y", -SPELL_CHAIN_WAVE_AMPLITUDE, rise_time).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(char_label, "position:y", 0.0, fall_time).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+	tw.tween_interval(rest_time)
+
+
+func _get_current_living_target() -> Enemy:
+	var target: Enemy = battle_manager.targeted_enemy
+	if is_instance_valid(target) and target.current_hp > 0:
+		return target
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy) and enemy.current_hp > 0:
+			return enemy
+	return null
+
+
+func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float) -> void:
+	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
+		return
+	var block: Block = board.grid[pos.x][pos.y]
+	if block == null:
+		return
+	board.is_busy = true
+	board.grid[pos.x][pos.y] = null
+
+	var start_global: Vector2 = block.global_position
+	var block_parent: Node = block.get_parent()
+	if block_parent != null:
+		block_parent.remove_child(block)
+	fx_layer.add_child(block)
+	block.global_position = start_global
+	block.z_index = 42
+	block.scale = Vector2.ONE
+	block.modulate = Color.WHITE
+
+	var target: Enemy = _get_current_living_target()
+	if target == null:
+		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
+		DebrisVfx.play(fx_layer, fallback_texture, start_global, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
+		block.queue_free()
+		return
+
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	var base_damage: int = magic_value * ICEBALL_MAGIC_MULT
+	var element_mult: float = battle_manager.get_element_multiplier(Block.Type.BLUE, target.data.element) if target.data != null else 1.0
+	var final_damage: int = maxi(1, int(float(base_damage) * element_mult * spell_mult))
+	var is_super: bool = element_mult > 1.0
+
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			enemy.defer_death = true
+
+	var float_tw := create_tween()
+	float_tw.tween_property(block, "global_position:y", start_global.y - 32.0, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await float_tw.finished
+
+	var target_pos: Vector2 = target.get_global_rect().get_center() if is_instance_valid(target) else start_global
+	var fly_tw := create_tween().set_parallel(true)
+	fly_tw.tween_property(block, "global_position", target_pos, 0.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	fly_tw.tween_property(block, "scale", Vector2(0.62, 0.62), 0.4)
+	fly_tw.tween_property(block, "rotation", block.rotation + TAU, 0.4)
+	fly_tw.tween_property(block, "modulate:a", 0.55, 0.28).set_delay(0.12)
+	await fly_tw.finished
+
+	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
+		target.take_damage(final_damage)
+		_spawn_damage_number(target.get_global_rect().get_center(), final_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
+	_play_sfx(_se_impact)
+	var ice_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
+	DebrisVfx.play(fx_layer, ice_texture, target_pos, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
+	if is_instance_valid(block):
+		block.queue_free()
+
+	var mult_text := ""
+	if element_mult > 1.0:
+		mult_text += " ×%.1f" % element_mult
+	if spell_mult > 1.0:
+		mult_text += " ×%.1f%s" % [spell_mult, Locale.tr_ui("SPELL_CHAIN_SHORT")]
+	_add_log_entry("[b]%s[/b] %s MAG%d%s = %d" % [Locale.tr_ui("Iceball"), _gem_bbcode(Block.Type.BLUE), base_damage, mult_text, final_damage], Block.Type.BLUE, caster)
+
+	for enemy in battle_manager.active_enemies.duplicate():
+		if is_instance_valid(enemy):
+			enemy.defer_death = false
+			if enemy.current_hp <= 0:
+				enemy.finalize_death()
 
 
 # ── upper gem handlers ───────────────────────────────────────────────
@@ -4183,6 +4463,7 @@ func _on_upper_gem_clicked() -> void:
 	if is_instance_valid(_live_chain_header):
 		_live_chain_header.queue_free()
 		_live_chain_header = null
+	_position_combo_ui()
 
 
 ## 連鎖爆炸中波及特殊高階寶石時：即時觸發其獨有效果
@@ -4334,6 +4615,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 		fade_tw2.tween_property(_live_chain_header, "modulate:a", 0.0, 0.4)
 		fade_tw2.tween_callback(_live_chain_header.queue_free)
 		_live_chain_header = null
+	_position_combo_ui()
 
 	# 重置狀態
 	_is_upper_gem_turn = false
@@ -4344,9 +4626,6 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 
 ## 建立或更新連鏈數字標籤，並播放 pop 彈跳動畫
 func _update_chain_label(count: int) -> void:
-	# 棋盤左下角座標（fx_layer 為 CanvasLayer，使用螢幕座標；考量 board.scale）
-	var board_h: float = 8.0 * 64.0 * board.scale.y
-	var bl: Vector2 = Vector2(board.position.x, board.position.y + board_h)
 	# 每多一連鎖 +5 fontsize，加成上限 +50
 	var base_font_size: int = 44
 	var font_bonus: int = mini((count - 1) * 5, 50)
@@ -4363,7 +4642,6 @@ func _update_chain_label(count: int) -> void:
 		_live_chain_header.add_theme_constant_override("outline_size", 4)
 		_live_chain_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_live_chain_header.z_index = 100
-		_live_chain_header.position = bl + Vector2(8.0, -64.0)
 		fx_layer.add_child(_live_chain_header)
 
 	# "×N!" 動態標籤 — 只建立一次，之後只更新內容
@@ -4374,7 +4652,6 @@ func _update_chain_label(count: int) -> void:
 		_live_chain_label.add_theme_constant_override("outline_size", 8)
 		_live_chain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_live_chain_label.z_index = 100
-		_live_chain_label.position = bl + Vector2(8.0, -44.0)
 		fx_layer.add_child(_live_chain_label)
 
 	_live_chain_label.text = "×%d!" % count
@@ -4383,6 +4660,7 @@ func _update_chain_label(count: int) -> void:
 	# 從左下角 pivot 放大（避免向螢幕中央偏移）
 	_live_chain_label.pivot_offset = Vector2(0.0, font_size)
 	_live_chain_label.scale = Vector2(0.5, 0.5)
+	_position_combo_ui()
 
 	var tw := create_tween()
 	tw.tween_property(_live_chain_label, "scale", Vector2(pop_scale, pop_scale), 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
@@ -4561,6 +4839,35 @@ func _handle_active_skill(char_index: int) -> void:
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Tranquil Mirror"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
+		"冰球法印":
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			var centers: Array[Vector2i] = [Vector2i(board.columns - 2, 1), Vector2i(1, board.rows - 2)]
+			var converted := 0
+			var affected := 0
+			var seen: Dictionary = {}
+			for center: Vector2i in centers:
+				for dx in range(-1, 2):
+					for dy in range(-1, 2):
+						if dx == 0 and dy == 0:
+							continue
+						var pos: Vector2i = center + Vector2i(dx, dy)
+						if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
+							continue
+						if seen.has(pos):
+							continue
+						seen[pos] = true
+						var target_block: Block = board.grid[pos.x][pos.y]
+						if target_block == null or target_block.is_obstacle() or target_block.is_upper_gem():
+							continue
+						affected += 1
+						if target_block.block_type != Block.Type.BLUE:
+							board._animate_gem_morph(target_block, Block.Type.BLUE)
+							converted += 1
+			_add_log_entry("%s：%d/%d→%s" % [Locale.tr_ui("冰球法印"), converted, affected, _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
+			await get_tree().create_timer(0.4).timeout
+			board.is_busy = false
 		"居合。水":
 			# 居合.水魂：消除棋盤上所有水寶石並儲存於 pending，下次水屬性攻擊時併入
 			battle_manager.use_active_skill(char_index)
@@ -4678,6 +4985,10 @@ func _handle_active_skill(char_index: int) -> void:
 				if spear_pos.y == board.rows - 1:
 					spear_type = Block.UpperType.WOOD_SPEAR_UP
 				if board.place_upper_gem(spear_pos, spear_type, Block.Type.GREEN):
+					var placed_spear: Block = board.grid[spear_pos.x][spear_pos.y]
+					if placed_spear != null:
+						var spear_skill_index: int = SkillUpgradeUtils.find_responding_skill_index(c, "Wood Spear")
+						placed_spear.wood_spear_pierce_breakable = SkillUpgradeUtils.wood_spear_pierces_breakable(c, spear_skill_index)
 					placed_count += 1
 					last_spear_type = spear_type
 			if placed_count <= 0:
@@ -6114,6 +6425,7 @@ func _debug_spawn_upper(skill_name: String) -> void:
 		"Justice Slash": Block.UpperType.SAINT_CROSS,
 		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 		"Snowball": Block.UpperType.SNOWBALL,
+		"Iceball": Block.UpperType.ICEBALL,
 		"Water Slash": Block.UpperType.WATER_SLASH,
 		"Porcupine": Block.UpperType.PORCUPINE,
 		"Turtle": Block.UpperType.TURTLE,

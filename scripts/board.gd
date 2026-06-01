@@ -2413,6 +2413,8 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return [pos]
 		Block.UpperType.SNOWBALL:
 			return _get_surrounding_positions(pos)
+		Block.UpperType.ICEBALL:
+			return _get_surrounding_positions(pos)
 		Block.UpperType.BAMBOO_SUPPLY:
 			return _get_surrounding_positions(pos)
 		Block.UpperType.WATER_SLASH:
@@ -2439,6 +2441,8 @@ func _get_wood_spear_positions(origin: Vector2i, direction_y: int) -> Array[Vect
 	var result: Array[Vector2i] = []
 	_append_unique_valid_position(result, origin)
 
+	var origin_block: Block = grid[origin.x][origin.y]
+	var pierce_breakable: bool = origin_block != null and origin_block.wood_spear_pierce_breakable
 	var terminal: Vector2i = origin
 	var current: Vector2i = origin + Vector2i(0, direction_y)
 	while _is_valid(current):
@@ -2446,6 +2450,9 @@ func _get_wood_spear_positions(origin: Vector2i, direction_y: int) -> Array[Vect
 		terminal = current
 		var block: Block = grid[current.x][current.y]
 		if block != null and block.is_obstacle():
+			if pierce_breakable and block.is_breakable_structure():
+				current += Vector2i(0, direction_y)
+				continue
 			var beyond: Vector2i = current + Vector2i(0, direction_y)
 			_append_unique_valid_position(result, beyond)
 			_append_wood_spear_head(result, current)
