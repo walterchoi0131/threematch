@@ -172,12 +172,16 @@ func _build() -> void:
 	cl_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	char_row.add_child(cl_pad)
 
-	var chars: Array[CharacterData] = GameState.owned_characters
+	var chars: Array[CharacterData] = _debug_characters()
 	for i: int in chars.size():
 		_build_char_btn(char_row, chars[i], i)
 
 	if chars.size() > 0:
 		_select_char(0)
+
+
+func _debug_characters() -> Array[CharacterData]:
+	return GameState.get_character_catalog()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -749,8 +753,8 @@ func _build_scene_battle(scene: Control, scene_h: float) -> TextureRect:
 	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	scene.add_child(hbox)
 
-	var chars: Array[CharacterData] = GameState.owned_characters
-	var target_idx: int = GameState.owned_characters.find(_char_data)
+	var chars: Array[CharacterData] = _debug_characters()
+	var target_idx: int = chars.find(_char_data)
 	var portrait_ref: TextureRect = null
 
 	for i: int in N_CARDS:
@@ -831,8 +835,8 @@ func _build_scene_result(scene: Control, scene_h: float) -> TextureRect:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	scene.add_child(bg)
 
-	var chars: Array[CharacterData] = GameState.owned_characters
-	var target_idx: int = GameState.owned_characters.find(_char_data)
+	var chars: Array[CharacterData] = _debug_characters()
+	var target_idx: int = chars.find(_char_data)
 	# 顯示 2 列：目標角色在第 0 列，另一個角色作背景
 	const N_ROWS: int = 2
 	var portrait_ref: TextureRect = null
@@ -1076,9 +1080,10 @@ func _build_char_btn(parent: HBoxContainer, c: CharacterData, idx: int) -> void:
 # 邏輯
 # ─────────────────────────────────────────────────────────────
 func _select_char(idx: int) -> void:
-	if idx < 0 or idx >= GameState.owned_characters.size():
+	var chars: Array[CharacterData] = _debug_characters()
+	if idx < 0 or idx >= chars.size():
 		return
-	_char_data = GameState.owned_characters[idx]
+	_char_data = chars[idx]
 	for j: int in _char_btns.size():
 		var sel: Node = _char_btns[j].get_node_or_null("SelBorder")
 		if sel != null:
@@ -1128,8 +1133,9 @@ func _rebuild_preserving_selection(selected_path: String) -> void:
 	_build()
 	if selected_path == "":
 		return
-	for i in GameState.owned_characters.size():
-		var character: CharacterData = GameState.owned_characters[i]
+	var chars: Array[CharacterData] = _debug_characters()
+	for i in chars.size():
+		var character: CharacterData = chars[i]
 		if character != null and character.resource_path == selected_path:
 			_select_char(i)
 			return

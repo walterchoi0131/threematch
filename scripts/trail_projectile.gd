@@ -11,6 +11,8 @@ const SPARKLE_AMOUNT := 16       # 火花粒子數量
 const FLARE_COUNT := 4           # 十字光芒條數
 const FLARE_LENGTH := 22.0       # 光芒長度
 const FLARE_WIDTH := 2.0         # 光芒寬度
+const PARTICLE_SCALE_MIN := 0.6
+const PARTICLE_SCALE_MAX := 1.2
 
 static var speed_divisor := 3.5  # 速度除數（外部可調）
 
@@ -25,11 +27,20 @@ var _tween: Tween
 var _particles: GPUParticles2D
 var _flying := false
 var _head_pos := Vector2.ZERO  # 全域座標中的頭部位置
+var _visual_size_multiplier: float = 1.0
 
 
 ## 初始化（池模式呼叫一次）
 func setup() -> void:
-	_build_particles()
+	if _particles == null:
+		_build_particles()
+	_apply_particle_size()
+
+
+func set_visual_size_multiplier(value: float) -> void:
+	_visual_size_multiplier = maxf(0.1, value)
+	_apply_particle_size()
+	queue_redraw()
 
 
 ## 發射：從 from 到 to（全域座標），沿 Bezier 弧線飛行
@@ -44,6 +55,7 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 
 	if _particles == null:
 		_build_particles()
+	_apply_particle_size()
 	_apply_particle_color(color)
 	_particles.emitting = true
 
@@ -113,6 +125,7 @@ func _draw() -> void:
 
 	# ── 寬光帶拖尾（多層漸變 polygon strip）──
 	var count: int = _trail.size()
+	var visual_mult: float = _visual_size_multiplier
 
 	# 計算每個點的法線方向（用於展開寬度）
 	var normals: Array[Vector2] = []
@@ -143,8 +156,8 @@ func _draw() -> void:
 			var t1: float = float(i + 1) / float(count - 1)
 			var alpha0: float = pow(1.0 - t0, 2.2) * a_mult
 			var alpha1: float = pow(1.0 - t1, 2.2) * a_mult
-			var w0: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t0, 0.6)) * w_mult
-			var w1: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t1, 0.6)) * w_mult
+			var w0: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t0, 0.6)) * w_mult * visual_mult
+			var w1: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t1, 0.6)) * w_mult * visual_mult
 			var p0: Vector2 = _trail[i] - global_position
 			var p1: Vector2 = _trail[i + 1] - global_position
 			var n0: Vector2 = normals[i]
@@ -176,25 +189,27 @@ func _draw() -> void:
 		var head_local: Vector2 = _trail[0] - global_position
 
 		# 最外層柔暈
-		draw_circle(head_local, HEAD_GLOW_RADIUS, Color(_color.r, _color.g, _color.b, 0.12))
+		draw_circle(head_local, HEAD_GLOW_RADIUS * visual_mult, Color(_color.r, _color.g, _color.b, 0.12))
 		# 中層暈
-		draw_circle(head_local, HEAD_GLOW_RADIUS * 0.6, Color(_color.r, _color.g, _color.b, 0.25))
+		draw_circle(head_local, HEAD_GLOW_RADIUS * 0.6 * visual_mult, Color(_color.r, _color.g, _color.b, 0.25))
 		# 元素色核心
-		draw_circle(head_local, HEAD_RADIUS * 1.4, _color)
+		draw_circle(head_local, HEAD_RADIUS * 1.4 * visual_mult, _color)
 		# 白色核心
-		draw_circle(head_local, HEAD_RADIUS, Color(1, 1, 1, 0.92))
+		draw_circle(head_local, HEAD_RADIUS * visual_mult, Color(1, 1, 1, 0.92))
 		# 最亮高光
-		draw_circle(head_local, HEAD_RADIUS * 0.45, Color(1, 1, 1, 1.0))
+		draw_circle(head_local, HEAD_RADIUS * 0.45 * visual_mult, Color(1, 1, 1, 1.0))
 
 		# 十字光芒（lens flare spikes）
 		for fi in FLARE_COUNT:
 			var angle: float = (PI / float(FLARE_COUNT)) * float(fi)
 			var dir_f := Vector2(cos(angle), sin(angle))
 			var perp_f := Vector2(-dir_f.y, dir_f.x)
-			var tip_a: Vector2 = head_local + dir_f * FLARE_LENGTH
-			var tip_b: Vector2 = head_local - dir_f * FLARE_LENGTH
-			var side_a: Vector2 = head_local + perp_f * FLARE_WIDTH
-			var side_b: Vector2 = head_local - perp_f * FLARE_WIDTH
+			var flare_length: float = FLARE_LENGTH * visual_mult
+			var flare_width: float = FLARE_WIDTH * visual_mult
+			var tip_a: Vector2 = head_local + dir_f * flare_length
+			var tip_b: Vector2 = head_local - dir_f * flare_length
+			var side_a: Vector2 = head_local + perp_f * flare_width
+			var side_b: Vector2 = head_local - perp_f * flare_width
 			var flare_color := Color(1, 1, 1, 0.55)
 			var tip_color := Color(1, 1, 1, 0.0)
 			# 兩個三角形組成一道光芒
@@ -220,8 +235,8 @@ func _build_particles() -> void:
 	mat.initial_velocity_min = 20.0
 	mat.initial_velocity_max = 60.0
 	mat.gravity = Vector3(0, 40, 0)
-	mat.scale_min = 0.6
-	mat.scale_max = 1.2
+	mat.scale_min = PARTICLE_SCALE_MIN
+	mat.scale_max = PARTICLE_SCALE_MAX
 	mat.damping_min = 20.0
 	mat.damping_max = 40.0
 
@@ -259,6 +274,17 @@ func _build_particles() -> void:
 	_particles.texture = ImageTexture.create_from_image(img)
 
 	add_child(_particles)
+	_apply_particle_size()
+
+
+func _apply_particle_size() -> void:
+	if _particles == null or _particles.process_material == null:
+		return
+	var mat: ParticleProcessMaterial = _particles.process_material as ParticleProcessMaterial
+	if mat == null:
+		return
+	mat.scale_min = PARTICLE_SCALE_MIN * _visual_size_multiplier
+	mat.scale_max = PARTICLE_SCALE_MAX * _visual_size_multiplier
 
 
 ## 套用顏色到粒子材質

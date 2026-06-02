@@ -291,7 +291,7 @@ func _finish_typing() -> void:
 	_typing = false
 
 
-## 依 char_id 查找 GameState.owned_characters、套用 dialog_square_scale/offset
+## 依 char_id 查找角色 catalog，套用 .tres 裡的 dialog_square_scale/offset。
 func _apply_dialog_pose(char_id: String) -> void:
 	var c: CharacterData = _find_character_data(char_id)
 	if c == null:
@@ -304,12 +304,15 @@ func _apply_dialog_pose(char_id: String) -> void:
 
 func _find_character_data(char_id: String) -> CharacterData:
 	var gs: Node = get_node_or_null("/root/GameState")
-	if gs == null:
+	if gs == null or not gs.has_method("get_character_catalog"):
 		return null
 	var lower := char_id.to_lower()
-	for c: CharacterData in gs.owned_characters:
-		if c.character_name.to_lower() == lower:
-			return c
+	var catalog: Array = gs.call("get_character_catalog")
+	for entry in catalog:
+		if entry is CharacterData:
+			var c: CharacterData = entry as CharacterData
+			if c.character_name.to_lower() == lower:
+				return c
 	return null
 
 

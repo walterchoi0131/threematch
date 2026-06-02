@@ -3111,7 +3111,7 @@ func _start_battle_tutorial() -> void:
 		await _battle_dialog.all_lines_finished
 		await add_temporary_guest_character(CHAR_HUSKY, {
 			"slot_index": 3,
-			"visual_scale": 5.0,
+			"visual_scale": 1.5,
 			"reveal_duration_scale": 2.0,
 			"include_in_result": true,
 		})
@@ -3165,8 +3165,9 @@ func _play_guest_join_projectile(from_pos: Vector2, target_pos: Vector2, color: 
 	var trail := Node2D.new()
 	trail.set_script(TrailProjectileScript)
 	trail.z_index = 200
-	trail.scale = Vector2(visual_scale, visual_scale)
 	fx_layer.add_child(trail)
+	if trail.has_method("set_visual_size_multiplier"):
+		trail.set_visual_size_multiplier(visual_scale)
 	if trail.has_method("setup"):
 		trail.setup()
 	if trail.has_signal("released"):
