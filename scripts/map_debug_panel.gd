@@ -14,7 +14,7 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	panel.offset_left = -274
 	panel.offset_top = 4
 	panel.offset_right = -4
-	panel.offset_bottom = 200
+	panel.offset_bottom = 236
 	panel.anchor_left = 1.0
 	panel.anchor_right = 1.0
 
@@ -48,6 +48,11 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	clear_btn.add_theme_color_override("font_color", Color(1.0, 0.7, 0.7))
 	vbox.add_child(clear_btn)
 
+	var reset_chars_btn := Button.new()
+	reset_chars_btn.text = "Reset character state (+1 Sapphire)"
+	reset_chars_btn.add_theme_color_override("font_color", Color(0.7, 1.0, 0.85))
+	vbox.add_child(reset_chars_btn)
+
 	var status := Label.new()
 	status.add_theme_font_size_override("font_size", 11)
 	status.add_theme_color_override("font_color", Color(0.6, 0.95, 0.6))
@@ -62,12 +67,22 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 			on_cleared.call()
 	)
 
+	reset_chars_btn.pressed.connect(func() -> void:
+		GameState.reset_owned_character_progress(false)
+		GameState.add_loot(ItemDefs.Type.SAPPHIRE, 1)
+		status.text = "Characters reset. Sapphire +1."
+		info.text = _make_info_text()
+		if on_cleared.is_valid():
+			on_cleared.call()
+	)
+
 	return panel
 
 
 static func _make_info_text() -> String:
-	return "Cleared stages: %d\nOwned characters: %d\nGold: %d" % [
+	return "Cleared stages: %d\nOwned characters: %d\nGold: %d\nSapphire: %d" % [
 		GameState.cleared_stages.size(),
 		GameState.owned_characters.size(),
 		GameState.gold,
+		GameState.get_inventory_count(ItemDefs.Type.SAPPHIRE),
 	]

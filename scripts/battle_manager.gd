@@ -61,7 +61,7 @@ var logic_pending_enemy_attack: bool = false
 
 ## 設定關卡與角色資料，初始化血量、冷卻、並生成第一波敎人
 func setup(stage: StageData, chars: Array[CharacterData]) -> void:
-	characters = chars
+	characters = chars.duplicate()
 	stage_rounds = stage.rounds
 	stage_rounds_init_cd = stage.rounds_init_cd
 	stage_rounds_enemy_levels = stage.rounds_enemy_levels
@@ -95,6 +95,24 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	if stage_mode == StageData.Mode.ESCAPE:
 		return
 	_spawn_round(current_round)
+
+
+func add_temporary_character(character: CharacterData, add_current_hp: bool = true) -> int:
+	if character == null:
+		return -1
+	characters.append(character)
+	var index: int = characters.size() - 1
+	var added_hp: int = character.get_max_hp()
+	player_max_hp += added_hp
+	if add_current_hp:
+		player_current_hp = mini(player_current_hp + added_hp, player_max_hp)
+	else:
+		player_current_hp = mini(player_current_hp, player_max_hp)
+	var active_cd: int = SkillUpgradeUtils.effective_active_cd(character)
+	if active_cd > 0:
+		skill_cooldowns[index] = active_cd
+	player_hp_changed.emit(player_current_hp, player_max_hp)
+	return index
 
 
 # ── 波次管理 ──────────────────────────────────────────────────

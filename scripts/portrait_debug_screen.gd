@@ -106,6 +106,13 @@ func _build() -> void:
 	save_btn.pressed.connect(_save)
 	top_bar.add_child(save_btn)
 
+	var grant_all_btn := Button.new()
+	grant_all_btn.text = "Grant All"
+	grant_all_btn.add_theme_font_size_override("font_size", 16)
+	grant_all_btn.custom_minimum_size = Vector2(110, 40)
+	grant_all_btn.pressed.connect(_on_grant_all_owned_pressed)
+	top_bar.add_child(grant_all_btn)
+
 	var close_btn := Button.new()
 	close_btn.text = "✕"
 	close_btn.add_theme_font_size_override("font_size", 20)
@@ -1079,6 +1086,53 @@ func _select_char(idx: int) -> void:
 	for i: int in 4:
 		_rebuild_preview(i)
 	_refresh_stats_section()
+
+
+func _on_grant_all_owned_pressed() -> void:
+	var selected_path: String = _char_data.resource_path if _char_data != null else ""
+	GameState.debug_grant_all_characters(true)
+	_rebuild_preserving_selection(selected_path)
+
+
+func _rebuild_preserving_selection(selected_path: String) -> void:
+	for child in get_children():
+		child.queue_free()
+	_scene_nodes.clear()
+	_wrappers.clear()
+	_portraits.clear()
+	_scale_lbls.clear()
+	_offset_lbls.clear()
+	_char_btns.clear()
+	_drag_active.clear()
+	_drag_start_mouse.clear()
+	_drag_start_offset.clear()
+	for _i: int in 4:
+		_drag_active.append(false)
+		_drag_start_mouse.append(Vector2.ZERO)
+		_drag_start_offset.append(Vector2.ZERO)
+		_portraits.append(null)
+	_char_data = null
+	_hp_chart = null
+	_magic_chart = null
+	_atk_chart = null
+	_hp_growth_edit = null
+	_magic_growth_edit = null
+	_atk_growth_edit = null
+	_hp_growth_mode_opt = null
+	_magic_growth_mode_opt = null
+	_atk_growth_mode_opt = null
+	_stat_max_lbl = null
+	_stat_hover_panel_lbl = null
+	_syncing_growth_edits = false
+	_syncing_growth_mode_options = false
+	_build()
+	if selected_path == "":
+		return
+	for i in GameState.owned_characters.size():
+		var character: CharacterData = GameState.owned_characters[i]
+		if character != null and character.resource_path == selected_path:
+			_select_char(i)
+			return
 
 
 func _on_preview_input(ev: InputEvent, idx: int) -> void:

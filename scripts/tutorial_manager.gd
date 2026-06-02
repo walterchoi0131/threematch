@@ -139,15 +139,49 @@ func _play_spotlight(config: Dictionary) -> void:
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(overlay)
 
-	var fade_in := create_tween()
+	var hand: Control = null
+	if bool(config.get("hand", false)):
+		hand = _add_spotlight_hand(layer, target_rect, config)
+		if hand != null:
+			hand.modulate.a = 0.0
+
+	var fade_in := create_tween().set_parallel(true)
 	fade_in.tween_property(overlay, "modulate:a", 1.0, SPOTLIGHT_FADE_IN).set_ease(Tween.EASE_OUT)
+	if hand != null:
+		fade_in.tween_property(hand, "modulate:a", 1.0, SPOTLIGHT_FADE_IN).set_ease(Tween.EASE_OUT)
 	await fade_in.finished
 	await get_tree().create_timer(float(config.get("hold", 3.0))).timeout
-	var fade_out := create_tween()
+	var fade_out := create_tween().set_parallel(true)
 	fade_out.tween_property(overlay, "modulate:a", 0.0, SPOTLIGHT_FADE_OUT).set_ease(Tween.EASE_IN)
+	if hand != null:
+		fade_out.tween_property(hand, "modulate:a", 0.0, SPOTLIGHT_FADE_OUT).set_ease(Tween.EASE_IN)
 	await fade_out.finished
 	if is_instance_valid(layer):
 		layer.queue_free()
+
+
+func _add_spotlight_hand(layer: CanvasLayer, target_rect: Rect2, config: Dictionary) -> Control:
+	var tex: Texture2D = load("res://assets/Hand3.png") as Texture2D
+	if tex == null:
+		return null
+	var hand := TextureRect.new()
+	hand.texture = tex
+	hand.size = tex.get_size()
+	hand.pivot_offset = hand.size * 0.5
+	hand.scale = Vector2(0.7, 0.7)
+	hand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand.z_index = 20
+	var offset_variant: Variant = config.get("hand_offset", Vector2(24, 24))
+	var offset: Vector2 = offset_variant if offset_variant is Vector2 else Vector2(24, 24)
+	var base_pos: Vector2 = target_rect.get_center() + offset - hand.size * 0.5
+	hand.position = base_pos
+	layer.add_child(hand)
+	var bob := create_tween().set_loops()
+	bob.tween_property(hand, "position:y", base_pos.y - 8.0, 0.5) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	bob.tween_property(hand, "position:y", base_pos.y + 8.0, 0.5) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	return hand
 
 
 func _resolve_spotlight_rect(target: String) -> Rect2:

@@ -5,7 +5,11 @@ extends HBoxContainer
 signal active_skill_activated(char_index: int)  # 主動技能觸發信號
 signal active_skill_selection_cancelled(char_index: int)  # 主動技能選格取消信號
 
+const BATTLE_CHARACTER_ROW_MARGIN_X: float = 16.0
+const BATTLE_CHARACTER_ROW_HEIGHT: float = 60.0
+
 var _cards: Array[Control] = []        # 角色卡片陣列
+var _slot_nodes: Array[Control] = []   # 實際 HBox slot 節點；空槽不進入 _cards
 var _card_orig_y: Dictionary = {}      # 角色卡片原始 Y 座標
 var _glow_tweens: Dictionary = {}      # 角色索引 -> 發光動畫
 var _glow_panels: Dictionary = {}      # 角色索引 -> 發光覆蓋層
@@ -34,16 +38,122 @@ var _popup_panel: Control = null         # 中央面板（淡入淡出用）
 func setup(characters: Array[CharacterData]) -> void:
 	exit_active_selection_cancel_mode()
 	_cards.clear()
+	_slot_nodes.clear()
+	_card_orig_y.clear()
+	_glow_tweens.clear()
+	_glow_panels.clear()
+	_cd_labels.clear()
+	_prev_cd.clear()
+	_portraits.clear()
 	_gem_icons.clear()
 	_gem_rays.clear()
-	_char_data = characters
+	_char_data = characters.duplicate()
 	for child in get_children():
 		child.queue_free()
 
-	for i in characters.size():
-		var card := _make_card(characters[i], i)
-		add_child(card)
-		_cards.append(card)
+	var slot_count: int = maxi(GameState.MAX_PARTY_SIZE, characters.size())
+	for i in slot_count:
+		if i < characters.size():
+			var card := _make_card(characters[i], i)
+			_apply_battle_slot_size(card)
+			add_child(card)
+			_cards.append(card)
+			_slot_nodes.append(card)
+		else:
+			var slot := _make_empty_battle_slot()
+			add_child(slot)
+			_slot_nodes.append(slot)
+
+
+func append_temporary_card(character: CharacterData, hidden_until_reveal: bool = true) -> int:
+	if character == null:
+		return -1
+	var index: int = _cards.size()
+	_char_data.append(character)
+	var card := _make_card(character, index)
+	_apply_battle_slot_size(card)
+	var insert_index: int = get_child_count()
+	if index < _slot_nodes.size():
+		var old_slot: Control = _slot_nodes[index]
+		if old_slot != null and is_instance_valid(old_slot):
+			insert_index = old_slot.get_index()
+			remove_child(old_slot)
+			old_slot.queue_free()
+		_slot_nodes[index] = card
+	else:
+		_slot_nodes.append(card)
+	add_child(card)
+	move_child(card, insert_index)
+	_cards.append(card)
+	_prev_cd[index] = -999
+	if hidden_until_reveal:
+		card.modulate.a = 0.0
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return index
+
+
+func reveal_temporary_card(index: int, duration_scale: float = 1.0) -> void:
+	if index < 0 or index >= _cards.size():
+		return
+	var card: Control = _cards[index]
+	if card == null or not is_instance_valid(card):
+		return
+	var time_scale: float = maxf(duration_scale, 0.01)
+	await get_tree().process_frame
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.pivot_offset = card.size * 0.5
+	card.scale = Vector2(0.82, 0.82)
+	card.modulate.a = 0.0
+
+	var flash := ColorRect.new()
+	flash.color = Color(1, 1, 1, 0.9)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.z_index = 80
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card.add_child(flash)
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(card, "modulate:a", 1.0, 0.12 * time_scale).set_ease(Tween.EASE_OUT)
+	tw.tween_property(card, "scale", Vector2(1.12, 1.12), 0.16 * time_scale) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(flash, "color:a", 0.0, 0.22 * time_scale).set_ease(Tween.EASE_IN)
+	tw.chain().tween_property(card, "scale", Vector2.ONE, 0.12 * time_scale) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_callback(flash.queue_free)
+	await tw.finished
+
+
+func refresh_slot_sizes() -> void:
+	for child in get_children():
+		if child is Control:
+			_apply_battle_slot_size(child as Control)
+
+
+func _battle_character_panel_separation() -> int:
+	return get_theme_constant("separation", "HBoxContainer")
+
+
+func _battle_character_panel_card_size() -> Vector2:
+	var total_width: float = ViewportUtils.get_size().x - BATTLE_CHARACTER_ROW_MARGIN_X * 2.0
+	var separation_total: float = float(maxi(GameState.MAX_PARTY_SIZE - 1, 0) * _battle_character_panel_separation())
+	var card_width: float = (total_width - separation_total) / float(GameState.MAX_PARTY_SIZE)
+	return Vector2(card_width, BATTLE_CHARACTER_ROW_HEIGHT)
+
+
+func _apply_battle_slot_size(slot: Control) -> void:
+	if slot == null:
+		return
+	slot.custom_minimum_size = _battle_character_panel_card_size()
+	slot.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+
+
+func _make_empty_battle_slot() -> Control:
+	var slot := Control.new()
+	_apply_battle_slot_size(slot)
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return slot
 
 
 ## 取得角色卡片的螢幕中心座標
