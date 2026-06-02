@@ -71,6 +71,21 @@ func _ensure_subpage(page: Control, scene: PackedScene) -> void:
 	page.add_child(screen)
 
 
+func _rebuild_subpage(page: Control, scene: PackedScene) -> void:
+	if page == null:
+		return
+	for child in page.get_children():
+		page.remove_child(child)
+		child.queue_free()
+	_ensure_subpage(page, scene)
+
+
+func _refresh_after_save_clear() -> void:
+	_rebuild_subpage(_characters_page, CharactersScene)
+	_rebuild_subpage(_inventory_page, InventoryScene)
+	_refresh_stage_buttons()
+
+
 func _on_characters_tab_pressed() -> void:
 	_show_page(Page.CHARACTERS)
 
@@ -274,7 +289,7 @@ func _toggle_debug_panel() -> void:
 	layer.layer = 64
 	add_child(layer)
 	_debug_panel = MapDebugPanel.build(layer, func() -> void:
-		_refresh_stage_buttons()
+		_refresh_after_save_clear()
 	)
 	# 關閉時連同 CanvasLayer 一起移除
 	_debug_panel.tree_exited.connect(func() -> void:

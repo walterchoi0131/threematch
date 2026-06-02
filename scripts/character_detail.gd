@@ -611,7 +611,6 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 	var defs: Array[Dictionary] = SkillUpgradeUtils.get_upgrade_defs(_char, kind, skill_index)
 	if defs.is_empty():
 		return
-	var current_level: int = SkillUpgradeUtils.get_unlocked_level(_char, kind, skill_index)
 	var elem_color: Color = Block.COLORS.get(_char.gem_type, Color(0.4, 0.6, 1.0))
 	_upgrade_hold_token += 1
 	_upgrade_hold_completed = false
@@ -656,7 +655,13 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 12)
 	panel.add_child(vbox)
+	layer.set_meta("_upgrade_vbox", vbox)
+	_build_upgrade_dialog_content(vbox, layer, kind, skill_index, elem_color)
 
+
+func _build_upgrade_dialog_content(vbox: VBoxContainer, dialog_layer: CanvasLayer, kind: String, skill_index: int, elem_color: Color) -> void:
+	var defs: Array[Dictionary] = SkillUpgradeUtils.get_upgrade_defs(_char, kind, skill_index)
+	var current_level: int = SkillUpgradeUtils.get_unlocked_level(_char, kind, skill_index)
 	var title := Label.new()
 	title.text = Locale.tr_ui("SKILL_UPGRADE_TITLE")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -672,6 +677,7 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 		var is_next_upgrade: bool = i == current_level and current_level < defs.size()
 		var row_panel := PanelContainer.new()
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_panel.clip_contents = true
 		var row_style := StyleBoxFlat.new()
 		row_style.bg_color = Color(0.075, 0.09, 0.14, 0.92) if is_unlocked else Color(0.035, 0.04, 0.05, 0.96)
 		row_style.border_color = Color(0.34, 0.38, 0.48, 0.9) if is_unlocked else Color(0.12, 0.13, 0.16, 1.0)
@@ -685,15 +691,32 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 		row_panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_next_upgrade else Control.MOUSE_FILTER_IGNORE
 		vbox.add_child(row_panel)
 
+		var row_body := Control.new()
+		row_body.custom_minimum_size = Vector2(0.0, 48.0)
+		row_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row_panel.add_child(row_body)
+
+		var row_fill: Control = _make_upgrade_row_fill(elem_color)
+		row_body.add_child(row_fill)
+
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row_panel.add_child(row)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.z_index = 1
+		row_body.add_child(row)
 
 		var row_info: Dictionary = {
 			"row": row_panel,
+			"row_body": row_body,
+			"row_fill": row_fill,
 			"fill_ratio": 1.0 if is_unlocked else 0.0,
 		}
+		row_body.resized.connect(func() -> void:
+			_set_upgrade_row_background_fill(row_info, float(row_info.get("fill_ratio", 0.0)))
+		)
 
 		var slot: Control = _make_upgrade_progress_slot(elem_color, 30.0, is_unlocked)
 		row_info["slot"] = slot
@@ -705,7 +728,7 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 		_set_upgrade_row_fill_ratio(float(row_info["fill_ratio"]), row_info)
 
 		if is_next_upgrade:
-			row_panel.gui_input.connect(_on_upgrade_hold_row_gui_input.bind(kind, skill_index, layer, row_info, elem_color))
+			row_panel.gui_input.connect(_on_upgrade_hold_row_gui_input.bind(kind, skill_index, dialog_layer, row_info, elem_color))
 
 	var cost := Label.new()
 	if current_level >= defs.size():
@@ -716,6 +739,61 @@ func _show_upgrade_dialog(kind: String, skill_index: int) -> void:
 	cost.add_theme_font_size_override("font_size", 14)
 	cost.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0))
 	vbox.add_child(cost)
+
+
+func _rebuild_upgrade_dialog_content(dialog_layer: CanvasLayer, kind: String, skill_index: int, elem_color: Color) -> void:
+	if not is_instance_valid(dialog_layer) or not dialog_layer.has_meta("_upgrade_vbox"):
+		return
+	var vbox: VBoxContainer = dialog_layer.get_meta("_upgrade_vbox") as VBoxContainer
+	if vbox == null:
+		return
+	for child in vbox.get_children():
+		vbox.remove_child(child)
+		child.queue_free()
+	_build_upgrade_dialog_content(vbox, dialog_layer, kind, skill_index, elem_color)
+
+
+func _make_upgrade_row_fill_style(elem_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	var bg: Color = elem_color.darkened(0.55)
+	bg.a = 0.46
+	style.bg_color = bg
+	style.border_color = Color(1.0, 0.86, 0.18, 0.9)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	return style
+
+
+func _make_upgrade_row_fill(elem_color: Color) -> Control:
+	var fill_clip := Control.new()
+	fill_clip.clip_contents = true
+	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var fill_panel := PanelContainer.new()
+	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_row_fill_style(elem_color))
+	fill_clip.add_child(fill_panel)
+
+	fill_clip.set_meta("_fill_panel", fill_panel)
+	return fill_clip
+
+
+func _set_upgrade_row_background_fill(row_info: Dictionary, ratio: float) -> void:
+	var row_body: Control = row_info.get("row_body", null) as Control
+	var fill_clip: Control = row_info.get("row_fill", null) as Control
+	if row_body == null or fill_clip == null or not fill_clip.has_meta("_fill_panel"):
+		return
+	var fill_panel: PanelContainer = fill_clip.get_meta("_fill_panel") as PanelContainer
+	if fill_panel == null:
+		return
+	var body_size: Vector2 = row_body.size
+	if body_size.x <= 0.0 or body_size.y <= 0.0:
+		body_size = row_body.custom_minimum_size
+	var fill_w: float = body_size.x * clampf(ratio, 0.0, 1.0)
+	fill_clip.position = Vector2.ZERO
+	fill_clip.size = Vector2(fill_w, body_size.y)
+	fill_panel.position = Vector2.ZERO
+	fill_panel.size = body_size
 
 
 func _make_upgrade_slot_style(color: Color, slot_size: float) -> StyleBoxFlat:
@@ -771,10 +849,10 @@ func _set_upgrade_slot_fill(slot: Control, ratio: float) -> void:
 	var slot_size: Vector2 = slot.size
 	if slot_size.x <= 0.0 or slot_size.y <= 0.0:
 		slot_size = slot.custom_minimum_size
-	var fill_h: float = slot_size.y * clampf(ratio, 0.0, 1.0)
-	fill_clip.position = Vector2(0.0, slot_size.y - fill_h)
-	fill_clip.size = Vector2(slot_size.x, fill_h)
-	fill_panel.position = Vector2(0.0, -fill_clip.position.y)
+	var fill_w: float = slot_size.x * clampf(ratio, 0.0, 1.0)
+	fill_clip.position = Vector2.ZERO
+	fill_clip.size = Vector2(fill_w, slot_size.y)
+	fill_panel.position = Vector2.ZERO
 	fill_panel.size = slot_size
 
 
@@ -831,10 +909,10 @@ func _set_upgrade_text_fill(holder: Control, ratio: float) -> void:
 		holder_size = holder.custom_minimum_size
 	dark_label.position = Vector2.ZERO
 	dark_label.size = holder_size
-	var fill_h: float = holder_size.y * clampf(ratio, 0.0, 1.0)
-	fill_clip.position = Vector2(0.0, holder_size.y - fill_h)
-	fill_clip.size = Vector2(holder_size.x, fill_h)
-	light_label.position = Vector2(0.0, -fill_clip.position.y)
+	var fill_w: float = holder_size.x * clampf(ratio, 0.0, 1.0)
+	fill_clip.position = Vector2.ZERO
+	fill_clip.size = Vector2(fill_w, holder_size.y)
+	light_label.position = Vector2.ZERO
 	light_label.size = holder_size
 
 
@@ -843,6 +921,7 @@ func _set_upgrade_row_fill_ratio(ratio: float, row_info: Dictionary) -> void:
 	row_info["fill_ratio"] = clamped
 	var slot: Control = row_info.get("slot", null) as Control
 	var text_holder: Control = row_info.get("text", null) as Control
+	_set_upgrade_row_background_fill(row_info, clamped)
 	_set_upgrade_slot_fill(slot, clamped)
 	_set_upgrade_text_fill(text_holder, clamped)
 
@@ -900,9 +979,9 @@ func _run_upgrade_hold_completion(kind: String, skill_index: int, dialog_layer: 
 	if bool(result.get("ok", false)):
 		_set_upgrade_row_fill_ratio(1.0, row_info)
 		await _play_upgrade_hold_success(row_info, elem_color, dialog_layer)
-		if is_instance_valid(dialog_layer):
-			dialog_layer.queue_free()
-		_rebuild_ui()
+		_rebuild_ui_preserving_upgrade_dialog(dialog_layer)
+		_rebuild_upgrade_dialog_content(dialog_layer, kind, skill_index, elem_color)
+		_upgrade_hold_completed = false
 	else:
 		_upgrade_hold_completed = false
 		_set_upgrade_row_fill_ratio(0.0, row_info)
@@ -985,6 +1064,15 @@ func _rebuild_ui() -> void:
 	for child in get_children():
 		child.queue_free()
 	_build_ui()
+
+
+func _rebuild_ui_preserving_upgrade_dialog(dialog_layer: CanvasLayer) -> void:
+	var should_restore: bool = is_instance_valid(dialog_layer) and dialog_layer.get_parent() == self
+	if should_restore:
+		remove_child(dialog_layer)
+	_rebuild_ui()
+	if should_restore and is_instance_valid(dialog_layer):
+		add_child(dialog_layer)
 
 
 # ── 技能條輔助元件 ─────────────────────────────────────────

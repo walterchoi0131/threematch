@@ -4,10 +4,25 @@ extends Node
 
 signal inventory_changed
 signal skill_upgrades_changed
+signal save_cleared
 
 const MAX_PARTY_SIZE := 4  # 隊伍最大人數
 const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 1
+const DEFAULT_CHARACTER_LEVEL := 5
+const DEFAULT_CHARACTER_EXP := 0
+const DEFAULT_CHARACTER_PATHS := [
+	"res://characters/char_boar.tres",
+	"res://characters/char_raccoon.tres",
+	"res://characters/char_fox.tres",
+	"res://characters/char_husky.tres",
+	"res://characters/char_panda.tres",
+	"res://characters/char_polar.tres",
+	"res://characters/char_polarz.tres",
+	"res://characters/char_shark.tres",
+	"res://characters/char_dragon.tres",
+	"res://characters/char_gory.tres",
+]
 
 var selected_stage: StageData = null           # 當前選擇的關卡
 var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
@@ -281,18 +296,7 @@ func try_upgrade_skill(character: CharacterData, kind: String, skill_index: int 
 
 func _ready() -> void:
 	# 預載初始角色
-	owned_characters = [
-		preload("res://characters/char_boar.tres"),
-		preload("res://characters/char_raccoon.tres"),
-		preload("res://characters/char_fox.tres"),
-		preload("res://characters/char_husky.tres"),
-		preload("res://characters/char_panda.tres"),
-		preload("res://characters/char_polar.tres"),
-		preload("res://characters/char_polarz.tres"),
-		preload("res://characters/char_shark.tres"),
-		preload("res://characters/char_dragon.tres"),
-		preload("res://characters/char_gory.tres"),
-	]
+	owned_characters = _load_default_characters()
 
 	# 為關卡設定對話（程式碼建構）
 	var _stage_dev: StageData = preload("res://stages/stage_dev.tres")
@@ -315,7 +319,9 @@ func _ready() -> void:
 	]
 
 	# 嘗試載入持久化存檔（覆寫 owned_characters / inventory / gold / cleared_stages）
-	load_game()
+	var loaded_save: bool = load_game()
+	if not loaded_save:
+		_reset_characters_progress(owned_characters)
 	_ensure_default_characters_owned()
 
 
@@ -366,41 +372,22 @@ func clear_save() -> void:
 	cleared_stages.clear()
 	inventory.clear()
 	skill_upgrade_levels.clear()
+	selected_party.clear()
+	detail_character = null
+	last_used_party_paths.clear()
+	last_battle_loot.clear()
+	last_battle_party.clear()
+	last_battle_exp = 0
 	gold = 0
-	owned_characters = [
-		preload("res://characters/char_boar.tres"),
-		preload("res://characters/char_raccoon.tres"),
-		preload("res://characters/char_fox.tres"),
-		preload("res://characters/char_husky.tres"),
-		preload("res://characters/char_panda.tres"),
-		preload("res://characters/char_polar.tres"),
-		preload("res://characters/char_polarz.tres"),
-		preload("res://characters/char_shark.tres"),
-		preload("res://characters/char_dragon.tres"),
-		preload("res://characters/char_gory.tres"),
-	]
-	# 將每個角色的等級/經驗重置為預設值（避免快取中的舊值殘留）
-	for c: CharacterData in owned_characters:
-		if c != null:
-			c.level = 5
-			c.current_exp = 0
+	owned_characters = _load_default_characters()
+	_reset_characters_progress(owned_characters)
 	inventory_changed.emit()
 	skill_upgrades_changed.emit()
+	save_cleared.emit()
 
 
 func _ensure_default_characters_owned() -> void:
-	var default_characters: Array[CharacterData] = [
-		preload("res://characters/char_boar.tres"),
-		preload("res://characters/char_raccoon.tres"),
-		preload("res://characters/char_fox.tres"),
-		preload("res://characters/char_husky.tres"),
-		preload("res://characters/char_panda.tres"),
-		preload("res://characters/char_polar.tres"),
-		preload("res://characters/char_polarz.tres"),
-		preload("res://characters/char_shark.tres"),
-		preload("res://characters/char_dragon.tres"),
-		preload("res://characters/char_gory.tres"),
-	]
+	var default_characters: Array[CharacterData] = _load_default_characters()
 	var owned_paths: Dictionary = {}
 	for c: CharacterData in owned_characters:
 		if c != null and c.resource_path != "":
@@ -411,11 +398,33 @@ func _ensure_default_characters_owned() -> void:
 			continue
 		if owned_paths.has(default_char.resource_path):
 			continue
+		_reset_character_progress(default_char)
 		owned_characters.append(default_char)
 		owned_paths[default_char.resource_path] = true
 		changed = true
 	if changed:
 		save_game()
+
+
+func _load_default_characters() -> Array[CharacterData]:
+	var result: Array[CharacterData] = []
+	for path in DEFAULT_CHARACTER_PATHS:
+		var res: Resource = load(str(path))
+		if res is CharacterData:
+			result.append(res as CharacterData)
+	return result
+
+
+func _reset_characters_progress(characters: Array[CharacterData]) -> void:
+	for c: CharacterData in characters:
+		_reset_character_progress(c)
+
+
+func _reset_character_progress(c: CharacterData) -> void:
+	if c == null:
+		return
+	c.level = DEFAULT_CHARACTER_LEVEL
+	c.current_exp = DEFAULT_CHARACTER_EXP
 
 
 func _serialize() -> Dictionary:
@@ -460,15 +469,15 @@ func _deserialize(d: Dictionary) -> void:
 		var res: Resource = load(path)
 		if res is CharacterData:
 			var cd: CharacterData = res
-			if lvl > 0:
-				cd.level = lvl
-			if xp >= 0:
-				cd.current_exp = xp
+			cd.level = lvl if lvl > 0 else DEFAULT_CHARACTER_LEVEL
+			cd.current_exp = xp if xp >= 0 else DEFAULT_CHARACTER_EXP
 			loaded_chars.append(cd)
 		else:
 			push_warning("GameState: cannot load CharacterData at %s" % path)
 	if loaded_chars.size() > 0:
 		owned_characters = loaded_chars
+	else:
+		_reset_characters_progress(owned_characters)
 
 	inventory.clear()
 	var inv: Dictionary = d.get("inventory", {})
