@@ -191,6 +191,8 @@ script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 800
 attack_damage = 12
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
@@ -199,6 +201,8 @@ script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 900
 attack_damage = 14
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
@@ -207,6 +211,8 @@ script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 900
 attack_damage = 14
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
@@ -215,7 +221,8 @@ script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 1000
 attack_damage = 14
-attack_interval = 2
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
@@ -224,7 +231,8 @@ script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 1000
 attack_damage = 14
-attack_interval = 2
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 
@@ -233,7 +241,8 @@ script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 1000
 attack_damage = 14
-attack_interval = 2
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
 loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
 

@@ -482,7 +482,7 @@ func _make_team_portrait(c: CharacterData, s: float) -> Control:
 		var portrait := TextureRect.new()
 		portrait.texture = c.portrait_texture
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.custom_minimum_size = Vector2(300, 300)
 		portrait.size = Vector2(300, 300)

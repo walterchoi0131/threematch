@@ -3145,7 +3145,8 @@ func add_temporary_guest_character(guest: CharacterData, options: Dictionary = {
 	var color: Color = Block.COLORS.get(guest.gem_type, Color.WHITE)
 	var visual_scale: float = float(options.get("visual_scale", 1.0))
 	await _play_guest_join_projectile(from_pos, target_pos, color, visual_scale)
-	var reveal_duration_scale: float = float(options.get("reveal_duration_scale", 1.0))
+	var reveal_duration_scale: float = float(options.get("reveal_duration_scale", 1.0)) * 2.0
+	reveal_duration_scale = maxf(reveal_duration_scale - (0.5 / 0.34), 0.1)
 	await character_panel.reveal_temporary_card(card_index, reveal_duration_scale)
 	party.append(guest)
 	var battle_index: int = battle_manager.add_temporary_character(guest, bool(options.get("add_current_hp", true)))
@@ -3170,11 +3171,18 @@ func _play_guest_join_projectile(from_pos: Vector2, target_pos: Vector2, color: 
 		trail.set_visual_size_multiplier(visual_scale)
 	if trail.has_method("setup"):
 		trail.setup()
-	if trail.has_signal("released"):
+	var has_release_signal: bool = trail.has_signal("released")
+	if has_release_signal:
 		trail.released.connect(trail.queue_free, CONNECT_ONE_SHOT)
-	var duration: float = 1.0
-	trail.launch(from_pos, target_pos, color, duration)
-	await get_tree().create_timer(duration / TrailProjectileScript.speed_divisor + 0.25).timeout
+	var duration: float = 2.0
+	if trail.has_method("launch_guest_join"):
+		trail.launch_guest_join(from_pos, target_pos, color, duration, 0.35)
+	else:
+		trail.launch(from_pos, target_pos, color, duration)
+	if has_release_signal:
+		await trail.released
+	else:
+		await get_tree().create_timer(duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 	if is_instance_valid(trail):
 		trail.queue_free()
 
@@ -3869,7 +3877,7 @@ func _end_player_turn() -> void:
 
 const PORCUPINE_POWER: float = 0.5  # 豪豬攻擊：全隊魔力 × 0.5
 const TURTLE_POWER: float = 0.8     # 烏龜回血：全隊魔力 × 0.8
-const BAMBOO_SUPPLY_HEAL_MULT: float = 1.6  # 竹葉補給回血：Panda 魔力 × 1.6
+const BAMBOO_SUPPLY_HEAL_MULT: float = 4.8  # 竹葉補給回血：Panda 魔力 × 4.8
 
 
 ## 在玩家回合結束、敵人行動之前：讓所有場上的召喚物（豪豬/烏龜）行動一次。
@@ -4502,7 +4510,7 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	var target_pos: Vector2 = target.get_global_rect().get_center() if is_instance_valid(target) else start_global
 	var fly_tw := create_tween().set_parallel(true)
 	fly_tw.tween_property(block, "global_position", target_pos, 0.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	fly_tw.tween_property(block, "scale", Vector2(0.62, 0.62), 0.4)
+	fly_tw.tween_property(block, "scale", Vector2(1.62, 1.62), 0.4)
 	fly_tw.tween_property(block, "rotation", block.rotation + TAU, 0.4)
 	fly_tw.tween_property(block, "modulate:a", 0.55, 0.28).set_delay(0.12)
 	await fly_tw.finished
@@ -4608,8 +4616,8 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 				husky_index = i
 				break
 		var base_atk := husky_data.get_atk() if husky_data != null else 5
-		# 聖十字傷害：最初公式 ×0.4（-60%）×0.2（-80%）= ×0.08
-		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult * _pending_saint_cross_count * 0.08)
+		# 聖十字傷害：原 ×0.08 版本再降低 10 倍。
+		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult * _pending_saint_cross_count * 0.008)
 		# 選定單一目標：當前鎖定敵，若無效則取第一個存活敵
 		var saint_target: Enemy = battle_manager.targeted_enemy
 		if saint_target == null or not is_instance_valid(saint_target) or saint_target.current_hp <= 0:

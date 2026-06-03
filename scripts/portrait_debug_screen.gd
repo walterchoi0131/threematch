@@ -969,7 +969,7 @@ func _build_scene_dialog(scene: Control, scene_h: float) -> TextureRect:
 		var portrait := TextureRect.new()
 		portrait.texture              = _char_data.portrait_texture
 		portrait.expand_mode          = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode         = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.stretch_mode         = TextureRect.STRETCH_KEEP_ASPECT
 		portrait.custom_minimum_size  = Vector2(300.0, 300.0)
 		portrait.size                 = Vector2(300.0, 300.0)
 		portrait.pivot_offset         = Vector2.ZERO

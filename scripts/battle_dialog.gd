@@ -126,7 +126,7 @@ func _build_ui() -> void:
 
 	_portrait = TextureRect.new()
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 	_portrait.custom_minimum_size = Vector2(300, 300)
 	_portrait.size = Vector2(300, 300)
 	_portrait.pivot_offset = Vector2.ZERO

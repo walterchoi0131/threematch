@@ -194,7 +194,7 @@ static func _make_battle_like(c: CharacterData, square: bool) -> Dictionary:
 		var portrait := TextureRect.new()
 		portrait.texture = c.portrait_texture
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.custom_minimum_size = Vector2(300, 300)
 		portrait.size = Vector2(300, 300)
@@ -356,7 +356,7 @@ static func make(c: CharacterData, size: CardSize = CardSize.MEDIUM) -> PanelCon
 		var portrait := TextureRect.new()
 		portrait.texture = c.portrait_texture
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.custom_minimum_size = preset.portrait
 		portrait.size = preset.portrait

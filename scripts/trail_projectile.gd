@@ -26,7 +26,11 @@ var _trail: Array[Vector2] = []
 var _tween: Tween
 var _particles: GPUParticles2D
 var _flying := false
+var _bursting := false
 var _head_pos := Vector2.ZERO  # 全域座標中的頭部位置
+var _burst_pos := Vector2.ZERO
+var _burst_scale := 1.0
+var _burst_alpha := 0.0
 var _visual_size_multiplier: float = 1.0
 
 
@@ -51,6 +55,7 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 	_trail.clear()
 	_head_pos = from
 	_flying = true
+	_bursting = false
 	visible = true
 
 	if _particles == null:
@@ -86,6 +91,58 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 	_tween.tween_callback(_on_flight_done)
 
 
+func _set_head_position(pos: Vector2) -> void:
+	_head_pos = pos
+	_trail.push_front(_head_pos)
+	if _trail.size() > TRAIL_LENGTH:
+		_trail.resize(TRAIL_LENGTH)
+	if _particles:
+		_particles.global_position = _head_pos
+	queue_redraw()
+
+
+func launch_guest_join(from: Vector2, to: Vector2, color: Color, duration: float = 1.0, spread: float = 0.35) -> void:
+	is_available = false
+	duration = duration / speed_divisor
+	_color = color
+	_trail.clear()
+	_head_pos = from
+	_flying = true
+	_bursting = false
+	_burst_alpha = 0.0
+	modulate.a = 1.0
+	visible = true
+
+	if _particles == null:
+		_build_particles()
+	_apply_particle_size()
+	_apply_particle_color(color)
+	_particles.emitting = true
+
+	if _tween and _tween.is_valid():
+		_tween.kill()
+
+	var dir: Vector2 = to - from
+	var dist: float = dir.length()
+	var dir_n: Vector2 = dir.normalized() if dist > 0.001 else Vector2.RIGHT
+	var perp := Vector2(-dir_n.y, dir_n.x)
+	var side: float = spread
+	var pullback_dist: float = minf(maxf(dist * 0.14, 28.0), 86.0)
+	var backswing: Vector2 = from - dir_n * pullback_dist + perp * pullback_dist * 0.35 * side
+	var arc_height: float = maxf(dist * 0.32, 72.0)
+	var control: Vector2 = (backswing + to) * 0.5 + perp * arc_height * 0.28 * side + Vector2(0.0, -arc_height)
+
+	_tween = create_tween()
+	_tween.tween_method(func(t: float) -> void:
+		_set_head_position(from.lerp(backswing, t))
+	, 0.0, 1.0, duration * 0.22).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	_tween.tween_method(func(t: float) -> void:
+		var inv: float = 1.0 - t
+		_set_head_position(inv * inv * backswing + 2.0 * inv * t * control + t * t * to)
+	, 0.0, 1.0, duration * 0.78).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	_tween.tween_callback(_on_guest_join_arrived)
+
+
 ## 飛行結束
 func _on_flight_done() -> void:
 	_flying = false
@@ -107,11 +164,44 @@ func _on_flight_done() -> void:
 	)
 
 
+func _on_guest_join_arrived() -> void:
+	_flying = false
+	_bursting = true
+	_burst_pos = _head_pos
+	_burst_scale = 0.75
+	_burst_alpha = 1.0
+	if _particles:
+		_particles.emitting = false
+	deduct_hp.emit()
+
+	var burst_tw := create_tween()
+	burst_tw.set_parallel(true)
+	burst_tw.tween_method(func(v: float) -> void:
+		_burst_scale = v
+		queue_redraw()
+	, 0.75, 3.2, 0.28).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	burst_tw.tween_method(func(v: float) -> void:
+		_burst_alpha = v
+		modulate.a = v
+		queue_redraw()
+	, 1.0, 0.0, 0.28).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	burst_tw.chain().tween_callback(func() -> void:
+		visible = false
+		modulate.a = 1.0
+		_bursting = false
+		_burst_alpha = 0.0
+		_trail.clear()
+		is_available = true
+		released.emit()
+	)
+
+
 ## 強制回收
 func force_release() -> void:
 	if _tween and _tween.is_valid():
 		_tween.kill()
 	_flying = false
+	_bursting = false
 	if _particles:
 		_particles.emitting = false
 	visible = false
@@ -217,6 +307,25 @@ func _draw() -> void:
 			draw_polygon([head_local, side_b, tip_a], [flare_color, flare_color, tip_color])
 			draw_polygon([head_local, side_a, tip_b], [flare_color, flare_color, tip_color])
 			draw_polygon([head_local, side_b, tip_b], [flare_color, flare_color, tip_color])
+
+	_draw_guest_join_burst(visual_mult)
+
+
+func _draw_guest_join_burst(visual_mult: float) -> void:
+	if not _bursting:
+		return
+	var burst_local: Vector2 = _burst_pos - global_position
+	var a: float = _burst_alpha
+	var s: float = _burst_scale * visual_mult
+	draw_circle(burst_local, HEAD_GLOW_RADIUS * 0.95 * s, Color(_color.r, _color.g, _color.b, 0.18 * a))
+	draw_circle(burst_local, HEAD_GLOW_RADIUS * 0.55 * s, Color(1, 1, 1, 0.28 * a))
+	draw_arc(burst_local, HEAD_GLOW_RADIUS * 0.75 * s, 0.0, TAU, 40, Color(1, 1, 1, 0.65 * a), 3.0 * visual_mult, true)
+	for fi in 8:
+		var angle: float = TAU * float(fi) / 8.0
+		var dir_f := Vector2(cos(angle), sin(angle))
+		var inner: Vector2 = burst_local + dir_f * HEAD_RADIUS * 1.5 * s
+		var outer: Vector2 = burst_local + dir_f * HEAD_GLOW_RADIUS * 1.15 * s
+		draw_line(inner, outer, Color(1, 1, 1, 0.55 * a), 2.0 * visual_mult)
 
 
 ## 建立 GPUParticles2D 火花粒子

@@ -82,7 +82,7 @@ var _translations: Dictionary = {
 	"Turtle": {"zh": "召喚:烏龜", "en": "Summon: Turtle"},
 	"Turtle DESC": {"zh": "在點擊處召喚烏龜寶石。爆炸時只消除自身。每回合所有角色攻擊後,以全隊魔力 × 0.8 為玩家回血。", "en": "Summon a Turtle gem at the tapped cell. Self-blast only. After all party attacks each turn, heals the player for ΣTeamMagic × 0.8."},
 	"Bamboo Supply": {"zh": "竹葉補給", "en": "Bamboo Supply"},
-	"Bamboo Supply DESC": {"zh": "在點擊處生成竹葉補給寶石；爆炸時消除周圍 8 格並回復 Panda 魔力 × 1.6 HP。", "en": "Create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 1.6."},
+	"Bamboo Supply DESC": {"zh": "在點擊處生成竹葉補給寶石；爆炸時消除周圍 8 格並回復 Panda 魔力 × 4.8 HP。", "en": "Create a Bamboo Supply gem. Blasts surrounding 8 cells and heals Panda for magic × 4.8."},
 	"Wood Spear": {"zh": "木槍", "en": "Wood Spear"},
 	"Wood Spear DESC": {"zh": "7 顆以上葉寶石合成時，在點擊處生成木槍寶石；點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse 7+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},
 	"Wood Spear DESC DYNAMIC": {"zh": "%d 顆以上葉寶石合成時，在點擊處生成木槍寶石。點擊該格上半部時朝上，下半部時朝下。爆發會沿方向貫穿至第一個障礙或邊界，形成箭頭並穿透障礙後 1 格，可破壞木板與木結構。", "en": "Fuse %d+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half of that cell points it up; tapping the lower half points it down. On blast, it pierces to the first obstacle or edge, forms an arrow head, penetrates 1 cell past obstacles, and breaks breakable structures."},

@@ -68,7 +68,14 @@ func setup(enemy_data: EnemyData, init_cd: int = -1, level_value: int = 1, estim
 	is_main_boss_spawn = main_boss_spawn
 	current_hp = max_hp
 	action_pattern_index = 0
-	turns_until_attack = init_cd if init_cd > 0 else _initial_action_cd()
+	if init_cd > 0:
+		if _uses_legacy_interval():
+			action_pattern_index = 0
+		else:
+			_seek_next_active_action_from(0)
+		turns_until_attack = init_cd
+	else:
+		turns_until_attack = _initial_action_cd()
 	refresh_ui()
 	_style_hp_label()
 	hp_changed.emit(current_hp, max_hp)
