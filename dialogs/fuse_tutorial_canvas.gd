@@ -25,6 +25,13 @@ const BATTLE_ROW_SIDE_MARGIN: float = 16.0
 const BATTLE_ROW_CARD_GAP: float = 4.0
 const BATTLE_ROW_HEIGHT: float = 60.0
 const PANEL_BASE_HEIGHT: float = 132.0
+const ROW_DESCRIPTION_HEIGHT: float = 22.0
+const JOB_ICON_PATHS: Dictionary = {
+	"attacker": "res://assets/jobs/attacker.png",
+	"breaker": "res://assets/jobs/breaker.png",
+	"tactictian": "res://assets/jobs/tactictian.png",
+	"wizard": "res://assets/jobs/wizard.png",
+}
 
 const NAME_TO_UPPER: Dictionary = {
 	"Fireball": Block.UpperType.FIREBALL,
@@ -143,14 +150,27 @@ static func _make_row(c: CharacterData, battle_card_size: Vector2) -> Control:
 	var row_style := StyleBoxFlat.new()
 	row_style.bg_color = Color(0.08, 0.10, 0.16, 1.0)
 	row_style.set_corner_radius_all(8)
-	row_style.set_content_margin_all(6)
+	row_style.content_margin_left = 0
+	row_style.content_margin_right = 0
+	row_style.content_margin_top = 6
+	row_style.content_margin_bottom = 6
 	row.add_theme_stylebox_override("panel", row_style)
+
+	var content := Control.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(content)
+
+	var layout := VBoxContainer.new()
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.add_theme_constant_override("separation", 2)
+	content.add_child(layout)
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
 	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_child(hbox)
+	layout.add_child(hbox)
 
 	var portrait_clip := Control.new()
 	portrait_clip.custom_minimum_size = portrait_size
@@ -165,7 +185,7 @@ static func _make_row(c: CharacterData, battle_card_size: Vector2) -> Control:
 		var portrait := TextureRect.new()
 		portrait.texture = c.portrait_texture
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait.custom_minimum_size = Vector2(300, 300)
 		portrait.size = Vector2(300, 300)
@@ -184,6 +204,7 @@ static func _make_row(c: CharacterData, battle_card_size: Vector2) -> Control:
 
 	var elem_color: Color = Block.COLORS.get(c.gem_type, Color(0.4, 0.6, 1.0))
 	var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type, null)
+	var summary_lines: Array[String] = []
 
 	for skill: Dictionary in c.responding_skills:
 		var sname: String = skill.get("name", "")
@@ -194,8 +215,86 @@ static func _make_row(c: CharacterData, battle_card_size: Vector2) -> Control:
 		var gem_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
 		var pattern: Array = _blast_pattern_for(upper_type)
 		skills_box.add_child(_make_skill_chain(fuse_label, base_gem_tex, gem_tex, upper_type, pattern, elem_color))
+		var summary: String = _upper_gem_summary(upper_type)
+		if summary != "" and not summary_lines.has(summary):
+			summary_lines.append(summary)
+
+	var summary_text: String = ""
+	for line: String in summary_lines:
+		if summary_text != "":
+			summary_text += " / "
+		summary_text += line
+
+	var summary_label := Label.new()
+	summary_label.text = summary_text
+	summary_label.anchor_left = 0.0
+	summary_label.anchor_top = 1.0
+	summary_label.anchor_right = 1.0
+	summary_label.anchor_bottom = 1.0
+	summary_label.offset_left = 0.0
+	summary_label.offset_top = -ROW_DESCRIPTION_HEIGHT
+	summary_label.offset_right = -6.0
+	summary_label.offset_bottom = 0.0
+	summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	summary_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	summary_label.add_theme_font_size_override("font_size", 12 if summary_text.length() > 8 else 14)
+	summary_label.add_theme_color_override("font_color", Color(0.86, 0.90, 1.0))
+	summary_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	summary_label.add_theme_constant_override("outline_size", 3)
+	summary_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	summary_label.z_index = 2
+	content.add_child(summary_label)
+
+	if c.job_id != "":
+		var job_badge := _make_job_badge(c.job_id)
+		job_badge.position = Vector2.ZERO
+		content.add_child(job_badge)
 
 	return row
+
+
+static func _make_job_badge(job_id: String) -> Control:
+	var badge := PanelContainer.new()
+	badge.custom_minimum_size = Vector2(0, ROW_DESCRIPTION_HEIGHT)
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.z_index = 2
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0.5)
+	style.set_border_width_all(0)
+	style.content_margin_left = 0
+	style.content_margin_right = 0
+	style.content_margin_top = 0
+	style.content_margin_bottom = 0
+	badge.add_theme_stylebox_override("panel", style)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(row)
+
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(18, 18)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon_path: String = str(JOB_ICON_PATHS.get(job_id, ""))
+	if icon_path != "" and ResourceLoader.exists(icon_path):
+		icon.texture = load(icon_path) as Texture2D
+	row.add_child(icon)
+
+	var label := Label.new()
+	label.text = Locale.tr_ui("JOB_" + job_id.to_upper())
+	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 3)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+
+	return badge
 
 
 ## 構建 [合成提示 N+] ▶ [融合寶石] ▶ [爆發範圍] 一條水平鏈。
@@ -318,6 +417,27 @@ static func _row_height_for(battle_row_height: float) -> float:
 
 static func _estimated_panel_height(card_count: int, row_height: float) -> float:
 	return PANEL_BASE_HEIGHT + float(card_count) * row_height + float(maxi(card_count - 1, 0)) * 8.0
+
+
+static func _upper_gem_summary(upper_type: int) -> String:
+	match upper_type:
+		Block.UpperType.FIREBALL, Block.UpperType.FIRE_PILLAR_X, Block.UpperType.FIRE_PILLAR_Y:
+			return Locale.tr_ui("FUSE_SUMMARY_BOARD_BLAST")
+		Block.UpperType.WATER_SLASH:
+			return Locale.tr_ui("FUSE_SUMMARY_CHAIN_BURST")
+		Block.UpperType.BAMBOO_SUPPLY:
+			return Locale.tr_ui("FUSE_SUMMARY_HEAL")
+		Block.UpperType.SAINT_CROSS:
+			return Locale.tr_ui("FUSE_SUMMARY_BLAST_HEAL_ATTACK")
+		Block.UpperType.ICEBALL:
+			return Locale.tr_ui("FUSE_SUMMARY_SINGLE_BURST")
+		Block.UpperType.LEAF_SHIELD, Block.UpperType.TURTLE:
+			return Locale.tr_ui("FUSE_SUMMARY_HEAL")
+		Block.UpperType.PORCUPINE:
+			return Locale.tr_ui("FUSE_SUMMARY_ATTACK")
+		Block.UpperType.WOOD_SPEAR_UP, Block.UpperType.WOOD_SPEAR_DOWN:
+			return Locale.tr_ui("FUSE_SUMMARY_BOARD_BLAST")
+	return ""
 
 
 static func _blast_pattern_for(upper_type: int) -> Array:

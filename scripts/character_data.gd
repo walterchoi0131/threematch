@@ -10,6 +10,7 @@ const STAT_LEVEL_MIN: int = 1
 const STAT_LEVEL_MAX: int = 99
 
 @export var character_name: String = "Hero"  # 角色名稱
+@export var job_id: String = ""              # Job/play style id: attacker, breaker, tactictian, wizard
 @export var gem_type: Block.Type = Block.Type.RED  # 對應的寶石類型（決定哪種寶石觸發攻擊）
 @export var level: int = 5            # 等級（玩家角色預設 Lv5）
 var current_exp: int = 0              # 當前累積經驗值（不存入 .tres，執行時管理）

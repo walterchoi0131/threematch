@@ -1,27 +1,27 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://cykw4g8khj6rr"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://cch2mevaonj6u" path="res://assets/shark.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/shark.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
 character_name = "Shark"
+job_id = "attacker"
 gem_type = 1
-level = 18
+level = 7
 base_atk = 3
-atk_growth = 7
+atk_growth = 7.0
 base_hp = 55
 hp_growth = 8.5
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.25, 0.47, 0.85, 1)
-portrait_scale = 0.75
-portrait_offset = Vector2(0, -56)
-dialog_square_scale = 0.95
-dialog_square_offset = Vector2(-40, -1)
-square_scale = 0.75
-square_offset = Vector2(-26, -26)
-rectangular_scale = 0.2
-rectangular_offset = Vector2(-20, 119)
+portrait_offset = Vector2(-55, -41)
+dialog_square_scale = 1.25
+dialog_square_offset = Vector2(-101, -19)
+square_scale = 0.9500000000000001
+square_offset = Vector2(-79, -8)
+rectangular_scale = 0.3
+rectangular_offset = Vector2(-82, 227)
 active_skill_name = "居合。水"
 active_skill_desc = "Blast all water gems on the board. The destroyed count is stored and added to the next water attack. CD: 5 turns."
 active_skill_cd = 5

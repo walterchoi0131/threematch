@@ -17,6 +17,12 @@ const UPGRADE_TEXT_LIGHT := Color(0.92, 0.92, 0.96, 1.0)
 const UPGRADE_TEXT_UNLOCKED := Color(0.9, 0.9, 0.95, 1.0)
 const UPGRADE_SLOT_DARK := Color(0.05, 0.055, 0.065, 1.0)
 const SE_OPEN := preload("res://assets/se/card_draw_3.wav")
+const JOB_ICON_PATHS: Dictionary = {
+	"attacker": "res://assets/jobs/attacker.png",
+	"breaker": "res://assets/jobs/breaker.png",
+	"tactictian": "res://assets/jobs/tactictian.png",
+	"wizard": "res://assets/jobs/wizard.png",
+}
 
 var _char: CharacterData  # 要顯示的角色資料
 var _card: Control = null
@@ -323,12 +329,67 @@ func _build_lv_exp_row(parent: VBoxContainer, card_w: float) -> void:
 func _build_stats_row(parent: VBoxContainer, _card_w: float) -> void:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 24)
+	row.add_theme_constant_override("separation", 18)
 	parent.add_child(row)
 
+	if _char.job_id != "":
+		row.add_child(_make_job_badge(_char.job_id))
 	row.add_child(_make_stat_badge("ATK", _char.get_atk(), Color(1.0, 0.45, 0.30)))
 	row.add_child(_make_stat_badge("HP", _char.get_max_hp(), Color(0.45, 0.85, 0.45)))
 	row.add_child(_make_stat_badge("MAG", _char.get_magic(), Color(0.55, 0.55, 1.0)))
+
+
+func _make_job_badge(job_id: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(166, 56)
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.13, 0.22, 1.0)
+	style.border_color = Color(0.85, 0.72, 0.35)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 8
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", style)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(row)
+
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(40, 40)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon_path: String = str(JOB_ICON_PATHS.get(job_id, ""))
+	if icon_path != "" and ResourceLoader.exists(icon_path):
+		icon.texture = load(icon_path) as Texture2D
+	row.add_child(icon)
+
+	var labels := VBoxContainer.new()
+	labels.add_theme_constant_override("separation", -2)
+	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(labels)
+
+	var title := Label.new()
+	title.text = Locale.tr_ui("JOB")
+	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_color_override("font_color", Color(0.8, 0.82, 0.92))
+	labels.add_child(title)
+
+	var name := Label.new()
+	name.text = Locale.tr_ui("JOB_" + job_id.to_upper())
+	name.add_theme_font_size_override("font_size", 18)
+	name.add_theme_color_override("font_color", Color.WHITE)
+	name.add_theme_color_override("font_outline_color", Color.BLACK)
+	name.add_theme_constant_override("outline_size", 3)
+	labels.add_child(name)
+
+	return panel
 
 
 func _make_stat_badge(label: String, value: int, color: Color) -> Control:

@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_script")
 character_name = "Polarz"
+job_id = "wizard"
 gem_type = 1
 level = 7
 atk_growth = 5.5
