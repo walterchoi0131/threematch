@@ -23,6 +23,11 @@ const DEFAULT_CHARACTER_PATHS := [
 	"res://characters/char_dragon.tres",
 	"res://characters/char_gory.tres",
 ]
+const STARTING_CHARACTER_PATHS := [
+	"res://characters/char_dragon.tres",
+	"res://characters/char_panda.tres",
+	"res://characters/char_shark.tres",
+]
 
 var selected_stage: StageData = null           # 當前選擇的關卡
 var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
@@ -295,8 +300,7 @@ func try_upgrade_skill(character: CharacterData, kind: String, skill_index: int 
 
 
 func _ready() -> void:
-	# 預載初始角色
-	owned_characters = _load_default_characters()
+	owned_characters.clear()
 
 	# 為關卡設定對話（程式碼建構）
 	var _stage_dev: StageData = preload("res://stages/stage_dev.tres")
@@ -310,9 +314,8 @@ func _ready() -> void:
 		_stage_dev.fixed_layout = _build_stage1_layout()
 	# 第三波（index 2）三隻史萊姆的初始 CD：2, 3, 1
 	_stage_dev.rounds_init_cd = [[], [], [2, 3, 1], []]
-	# 第一關固定隊伍：husky, dragon, shark, panda
+	# 第一關固定隊伍：dragon, shark, panda；husky 由戰鬥教學中途加入
 	_stage_dev.set_party = [
-		preload("res://characters/char_husky.tres"),
 		preload("res://characters/char_dragon.tres"),
 		preload("res://characters/char_shark.tres"),
 		preload("res://characters/char_panda.tres"),
@@ -321,8 +324,8 @@ func _ready() -> void:
 	# 嘗試載入持久化存檔（覆寫 owned_characters / inventory / gold / cleared_stages）
 	var loaded_save: bool = load_game()
 	if not loaded_save:
-		_reset_characters_progress(owned_characters)
-	_ensure_default_characters_owned()
+		owned_characters.clear()
+	_ensure_starting_characters_if_empty()
 
 
 # ── 持久化存檔 ───────────────────────────────────────────────
@@ -379,31 +382,56 @@ func clear_save() -> void:
 	last_battle_party.clear()
 	last_battle_exp = 0
 	gold = 0
-	owned_characters = _load_default_characters()
-	_reset_characters_progress(owned_characters)
+	owned_characters.clear()
+	_ensure_starting_characters_if_empty()
 	inventory_changed.emit()
 	skill_upgrades_changed.emit()
 	save_cleared.emit()
 
 
-func _ensure_default_characters_owned() -> void:
-	var default_characters: Array[CharacterData] = _load_default_characters()
-	var owned_paths: Dictionary = {}
-	for c: CharacterData in owned_characters:
-		if c != null and c.resource_path != "":
-			owned_paths[c.resource_path] = true
-	var changed: bool = false
-	for default_char: CharacterData in default_characters:
-		if default_char == null or default_char.resource_path == "":
-			continue
-		if owned_paths.has(default_char.resource_path):
-			continue
-		_reset_character_progress(default_char)
-		owned_characters.append(default_char)
-		owned_paths[default_char.resource_path] = true
-		changed = true
-	if changed:
+func reset_owned_character_progress(auto_save: bool = true) -> void:
+	_reset_characters_progress(owned_characters)
+	if auto_save:
 		save_game()
+
+
+func _ensure_starting_characters_if_empty() -> void:
+	if owned_characters.size() > 0:
+		return
+	for path: String in STARTING_CHARACTER_PATHS:
+		var res: Resource = load(path)
+		if res is CharacterData:
+			grant_character(res as CharacterData, true)
+	save_game()
+
+
+func grant_character(character: CharacterData, reset_progress: bool = true) -> bool:
+	if character == null:
+		return false
+	var path: String = character.resource_path
+	for owned: CharacterData in owned_characters:
+		if owned == character:
+			return false
+		if path != "" and owned != null and owned.resource_path == path:
+			return false
+	if reset_progress:
+		_reset_character_progress(character)
+	owned_characters.append(character)
+	return true
+
+
+func debug_grant_all_characters(auto_save: bool = true) -> int:
+	var added: int = 0
+	for character: CharacterData in _load_default_characters():
+		if grant_character(character, true):
+			added += 1
+	if auto_save:
+		save_game()
+	return added
+
+
+func get_character_catalog() -> Array[CharacterData]:
+	return _load_default_characters()
 
 
 func _load_default_characters() -> Array[CharacterData]:

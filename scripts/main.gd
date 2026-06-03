@@ -65,6 +65,7 @@ const SPELL_CHAIN_WAVE_AMPLITUDE := 8.0
 const SPELL_CHAIN_WAVE_PERIOD := 0.62
 
 var party: Array[CharacterData] = []
+var _guest_result_exclusions: Dictionary = {}
 var current_stage: StageData = null
 var _upper_blast_positions: Dictionary = {}  # gem_type -> Array of global positions (for upper gem VFX)
 var _is_upper_gem_turn: bool = false  # set when an upper gem click is in progress
@@ -391,6 +392,7 @@ func _apply_safe_area() -> void:
 	if char_row:
 		char_row.offset_top = -200.0 - bottom_inset
 		char_row.offset_bottom = -140.0 - bottom_inset
+		character_panel.refresh_slot_sizes()
 	var hp_bar: Control = $UILayer/PlayerHPBar
 	if hp_bar:
 		hp_bar.offset_top = -234.0 - bottom_inset
@@ -3104,8 +3106,88 @@ func _start_battle_tutorial() -> void:
 	_tutorial_manager.setup(board, _battle_dialog)
 	_tutorial_manager.tutorial_finished.connect(_on_tutorial_finished)
 
+	if _should_run_stage1_guest_intro():
+		_battle_dialog.show_lines(_Stage1Tutorial.make_guest_intro_dialog())
+		await _battle_dialog.all_lines_finished
+		await add_temporary_guest_character(CHAR_HUSKY, {
+			"slot_index": 3,
+			"visual_scale": 1.5,
+			"reveal_duration_scale": 2.0,
+			"include_in_result": true,
+		})
+
 	var steps: Array = _Stage1Tutorial.make_steps(party)
 	_tutorial_manager.start(steps)
+
+
+func _should_run_stage1_guest_intro() -> bool:
+	return current_stage != null and current_stage.stage_id == "1-1" and not party.has(CHAR_HUSKY)
+
+
+func add_temporary_guest_character(guest: CharacterData, options: Dictionary = {}) -> int:
+	if guest == null:
+		return -1
+	if party.has(guest):
+		return party.find(guest)
+	var was_busy: bool = board.is_busy
+	board.is_busy = true
+	var card_index: int = character_panel.append_temporary_card(guest, true)
+	if card_index < 0:
+		board.is_busy = was_busy
+		return -1
+	var expected_index: int = int(options.get("slot_index", party.size()))
+	if expected_index != card_index:
+		push_warning("Guest slot mismatch: expected %d, got %d" % [expected_index, card_index])
+	await get_tree().process_frame
+	var target_pos: Vector2 = character_panel.get_card_screen_center(card_index)
+	var board_center: Vector2i = Vector2i(int(floor(float(board.columns) * 0.5)), int(floor(float(board.rows) * 0.5)))
+	var from_pos: Vector2 = board.to_global(board.grid_to_world(board_center))
+	var color: Color = Block.COLORS.get(guest.gem_type, Color.WHITE)
+	var visual_scale: float = float(options.get("visual_scale", 1.0))
+	await _play_guest_join_projectile(from_pos, target_pos, color, visual_scale)
+	var reveal_duration_scale: float = float(options.get("reveal_duration_scale", 1.0))
+	await character_panel.reveal_temporary_card(card_index, reveal_duration_scale)
+	party.append(guest)
+	var battle_index: int = battle_manager.add_temporary_character(guest, bool(options.get("add_current_hp", true)))
+	if battle_index != card_index:
+		push_warning("Guest battle index mismatch: card=%d battle=%d" % [card_index, battle_index])
+	if not bool(options.get("include_in_result", true)):
+		_guest_result_exclusions[guest] = true
+	_setup_fuse_hints()
+	_update_skill_ui()
+	_refresh_gem_meter()
+	await get_tree().create_timer(1.0).timeout
+	board.is_busy = was_busy
+	return card_index
+
+
+func _play_guest_join_projectile(from_pos: Vector2, target_pos: Vector2, color: Color, visual_scale: float) -> void:
+	var trail := Node2D.new()
+	trail.set_script(TrailProjectileScript)
+	trail.z_index = 200
+	fx_layer.add_child(trail)
+	if trail.has_method("set_visual_size_multiplier"):
+		trail.set_visual_size_multiplier(visual_scale)
+	if trail.has_method("setup"):
+		trail.setup()
+	if trail.has_signal("released"):
+		trail.released.connect(trail.queue_free, CONNECT_ONE_SHOT)
+	var duration: float = 1.0
+	trail.launch(from_pos, target_pos, color, duration)
+	await get_tree().create_timer(duration / TrailProjectileScript.speed_divisor + 0.25).timeout
+	if is_instance_valid(trail):
+		trail.queue_free()
+
+
+func _get_battle_result_party() -> Array[CharacterData]:
+	var result: Array[CharacterData] = []
+	for c: CharacterData in party:
+		if c == null:
+			continue
+		if _guest_result_exclusions.has(c):
+			continue
+		result.append(c)
+	return result
 
 
 ## 教學完成回呼
@@ -5976,11 +6058,11 @@ func _on_battle_won() -> void:
 		GameState.mark_stage_cleared(current_stage.stage_id)
 		# 關卡未設定 fixed party 時，記錄本場出戰隊伍為「下次預設隊伍」
 		if current_stage.set_party.is_empty():
-			GameState.set_last_used_party(party)
+			GameState.set_last_used_party(_get_battle_result_party())
 
 	# 將結算資料寫入 GameState（結算場景讀取）
 	GameState.last_battle_loot = _battle_loot.duplicate()
-	GameState.last_battle_party = party.duplicate()
+	GameState.last_battle_party = _get_battle_result_party()
 	GameState.last_battle_exp = _battle_exp
 
 	_show_victory_overlay()

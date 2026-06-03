@@ -106,6 +106,13 @@ func _build() -> void:
 	save_btn.pressed.connect(_save)
 	top_bar.add_child(save_btn)
 
+	var grant_all_btn := Button.new()
+	grant_all_btn.text = "Grant All"
+	grant_all_btn.add_theme_font_size_override("font_size", 16)
+	grant_all_btn.custom_minimum_size = Vector2(110, 40)
+	grant_all_btn.pressed.connect(_on_grant_all_owned_pressed)
+	top_bar.add_child(grant_all_btn)
+
 	var close_btn := Button.new()
 	close_btn.text = "✕"
 	close_btn.add_theme_font_size_override("font_size", 20)
@@ -165,12 +172,16 @@ func _build() -> void:
 	cl_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	char_row.add_child(cl_pad)
 
-	var chars: Array[CharacterData] = GameState.owned_characters
+	var chars: Array[CharacterData] = _debug_characters()
 	for i: int in chars.size():
 		_build_char_btn(char_row, chars[i], i)
 
 	if chars.size() > 0:
 		_select_char(0)
+
+
+func _debug_characters() -> Array[CharacterData]:
+	return GameState.get_character_catalog()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -742,8 +753,8 @@ func _build_scene_battle(scene: Control, scene_h: float) -> TextureRect:
 	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	scene.add_child(hbox)
 
-	var chars: Array[CharacterData] = GameState.owned_characters
-	var target_idx: int = GameState.owned_characters.find(_char_data)
+	var chars: Array[CharacterData] = _debug_characters()
+	var target_idx: int = chars.find(_char_data)
 	var portrait_ref: TextureRect = null
 
 	for i: int in N_CARDS:
@@ -824,8 +835,8 @@ func _build_scene_result(scene: Control, scene_h: float) -> TextureRect:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	scene.add_child(bg)
 
-	var chars: Array[CharacterData] = GameState.owned_characters
-	var target_idx: int = GameState.owned_characters.find(_char_data)
+	var chars: Array[CharacterData] = _debug_characters()
+	var target_idx: int = chars.find(_char_data)
 	# 顯示 2 列：目標角色在第 0 列，另一個角色作背景
 	const N_ROWS: int = 2
 	var portrait_ref: TextureRect = null
@@ -1069,9 +1080,10 @@ func _build_char_btn(parent: HBoxContainer, c: CharacterData, idx: int) -> void:
 # 邏輯
 # ─────────────────────────────────────────────────────────────
 func _select_char(idx: int) -> void:
-	if idx < 0 or idx >= GameState.owned_characters.size():
+	var chars: Array[CharacterData] = _debug_characters()
+	if idx < 0 or idx >= chars.size():
 		return
-	_char_data = GameState.owned_characters[idx]
+	_char_data = chars[idx]
 	for j: int in _char_btns.size():
 		var sel: Node = _char_btns[j].get_node_or_null("SelBorder")
 		if sel != null:
@@ -1079,6 +1091,54 @@ func _select_char(idx: int) -> void:
 	for i: int in 4:
 		_rebuild_preview(i)
 	_refresh_stats_section()
+
+
+func _on_grant_all_owned_pressed() -> void:
+	var selected_path: String = _char_data.resource_path if _char_data != null else ""
+	GameState.debug_grant_all_characters(true)
+	_rebuild_preserving_selection(selected_path)
+
+
+func _rebuild_preserving_selection(selected_path: String) -> void:
+	for child in get_children():
+		child.queue_free()
+	_scene_nodes.clear()
+	_wrappers.clear()
+	_portraits.clear()
+	_scale_lbls.clear()
+	_offset_lbls.clear()
+	_char_btns.clear()
+	_drag_active.clear()
+	_drag_start_mouse.clear()
+	_drag_start_offset.clear()
+	for _i: int in 4:
+		_drag_active.append(false)
+		_drag_start_mouse.append(Vector2.ZERO)
+		_drag_start_offset.append(Vector2.ZERO)
+		_portraits.append(null)
+	_char_data = null
+	_hp_chart = null
+	_magic_chart = null
+	_atk_chart = null
+	_hp_growth_edit = null
+	_magic_growth_edit = null
+	_atk_growth_edit = null
+	_hp_growth_mode_opt = null
+	_magic_growth_mode_opt = null
+	_atk_growth_mode_opt = null
+	_stat_max_lbl = null
+	_stat_hover_panel_lbl = null
+	_syncing_growth_edits = false
+	_syncing_growth_mode_options = false
+	_build()
+	if selected_path == "":
+		return
+	var chars: Array[CharacterData] = _debug_characters()
+	for i in chars.size():
+		var character: CharacterData = chars[i]
+		if character != null and character.resource_path == selected_path:
+			_select_char(i)
+			return
 
 
 func _on_preview_input(ev: InputEvent, idx: int) -> void:

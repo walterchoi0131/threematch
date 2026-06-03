@@ -11,7 +11,6 @@
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="7_jsm3v"]
-[ext_resource type="Resource" path="res://characters/char_husky.tres" id="12_o6cdy"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="13_7x61u"]
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="14_epvkr"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
@@ -263,12 +262,12 @@ stage_name = "1-1 畢業測驗"
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "school"
 rounds = Array[Array]([[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]])
-rounds_init_cd = Array[Array]([[1], [0, 0], [2, 3, 1], [0]])
+rounds_init_cd = Array[Array]([[3], [3, 3], [2, 3, 1], [2]])
 rounds_enemy_levels = Array[Array]([[3], [3, 3], [3, 3, 3], [4]])
 rounds_main_bosses = Array[Array]([[false], [false, false], [false, false, false], [true]])
 background = 1
 bgm = ExtResource("1_lvgyu")
 pre_dialog = SubResource("Resource_ogy0i")
 is_tutorial = true
-set_party = Array[ExtResource("7_jsm3v")]([ExtResource("12_o6cdy"), ExtResource("13_7x61u"), ExtResource("14_epvkr"), ExtResource("15_wrajf")])
+set_party = Array[ExtResource("7_jsm3v")]([ExtResource("13_7x61u"), ExtResource("14_epvkr"), ExtResource("15_wrajf")])
 fixed_layout = [[0, 0, 0, 0, 0, 0, 0, 6], [1, 1, 6, 6, 6, 6, 0, 6], [1, 1, 6, 6, 2, 0, 0, 6], [1, 6, 1, 6, 0, 0, 1, 0], [2, 1, 1, 1, 2, 2, 6, 1], [2, 1, 1, 6, 2, 1, 6, 6], [6, 1, 6, 6, 0, 0, 6, 6], [6, 2, 2, 6, 6, 6, 6, 2]]

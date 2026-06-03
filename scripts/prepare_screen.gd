@@ -449,11 +449,13 @@ func _refresh_team_summary() -> void:
 			_team_summary.add_child(card)
 			_team_summary_cards.append(card)
 		else:
-			var slot: PanelContainer = _make_empty_summary_slot(battle_card_size.x)
+			var locked_empty: bool = _is_locked_empty_party_slot(i)
+			var slot_label: String = "X" if locked_empty else "+"
+			var slot: PanelContainer = _make_empty_summary_slot(battle_card_size.x, slot_label, locked_empty)
 			slot.custom_minimum_size = battle_card_size
 			_team_summary.add_child(slot)
 			var blink_label: Label = slot.get_node_or_null("Label") as Label
-			if blink_label != null:
+			if blink_label != null and not locked_empty:
 				var blink_tw: Tween = create_tween().set_loops()
 				blink_tw.tween_property(blink_label, "modulate:a", 0.25, 0.6) \
 				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
@@ -463,6 +465,10 @@ func _refresh_team_summary() -> void:
 
 	if _confirm_btn:
 		_confirm_btn.disabled = _selected_count() == 0
+
+
+func _is_locked_empty_party_slot(slot_index: int) -> bool:
+	return _is_party_locked() and _stage != null and slot_index >= _stage.set_party.size()
 
 
 ## 建立隊伍欄列左側純頭像：無邊框，套用 battle panel pose，固定方形大小。
@@ -521,25 +527,26 @@ func _make_empty_team_row_style() -> StyleBoxFlat:
 	return sb
 
 
-func _make_empty_summary_slot(s: float) -> PanelContainer:
+func _make_empty_summary_slot(s: float, label_text: String = "+", locked: bool = false) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = 0
 	panel.custom_minimum_size = Vector2(s, s)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.12, 0.6)
+	style.bg_color = Color(0.08, 0.08, 0.12, 0.78 if locked else 0.6)
 	style.set_border_width_all(2)
-	style.border_color = Color(0.25, 0.25, 0.35, 0.5)
+	style.border_color = Color(0.45, 0.25, 0.28, 0.75) if locked else Color(0.25, 0.25, 0.35, 0.5)
 	style.set_corner_radius_all(8)
 	style.set_content_margin_all(0)
 	panel.add_theme_stylebox_override("panel", style)
 	var lbl := Label.new()
-	lbl.text = "+"
+	lbl.name = "Label"
+	lbl.text = label_text
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if _font != null:
 		lbl.add_theme_font_override("font", _font)
 	lbl.add_theme_font_size_override("font_size", 28)
-	lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+	lbl.add_theme_color_override("font_color", Color(0.95, 0.45, 0.45) if locked else Color(0.5, 0.5, 0.6))
 	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(lbl)

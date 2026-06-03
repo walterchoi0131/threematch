@@ -48,6 +48,8 @@ static func make_steps(party: Array = []) -> Array:
 				"target": "first_enemy",
 				"shape": "circle",
 				"hold": 3.0,
+				"hand": true,
+				"hand_offset": Vector2(24, 28),
 			},
 			"wait_for_blast": false,
 		},
@@ -62,6 +64,8 @@ static func make_steps(party: Array = []) -> Array:
 				"target": "player_hp",
 				"shape": "rect",
 				"hold": 3.0,
+				"hand": true,
+				"hand_offset": Vector2(28, 20),
 			},
 			"wait_for_blast": false,
 		},
@@ -86,6 +90,12 @@ static func make_steps(party: Array = []) -> Array:
 			"post_canvas_fn": func(parent: Node, on_close: Callable) -> void:
 				_FuseTutorialCanvas.build(parent, party, on_close),
 		},
+	]
+
+
+static func make_guest_intro_dialog() -> Array:
+	return [
+		_line("husky", "normal", "hey!", "hey!"),
 	]
 
 
