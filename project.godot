@@ -33,7 +33,7 @@ window/handheld/orientation="portrait"
 
 [gui]
 
-theme/custom_font="res://assets/fonts/RussoOne-Regular.ttf"
+theme/custom_font="res://assets/fonts/game_ui_font.tres"
 
 [physics]
 

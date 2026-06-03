@@ -16,7 +16,7 @@ const UPPER_GEM_DEBRIS_SHARDS := 7
 const OBSTACLE_DEBRIS_SHARDS := 8
 const WOOD_SPEAR_THRUST_SCALE := 0.18
 const WOOD_SPEAR_ROW_HIT_INTERVAL := 0.075
-const SELECTION_ORDER_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
+const SELECTION_ORDER_FONT := preload("res://assets/fonts/game_ui_font.tres")
 
 @export var stage: StageData  # 當前關卡資料
 

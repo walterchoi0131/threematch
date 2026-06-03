@@ -600,7 +600,7 @@ func show_fuse_hint(text: String) -> void:
 		_fuse_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_fuse_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		# Russo One 字型
-		var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+		var font: Font = load("res://assets/fonts/game_ui_font.tres")
 		_fuse_hint_label.add_theme_font_override("font", font)
 		_fuse_hint_label.add_theme_font_size_override("font_size", 46)
 		_fuse_hint_label.add_theme_color_override("font_color", Color.WHITE)

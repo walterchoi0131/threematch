@@ -43,7 +43,7 @@ const BGM_FADE_DUR := 0.8
 
 # Skip 自動推進
 const SKIP_INTERVAL := 0.1
-const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 
 # 角色名稱顏色
 const CHAR_NAME_COLORS := {
@@ -163,6 +163,8 @@ func _play_start_fade_in() -> void:
 # ── UI 建構 ──────────────────────────────────────────────────
 
 func _build_ui() -> void:
+	var dialog_font := load(FONT_PATH) as Font
+
 	# 純色背景（fallback）
 	_bg_color = ColorRect.new()
 	_bg_color.color = Color(0.05, 0.05, 0.1, 1.0)
@@ -255,6 +257,8 @@ func _build_ui() -> void:
 
 	# 角色名稱
 	_name_label = Label.new()
+	if dialog_font != null:
+		_name_label.add_theme_font_override("font", dialog_font)
 	_name_label.add_theme_font_size_override("font_size", NAME_FONT_SIZE)
 	_name_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
 	_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
@@ -268,6 +272,8 @@ func _build_ui() -> void:
 	_skip_btn.text = Locale.tr_ui("SKIP")
 	_skip_btn.focus_mode = Control.FOCUS_NONE
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	if dialog_font != null:
+		_skip_btn.add_theme_font_override("font", dialog_font)
 	_skip_btn.add_theme_font_size_override("font_size", SKIP_FONT_SIZE)
 	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
 	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 1.0, 1.0, 0.7))
@@ -293,6 +299,9 @@ func _build_ui() -> void:
 	_text_label.fit_content = true
 	_text_label.scroll_active = false
 	_text_label.custom_minimum_size = Vector2(vp.x - PANEL_MARGIN * 2, 0)
+	if dialog_font != null:
+		_text_label.add_theme_font_override("normal_font", dialog_font)
+		_text_label.add_theme_font_override("bold_font", dialog_font)
 	_text_label.add_theme_font_size_override("normal_font_size", TEXT_FONT_SIZE)
 	_text_label.add_theme_color_override("default_color", Color.WHITE)
 	_text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE

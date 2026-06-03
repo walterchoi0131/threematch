@@ -4,7 +4,7 @@ extends Control
 
 signal closed
 
-const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const CharacterSorter = preload("res://scripts/character_sorter.gd")
 const RosterLayout = preload("res://scripts/roster_layout.gd")
 

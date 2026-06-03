@@ -314,7 +314,7 @@ static func make_hp_gradient(elem_color: Color) -> GradientTexture2D:
 func _style_hp_label() -> void:
 	if not hp_bar_label:
 		return
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	hp_bar_label.add_theme_font_override("font", font)
 	hp_bar_label.add_theme_font_size_override("font_size", 16)
 	hp_bar_label.add_theme_color_override("font_color", Color.WHITE)

@@ -4,7 +4,7 @@ extends Control
 
 signal closed
 
-const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 
 var _font: Font
 

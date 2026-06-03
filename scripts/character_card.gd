@@ -3,7 +3,7 @@
 class_name CharacterCard
 extends RefCounted
 
-const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 
 
 ## 卡片尺寸配置

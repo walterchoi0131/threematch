@@ -753,12 +753,12 @@ func _rebuild_upgrade_dialog_content(dialog_layer: CanvasLayer, kind: String, sk
 	_build_upgrade_dialog_content(vbox, dialog_layer, kind, skill_index, elem_color)
 
 
-func _make_upgrade_row_fill_style(elem_color: Color) -> StyleBoxFlat:
+func _make_upgrade_row_fill_style(_elem_color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	var bg: Color = elem_color.darkened(0.55)
-	bg.a = 0.46
+	var bg: Color = CARD_BG_COLOR
+	bg.a = 0.55
 	style.bg_color = bg
-	style.border_color = Color(1.0, 0.86, 0.18, 0.9)
+	style.border_color = Color(0.85, 0.72, 0.35, 0.7)
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(6)
 	return style
@@ -824,7 +824,7 @@ func _make_upgrade_progress_slot(elem_color: Color, slot_size: float, filled: bo
 
 	var fill_panel := PanelContainer.new()
 	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_slot_style(elem_color, slot_size))
+	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_slot_style(CARD_BG_COLOR, slot_size))
 	fill_clip.add_child(fill_panel)
 
 	holder.set_meta("_fill_clip", fill_clip)
@@ -1139,7 +1139,7 @@ func _make_fuse_hint_box(fuse_label: String, base_gem_tex: Texture2D) -> Control
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	num.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var dmg_font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var dmg_font: Font = load("res://assets/fonts/game_ui_font.tres")
 	if dmg_font != null:
 		num.add_theme_font_override("font", dmg_font)
 	num.add_theme_font_size_override("font_size", 30)

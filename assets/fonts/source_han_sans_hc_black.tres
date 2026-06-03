@@ -1,0 +1,8 @@
+[gd_resource type="FontVariation" load_steps=2 format=3]
+
+[ext_resource type="FontFile" uid="uid://chavb0hkb7jrd" path="res://assets/fonts/SourceHanSansHC-VF.otf" id="1_source_han"]
+
+[resource]
+base_font = ExtResource("1_source_han")
+variation_opentype = {"wght": 1000}
+variation_embolden = 1.0

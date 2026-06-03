@@ -5411,7 +5411,7 @@ func _refresh_gem_meter() -> void:
 
 ## 為玩家血量標籤套用 Russo One 字型＋黑色描邊
 func _style_player_hp_label() -> void:
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	player_hp_label.add_theme_font_override("font", font)
 	player_hp_label.add_theme_font_size_override("font_size", 16)
 	player_hp_label.add_theme_color_override("font_color", Color.WHITE)
@@ -5436,7 +5436,7 @@ func _on_player_defeated() -> void:
 func _show_defeat_overlay() -> void:
 	if _defeat_overlay != null:
 		return
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	var ui_layer: CanvasLayer = $UILayer
 
 	_defeat_overlay = Control.new()
@@ -5541,7 +5541,7 @@ func _show_boss_intro() -> void:
 	# Boss 警告橫幅文字
 	var boss_name := "BOSS INCOMING"
 
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	var ui_layer: CanvasLayer = $UILayer
 
 	var overlay := Control.new()
@@ -5990,7 +5990,7 @@ func _on_battle_won() -> void:
 func _show_victory_overlay() -> void:
 	if _victory_overlay != null:
 		return
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	var ui_layer: CanvasLayer = $UILayer
 
 	_victory_overlay = Control.new()
@@ -6131,7 +6131,7 @@ func _setup_boss_bar() -> void:
 	_boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_fill)
 
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 
 	_boss_bar_label = Label.new()
 	_boss_bar_label.set_anchors_preset(Control.PRESET_RIGHT_WIDE)

@@ -18,7 +18,7 @@ func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool 
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 	# Russo One 字型（與血條 HP 標籤一致）
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	label.add_theme_font_override("font", font)
 
 	# 字體大小 — 克制效果時更大
@@ -70,7 +70,7 @@ func show_text(pos: Vector2, text: String, color: Color) -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
-	var font: Font = load("res://assets/fonts/RussoOne-Regular.ttf")
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	label.add_theme_font_override("font", font)
 	label.add_theme_font_size_override("font_size", 26)
 	label.add_theme_color_override("font_color", color)

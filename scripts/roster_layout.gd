@@ -5,7 +5,7 @@ class_name RosterLayout
 extends RefCounted
 
 const CharacterSorterRef = preload("res://scripts/character_sorter.gd")
-const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const ATK_ICON_PATH := "res://assets/slash.png"
 const GROUP_BG_ALPHA := 0.25
 const GROUP_ICON_ALPHA := 0.5

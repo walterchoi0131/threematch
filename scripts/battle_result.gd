@@ -2,7 +2,7 @@
 ## 三階段播放：Gold → Loot → EXP。點擊可跳過當前階段。
 extends Control
 
-const FONT_PATH := "res://assets/fonts/RussoOne-Regular.ttf"
+const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 
 # ── 階段列舉 ──
