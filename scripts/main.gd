@@ -4633,36 +4633,41 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 		var light_color: Color = Block.COLORS[Block.Type.LIGHT]
 		if saint_target != null:
 			var target_pos: Vector2 = saint_target.get_global_rect().get_center()
-			# ── 光爆動畫：逐幀播放 lightbrust/vnbvx_1..29.png ──
-			const LIGHTBRUST_FRAMES := 29
-			const LIGHTBRUST_DURATION := 0.6
-			var lb_node := Node2D.new()
-			lb_node.position = target_pos
-			lb_node.z_index = 30
-			fx_layer.add_child(lb_node)
-			var lb_sprite := Sprite2D.new()
-			lb_sprite.texture = load("res://assets/animation/lightbrust/vnbvx_1.png")
-			lb_sprite.scale = Vector2(0.6, 0.6)
-			lb_node.add_child(lb_sprite)
-			var frame_dur: float = LIGHTBRUST_DURATION / LIGHTBRUST_FRAMES
+			# ── 敵人受擊動畫：SwordOfJustice_spritesheet.png 1 row × 13 cols ──
+			const SWORD_OF_JUSTICE_FRAMES := 13
+			const SWORD_OF_JUSTICE_DURATION := 0.6
+			var sword_node := Node2D.new()
+			sword_node.position = target_pos
+			sword_node.z_index = 30
+			fx_layer.add_child(sword_node)
+			var sword_sprite := Sprite2D.new()
+			var sword_tex: Texture2D = load("res://assets/animation/SwordOfJustice_spritesheet.png") as Texture2D
+			if sword_tex != null:
+				sword_sprite.texture = sword_tex
+			sword_sprite.hframes = SWORD_OF_JUSTICE_FRAMES
+			sword_sprite.vframes = 1
+			sword_sprite.frame = 0
+			sword_sprite.scale = Vector2(1.4, 1.4)
+			sword_node.add_child(sword_sprite)
+			var frame_dur: float = SWORD_OF_JUSTICE_DURATION / SWORD_OF_JUSTICE_FRAMES
 			var captured_enemy: Enemy = saint_target
 			var captured_dmg: int = holy_damage
 			# 在中途幀觸發扣血
-			get_tree().create_timer(LIGHTBRUST_DURATION * 0.45).timeout.connect(func() -> void:
+			get_tree().create_timer(SWORD_OF_JUSTICE_DURATION * 0.45).timeout.connect(func() -> void:
 				if is_instance_valid(captured_enemy):
 					captured_enemy.take_damage(captured_dmg)
 					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), captured_dmg, light_color, true)
 				_play_sfx(_se_impact)
 			, CONNECT_ONE_SHOT)
-			var lb_tw := create_tween()
-			for fi: int in LIGHTBRUST_FRAMES:
-				var frame_path: String = "res://assets/animation/lightbrust/vnbvx_%d.png" % (fi + 1)
-				lb_tw.tween_callback(func() -> void:
-					if is_instance_valid(lb_sprite):
-						lb_sprite.texture = load(frame_path)
+			var sword_tw := create_tween()
+			for fi: int in SWORD_OF_JUSTICE_FRAMES:
+				var frame_index := fi
+				sword_tw.tween_callback(func() -> void:
+					if is_instance_valid(sword_sprite):
+						sword_sprite.frame = frame_index
 				)
-				lb_tw.tween_interval(frame_dur)
-			lb_tw.tween_callback(lb_node.queue_free)
+				sword_tw.tween_interval(frame_dur)
+			sword_tw.tween_callback(sword_node.queue_free)
 			await get_tree().create_timer(0.4).timeout
 		# 回復 20% 最大血量（每個聖十字各回復一次）
 		var heal_amount := int(floor(battle_manager.player_max_hp * 0.2)) * _pending_saint_cross_count

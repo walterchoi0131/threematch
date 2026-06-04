@@ -77,8 +77,7 @@ static func _ensure_init() -> void:
 		Block.Type.LIGHT,
 		Color(1.0, 0.92, 0.23),
 		"Saint Cross",
-		"res://assets/animation/RetroImpactEffectPack5A.png", 9, 30, 8, 3.0, 0.05,
-		"", 117,  # row 14 (zero-indexed 13) * 9 cols = 117
+		"res://assets/animation/Smite_spritesheet.png", 11, 1, 11, 2.0, 0.04,
 	)
 	_defs[Block.UpperType.LEAF_SHIELD] = Def.new(
 		Block.Type.GREEN,
