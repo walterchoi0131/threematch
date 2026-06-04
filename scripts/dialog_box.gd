@@ -16,6 +16,8 @@ const LEFT_X_RATIO := 0.064            # 左側立繪 X / viewport_w
 const RIGHT_X_RATIO := 0.625           # 右側立繪 X / viewport_w
 const SLIDE_OFFSET_RATIO := 0.41       # 滑入/滑出偏移量 / viewport_w
 const ACTIVE_PORTRAIT_Z := 100         # 目前說話者永遠畫在最前方
+const DIALOG_PANEL_Z := 150
+const FULLSCREEN_FADE_Z := 220
 const ROTARY_X_RADIUS := 92.0          # 多角色同側旋轉展示的水平半徑
 const ROTARY_Y_RADIUS := 48.0          # 多角色同側旋轉展示的垂直半徑
 const BACK_PORTRAIT_SCALE := 0.86      # 非說話角色稍微縮小，讓後排更不擁擠
@@ -158,7 +160,7 @@ func switch_background(texture: Texture2D, animated: bool = true) -> void:
 	overlay.color = Color(0, 0, 0, 0)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.z_index = 120
+	overlay.z_index = FULLSCREEN_FADE_Z
 	add_child(overlay)
 	_bg_switch_tween = create_tween()
 	_bg_switch_tween.tween_property(overlay, "color:a", 1.0, BG_SWITCH_FADE_DUR)
@@ -182,7 +184,7 @@ func _play_start_fade_in() -> void:
 	overlay.color = Color(0, 0, 0, 1)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.z_index = 200
+	overlay.z_index = FULLSCREEN_FADE_Z
 	add_child(overlay)
 	var tw := create_tween()
 	tw.tween_property(overlay, "color:a", 0.0, 0.35)
@@ -261,6 +263,7 @@ func _build_ui() -> void:
 	_dialog_panel.offset_bottom = 0.0
 	_dialog_panel.offset_left = 0.0
 	_dialog_panel.offset_right = 0.0
+	_dialog_panel.z_index = DIALOG_PANEL_Z
 	_dialog_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var panel_style := StyleBoxFlat.new()
@@ -517,7 +520,7 @@ func _finish_dialog() -> void:
 	overlay.color = Color(0, 0, 0, 0)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.z_index = 100
+	overlay.z_index = FULLSCREEN_FADE_Z
 	add_child(overlay)
 
 	var tw := create_tween()
@@ -533,7 +536,7 @@ func _finish_preview_with_fade() -> void:
 	overlay.color = Color(0, 0, 0, 0)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.z_index = 100
+	overlay.z_index = FULLSCREEN_FADE_Z
 	add_child(overlay)
 
 	var tw := create_tween()

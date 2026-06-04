@@ -1602,8 +1602,6 @@ func _stage_editor_add_switch_bg_line(resource_path: String) -> void:
 	line.shake = false
 	line.background = texture
 	var insert_index: int = sequence.lines.size()
-	if _stage_editor_dialog_selected_index >= 0 and _stage_editor_dialog_selected_index < sequence.lines.size():
-		insert_index = _stage_editor_dialog_selected_index + 1
 	sequence.lines.insert(insert_index, line)
 	_stage_editor_dialog_selected_index = insert_index
 	_refresh_stage_editor_dialog_editor()
