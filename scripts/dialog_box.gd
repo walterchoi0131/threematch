@@ -538,7 +538,7 @@ func _portrait_anchor_position(side: String) -> Vector2:
 	if side == "right":
 		anchor_x = vp.x * RIGHT_X_RATIO - (portrait_size.x - 300.0) * 0.5 - 30.0
 	else:
-		anchor_x = vp.x * LEFT_X_RATIO - (portrait_size.x - 300.0) * 0.5 - 50.0
+		anchor_x = vp.x * LEFT_X_RATIO - (portrait_size.x - 300.0) * 0.5 - 30.0
 	return Vector2(anchor_x, portrait_y - (portrait_size.y - 400.0))
 
 

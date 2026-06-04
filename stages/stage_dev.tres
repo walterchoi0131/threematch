@@ -3,7 +3,7 @@
 [ext_resource type="AudioStream" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_classroom.png" id="2_fjo77"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_bedroom.png" id="2_fsca4"]
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
 [ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
 [ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
@@ -15,171 +15,127 @@
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="14_epvkr"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
 
-[sub_resource type="Resource" id="Resource_smhwd"]
+[sub_resource type="Resource" id="Resource_stage1_intro_morning"]
 script = ExtResource("3_6yv1j")
-text_zh = "元素學院——古老的石造教室裡，陽光透過彩繪玻璃灑落。空氣中瀰漫著微弱的魔力氣息。
-新生們坐得筆直，緊張地望向講台。"
-text_en = "The Elemental Academy — sunlight filters through stained glass into the ancient stone classroom.
-The freshmen sit upright, staring nervously at the podium."
+text_zh = "清晨的陽光溜進宿舍臥室。阿潘還整隻埋在棉被裡。"
+text_en = "Morning light slips into the dorm bedroom. Pan is still buried under his blanket."
 music = ExtResource("4_tq0q5")
 
-[sub_resource type="Resource" id="Resource_jg7yr"]
+[sub_resource type="Resource" id="Resource_stage1_intro_dragon_wakeup"]
 script = ExtResource("3_6yv1j")
-character_id = "husky"
-text_zh = "歡迎來到元素學院。我們的世界由四大元素構成——火、水、草、光。"
-text_en = "Welcome to the Elemental Academy. Our world is shaped by four elements — Fire, Water, Leaf, and Light."
+character_id = "dragon"
+emotion = "excited"
+position = "right"
+text_zh = "阿潘！阿潘！起床啦！今天可是大日子！超大的日子！"
+text_en = "Pan! Pan! Wake up! This is a big day! The BIG day!"
 action = "enter"
 
-[sub_resource type="Resource" id="Resource_lyr6i"]
+[sub_resource type="Resource" id="Resource_stage1_intro_panda_waking"]
 script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "老師老師！所以我們可以噴火對嗎！！我超會噴火的！！"
-text_en = "Professor, professor! So we get to breathe fire, right?! I'm SO good at breathing fire!!"
+character_id = "panda"
+emotion = "sleepy"
+text_zh = "Zzz... zz... 米洛？現在幾點啊……"
+text_en = "Zzz... zz... Milo? What time is it now?..."
 action = "enter"
 
-[sub_resource type="Resource" id="Resource_piard"]
+[sub_resource type="Resource" id="Resource_stage1_intro_dragon_graduate"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+emotion = "excited"
+position = "right"
+text_zh = "我們今天要從冒險者學校畢業了！畢業生！真正的冒險者！說不定還會有披風！"
+text_en = "We graduate from adventurer's school today! Graduates! Real adventurers! With capes maybe!"
+
+[sub_resource type="Resource" id="Resource_stage1_intro_panda_sleepy"]
+script = ExtResource("3_6yv1j")
+character_id = "panda"
+emotion = "sleepy"
+text_zh = "米洛，安靜一點……Zzz……你要是吵醒埃德，他會在早餐前把我們捏扁。"
+text_en = "Milo, be quiet... Zzz... If you wake Ed up, he'll crush us before breakfast."
+
+[sub_resource type="Resource" id="Resource_stage1_intro_dragon_shark_up"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+emotion = "happy"
+position = "right"
+text_zh = "喔，埃德早就醒了。"
+text_en = "Oh, Ed is already up."
+
+[sub_resource type="Resource" id="Resource_stage1_intro_pullup_narration"]
+script = ExtResource("3_6yv1j")
+text_zh = "埃德掛在門框上，冷靜地做著引體向上，彷彿這只是再普通不過的早晨。"
+text_en = "Ed hangs from the door frame, calmly doing pull-ups like this is a normal morning."
+
+[sub_resource type="Resource" id="Resource_stage1_intro_shark_pullup"]
 script = ExtResource("3_6yv1j")
 character_id = "shark"
-position = "right"
-text_zh = "……那是你個人的事。別打斷上課。"
-text_en = "...That's your own business. Don't interrupt the lesson."
+text_zh = "早，阿潘。四十七……四十八……"
+text_en = "Morning, Pan. Forty-seven... forty-eight..."
 action = "enter"
 
-[sub_resource type="Resource" id="Resource_5oni6"]
+[sub_resource type="Resource" id="Resource_stage1_intro_panda_ed_too"]
 script = ExtResource("3_6yv1j")
 character_id = "panda"
-position = "right"
-text_zh = "鯊鯊只是說話直接一點嘛～其實他是為了讓大家認真上課哦。"
-text_en = "Shark just sounds blunt—he only says it because he wants everyone to take class seriously."
+emotion = "sleepy"
+text_zh = "啊...?! 埃德你也?!"
+text_en = "Ah...?! Ed, you too?!"
 
-[sub_resource type="Resource" id="Resource_et6yt"]
-script = ExtResource("3_6yv1j")
-character_id = "husky"
-text_zh = "元素之間存在相剋關係。火焚草、草吸水、水滅火。記住這些，戰場上會救你一命。"
-text_en = "Elements counter each other — Fire burns Leaf, Leaf absorbs Water, Water douses Fire. Remember this."
-
-[sub_resource type="Resource" id="Resource_f0mht"]
-script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "所以水剋草、草剋火、火剋水？！對嗎老師！我答對了嗎！"
-text_en = "So Water beats Leaf, Leaf beats Fire, Fire beats Water?! Right?! Did I get it right, Professor?!"
-
-[sub_resource type="Resource" id="Resource_4g8bb"]
+[sub_resource type="Resource" id="Resource_stage1_intro_shark_morning"]
 script = ExtResource("3_6yv1j")
 character_id = "shark"
-position = "right"
-text_zh = "完全反過來。"
-text_en = "You got it completely backwards."
+text_zh = "一日之計在於晨，阿潘，你也該好好利用早晨的時間。"
+text_en = "Morning, Pan. Make good use of the morning too."
+action = "enter"
 
-[sub_resource type="Resource" id="Resource_pqxqm"]
-script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "啊！？"
-text_en = "Huh?!"
-
-[sub_resource type="Resource" id="Resource_fitqk"]
+[sub_resource type="Resource" id="Resource_stage1_intro_panda_outvoted"]
 script = ExtResource("3_6yv1j")
 character_id = "panda"
-position = "right"
-text_zh = "老師剛才說過哦～火焚草，所以火剛草。小龍一定是太興奮了，下次慎慎來就可以了。"
-text_en = "Professor said it just now—fire burns leaf, so fire beats leaf. Dragon was just too excited; take it slow next time and you'll get it."
+emotion = "sleepy"
+text_zh = "好吧，二對一。"
+text_en = "Alright, two against one."
 
-[sub_resource type="Resource" id="Resource_yi8km"]
+[sub_resource type="Resource" id="Resource_stage1_intro_dragon_go"]
 script = ExtResource("3_6yv1j")
 character_id = "dragon"
+emotion = "excited"
 position = "right"
-text_zh = "喔喔喔！！對！！我早就知道了！！"
-text_en = "Ohhhh!! Right!! I knew that all along!!"
+text_zh = "好耶！！我們快走吧！"
+text_en = "Yay!! Let's go!"
 
-[sub_resource type="Resource" id="Resource_qfcwp"]
-script = ExtResource("3_6yv1j")
-character_id = "shark"
-position = "right"
-text_zh = "（嘆氣）"
-text_en = "(sighs)"
-
-[sub_resource type="Resource" id="Resource_xmigc"]
-script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "老師老師！那「光」元素呢？"
-text_en = "Professor, professor! What about the 'Light' element?"
-
-[sub_resource type="Resource" id="Resource_yj5ux"]
-script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "光！！光是最強的吧！！因為光可以照亮黑暗！！"
-text_en = "Light!! Light is definitely the strongest!! Because light shines through darkness!!"
-
-[sub_resource type="Resource" id="Resource_033xj"]
-script = ExtResource("3_6yv1j")
-character_id = "shark"
-position = "right"
-text_zh = "……目前沒有已知的剋制元素。這不等於「最強」，只是尚未解明。"
-text_en = "...There is currently no known counter element. That does not mean 'strongest.' It means unexplained."
-
-[sub_resource type="Resource" id="Resource_6if1r"]
+[sub_resource type="Resource" id="Resource_stage1_intro_panda_breakfast"]
 script = ExtResource("3_6yv1j")
 character_id = "panda"
-position = "right"
-text_zh = "老師的表情⋯⋯看起來有點難過。是不是勾起了什麼難過的回憶呢？"
-text_en = "Professor's expression... looks a little sad. Did something painful come back to him?"
+emotion = "sleepy"
+text_zh = "慢一點，我還沒吃早餐..."
+text_en = "Slow down, I haven't had breakfast..."
 
-[sub_resource type="Resource" id="Resource_ubk7d"]
-script = ExtResource("3_6yv1j")
-character_id = "husky"
-text_zh = "⋯⋯"
-text_en = "..."
-
-[sub_resource type="Resource" id="Resource_k41va"]
-script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "老師你沒事吧！！臉色好白！！"
-text_en = "Professor, are you okay?! Your face went pale!!"
-
-[sub_resource type="Resource" id="Resource_idwy2"]
-script = ExtResource("3_6yv1j")
-character_id = "husky"
-text_zh = "⋯⋯我沒事。"
-text_en = "...I'm fine."
-
-[sub_resource type="Resource" id="Resource_5j6eb"]
-script = ExtResource("3_6yv1j")
-character_id = "husky"
-text_zh = "好了。今天是你們第一堂實戰課。前往指定地點，消滅出沒的魔物。"
-text_en = "Anyway, that's enough. Today is your first practical combat lesson. Proceed to the designated area and eliminate the monsters."
-
-[sub_resource type="Resource" id="Resource_udkyh"]
-script = ExtResource("3_6yv1j")
-character_id = "dragon"
-position = "right"
-text_zh = "耶耶耶！！終於可以打架了！！衝啊！！"
-text_en = "YES YES YES!! Finally we get to fight!! CHARGE!!"
-
-[sub_resource type="Resource" id="Resource_03d32"]
-script = ExtResource("3_6yv1j")
-character_id = "shark"
-position = "right"
-text_zh = "……先等隊形好嗎。"
-text_en = "...Can you wait for formation first?"
-
-[sub_resource type="Resource" id="Resource_ccp7f"]
+[sub_resource type="Resource" id="Resource_fsca4"]
 script = ExtResource("3_6yv1j")
 character_id = "panda"
-position = "right"
-text_zh = "我跟在大家身後好好支援，請放心快去吧～"
-text_en = "I'll stay close behind and keep you all supported—go on, don't worry about me."
+action = "exit"
+shake = false
 
-[sub_resource type="Resource" id="Resource_ogy0i"]
+[sub_resource type="Resource" id="Resource_fjo77"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+action = "exit"
+shake = false
+
+[sub_resource type="Resource" id="Resource_6yv1j"]
+script = ExtResource("3_6yv1j")
+character_id = "shark"
+action = "exit"
+shake = false
+
+[sub_resource type="Resource" id="Resource_tq0q5"]
+script = ExtResource("3_6yv1j")
+text_zh = "這就樣, 米洛, 阿潘, 埃德踏上了作為冒險者的征途。"
+
+[sub_resource type="Resource" id="Resource_stage1_intro_new"]
 script = ExtResource("5_vmepe")
-lines = Array[ExtResource("3_6yv1j")]([SubResource("Resource_smhwd"), SubResource("Resource_jg7yr"), SubResource("Resource_lyr6i"), SubResource("Resource_piard"), SubResource("Resource_5oni6"), SubResource("Resource_et6yt"), SubResource("Resource_f0mht"), SubResource("Resource_4g8bb"), SubResource("Resource_pqxqm"), SubResource("Resource_fitqk"), SubResource("Resource_yi8km"), SubResource("Resource_qfcwp"), SubResource("Resource_xmigc"), SubResource("Resource_yj5ux"), SubResource("Resource_033xj"), SubResource("Resource_6if1r"), SubResource("Resource_ubk7d"), SubResource("Resource_k41va"), SubResource("Resource_idwy2"), SubResource("Resource_5j6eb"), SubResource("Resource_udkyh"), SubResource("Resource_03d32"), SubResource("Resource_ccp7f")])
-cast = Array[String](["husky", "dragon", "shark", "panda"])
-background = ExtResource("2_fjo77")
+lines = Array[ExtResource("3_6yv1j")]([SubResource("Resource_stage1_intro_morning"), SubResource("Resource_stage1_intro_dragon_wakeup"), SubResource("Resource_stage1_intro_panda_waking"), SubResource("Resource_stage1_intro_dragon_graduate"), SubResource("Resource_stage1_intro_panda_sleepy"), SubResource("Resource_stage1_intro_dragon_shark_up"), SubResource("Resource_stage1_intro_pullup_narration"), SubResource("Resource_stage1_intro_shark_pullup"), SubResource("Resource_stage1_intro_panda_ed_too"), SubResource("Resource_stage1_intro_shark_morning"), SubResource("Resource_stage1_intro_panda_outvoted"), SubResource("Resource_stage1_intro_dragon_go"), SubResource("Resource_stage1_intro_panda_breakfast"), SubResource("Resource_fsca4"), SubResource("Resource_fjo77"), SubResource("Resource_6yv1j"), SubResource("Resource_tq0q5")])
+cast = Array[String](["dragon", "shark", "panda"])
+background = ExtResource("2_fsca4")
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")
@@ -271,12 +227,12 @@ stage_name = "1-1 畢業測驗"
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "school"
 rounds = Array[Array]([[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]])
-rounds_init_cd = Array[Array]([[3], [3, 3], [2, 3, 1], [2]])
+rounds_init_cd = Array[Array]([[0], [0, 0], [2, 3, 1], [0]])
 rounds_enemy_levels = Array[Array]([[3], [3, 3], [3, 3, 3], [4]])
 rounds_main_bosses = Array[Array]([[false], [false, false], [false, false, false], [true]])
 background = 1
 bgm = ExtResource("1_lvgyu")
-pre_dialog = SubResource("Resource_ogy0i")
+pre_dialog = SubResource("Resource_stage1_intro_new")
 is_tutorial = true
 set_party = Array[ExtResource("7_jsm3v")]([ExtResource("13_7x61u"), ExtResource("14_epvkr"), ExtResource("15_wrajf")])
 fixed_layout = [[0, 0, 0, 0, 0, 0, 0, 6], [1, 1, 6, 6, 6, 6, 0, 6], [1, 1, 6, 6, 2, 0, 0, 6], [1, 6, 1, 6, 0, 0, 1, 0], [2, 1, 1, 1, 2, 2, 6, 1], [2, 1, 1, 6, 2, 1, 6, 6], [6, 1, 6, 6, 0, 0, 6, 6], [6, 2, 2, 6, 6, 6, 6, 2]]

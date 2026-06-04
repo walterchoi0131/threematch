@@ -7,9 +7,8 @@
 [ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="5_blue"]
 [ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_loot"]
 [ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_char"]
-[ext_resource type="Resource" uid="uid://cykw4g8khj6rr" path="res://characters/char_shark.tres" id="8_shark"]
-[ext_resource type="Resource" uid="uid://bdbktexrnd1lj" path="res://characters/char_panda.tres" id="9_panda"]
-[ext_resource type="Resource" uid="uid://bgttaela65j0m" path="res://characters/char_dragon.tres" id="10_dragon"]
+[ext_resource type="Resource" uid="uid://wm6c808lekeg" path="res://characters/char_shark.tres" id="8_shark"]
+[ext_resource type="Resource" uid="uid://dqg51vowqc4vw" path="res://characters/char_dragon.tres" id="10_dragon"]
 [ext_resource type="Resource" uid="uid://p6qx5pm80cmm" path="res://characters/char_husky.tres" id="11_husky"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="12_gory"]
 
@@ -54,7 +53,6 @@ script = ExtResource("2_stage")
 stage_id = "6x6-4C"
 connects_to = Array[String](["7x7-4C"])
 stage_name = "Research 6x6 / 4 Colors"
-area = "ruin"
 allowed_types = Array[int]([0, 1, 2, 6])
 columns = 6
 rows = 6

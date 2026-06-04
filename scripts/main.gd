@@ -3877,7 +3877,7 @@ func _end_player_turn() -> void:
 
 const PORCUPINE_POWER: float = 0.5  # 豪豬攻擊：全隊魔力 × 0.5
 const TURTLE_POWER: float = 0.8     # 烏龜回血：全隊魔力 × 0.8
-const BAMBOO_SUPPLY_HEAL_MULT: float = 4.8  # 竹葉補給回血：Panda 魔力 × 4.8
+const BAMBOO_SUPPLY_HEAL_MULT: float = 4.8  # 竹葉補給回血：Pan 魔力 × 4.8
 
 
 ## 在玩家回合結束、敵人行動之前：讓所有場上的召喚物（豪豬/烏龜）行動一次。
@@ -4564,11 +4564,11 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 		_play_chain_sfx(_live_chain_count)
 	match upper_type:
 		Block.UpperType.LEAF_SHIELD:
-			# 葉盾：治療 Panda ATK × 5
+			# 葉盾：治療 Pan ATK × 5
 			var panda_data: CharacterData = null
 			var panda_index := -1
 			for i in party.size():
-				if party[i].character_name == "Panda":
+				if party[i].character_name == "Pan":
 					panda_data = party[i]
 					panda_index = i
 					break
@@ -4582,11 +4582,11 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 			# 聖十字：標記需要在結算時執行聖十字效果
 			_pending_saint_cross_count += 1
 		Block.UpperType.BAMBOO_SUPPLY:
-			# 竹葉補給：治療 Panda magic × BAMBOO_SUPPLY_HEAL_MULT
+			# 竹葉補給：治療 Pan magic × BAMBOO_SUPPLY_HEAL_MULT
 			var panda_data2: CharacterData = null
 			var panda_index2 := -1
 			for i in party.size():
-				if party[i].character_name == "Panda":
+				if party[i].character_name == "Pan":
 					panda_data2 = party[i]
 					panda_index2 = i
 					break
@@ -5385,10 +5385,10 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 			battle_manager.apply_player_damage(reduced_damage)
 			_spawn_damage_number(shield_global, reduced_damage, Color(1.0, 0.3, 0.3))
 			_play_sfx(_se_impact)
-			# 找到 Panda 角色用於日誌
+			# 找到 Pan 角色用於日誌
 			var panda_data: CharacterData = null
 			for i in party.size():
-				if party[i].character_name == "Panda":
+				if party[i].character_name == "Pan":
 					panda_data = party[i]
 					break
 			_add_log_entry("[b]葉盾[/b] 擋下攻擊！%d → %d" % [damage, reduced_damage], Block.Type.GREEN, panda_data)

@@ -36,7 +36,7 @@ static func make_post_dialog() -> Array:
 	return [
 		_line("panda", "normal",
 			"哇——！龍哥好厲害！木板一下就被燒掉了！",
-			"Wow—! Dragon, you're amazing! The planks burned right up!"),
+			"Wow—! Milo, you're amazing! The planks burned right up!"),
 		_line("dragon", "normal",
 			"沒、沒什麼啦……",
 			"I-it's nothing…"),

@@ -3,12 +3,12 @@
 [ext_resource type="Script" uid="uid://xo704l56k5e4" path="res://scripts/map.gd" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://b565j307xwlbt" path="res://assets/background/worldmap.png" id="2_worldmap"]
 [ext_resource type="PackedScene" uid="uid://b8t3xq4mn5lvr" path="res://scenes/stage_button.tscn" id="3_stagebtn"]
-[ext_resource type="Resource" uid="uid://dyafoiu2m3dke" path="res://stages/stage_dev.tres" id="4_stage_1_1"]
-[ext_resource type="Resource" uid="uid://b5xw1nv2s4tg2" path="res://stages/stage_1_2.tres" id="5_stage_1_2"]
-[ext_resource type="Resource" uid="uid://cm3p2rt5q8nv1" path="res://stages/stage_1_3.tres" id="6_stage_1_3"]
+[ext_resource type="Resource" path="res://stages/stage_dev.tres" id="4_stage_1_1"]
+[ext_resource type="Resource" path="res://stages/stage_1_2.tres" id="5_stage_1_2"]
+[ext_resource type="Resource" path="res://stages/stage_1_3.tres" id="6_stage_1_3"]
 [ext_resource type="Resource" uid="uid://cg0cxhhwwyvnk" path="res://stages/stage_1_4.tres" id="7_stage_1_4"]
 [ext_resource type="Resource" uid="uid://dq8x1t5n3p7bv" path="res://stages/stage_1_5.tres" id="8_stage_1_5"]
-[ext_resource type="Resource" path="res://stages/stage_board_5x5_3c.tres" id="9_board_5x5_3c"]
+[ext_resource type="Resource" uid="uid://deymcgf4txtoq" path="res://stages/stage_board_5x5_3c.tres" id="9_board_5x5_3c"]
 [ext_resource type="Resource" uid="uid://br26x6fourclr" path="res://stages/stage_board_6x6_4c.tres" id="10_board_6x6_4c"]
 [ext_resource type="Resource" uid="uid://br27x7fourclr" path="res://stages/stage_board_7x7_4c.tres" id="11_board_7x7_4c"]
 [ext_resource type="Resource" uid="uid://br28x8fiveclr" path="res://stages/stage_board_8x8_5c.tres" id="12_board_8x8_5c"]
@@ -51,6 +51,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 1
 
 [node name="Stage1_1" parent="UILayer/Pages/MapPage" unique_id=204662907 instance=ExtResource("3_stagebtn")]

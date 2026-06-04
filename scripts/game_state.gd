@@ -302,11 +302,7 @@ func try_upgrade_skill(character: CharacterData, kind: String, skill_index: int 
 func _ready() -> void:
 	owned_characters.clear()
 
-	# 為關卡設定對話（程式碼建構）
 	var _stage_dev: StageData = preload("res://stages/stage_dev.tres")
-	var _Stage1Intro := preload("res://dialogs/stage1_intro.gd")
-	if _stage_dev.pre_dialog == null:
-		_stage_dev.pre_dialog = _Stage1Intro.make()
 
 	# 設定教學模式與固定棋盤佈局
 	_stage_dev.is_tutorial = true

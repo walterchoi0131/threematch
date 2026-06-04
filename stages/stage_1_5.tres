@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
 [ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
 [ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Resource" path="res://enemies/bone_wizard.tres" id="6_bonewizard"]
+[ext_resource type="Resource" uid="uid://b36ybo223i810" path="res://enemies/bone_wizard.tres" id="6_bonewizard"]
 [ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_76jdj"]
 
 [sub_resource type="Resource" id="gold_loot_shared"]
@@ -64,7 +64,6 @@ script = ExtResource("1_script")
 stage_id = "1-5"
 prerequisite_stage_id = "1-4"
 stage_name = "Stage 1-5 (Dark Test)"
-area = "ruin"
 allowed_types = Array[int]([0, 1, 2, 7])
 rounds = Array[Array]([[ExtResource("6_bonewizard"), ExtResource("6_bonewizard")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
 rounds_init_cd = Array[Array]([[1, 2], [], []])

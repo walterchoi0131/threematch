@@ -27,9 +27,9 @@ const CHAR_NAMES := {
 	"polar":   { "zh": "白熊",       "en": "Polar" },
 	"raccoon": { "zh": "小浣",       "en": "Raccoon" },
 	"boar":    { "zh": "山豬",       "en": "Boar" },
-	"panda":   { "zh": "熊貓",       "en": "Panda" },
-	"dragon":  { "zh": "小龍",       "en": "Dragon" },
-	"shark":   { "zh": "鯊鯊",       "en": "Shark" },
+	"panda":   { "zh": "阿潘",       "en": "Pan" },
+	"dragon":  { "zh": "米洛",       "en": "Milo" },
+	"shark":   { "zh": "埃德",       "en": "Ed" },
 	"polarz":  { "zh": "極極",       "en": "Polarz" },
 }
 
@@ -320,7 +320,8 @@ func _find_character_data(char_id: String) -> CharacterData:
 	for entry in catalog:
 		if entry is CharacterData:
 			var c: CharacterData = entry as CharacterData
-			if c.character_name.to_lower() == lower:
+			var path_id := c.resource_path.get_file().get_basename().trim_prefix("char_").to_lower()
+			if path_id == lower or c.character_name.to_lower() == lower:
 				return c
 	return null
 
