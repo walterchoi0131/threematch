@@ -896,6 +896,20 @@ func _stage_editor_dialog_background_display_name(resource_path: String) -> Stri
 	return file_base.replace("_", " ").capitalize()
 
 
+func _stage_editor_populate_dialog_background_selector(option: OptionButton, selected_path: String, placeholder: String = "switchBG") -> void:
+	option.clear()
+	_stage_editor_add_option_item(option, placeholder, "")
+	for entry: Dictionary in _stage_editor_dialog_background_catalog:
+		_stage_editor_add_option_item(option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
+	_stage_editor_select_option_value(option, selected_path)
+
+
+func _stage_editor_dialog_line_background_path(line: DialogLine) -> String:
+	if line == null or line.background == null:
+		return ""
+	return line.background.resource_path
+
+
 func _stage_editor_character_id_from_path(resource_path: String) -> String:
 	var file_base: String = resource_path.get_file().get_basename()
 	if file_base.begins_with("char_"):
@@ -976,6 +990,7 @@ func _stage_editor_copy_dialog_line(source: DialogLine) -> DialogLine:
 	line.action = source.action
 	line.shake = source.shake
 	line.music = source.music
+	line.background = source.background
 	return line
 
 
@@ -1086,6 +1101,10 @@ func _refresh_stage_editor_dialog_line_list() -> void:
 
 
 func _stage_editor_make_dialog_add_row() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var button := Button.new()
 	button.text = "+"
 	button.focus_mode = Control.FOCUS_NONE
@@ -1097,7 +1116,16 @@ func _stage_editor_make_dialog_add_row() -> Control:
 		Callable(self, "_stage_editor_no_drag_data"),
 		Callable(self, "_stage_editor_can_drop_on_dialog_add_row"),
 		Callable(self, "_stage_editor_drop_on_dialog_add_row"))
-	return button
+	row.add_child(button)
+
+	var switch_bg_option := OptionButton.new()
+	switch_bg_option.focus_mode = Control.FOCUS_NONE
+	switch_bg_option.custom_minimum_size = Vector2(180, 38)
+	_stage_editor_populate_dialog_background_selector(switch_bg_option, "", "switchBG")
+	switch_bg_option.item_selected.connect(_on_stage_editor_dialog_add_switch_bg_selected.bind(switch_bg_option))
+	row.add_child(switch_bg_option)
+
+	return row
 
 
 func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: DialogSequence) -> Control:
@@ -1145,6 +1173,53 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	number_label.add_theme_font_size_override("font_size", 12)
 	number_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	controls.add_child(number_label)
+
+	if _stage_editor_dialog_line_is_switch_bg(line):
+		var event_label := Label.new()
+		event_label.text = "Switch BG"
+		event_label.custom_minimum_size = Vector2(110, 30)
+		event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		event_label.add_theme_font_size_override("font_size", 13)
+		event_label.add_theme_color_override("font_color", Color(0.95, 0.95, 1.0, 1.0))
+		controls.add_child(event_label)
+
+		var bg_option := OptionButton.new()
+		bg_option.focus_mode = Control.FOCUS_NONE
+		bg_option.custom_minimum_size = Vector2(190, 30)
+		_stage_editor_populate_dialog_background_selector(bg_option, _stage_editor_dialog_line_background_path(line), "BG")
+		bg_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bg_selected.bind(line_index, bg_option))
+		_stage_editor_forward_dialog_row_drop(bg_option, line_index)
+		controls.add_child(bg_option)
+
+		var event_spacer := Control.new()
+		event_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		controls.add_child(event_spacer)
+
+		controls.add_child(_make_stage_editor_small_button("Dup", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(44, 30)))
+		controls.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(42, 30)))
+
+		var event_row := HBoxContainer.new()
+		event_row.add_theme_constant_override("separation", 6)
+		row_box.add_child(event_row)
+
+		var indicator := Label.new()
+		indicator.text = "BG"
+		indicator.custom_minimum_size = Vector2(64, 42)
+		indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		indicator.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		indicator.add_theme_font_size_override("font_size", 14)
+		indicator.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+		event_row.add_child(indicator)
+
+		var description := Label.new()
+		var bg_path: String = _stage_editor_dialog_line_background_path(line)
+		description.text = "Fade switch to %s" % [_stage_editor_dialog_background_display_name(bg_path) if not bg_path.is_empty() else "None"]
+		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		description.add_theme_font_size_override("font_size", 13)
+		description.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+		event_row.add_child(description)
+		return panel
 
 	var speaker_option := OptionButton.new()
 	speaker_option.focus_mode = Control.FOCUS_NONE
@@ -1264,6 +1339,10 @@ func _stage_editor_character_portrait_texture(char_id: String) -> Texture2D:
 
 func _stage_editor_dialog_line_is_exit(line: DialogLine) -> bool:
 	return line != null and line.action == "exit"
+
+
+func _stage_editor_dialog_line_is_switch_bg(line: DialogLine) -> bool:
+	return line != null and line.action == "switch_bg"
 
 
 func _stage_editor_make_row_text_edit(text_value: String, placeholder: String) -> TextEdit:
@@ -1391,6 +1470,8 @@ func _stage_editor_get_row_drag_data(_at_position: Vector2, source_control: Cont
 	if line == null:
 		return null
 	var label_text: String = "%02d %s" % [line_index + 1, _stage_editor_character_display_name(line.character_id)]
+	if _stage_editor_dialog_line_is_switch_bg(line):
+		label_text = "%02d Switch BG" % [line_index + 1]
 	source_control.set_drag_preview(_stage_editor_make_drag_preview(label_text, _stage_editor_character_portrait_texture(line.character_id)))
 	return {"type": "dialog_row", "line_index": line_index}
 
@@ -1436,6 +1517,8 @@ func _stage_editor_drop_on_dialog_row(_at_position: Vector2, data: Variant, targ
 	var drag_data: Dictionary = data
 	var drag_type: String = String(drag_data.get("type", ""))
 	if drag_type == "cast_character":
+		if _stage_editor_dialog_line_is_switch_bg(_stage_editor_get_dialog_line_at(target_index)):
+			return
 		_stage_editor_set_dialog_line_character(target_index, String(drag_data.get("char_id", "")))
 	elif drag_type == "dialog_row":
 		_stage_editor_reorder_dialog_line(int(drag_data.get("line_index", -1)), target_index)
@@ -1502,6 +1585,30 @@ func _stage_editor_add_dialog_line_for_character(char_id: String) -> void:
 	_refresh_stage_editor_dialog_editor()
 
 
+func _stage_editor_add_switch_bg_line(resource_path: String) -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or resource_path.is_empty():
+		return
+	var texture: Texture2D = load(resource_path) as Texture2D
+	if texture == null:
+		return
+	var line := DialogLine.new()
+	line.character_id = ""
+	line.emotion = "normal"
+	line.position = "left"
+	line.text_zh = ""
+	line.text_en = ""
+	line.action = "switch_bg"
+	line.shake = false
+	line.background = texture
+	var insert_index: int = sequence.lines.size()
+	if _stage_editor_dialog_selected_index >= 0 and _stage_editor_dialog_selected_index < sequence.lines.size():
+		insert_index = _stage_editor_dialog_selected_index + 1
+	sequence.lines.insert(insert_index, line)
+	_stage_editor_dialog_selected_index = insert_index
+	_refresh_stage_editor_dialog_editor()
+
+
 func _stage_editor_reorder_dialog_line(source_index: int, target_index: int) -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
 	if sequence == null:
@@ -1553,6 +1660,28 @@ func _on_stage_editor_dialog_background_selected(_item_index: int) -> void:
 		return
 	var texture: Texture2D = load(resource_path) as Texture2D
 	sequence.background = texture
+
+
+func _on_stage_editor_dialog_add_switch_bg_selected(_item_index: int, option: OptionButton) -> void:
+	var resource_path: String = _stage_editor_get_option_value(option)
+	_stage_editor_select_option_value(option, "")
+	if resource_path.is_empty():
+		return
+	_stage_editor_add_switch_bg_line(resource_path)
+
+
+func _on_stage_editor_dialog_row_switch_bg_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line == null:
+		return
+	var resource_path: String = _stage_editor_get_option_value(option)
+	if resource_path.is_empty():
+		return
+	var texture: Texture2D = load(resource_path) as Texture2D
+	if texture == null:
+		return
+	line.background = texture
+	_refresh_stage_editor_dialog_line_list()
 
 
 func _on_stage_editor_dialog_exit_side_toggled(button_pressed: bool) -> void:

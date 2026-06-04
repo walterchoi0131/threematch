@@ -40,6 +40,7 @@ const SKIP_FONT_SIZE := 20
 
 # 音樂淡入淡出
 const BGM_FADE_DUR := 0.8
+const BG_SWITCH_FADE_DUR := 0.18
 
 # Skip 自動推進
 const SKIP_INTERVAL := 0.1
@@ -89,7 +90,9 @@ var _preview_mode: bool = false
 var _finish_with_fade: bool = false
 var _start_with_fade: bool = false
 var _typing: bool = false
+var _event_transitioning: bool = false
 var _type_tween: Tween = null
+var _bg_switch_tween: Tween = null
 var _texture_cache: Dictionary = {}  # path -> Texture2D
 var _auto_skipping: bool = false
 var _skip_timer: Timer = null
@@ -118,6 +121,7 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 	_preview_mode = preview_mode
 	_finish_with_fade = finish_with_fade
 	_start_with_fade = start_with_fade
+	_event_transitioning = false
 	_line_index = -1
 	_left_char_id = ""
 	_right_char_id = ""
@@ -134,18 +138,43 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 	_portrait_right.visible = false
 
 	# 設定背景圖
-	if sequence.background != null:
-		_bg_rect.texture = sequence.background
-		_bg_rect.visible = true
-		_bg_color.visible = false
-	else:
-		_bg_rect.visible = false
-		_bg_color.visible = true
+	_set_background_texture(sequence.background)
 
 	if _start_with_fade:
 		_play_start_fade_in()
 
 	_advance()
+
+
+func switch_background(texture: Texture2D, animated: bool = true) -> void:
+	if _bg_rect == null or _bg_color == null:
+		return
+	if _bg_switch_tween != null and _bg_switch_tween.is_valid():
+		_bg_switch_tween.kill()
+	if not animated:
+		_set_background_texture(texture)
+		return
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.z_index = 120
+	add_child(overlay)
+	_bg_switch_tween = create_tween()
+	_bg_switch_tween.tween_property(overlay, "color:a", 1.0, BG_SWITCH_FADE_DUR)
+	_bg_switch_tween.tween_callback(Callable(self, "_set_background_texture").bind(texture))
+	_bg_switch_tween.tween_property(overlay, "color:a", 0.0, BG_SWITCH_FADE_DUR)
+	_bg_switch_tween.tween_callback(overlay.queue_free)
+
+
+func _set_background_texture(texture: Texture2D) -> void:
+	if texture != null:
+		_bg_rect.texture = texture
+		_bg_rect.visible = true
+		_bg_color.visible = false
+	else:
+		_bg_rect.visible = false
+		_bg_color.visible = true
 
 
 func _play_start_fade_in() -> void:
@@ -339,6 +368,8 @@ func _build_ui() -> void:
 # ── 對話推進 ─────────────────────────────────────────────────
 
 func _advance() -> void:
+	if _event_transitioning:
+		return
 	# 若正在打字 → 立即全顯
 	if _typing:
 		_finish_typing()
@@ -380,6 +411,20 @@ func _show_line(line: _DialogLine) -> void:
 	var side: String = _normalize_dialog_side(line.position)
 
 	# ── 音樂切換 ──
+	if line.action == "switch_bg":
+		_name_label.text = ""
+		_text_label.text = ""
+		_text_label.visible_ratio = 1.0
+		_typing = false
+		_event_transitioning = true
+		switch_background(line.background, true)
+		get_tree().create_timer(BG_SWITCH_FADE_DUR * 2.0).timeout.connect(func() -> void:
+			if is_inside_tree():
+				_event_transitioning = false
+				_advance()
+		, CONNECT_ONE_SHOT)
+		return
+
 	if line.music != null:
 		_change_bgm(line.music)
 

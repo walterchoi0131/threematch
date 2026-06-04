@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
 [ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
 [ext_resource type="AudioStream" path="res://assets/music/Wild Arms 2 - The Town to the Western Winds.mp3" id="4_tq0q5"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_classroom.png" id="5_fjo77"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="7_jsm3v"]
@@ -131,9 +132,20 @@ shake = false
 script = ExtResource("3_6yv1j")
 text_zh = "這就樣, 米洛, 阿潘, 埃德踏上了作為冒險者的征途。"
 
+[sub_resource type="Resource" id="Resource_vmepe"]
+script = ExtResource("3_6yv1j")
+action = "switch_bg"
+shake = false
+background = ExtResource("5_fjo77")
+
+[sub_resource type="Resource" id="Resource_o6cdy"]
+script = ExtResource("3_6yv1j")
+character_id = "dragon"
+text_zh = "哈!"
+
 [sub_resource type="Resource" id="Resource_stage1_intro_new"]
 script = ExtResource("5_vmepe")
-lines = Array[ExtResource("3_6yv1j")]([SubResource("Resource_stage1_intro_morning"), SubResource("Resource_stage1_intro_dragon_wakeup"), SubResource("Resource_stage1_intro_panda_waking"), SubResource("Resource_stage1_intro_dragon_graduate"), SubResource("Resource_stage1_intro_panda_sleepy"), SubResource("Resource_stage1_intro_dragon_shark_up"), SubResource("Resource_stage1_intro_pullup_narration"), SubResource("Resource_stage1_intro_shark_pullup"), SubResource("Resource_stage1_intro_panda_ed_too"), SubResource("Resource_stage1_intro_shark_morning"), SubResource("Resource_stage1_intro_panda_outvoted"), SubResource("Resource_stage1_intro_dragon_go"), SubResource("Resource_stage1_intro_panda_breakfast"), SubResource("Resource_fsca4"), SubResource("Resource_fjo77"), SubResource("Resource_6yv1j"), SubResource("Resource_tq0q5")])
+lines = Array[ExtResource("3_6yv1j")]([SubResource("Resource_stage1_intro_morning"), SubResource("Resource_stage1_intro_dragon_wakeup"), SubResource("Resource_stage1_intro_panda_waking"), SubResource("Resource_stage1_intro_dragon_graduate"), SubResource("Resource_stage1_intro_panda_sleepy"), SubResource("Resource_stage1_intro_dragon_shark_up"), SubResource("Resource_stage1_intro_pullup_narration"), SubResource("Resource_stage1_intro_shark_pullup"), SubResource("Resource_stage1_intro_panda_ed_too"), SubResource("Resource_stage1_intro_shark_morning"), SubResource("Resource_stage1_intro_panda_outvoted"), SubResource("Resource_stage1_intro_dragon_go"), SubResource("Resource_stage1_intro_panda_breakfast"), SubResource("Resource_fsca4"), SubResource("Resource_fjo77"), SubResource("Resource_6yv1j"), SubResource("Resource_tq0q5"), SubResource("Resource_vmepe"), SubResource("Resource_o6cdy")])
 cast = Array[String](["dragon", "shark", "panda"])
 background = ExtResource("2_fsca4")
 
