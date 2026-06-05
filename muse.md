@@ -34,3 +34,7 @@ Active Snowball Attack
 Small polar
 Active Spreading Water gems
 Fuse small snowball
+
+建築: 每回發動效果
+精煉: 可以合成後繼續合成疊加效果
+咒語: 合成時立即發動
