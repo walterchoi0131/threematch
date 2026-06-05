@@ -98,6 +98,10 @@ var _longpress_active: bool = false        # 長按預覽是否已顯示
 var _longpress_overlays: Array[Node] = []  # 爆炸範圍高亮覆蓋層
 var _longpress_dim_tween: Tween = null     # 暗化/還原動畫 tween
 var _longpress_initial_tween: Tween = null # 初始爆炸色層循環動畫 tween
+var _longpress_press_tween: Tween = null   # 長按預覽時 upper gem 的按壓/放開動畫
+var _longpress_press_block: Block = null
+var _longpress_press_original_scale: Vector2 = Vector2.ONE
+var _longpress_press_original_position: Vector2 = Vector2.ZERO
 var _longpress_raised_blocks: Array[Block] = []  # 預覽時被抬高 z_index 的方塊
 
 # ── 教學系統 ──
@@ -3231,9 +3235,22 @@ const PREVIEW_BLOCK_Z := 8     # 受影響方塊在預覽時的 z_index（高於
 const PREVIEW_BORDER_Z := 9    # 邊框覆蓋層 z_index
 const PREVIEW_INITIAL_OVERLAY_Z := 10  # 初始爆炸半透明色層（蓋在受影響寶石上方）
 const PREVIEW_INITIAL_ALPHA_MAX := 0.50
-const PREVIEW_INITIAL_ALPHA_MIN := 0.12
-const PREVIEW_INITIAL_FADE_IN := 0.35
-const PREVIEW_INITIAL_FADE_OUT := 0.55
+const PREVIEW_INITIAL_ALPHA_MIN := 0.0
+const PREVIEW_INITIAL_FADE_IN := 0.22
+const PREVIEW_INITIAL_HOLD := 0.16
+const PREVIEW_INITIAL_FADE_OUT := 0.18
+const PREVIEW_CHAIN_STEP_GAP := 0.05
+const PREVIEW_LOOP_BORDER_WIDTH := 4.0
+const PREVIEW_LOOP_BORDER_ALPHA_MAX := 0.90
+const PREVIEW_LOOP_BORDER_STEP_DUR := 0.018
+const PREVIEW_LOOP_BORDER_HOLD := 0.24
+const PREVIEW_LOOP_BORDER_FADE_OUT := 0.18
+const PREVIEW_PRESS_SCALE := 0.86
+const PREVIEW_PRESS_BOUNCE_SCALE := 1.08
+const PREVIEW_PRESS_DOWN_OFFSET := 4.0
+const PREVIEW_PRESS_DOWN_DUR := 0.08
+const PREVIEW_PRESS_RELEASE_DUR := 0.13
+const PREVIEW_PRESS_SETTLE_DUR := 0.09
 
 ## 計算高階寶石的完整爆炸範圍（含連鏈遞迴）
 ## 回傳 { direct: Array[Vector2i], initial: Array[Vector2i], chain_groups: Array[Dictionary], chain_uppers: Array[Vector2i] }
@@ -3288,21 +3305,31 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 			continue
 		var cpositions: Array[Vector2i] = _get_blast_positions_for_upper(cpos, cut)
 		var group_positions: Array[Vector2i] = []
+		var group_preview_positions: Array[Vector2i] = []
 		for p in cpositions:
-			if p == cpos or direct_blast.has(p) or all_chain.has(p):
+			if not _is_valid(p):
 				continue
-			if _is_valid(p) and grid[p.x][p.y] != null and grid[p.x][p.y].is_rock():
+			if grid[p.x][p.y] != null and grid[p.x][p.y].is_rock():
+				continue
+			if not group_preview_positions.has(p):
+				group_preview_positions.append(p)
+			if p == cpos or direct_blast.has(p) or all_chain.has(p):
 				continue
 			all_chain[p] = true
 			group_positions.append(p)
-			if _is_valid(p) and grid[p.x][p.y] != null:
+			if grid[p.x][p.y] != null:
 				var b: Block = grid[p.x][p.y]
 				if b.is_upper_gem() and not processed_uppers.has(p):
 					chain_uppers.append(p)
 					processed_uppers[p] = true
 					next_queue.append({"pos": p, "ut": b.upper_type})
-		if group_positions.size() > 0:
-			chain_groups.append({"ut": cut, "positions": group_positions})
+		if group_preview_positions.size() > 0:
+			chain_groups.append({
+				"ut": cut,
+				"positions": group_positions,
+				"preview_positions": group_preview_positions,
+				"trigger_pos": cpos,
+			})
 
 	return {
 		"direct": direct_blast.keys(),
@@ -3370,12 +3397,15 @@ func _calc_water_slash_chain_preview(
 		else:
 			seg_cells = _get_col_positions(sp_i.x)
 		var group_pos: Array[Vector2i] = []
+		var group_preview_pos: Array[Vector2i] = []
 		for c in seg_cells:
 			if not _is_valid(c):
 				continue
 			var b: Block = grid[c.x][c.y]
 			if b != null and b.is_rock():
 				continue
+			if not group_preview_pos.has(c):
+				group_preview_pos.append(c)
 			if mark_initial and i == 0:
 				initial_blast[c] = true
 			if c == seed_pos or visited.has(c):
@@ -3390,8 +3420,13 @@ func _calc_water_slash_chain_preview(
 				processed_uppers[c] = true
 				chain_uppers.append(c)
 				bfs_queue.append({"pos": c, "ut": b.upper_type})
-		if group_pos.size() > 0:
-			groups.append({"ut": Block.UpperType.WATER_SLASH, "positions": group_pos})
+		if group_preview_pos.size() > 0:
+			groups.append({
+				"ut": Block.UpperType.WATER_SLASH,
+				"positions": group_pos,
+				"preview_positions": group_preview_pos,
+				"trigger_pos": sp_i,
+			})
 	return groups
 
 
@@ -3401,6 +3436,7 @@ func _show_blast_preview(pos: Vector2i) -> void:
 	var block: Block = grid[pos.x][pos.y]
 	if block == null or not block.is_upper_gem():
 		return
+	_play_longpress_press_down(block)
 
 	var result: Dictionary = _calc_blast_preview(pos, block.upper_type)
 	var direct: Array = result.direct
@@ -3408,12 +3444,11 @@ func _show_blast_preview(pos: Vector2i) -> void:
 	var chain_groups: Array = result.chain_groups
 	var chain_uppers: Array = result.chain_uppers
 
-	var initial_positions: Array[Vector2i] = []
-	for p in result.initial:
-		var initial_pos: Vector2i = p as Vector2i
-		if not initial_positions.has(initial_pos):
-			initial_positions.append(initial_pos)
-	_add_initial_blast_overlay(initial_positions, Block.COLORS.get(block.block_type, Color.WHITE))
+	var preview_steps: Array[Dictionary] = _build_blast_preview_steps(
+		result,
+		UpperGemDefs.get_preview_color(direct_ut, Block.COLORS.get(block.block_type, Color.WHITE))
+	)
+	_add_initial_blast_overlay(preview_steps)
 
 	# 收集所有不暗化的位置
 	var bright_set: Dictionary = {}
@@ -3453,37 +3488,280 @@ func _show_blast_preview(pos: Vector2i) -> void:
 	blast_preview_entered.emit()
 
 
-func _add_initial_blast_overlay(positions: Array[Vector2i], element_color: Color) -> void:
+func _play_longpress_press_down(block: Block) -> void:
+	_reset_longpress_press_bounce()
+	_longpress_press_block = block
+	_longpress_press_original_scale = block.scale
+	_longpress_press_original_position = block.position
+
+	_longpress_press_tween = create_tween()
+	_longpress_press_tween.tween_property(block, "scale", _longpress_press_original_scale * PREVIEW_PRESS_SCALE, PREVIEW_PRESS_DOWN_DUR) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	_longpress_press_tween.parallel().tween_property(block, "position", _longpress_press_original_position + Vector2(0.0, PREVIEW_PRESS_DOWN_OFFSET), PREVIEW_PRESS_DOWN_DUR) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	_longpress_press_tween.tween_callback(func() -> void:
+		_longpress_press_tween = null
+	)
+
+
+func _play_longpress_release_bounce() -> void:
+	if _longpress_press_tween != null and _longpress_press_tween.is_valid():
+		_longpress_press_tween.kill()
+	_longpress_press_tween = null
+	if not is_instance_valid(_longpress_press_block):
+		_longpress_press_block = null
+		return
+
+	var block := _longpress_press_block
+	_longpress_press_tween = create_tween()
+	_longpress_press_tween.tween_property(block, "scale", _longpress_press_original_scale * PREVIEW_PRESS_BOUNCE_SCALE, PREVIEW_PRESS_RELEASE_DUR) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	_longpress_press_tween.parallel().tween_property(block, "position", _longpress_press_original_position, PREVIEW_PRESS_RELEASE_DUR) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	_longpress_press_tween.tween_property(block, "scale", _longpress_press_original_scale, PREVIEW_PRESS_SETTLE_DUR) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	_longpress_press_tween.tween_callback(func() -> void:
+		if is_instance_valid(block):
+			block.position = _longpress_press_original_position
+			block.scale = _longpress_press_original_scale
+		_longpress_press_tween = null
+		_longpress_press_block = null
+	)
+
+
+func _reset_longpress_press_bounce(restore_transform: bool = true) -> void:
+	if _longpress_press_tween != null and _longpress_press_tween.is_valid():
+		_longpress_press_tween.kill()
+	_longpress_press_tween = null
+	if restore_transform and is_instance_valid(_longpress_press_block):
+		_longpress_press_block.scale = _longpress_press_original_scale
+		_longpress_press_block.position = _longpress_press_original_position
+	_longpress_press_block = null
+
+
+func _build_blast_preview_steps(result: Dictionary, initial_color: Color) -> Array[Dictionary]:
+	var steps: Array[Dictionary] = []
+	var initial_positions: Array[Vector2i] = _unique_preview_positions(result.initial as Array)
+	if not initial_positions.is_empty():
+		steps.append({"positions": initial_positions, "color": initial_color})
+
+	var chain_groups: Array = result.get("chain_groups", []) as Array
+	for group_value in chain_groups:
+		var group: Dictionary = group_value as Dictionary
+		var raw_positions: Array = group.get("preview_positions", group.get("positions", [])) as Array
+		var group_positions: Array[Vector2i] = _unique_preview_positions(raw_positions)
+		if group.has("trigger_pos"):
+			var trigger_pos: Vector2i = group["trigger_pos"] as Vector2i
+			if not group_positions.has(trigger_pos):
+				group_positions.push_front(trigger_pos)
+		if group_positions.is_empty():
+			continue
+		if not steps.is_empty():
+			var previous_step: Dictionary = steps[steps.size() - 1]
+			if _same_preview_positions(previous_step.get("positions", []) as Array, group_positions):
+				continue
+		var ut: Block.UpperType = group.get("ut", Block.UpperType.NONE) as Block.UpperType
+		steps.append({
+			"positions": group_positions,
+			"color": UpperGemDefs.get_preview_color(ut, initial_color),
+		})
+	return steps
+
+
+func _unique_preview_positions(values: Array) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for value in values:
+		var p: Vector2i = value as Vector2i
+		if _is_valid(p) and not result.has(p):
+			result.append(p)
+	return result
+
+
+func _same_preview_positions(left_values: Array, right_values: Array[Vector2i]) -> bool:
+	if left_values.size() != right_values.size():
+		return false
+	for value in left_values:
+		var p: Vector2i = value as Vector2i
+		if not right_values.has(p):
+			return false
+	return true
+
+
+func _collect_preview_step_positions(steps: Array[Dictionary]) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for step_value in steps:
+		var step: Dictionary = step_value as Dictionary
+		var positions: Array = step.get("positions", []) as Array
+		for position_value in positions:
+			var p: Vector2i = position_value as Vector2i
+			if _is_valid(p) and not result.has(p):
+				result.append(p)
+	return result
+
+
+func _preview_loop_border_color(steps: Array[Dictionary]) -> Color:
+	if steps.is_empty():
+		return Color(1.0, 1.0, 1.0, PREVIEW_LOOP_BORDER_ALPHA_MAX)
+	var first_step: Dictionary = steps[0]
+	var color: Color = first_step.get("color", Color.WHITE) as Color
+	return Color(color.r, color.g, color.b, PREVIEW_LOOP_BORDER_ALPHA_MAX).lightened(0.35)
+
+
+func _create_loop_preview_border_segments(positions: Array[Vector2i], color: Color) -> Array[Dictionary]:
+	var position_set: Dictionary = {}
+	for p in positions:
+		if _is_valid(p):
+			position_set[p] = true
+
+	var area_center: Vector2 = _preview_positions_center(positions)
+	var segments: Array[Dictionary] = []
+	for p in positions:
+		if not _is_valid(p):
+			continue
+		if not position_set.has(p + Vector2i(0, -1)):
+			segments.append(_create_loop_preview_border_segment(
+				Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE),
+				Vector2(CELL_SIZE, PREVIEW_LOOP_BORDER_WIDTH),
+				"x",
+				color,
+				area_center
+			))
+		if not position_set.has(p + Vector2i(1, 0)):
+			segments.append(_create_loop_preview_border_segment(
+				Vector2((p.x + 1) * CELL_SIZE - PREVIEW_LOOP_BORDER_WIDTH, p.y * CELL_SIZE),
+				Vector2(PREVIEW_LOOP_BORDER_WIDTH, CELL_SIZE),
+				"y",
+				color,
+				area_center
+			))
+		if not position_set.has(p + Vector2i(0, 1)):
+			segments.append(_create_loop_preview_border_segment(
+				Vector2(p.x * CELL_SIZE, (p.y + 1) * CELL_SIZE - PREVIEW_LOOP_BORDER_WIDTH),
+				Vector2(CELL_SIZE, PREVIEW_LOOP_BORDER_WIDTH),
+				"x",
+				color,
+				area_center
+			))
+		if not position_set.has(p + Vector2i(-1, 0)):
+			segments.append(_create_loop_preview_border_segment(
+				Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE),
+				Vector2(PREVIEW_LOOP_BORDER_WIDTH, CELL_SIZE),
+				"y",
+				color,
+				area_center
+			))
+	segments.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("angle", 0.0)) < float(b.get("angle", 0.0))
+	)
+	return segments
+
+
+func _preview_positions_center(positions: Array[Vector2i]) -> Vector2:
+	if positions.is_empty():
+		return Vector2.ZERO
+	var sum := Vector2.ZERO
+	for p in positions:
+		sum += Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE) + Vector2(CELL_SIZE, CELL_SIZE) * 0.5
+	return sum / float(positions.size())
+
+
+func _create_loop_preview_border_segment(pos: Vector2, size: Vector2, axis: String, color: Color, area_center: Vector2) -> Dictionary:
+	var rect := ColorRect.new()
+	rect.color = color
+	rect.size = size
+	rect.position = pos
+	rect.z_index = PREVIEW_INITIAL_OVERLAY_Z + 1
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.scale = Vector2(0.0, 1.0) if axis == "x" else Vector2(1.0, 0.0)
+	add_child(rect)
+	_longpress_overlays.append(rect)
+	var segment_center: Vector2 = pos + size * 0.5
+	var diff: Vector2 = segment_center - area_center
+	return {"rect": rect, "axis": axis, "angle": atan2(diff.y, diff.x)}
+
+
+func _reset_loop_preview_border_segments(segments: Array[Dictionary]) -> void:
+	for segment_value in segments:
+		var segment: Dictionary = segment_value as Dictionary
+		var rect: ColorRect = segment["rect"] as ColorRect
+		if not is_instance_valid(rect):
+			continue
+		var axis: String = segment["axis"] as String
+		rect.color.a = PREVIEW_LOOP_BORDER_ALPHA_MAX
+		rect.scale = Vector2(0.0, 1.0) if axis == "x" else Vector2(1.0, 0.0)
+
+
+func _add_initial_blast_overlay(steps: Array[Dictionary]) -> void:
 	if _longpress_initial_tween != null and _longpress_initial_tween.is_valid():
 		_longpress_initial_tween.kill()
 	_longpress_initial_tween = null
 
-	var overlay_color := Color(element_color.r, element_color.g, element_color.b, 0.0)
-	var pulse_rects: Array[ColorRect] = []
-	for p in positions:
-		if not _is_valid(p):
-			continue
-		var rect := ColorRect.new()
-		rect.color = overlay_color
-		rect.size = Vector2(CELL_SIZE, CELL_SIZE)
-		rect.position = Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE)
-		rect.z_index = PREVIEW_INITIAL_OVERLAY_Z
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(rect)
-		_longpress_overlays.append(rect)
-		pulse_rects.append(rect)
+	var step_rects: Array[Array] = []
+	var loop_border_segments: Array[Dictionary] = _create_loop_preview_border_segments(
+		_collect_preview_step_positions(steps),
+		_preview_loop_border_color(steps)
+	)
+	for step_value in steps:
+		var step: Dictionary = step_value as Dictionary
+		var element_color: Color = step.get("color", Color.WHITE) as Color
+		var overlay_color := Color(element_color.r, element_color.g, element_color.b, 0.0)
+		var pulse_rects: Array[ColorRect] = []
+		var step_positions: Array = step.get("positions", []) as Array
+		for position_value in step_positions:
+			var p: Vector2i = position_value as Vector2i
+			if not _is_valid(p):
+				continue
+			var rect := ColorRect.new()
+			rect.color = overlay_color
+			rect.size = Vector2(CELL_SIZE, CELL_SIZE)
+			rect.position = Vector2(p.x * CELL_SIZE, p.y * CELL_SIZE)
+			rect.z_index = PREVIEW_INITIAL_OVERLAY_Z
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(rect)
+			_longpress_overlays.append(rect)
+			pulse_rects.append(rect)
+		if not pulse_rects.is_empty():
+			step_rects.append(pulse_rects)
 
-	if pulse_rects.is_empty():
+	if step_rects.is_empty():
 		return
 	_longpress_initial_tween = create_tween().set_loops()
-	_longpress_initial_tween.set_parallel(true)
-	for rect in pulse_rects:
-		_longpress_initial_tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, PREVIEW_INITIAL_FADE_IN) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-	_longpress_initial_tween.chain()
-	for rect in pulse_rects:
-		_longpress_initial_tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, PREVIEW_INITIAL_FADE_OUT) \
-			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	for pulse_rects_value in step_rects:
+		var pulse_rects: Array = pulse_rects_value as Array
+		_longpress_initial_tween.set_parallel(true)
+		for rect_value in pulse_rects:
+			var fade_in_rect: ColorRect = rect_value as ColorRect
+			_longpress_initial_tween.tween_property(fade_in_rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, PREVIEW_INITIAL_FADE_IN) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		_longpress_initial_tween.chain().tween_interval(PREVIEW_INITIAL_HOLD)
+		_longpress_initial_tween.chain()
+		_longpress_initial_tween.set_parallel(true)
+		for rect_value in pulse_rects:
+			var fade_out_rect: ColorRect = rect_value as ColorRect
+			_longpress_initial_tween.tween_property(fade_out_rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, PREVIEW_INITIAL_FADE_OUT) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		_longpress_initial_tween.chain().tween_interval(PREVIEW_CHAIN_STEP_GAP)
+
+	if not loop_border_segments.is_empty():
+		_longpress_initial_tween.chain().tween_callback(_reset_loop_preview_border_segments.bind(loop_border_segments))
+		_longpress_initial_tween.chain()
+		_longpress_initial_tween.set_parallel(false)
+		for segment_value in loop_border_segments:
+			var draw_segment: Dictionary = segment_value as Dictionary
+			var draw_rect: ColorRect = draw_segment["rect"] as ColorRect
+			var draw_axis: String = draw_segment["axis"] as String
+			var scale_property := "scale:x" if draw_axis == "x" else "scale:y"
+			_longpress_initial_tween.tween_property(draw_rect, scale_property, 1.0, PREVIEW_LOOP_BORDER_STEP_DUR) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		_longpress_initial_tween.chain().tween_interval(PREVIEW_LOOP_BORDER_HOLD)
+		_longpress_initial_tween.chain()
+		_longpress_initial_tween.set_parallel(true)
+		for fade_segment_value in loop_border_segments:
+			var fade_segment: Dictionary = fade_segment_value as Dictionary
+			var fade_rect: ColorRect = fade_segment["rect"] as ColorRect
+			_longpress_initial_tween.tween_property(fade_rect, "color:a", 0.0, PREVIEW_LOOP_BORDER_FADE_OUT) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		_longpress_initial_tween.chain().tween_interval(PREVIEW_CHAIN_STEP_GAP)
 
 
 ## 漸變邊框覆蓋層透明度（對其下所有 ColorRect 子節點）
@@ -3536,6 +3814,7 @@ func _create_border_overlay(gp: Vector2i, color: Color) -> Node:
 ## 隱藏長按爆炸預覽：漸變還原暗化 + 漸變移除覆蓋層
 func _hide_blast_preview() -> void:
 	_longpress_active = false
+	_play_longpress_release_bounce()
 
 	# 還原被抬高的方塊 z_index
 	for rb in _longpress_raised_blocks:

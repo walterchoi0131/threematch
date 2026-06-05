@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="StageData" format=3 uid="uid://b3hm5l4s0mqh4"]
 
-[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
+[ext_resource type="AudioStream" uid="uid://cbn55o3jnga0q" path="res://assets/music/PondryHilllBattle.mp3" id="1_lvgyu"]
 [ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
 [ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
 [ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="2_s56y8"]
