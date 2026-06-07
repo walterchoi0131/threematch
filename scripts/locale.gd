@@ -114,6 +114,7 @@ var _translations: Dictionary = {
 	"Milo": {"zh": "米洛", "en": "Milo"},
 	"Ed": {"zh": "埃德", "en": "Ed"},
 	"Gory": {"zh": "戈爾", "en": "Gory"},
+	"Owen": {"zh": "奧云", "en": "Owen"},
 	"Flame": {"zh": "炎", "en": "Flame"},
 	"Tide": {"zh": "潮", "en": "Tide"},
 	"Hero": {"zh": "英雄", "en": "Hero"},
@@ -129,6 +130,7 @@ var _translations: Dictionary = {
 	"DIALOG_dragon":  {"zh": "米洛",       "en": "Milo"},
 	"DIALOG_shark":   {"zh": "埃德",       "en": "Ed"},
 	"DIALOG_gory":    {"zh": "戈爾",       "en": "Gory"},
+	"DIALOG_owen":    {"zh": "奧云",       "en": "Owen"},
 
 	# ── 主動技能名稱與描述 ──
 	"Attack Form": {"zh": "攻擊形態", "en": "Attack Form"},

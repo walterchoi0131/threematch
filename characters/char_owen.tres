@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/owen.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Owen"
+job_id = "attacker"
+gem_type = 7
+base_atk = 3
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(0.3, 0.2, 0.45, 1)
+portrait_scale = 1.45
+portrait_offset = Vector2(-112, -68)
+dialog_square_scale = 2.0
+dialog_square_offset = Vector2(-235, -35)
+dialog_phase_scale = 1.1
+dialog_phase_offset = Vector2(14, 98)
+square_scale = 1.45
+square_offset = Vector2(-169, -34)
+rectangular_scale = 0.45
+rectangular_offset = Vector2(-150, 383)
