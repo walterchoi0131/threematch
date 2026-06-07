@@ -64,12 +64,67 @@ class _ActionChip extends Button:
 			owner_screen.call("_drop_action_on_palette", data)
 
 
+class _PassiveDropRow extends HBoxContainer:
+	var owner_screen: Control = null
+
+	func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+		return owner_screen != null and owner_screen.has_method("_is_passive_drag_data") and bool(owner_screen.call("_is_passive_drag_data", data))
+
+	func _drop_data(_at_position: Vector2, data: Variant) -> void:
+		if owner_screen != null and owner_screen.has_method("_drop_passive_at_end"):
+			owner_screen.call("_drop_passive_at_end", data)
+
+
+class _PassivePaletteRow extends HBoxContainer:
+	var owner_screen: Control = null
+
+	func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+		return owner_screen != null and owner_screen.has_method("_can_drop_passive_on_palette") and bool(owner_screen.call("_can_drop_passive_on_palette", data))
+
+	func _drop_data(_at_position: Vector2, data: Variant) -> void:
+		if owner_screen != null and owner_screen.has_method("_drop_passive_on_palette"):
+			owner_screen.call("_drop_passive_on_palette", data)
+
+
+class _PassiveChip extends Button:
+	var passive_type: int = EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE
+	var source_index: int = -1
+	var owner_screen: Control = null
+
+	func _get_drag_data(_at_position: Vector2) -> Variant:
+		var preview := Label.new()
+		preview.text = text
+		preview.add_theme_font_size_override("font_size", 16)
+		preview.add_theme_color_override("font_color", Color.WHITE)
+		set_drag_preview(preview)
+		return {
+			"passive_type": passive_type,
+			"source_index": source_index,
+		}
+
+	func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+		if owner_screen == null or not owner_screen.has_method("_is_passive_drag_data") or not bool(owner_screen.call("_is_passive_drag_data", data)):
+			return false
+		if source_index >= 0:
+			return true
+		return owner_screen.has_method("_can_drop_passive_on_palette") and bool(owner_screen.call("_can_drop_passive_on_palette", data))
+
+	func _drop_data(_at_position: Vector2, data: Variant) -> void:
+		if owner_screen == null:
+			return
+		if source_index >= 0 and owner_screen.has_method("_drop_passive_on_index"):
+			owner_screen.call("_drop_passive_on_index", source_index, data)
+		elif owner_screen.has_method("_drop_passive_on_palette"):
+			owner_screen.call("_drop_passive_on_palette", data)
+
+
 var _enemy_entries: Array[Dictionary] = []
 var _image_entries: Array[Dictionary] = []
 var _selected_enemy: EnemyData = null
 var _selected_path: String = ""
 var _action_sequence: Array[int] = []
 var _action_percents: Array[int] = []
+var _passive_sequence: Array[int] = []
 
 var _status_lbl: Label = null
 var _detail_body: Control = null
@@ -79,6 +134,10 @@ var _name_edit: LineEdit = null
 var _hp_slider: HSlider = null
 var _hp_value_lbl: Label = null
 var _element_option: OptionButton = null
+var _passive_gem_option: OptionButton = null
+var _passive_count_spin: SpinBox = null
+var _passive_summary_lbl: Label = null
+var _passive_row: _PassiveDropRow = null
 var _portrait_preview: TextureRect = null
 var _attack_percent_slider: HSlider = null
 var _attack_percent_lbl: Label = null
@@ -478,11 +537,14 @@ func _select_enemy(index: int) -> void:
 	_selected_path = String(entry.get("path", ""))
 	_action_sequence.clear()
 	_action_percents.clear()
+	_passive_sequence.clear()
 	if _selected_enemy != null:
 		for i in _selected_enemy.action_pattern.size():
 			var action: EnemyData.ActionType = _selected_enemy.action_pattern[i]
 			_action_sequence.append(int(action))
 			_action_percents.append(_selected_enemy.get_action_percent_at(i))
+		if int(_selected_enemy.passive_type) != EnemyData.PassiveType.NONE:
+			_passive_sequence.append(int(_selected_enemy.passive_type))
 	_refresh_detail()
 	if _estimate_info_lbl != null:
 		_estimate_level_value = STAT_LEVEL_MIN
@@ -499,6 +561,11 @@ func _refresh_detail() -> void:
 		child.queue_free()
 	_hp_slider = null
 	_hp_value_lbl = null
+	_element_option = null
+	_passive_gem_option = null
+	_passive_count_spin = null
+	_passive_summary_lbl = null
+	_passive_row = null
 	_attack_percent_slider = null
 	_attack_percent_lbl = null
 	_attack_palette_chip = null
@@ -525,6 +592,7 @@ func _refresh_detail() -> void:
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(top_spacer)
 
+	_build_passive_column(_detail_body as VBoxContainer)
 	_build_action_column(_detail_body as VBoxContainer)
 
 
@@ -604,6 +672,210 @@ func _build_fields_column(parent: HBoxContainer) -> void:
 	hint_lbl.add_theme_color_override("font_color", Color(0.72, 0.76, 0.86))
 	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(hint_lbl)
+
+
+func _build_passive_column(parent: VBoxContainer) -> void:
+	var passive_panel := PanelContainer.new()
+	passive_panel.custom_minimum_size = Vector2(0, 172)
+	passive_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	passive_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.035, 0.04, 0.07, 0.98), Color(0.28, 0.32, 0.45, 1.0), 8))
+	parent.add_child(passive_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	passive_panel.add_child(margin)
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 10)
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(stack)
+
+	var palette_box := VBoxContainer.new()
+	palette_box.add_theme_constant_override("separation", 8)
+	stack.add_child(palette_box)
+	palette_box.add_child(_make_section_title("Passive List"))
+
+	var palette := _PassivePaletteRow.new()
+	palette.owner_screen = self
+	palette.add_theme_constant_override("separation", 8)
+	palette_box.add_child(palette)
+	palette.add_child(_make_passive_chip(EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE, -1))
+
+	var gate_settings := HBoxContainer.new()
+	gate_settings.add_theme_constant_override("separation", 8)
+	palette.add_child(gate_settings)
+
+	_passive_gem_option = OptionButton.new()
+	_add_element_option_to(_passive_gem_option, Block.Type.RED)
+	_add_element_option_to(_passive_gem_option, Block.Type.BLUE)
+	_add_element_option_to(_passive_gem_option, Block.Type.GREEN)
+	_add_element_option_to(_passive_gem_option, Block.Type.LIGHT)
+	_add_element_option_to(_passive_gem_option, Block.Type.DARK)
+	_select_element_option_in(_passive_gem_option, int(_selected_enemy.passive_required_gem_type))
+	_passive_gem_option.item_selected.connect(func(_index: int) -> void:
+		_refresh_passive_summary()
+	)
+	gate_settings.add_child(_make_labeled_control("Required Gem", _passive_gem_option))
+
+	_passive_count_spin = SpinBox.new()
+	_passive_count_spin.min_value = 1
+	_passive_count_spin.max_value = 99
+	_passive_count_spin.step = 1
+	_passive_count_spin.value = EnemyData.clamp_passive_required_gem_count(_selected_enemy.passive_required_gem_count)
+	_passive_count_spin.value_changed.connect(func(_value: float) -> void:
+		_refresh_passive_summary()
+	)
+	gate_settings.add_child(_make_labeled_control("Count", _passive_count_spin))
+
+	var sequence_box := VBoxContainer.new()
+	sequence_box.add_theme_constant_override("separation", 8)
+	stack.add_child(sequence_box)
+	sequence_box.add_child(_make_section_title("Passives"))
+
+	var row_panel := PanelContainer.new()
+	row_panel.custom_minimum_size = Vector2(0, 62)
+	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.025, 0.045, 1.0), Color(0.28, 0.32, 0.45, 1.0), 8))
+	sequence_box.add_child(row_panel)
+
+	var row_margin := MarginContainer.new()
+	row_margin.add_theme_constant_override("margin_left", 8)
+	row_margin.add_theme_constant_override("margin_right", 8)
+	row_margin.add_theme_constant_override("margin_top", 8)
+	row_margin.add_theme_constant_override("margin_bottom", 8)
+	row_panel.add_child(row_margin)
+
+	_passive_row = _PassiveDropRow.new()
+	_passive_row.owner_screen = self
+	_passive_row.add_theme_constant_override("separation", 6)
+	_passive_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_margin.add_child(_passive_row)
+
+	_passive_summary_lbl = Label.new()
+	_passive_summary_lbl.add_theme_font_size_override("font_size", 11)
+	_passive_summary_lbl.add_theme_color_override("font_color", Color(0.74, 0.80, 0.92))
+	_passive_summary_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sequence_box.add_child(_passive_summary_lbl)
+
+	_refresh_passive_sequence()
+
+
+func _make_passive_chip(passive_type: int, source_index: int) -> _PassiveChip:
+	var chip := _PassiveChip.new()
+	chip.owner_screen = self
+	chip.passive_type = passive_type
+	chip.source_index = source_index
+	chip.text = _passive_label(passive_type)
+	chip.tooltip_text = "Drag into Passives" if source_index < 0 else "Drag to reorder, or drag back to Passive List to remove"
+	chip.custom_minimum_size = Vector2(112, 38)
+	chip.add_theme_font_size_override("font_size", 13)
+	chip.add_theme_stylebox_override("normal", _passive_style(passive_type, false))
+	chip.add_theme_stylebox_override("hover", _passive_style(passive_type, true))
+	chip.add_theme_stylebox_override("pressed", _passive_style(passive_type, true))
+	if source_index < 0:
+		chip.pressed.connect(func() -> void:
+			_set_single_passive(passive_type)
+		)
+	return chip
+
+
+func _refresh_passive_sequence() -> void:
+	if _passive_row == null:
+		return
+	for child in _passive_row.get_children():
+		_passive_row.remove_child(child)
+		child.queue_free()
+
+	if _passive_sequence.is_empty():
+		var empty_lbl := Label.new()
+		empty_lbl.text = "Drag passives here. Empty saves as no passive."
+		empty_lbl.add_theme_font_size_override("font_size", 13)
+		empty_lbl.add_theme_color_override("font_color", Color(0.74, 0.78, 0.88))
+		empty_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_passive_row.add_child(empty_lbl)
+		_refresh_passive_summary()
+		return
+
+	for i in _passive_sequence.size():
+		_passive_row.add_child(_make_passive_chip(_passive_sequence[i], i))
+	_refresh_passive_summary()
+
+
+func _refresh_passive_summary() -> void:
+	if _passive_summary_lbl == null:
+		return
+	if _passive_sequence.is_empty():
+		_passive_summary_lbl.text = "No passive effect."
+		return
+	var gem_label: String = "gem"
+	if _passive_gem_option != null and _passive_gem_option.selected >= 0:
+		gem_label = _passive_gem_option.get_item_text(_passive_gem_option.selected)
+	var count: int = _current_passive_required_count()
+	_passive_summary_lbl.text = "If this turn blasted fewer than %d %s gems, incoming damage becomes 1." % [count, gem_label]
+
+
+func _is_passive_drag_data(data: Variant) -> bool:
+	return data is Dictionary and (data as Dictionary).has("passive_type")
+
+
+func _can_drop_passive_on_palette(data: Variant) -> bool:
+	if not _is_passive_drag_data(data):
+		return false
+	var drag_data: Dictionary = data as Dictionary
+	var source_index: int = int(drag_data.get("source_index", -1))
+	return source_index >= 0 and source_index < _passive_sequence.size()
+
+
+func _drop_passive_on_palette(data: Variant) -> void:
+	if not _can_drop_passive_on_palette(data):
+		return
+	var drag_data: Dictionary = data as Dictionary
+	var source_index: int = int(drag_data.get("source_index", -1))
+	_remove_passive(source_index)
+
+
+func _drop_passive_at_end(data: Variant) -> void:
+	if not _is_passive_drag_data(data):
+		return
+	var drag_data: Dictionary = data as Dictionary
+	var source_index: int = int(drag_data.get("source_index", -1))
+	var passive_type: int = int(drag_data.get("passive_type", EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE))
+	if source_index >= 0 and source_index < _passive_sequence.size():
+		return
+	_set_single_passive(passive_type)
+
+
+func _drop_passive_on_index(_target_index: int, data: Variant) -> void:
+	if not _is_passive_drag_data(data):
+		return
+	var drag_data: Dictionary = data as Dictionary
+	var source_index: int = int(drag_data.get("source_index", -1))
+	if source_index >= 0 and source_index < _passive_sequence.size():
+		return
+	_drop_passive_at_end(data)
+
+
+func _remove_passive(index: int) -> void:
+	if index < 0 or index >= _passive_sequence.size():
+		return
+	_passive_sequence.remove_at(index)
+	_refresh_passive_sequence()
+
+
+func _set_single_passive(passive_type: int) -> void:
+	_passive_sequence = [passive_type]
+	_refresh_passive_sequence()
+
+
+func _current_passive_required_count() -> int:
+	if _passive_count_spin != null:
+		return EnemyData.clamp_passive_required_gem_count(int(round(_passive_count_spin.value)))
+	if _selected_enemy != null:
+		return EnemyData.clamp_passive_required_gem_count(_selected_enemy.passive_required_gem_count)
+	return EnemyData.PASSIVE_REQUIRED_GEM_COUNT_DEFAULT
 
 
 func _build_action_column(parent: VBoxContainer) -> void:
@@ -900,6 +1172,17 @@ func _save_selected_enemy() -> void:
 	_selected_enemy.is_main_boss = false
 	if _element_option != null and _element_option.selected >= 0:
 		_selected_enemy.element = int(_element_option.get_item_metadata(_element_option.selected)) as Block.Type
+	if not _passive_sequence.is_empty():
+		_selected_enemy.passive_type = int(_passive_sequence[0]) as EnemyData.PassiveType
+		if _passive_gem_option != null and _passive_gem_option.selected >= 0:
+			_selected_enemy.passive_required_gem_type = int(_passive_gem_option.get_item_metadata(_passive_gem_option.selected)) as Block.Type
+		_selected_enemy.passive_required_gem_count = _current_passive_required_count()
+		if _selected_enemy.passive_name.strip_edges().is_empty():
+			_selected_enemy.passive_name = "Gem Gate"
+		if _selected_enemy.passive_desc.strip_edges().is_empty():
+			_selected_enemy.passive_desc = "Incoming damage becomes 1 unless enough matching gems were blasted this turn."
+	else:
+		_selected_enemy.passive_type = EnemyData.PassiveType.NONE
 	var validated_pattern: Array[EnemyData.ActionType] = _validated_action_pattern()
 	_selected_enemy.action_pattern = validated_pattern
 	_selected_enemy.action_percents = _validated_action_percents(validated_pattern)
@@ -962,6 +1245,7 @@ func _create_enemy_from_image(index: int) -> void:
 	enemy.is_main_boss = false
 	enemy.element = _guess_element_from_path(image_path)
 	enemy.portrait_texture = texture
+	enemy.passive_type = EnemyData.PassiveType.NONE
 	enemy.action_pattern = [EnemyData.ActionType.ATTACK_15]
 	enemy.action_percents = [EnemyData.ATTACK_PERCENT_DEFAULT]
 	var save_path: String = _unique_enemy_path(enemy.enemy_name)
@@ -1095,6 +1379,12 @@ func _on_estimate_level_hovered(level_value: int) -> void:
 
 
 func _add_element_option(element_type: int) -> void:
+	_add_element_option_to(_element_option, element_type)
+
+
+func _add_element_option_to(option: OptionButton, element_type: int) -> void:
+	if option == null:
+		return
 	var label: String = str(Block.ICONS.get(element_type, "?"))
 	match element_type:
 		Block.Type.RED:
@@ -1107,16 +1397,22 @@ func _add_element_option(element_type: int) -> void:
 			label = "Light"
 		Block.Type.DARK:
 			label = "Dark"
-	_element_option.add_item(label)
-	_element_option.set_item_metadata(_element_option.item_count - 1, element_type)
+	option.add_item(label)
+	option.set_item_metadata(option.item_count - 1, element_type)
 
 
 func _select_element_option(element_type: int) -> void:
-	for i in _element_option.item_count:
-		if int(_element_option.get_item_metadata(i)) == element_type:
-			_element_option.select(i)
+	_select_element_option_in(_element_option, element_type)
+
+
+func _select_element_option_in(option: OptionButton, element_type: int) -> void:
+	if option == null:
+		return
+	for i in option.item_count:
+		if int(option.get_item_metadata(i)) == element_type:
+			option.select(i)
 			return
-	_element_option.select(0)
+	option.select(0)
 
 
 func _make_labeled_control(label_text: String, control: Control) -> Control:
@@ -1149,6 +1445,14 @@ func _action_label(action_type: int, attack_percent: int = EnemyData.ATTACK_PERC
 			return "Attack %d%%" % EnemyData.clamp_attack_percent(attack_percent)
 
 
+func _passive_label(passive_type: int) -> String:
+	match passive_type:
+		EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE:
+			return "Gem Gate"
+		_:
+			return "Passive"
+
+
 func _action_style(action_type: int, hover: bool) -> StyleBoxFlat:
 	var color: Color = Color(0.18, 0.20, 0.28, 1.0)
 	match action_type:
@@ -1161,6 +1465,16 @@ func _action_style(action_type: int, hover: bool) -> StyleBoxFlat:
 	if hover:
 		color = color.lightened(0.12)
 	return _make_button_style(color, Color(0.55, 0.58, 0.72, 1.0))
+
+
+func _passive_style(passive_type: int, hover: bool) -> StyleBoxFlat:
+	var color: Color = Color(0.18, 0.22, 0.31, 1.0)
+	match passive_type:
+		EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE:
+			color = Color(0.18, 0.30, 0.42, 1.0)
+	if hover:
+		color = color.lightened(0.12)
+	return _make_button_style(color, Color(0.55, 0.68, 0.82, 1.0))
 
 
 func _make_button_style(bg_color: Color, border_color: Color) -> StyleBoxFlat:

@@ -3,12 +3,15 @@ class_name EnemyData
 extends Resource
 
 enum ActionType { ATTACK_15, STONE_MAGIC, REST }
+enum PassiveType { NONE, REQUIRE_GEM_COUNT_DAMAGE_GATE }
 
 const HP_PERCENT_MIN: int = 500
 const HP_PERCENT_MAX: int = 10000
 const ATTACK_PERCENT_MIN: int = 1
 const ATTACK_PERCENT_MAX: int = 200
 const ATTACK_PERCENT_DEFAULT: int = 15
+const PASSIVE_REQUIRED_GEM_COUNT_DEFAULT: int = 9
+const PASSIVE_REDUCED_DAMAGE_DEFAULT: int = 1
 
 @export var enemy_name: String = "Slime"     # 敎人名稱
 @export var enemy_level: int = 1              # Legacy: 新流程由關卡 spawn level 決定
@@ -24,6 +27,11 @@ const ATTACK_PERCENT_DEFAULT: int = 15
 @export var element: Block.Type = Block.Type.GREEN
 ## Legacy: 主要 Boss 現在由關卡 spawn 設定，保留此欄位只為讀取舊資源
 @export var is_main_boss: bool = false
+@export var passive_type: PassiveType = PassiveType.NONE
+@export var passive_required_gem_type: Block.Type = Block.Type.LIGHT
+@export var passive_required_gem_count: int = PASSIVE_REQUIRED_GEM_COUNT_DEFAULT
+@export var passive_name: String = ""
+@export_multiline var passive_desc: String = ""
 ## 掉落表：敵人死亡時依序擲骰每個條目
 @export var loot_table: Array[LootItem] = []
 
@@ -43,6 +51,10 @@ static func clamp_hp_percent(value: int) -> int:
 
 static func clamp_attack_percent(value: int) -> int:
 	return clampi(value, ATTACK_PERCENT_MIN, ATTACK_PERCENT_MAX)
+
+
+static func clamp_passive_required_gem_count(value: int) -> int:
+	return maxi(1, value)
 
 
 ## 取得指定 pattern index 對應的行動；空 pattern 退回普通攻擊

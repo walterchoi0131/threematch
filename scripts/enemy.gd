@@ -4,11 +4,13 @@ class_name Enemy
 extends Control
 
 signal pressed(enemy: Enemy)  # 被點擊時發出
+signal long_pressed(enemy: Enemy)
 signal died(enemy: Enemy)     # 死亡時發出
 signal hp_changed(current: int, maximum: int)  # 血量變動時發出（含初始與受傷）
 
 const MAIN_BOSS_DISPLAY_SCALE := 2.0
 const CLICK_RECT_PADDING := 4.0
+const LONG_PRESS_SECONDS := 0.45
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
@@ -20,6 +22,11 @@ var spawn_level: int = 1          # 關卡中此敵人的實際等級
 var estimated_team_hp_for_attack: int = 1     # 由 BattleManager 依 spawn_level 估算，用於 Attack X%
 var is_main_boss_spawn: bool = false
 var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻怪的過殺機制）
+var battle_manager_ref: Node = null
+var last_applied_damage: int = 0
+var _pressing: bool = false
+var _press_start_msec: int = 0
+var _long_press_fired: bool = false
 
 @onready var intent_label: Label = $VBox/IntentRow/IntentBG/IntentLabel       # 攻擊意圖標籤
 @onready var portrait: TextureRect = $VBox/Portrait         # 敎人頭像
@@ -31,6 +38,19 @@ var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻�
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 var _base_minimum_size: Vector2 = Vector2.ZERO
 var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
+var _passive_badge: Control = null
+var _passive_badge_icon: TextureRect = null
+var _passive_badge_label: Label = null
+
+
+func _process(_delta: float) -> void:
+	if not _pressing or _long_press_fired:
+		return
+	var held: float = float(Time.get_ticks_msec() - _press_start_msec) / 1000.0
+	if held >= LONG_PRESS_SECONDS:
+		_long_press_fired = true
+		_pressing = false
+		long_pressed.emit(self)
 
 
 func _has_point(point: Vector2) -> bool:
@@ -178,6 +198,8 @@ func _apply_main_boss_display_scale(active: bool) -> void:
 		portrait.custom_minimum_size = _base_portrait_minimum_size * display_scale
 	if target_indicator != null and target_indicator.visible:
 		_position_target_marker()
+	if _passive_badge != null and _passive_badge.visible:
+		_position_passive_badge()
 
 
 func _cache_base_display_sizes() -> void:
@@ -193,6 +215,7 @@ func refresh_ui() -> void:
 		await ready
 	portrait.texture = data.portrait_texture
 	hp_bar_label.text = "%d" % current_hp
+	_refresh_passive_badge()
 	if target_indicator:
 		target_indicator.visible = is_targeted
 		_position_target_marker()
@@ -292,6 +315,72 @@ func _position_target_marker() -> void:
 	target_indicator.pivot_offset = Vector2(marker_w * 0.5, marker_h * 0.5)
 
 
+func _refresh_passive_badge() -> void:
+	if data == null or int(data.passive_type) == EnemyData.PassiveType.NONE:
+		if _passive_badge != null:
+			_passive_badge.visible = false
+		return
+	_ensure_passive_badge()
+	_passive_badge.visible = true
+	_passive_badge_icon.texture = Block.GEM_TEXTURES.get(data.passive_required_gem_type, null)
+	_passive_badge_label.text = "%d+" % EnemyData.clamp_passive_required_gem_count(data.passive_required_gem_count)
+	_position_passive_badge()
+
+
+func _ensure_passive_badge() -> void:
+	if _passive_badge != null:
+		return
+	var badge := PanelContainer.new()
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.custom_minimum_size = Vector2(54, 34)
+	badge.z_index = 20
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.02, 0.025, 0.04, 0.88)
+	style.border_color = Color(1.0, 0.86, 0.25, 1.0)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(3)
+	badge.add_theme_stylebox_override("panel", style)
+	add_child(badge)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 1)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(row)
+
+	_passive_badge_icon = TextureRect.new()
+	_passive_badge_icon.custom_minimum_size = Vector2(26, 26)
+	_passive_badge_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_passive_badge_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_passive_badge_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_passive_badge_icon)
+
+	_passive_badge_label = Label.new()
+	_passive_badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_passive_badge_label.add_theme_font_size_override("font_size", 15)
+	_passive_badge_label.add_theme_color_override("font_color", Color.WHITE)
+	_passive_badge_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_passive_badge_label.add_theme_constant_override("outline_size", 4)
+	_passive_badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_passive_badge_label)
+	_passive_badge = badge
+
+
+func _position_passive_badge() -> void:
+	if _passive_badge == null or portrait == null:
+		return
+	await get_tree().process_frame
+	if _passive_badge == null or portrait == null:
+		return
+	var port_rect: Rect2 = portrait.get_global_rect()
+	var inverse_transform: Transform2D = get_global_transform().affine_inverse()
+	var top_left: Vector2 = inverse_transform * port_rect.position
+	var bottom_right: Vector2 = inverse_transform * (port_rect.position + port_rect.size)
+	var rect_pos := Vector2(minf(top_left.x, bottom_right.x), minf(top_left.y, bottom_right.y))
+	var rect_size := Vector2(absf(bottom_right.x - top_left.x), absf(bottom_right.y - top_left.y))
+	_passive_badge.position = Vector2(rect_pos.x + rect_size.x - 38.0, rect_pos.y + 8.0)
+
+
 ## 根據元素屬性設定血條顏色（黑底 + 元素色垂直漸層）
 func _apply_element_color() -> void:
 	if data == null:
@@ -353,9 +442,11 @@ func _stop_spin() -> void:
 
 
 ## 受到傷害：扣血、更新血條、播放受傷閃爍、檢查死亡
-func take_damage(amount: int) -> void:
+func take_damage(amount: int) -> int:
+	var applied_amount: int = _apply_damage_passives(amount)
+	last_applied_damage = applied_amount
 	var prev_hp: int = current_hp
-	current_hp = max(0, current_hp - amount)
+	current_hp = max(0, current_hp - applied_amount)
 	hp_changed.emit(current_hp, max_hp)
 	if hp_bar_label:
 		hp_bar_label.text = "%d" % current_hp
@@ -375,12 +466,36 @@ func take_damage(amount: int) -> void:
 
 	if current_hp <= 0:
 		if defer_death:
-			return  # 過殺模式：保持可被攻擊狀態
+			return applied_amount  # 過殺模式：保持可被攻擊狀態
 		if blink.is_valid():
 			blink.kill()
 		modulate = Color.WHITE
 		died.emit(self)
 		_play_death_animation()
+	return applied_amount
+
+
+func _apply_damage_passives(amount: int) -> int:
+	if amount <= 0 or data == null:
+		return maxi(0, amount)
+	if battle_manager_ref != null and battle_manager_ref.has_method("get_enemy_damage_after_passives"):
+		return int(battle_manager_ref.call("get_enemy_damage_after_passives", self, amount))
+	match int(data.passive_type):
+		EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE:
+			var required_count: int = EnemyData.clamp_passive_required_gem_count(data.passive_required_gem_count)
+			var blasted_count: int = _get_turn_blast_count(data.passive_required_gem_type)
+			if blasted_count < required_count:
+				return mini(amount, EnemyData.PASSIVE_REDUCED_DAMAGE_DEFAULT)
+	return amount
+
+
+func _get_turn_blast_count(gem_type: Block.Type) -> int:
+	if battle_manager_ref == null:
+		return 0
+	var blasts: Variant = battle_manager_ref.get("turn_gem_blasts")
+	if blasts is Dictionary:
+		return int((blasts as Dictionary).get(gem_type, 0))
+	return 0
 
 
 ## 結算延遲死亡（攻擊序列結束後呼叫）
@@ -401,8 +516,19 @@ func _play_death_animation() -> void:
 
 ## 處理滑鼠點擊敎人事件
 func _on_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		pressed.emit(self)
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	var mb := event as InputEventMouseButton
+	if mb.pressed:
+		_pressing = true
+		_long_press_fired = false
+		_press_start_msec = Time.get_ticks_msec()
+	else:
+		var was_long: bool = _long_press_fired
+		_pressing = false
+		_long_press_fired = false
+		if not was_long:
+			pressed.emit(self)
 
 
 ## HP 條傷害預覽白條：與內層 Fill 對齊（同 padding），停留 0.45s 後右邊崩往新 HP 邊界

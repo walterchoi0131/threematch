@@ -87,6 +87,7 @@ var _active_selection_dim_overlay: Control = null
 var _active_selection_dim_tween: Tween = null
 var _active_selection_preview_positions: Array[Vector2i] = []
 var _stage_intro_gems_ready: bool = false
+var _initial_boss_intro_shown: bool = false
 
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
@@ -107,6 +108,7 @@ const ATTACK_STAGGER_SEC := 0.2
 # ── 教學系統 ──
 var _battle_dialog: _BattleDialog = null
 var _tutorial_manager: _TutorialManager = null
+var _enemy_popup_layer: CanvasLayer = null
 
 # ── 戰鬥日誌 ──
 const LOG_PANEL_WIDTH := 272
@@ -276,6 +278,7 @@ func _ready() -> void:
 	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
 	battle_manager.enemy_stone_magic_cast.connect(_on_enemy_stone_magic_cast)
+	battle_manager.enemy_long_pressed.connect(_on_enemy_long_pressed)
 	battle_manager.loot_dropped.connect(_on_loot_dropped)
 	battle_manager.round_spawned.connect(_on_round_spawned)
 	battle_manager.turn_gem_blasts_changed.connect(_refresh_gem_meter)
@@ -283,11 +286,11 @@ func _ready() -> void:
 	character_panel.setup(party)
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
 	character_panel.active_skill_selection_cancelled.connect(_on_active_skill_selection_cancelled)
+	_setup_boss_bar()
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
 	return_button.text = Locale.tr_ui("EXIT")
 	return_button.visible = true
-	_setup_boss_bar()
 	_setup_kill_all_button()
 	_setup_escape_hud()
 
@@ -2743,14 +2746,6 @@ func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
 	if enemy_data != null and enemy_data.portrait_texture != null:
 		button.icon = enemy_data.portrait_texture
 		button.expand_icon = true
-	elif entry.has("manifest_entry"):
-		var manifest_entry: Dictionary = entry["manifest_entry"]
-		var image_path: String = String(manifest_entry.get("image_path", ""))
-		if not image_path.is_empty():
-			var texture_resource: Resource = load(image_path)
-			if texture_resource is Texture2D:
-				button.icon = texture_resource as Texture2D
-				button.expand_icon = true
 	button.tooltip_text = resource_path
 	button.pressed.connect(_on_stage_editor_enemy_entry_picked.bind(entry))
 	return button
@@ -2759,10 +2754,6 @@ func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
 func _on_stage_editor_enemy_entry_picked(entry: Dictionary) -> void:
 	var enemy_data: EnemyData = entry.get("data", null) as EnemyData
 	var spawn_level: int = enemy_data.enemy_level if enemy_data != null else 1
-	if enemy_data == null and entry.has("manifest_entry"):
-		var manifest_entry: Dictionary = entry["manifest_entry"]
-		spawn_level = int(manifest_entry.get("enemy_level", 1))
-		enemy_data = _stage_editor_make_manifest_enemy(manifest_entry)
 	if enemy_data == null:
 		_set_stage_editor_status("Enemy load failed", false)
 		return
@@ -2799,7 +2790,6 @@ func _on_stage_editor_enemy_picked(enemy_data: EnemyData, spawn_level: int = -1)
 func _stage_editor_load_available_enemies() -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	_stage_editor_collect_enemy_resources(STAGE_EDITOR_ENEMY_ROOT, results)
-	_stage_editor_collect_manifest_enemies(results)
 	results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var left: String = String(a.get("label", ""))
 		var right: String = String(b.get("label", ""))
@@ -2815,10 +2805,7 @@ func _stage_editor_collect_enemy_resources(dir_path: String, results: Array[Dict
 	dir.list_dir_begin()
 	var file_name: String = dir.get_next()
 	while not file_name.is_empty():
-		if dir.current_is_dir():
-			if not file_name.begins_with("."):
-				_stage_editor_collect_enemy_resources("%s/%s" % [dir_path, file_name], results)
-		elif file_name.ends_with(".tres") or file_name.ends_with(".res"):
+		if not dir.current_is_dir() and (file_name.ends_with(".tres") or file_name.ends_with(".res")):
 			var resource_path: String = "%s/%s" % [dir_path, file_name]
 			var resource: Resource = load(resource_path)
 			if resource is EnemyData:
@@ -3214,6 +3201,8 @@ func _play_stage_intro() -> void:
 		await character_panel.play_intro_slide()  # 等全部卡片滑入完畢
 		while not _stage_intro_gems_ready:
 			await get_tree().process_frame
+		if _should_show_initial_boss_intro():
+			await _show_boss_intro()
 		board.set_input_queue_locked(false)
 		await get_tree().create_timer(1.0).timeout
 		_start_battle_tutorial()
@@ -3225,6 +3214,8 @@ func _play_stage_intro() -> void:
 	await get_tree().create_timer(0.1).timeout
 	while not _stage_intro_gems_ready:
 		await get_tree().process_frame
+	if _should_show_initial_boss_intro():
+		await _show_boss_intro()
 	board.set_input_queue_locked(false)
 	board.is_busy = false
 
@@ -3232,6 +3223,18 @@ func _play_stage_intro() -> void:
 func _play_stage_intro_gems() -> void:
 	await board.play_gems_intro()
 	_stage_intro_gems_ready = true
+
+
+func _should_show_initial_boss_intro() -> bool:
+	if _initial_boss_intro_shown or battle_manager == null:
+		return false
+	if battle_manager.current_round != 0:
+		return false
+	var boss: Enemy = battle_manager.get_main_boss_for_round(0)
+	if boss == null or not is_instance_valid(boss):
+		return false
+	_initial_boss_intro_shown = true
+	return true
 
 
 ## 啟動戰鬥教學流程
@@ -4086,8 +4089,8 @@ func _resolve_persistent_upper_gems() -> void:
 				var captured_dmg: int = dmg
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
-						captured_target.take_damage(captured_dmg)
-						_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, green_color, true, false)
+						var applied_dmg: int = captured_target.take_damage(captured_dmg)
+						_spawn_damage_number(captured_target.get_global_rect().get_center(), applied_dmg, green_color, true, false)
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				trail.launch(from_pos, target_pos, green_color, 0.5)
@@ -4274,10 +4277,11 @@ func _retarget_attack_queue_by_simulated_hp(attacks: Array) -> void:
 			continue
 		var element_mult: float = battle_manager.get_element_multiplier(gem_type, target.data.element) if target.data != null else 1.0
 		var damage: int = int(float(char_data.get_atk() * gem_count) * element_mult * chain_mult)
+		var predicted_damage: int = battle_manager.get_enemy_damage_after_passives(target, damage)
 		attack["target"] = target
 		attack["damage"] = damage
 		attack["is_super"] = element_mult > 1.0
-		sim_hp[target] = int(sim_hp.get(target, target.current_hp)) - damage
+		sim_hp[target] = int(sim_hp.get(target, target.current_hp)) - predicted_damage
 		if manual_target == target and int(sim_hp.get(target, 0)) <= 0:
 			manual_target = null
 
@@ -4302,8 +4306,9 @@ func _get_best_target_for_damage(gem_type: Block.Type, base_damage: int, damage_
 			continue
 		var element_mult: float = battle_manager.get_element_multiplier(gem_type, enemy.data.element) if enemy.data != null else 1.0
 		var raw_damage: int = int(float(base_damage) * element_mult * damage_mult)
-		var effective_damage: int = mini(raw_damage, remaining_hp)
-		if raw_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
+		var predicted_damage: int = battle_manager.get_enemy_damage_after_passives(enemy, raw_damage)
+		var effective_damage: int = mini(predicted_damage, remaining_hp)
+		if predicted_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
 			kill_enemy = enemy
 			kill_remaining_hp = remaining_hp
 			kill_raw_damage = raw_damage
@@ -4353,6 +4358,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 	# 根據角色類型播放不同的攻擊特效
 	match char_data.character_name:
 		"Boar":  # 水屬性 — 斬擊特效 + 治療
+			var applied_damage: int = damage
 			if is_instance_valid(target):
 				var slash := Node2D.new()
 				slash.set_script(SlashEffectScript)
@@ -4360,14 +4366,14 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var target_pos := target.get_global_rect().get_center()
 				slash.deduct_hp.connect(func():
 					if is_instance_valid(target):
-						target.take_damage(damage)
-						_spawn_damage_number(target.get_global_rect().get_center(), damage, Block.COLORS[gem_type], true, is_super)
+						applied_damage = target.take_damage(damage)
+						_spawn_damage_number(target.get_global_rect().get_center(), applied_damage, Block.COLORS[gem_type], true, is_super)
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				await slash.play(target_pos)
-			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), damage, 1, mult, chain_mult), gem_type, char_data)
+			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), applied_damage, 1, mult, chain_mult), gem_type, char_data)
 			# 「飲水」被動：治療傷害的 50%
-			var heal := battle_manager.get_heal_amount(char_index, damage)
+			var heal := battle_manager.get_heal_amount(char_index, applied_damage)
 			if heal > 0:
 				battle_manager.apply_heal(heal)
 				character_panel.show_heal_text(char_index, heal)
@@ -4416,6 +4422,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 		# 	_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), total_arrow_dmg, arrow_count, raccoon_mult, chain_mult), gem_type, char_data)
 		# 	await get_tree().create_timer(0.45).timeout
 		_:  # 預設攻擊：拖尾弧光從角色卡飛向敵人
+			var applied_damage: int = damage
 			if is_instance_valid(target):
 				var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
 				var target_pos := target.get_global_rect().get_center()
@@ -4427,13 +4434,13 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var captured_dmg := damage
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
-						captured_target.take_damage(captured_dmg)
-						_spawn_damage_number(captured_target.get_global_rect().get_center(), captured_dmg, color, true, is_super)
+						applied_damage = captured_target.take_damage(captured_dmg)
+						_spawn_damage_number(captured_target.get_global_rect().get_center(), applied_damage, color, true, is_super)
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				trail.launch(card_center, target_pos, color, 0.5)
 				await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.05).timeout
-			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), damage, 1, mult, chain_mult), gem_type, char_data)
+			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), applied_damage, 1, mult, chain_mult), gem_type, char_data)
 
 	# Card moves back (non-blocking)
 	character_panel.play_card_return(char_index)
@@ -4735,8 +4742,8 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	await fly_tw.finished
 
 	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
-		target.take_damage(final_damage)
-		_spawn_damage_number(target.get_global_rect().get_center(), final_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
+		var applied_damage: int = target.take_damage(final_damage)
+		_spawn_damage_number(target.get_global_rect().get_center(), applied_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
 	_play_sfx(_se_impact)
 	var ice_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
 	DebrisVfx.play(fx_layer, ice_texture, target_pos, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
@@ -4870,8 +4877,8 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 			# 在中途幀觸發扣血
 			get_tree().create_timer(SWORD_OF_JUSTICE_DURATION * 0.45).timeout.connect(func() -> void:
 				if is_instance_valid(captured_enemy):
-					captured_enemy.take_damage(captured_dmg)
-					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), captured_dmg, light_color, true)
+					var applied_dmg: int = captured_enemy.take_damage(captured_dmg)
+					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), applied_dmg, light_color, true)
 				_play_sfx(_se_impact)
 			, CONNECT_ONE_SHOT)
 			var sword_tw := create_tween()
@@ -5528,8 +5535,8 @@ func _handle_active_skill(char_index: int) -> void:
 				# 抵達時造成傷害並銷毀
 				fly_tw.finished.connect(func() -> void:
 					if is_instance_valid(hit_target) and (hit_target.current_hp > 0 or hit_target.defer_death):
-						hit_target.take_damage(hit_dmg)
-						_spawn_damage_number(hit_target.get_global_rect().get_center(), hit_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
+						var applied_dmg: int = hit_target.take_damage(hit_dmg)
+						_spawn_damage_number(hit_target.get_global_rect().get_center(), applied_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
 						_play_sfx(_se_impact)
 					if is_instance_valid(block):
 						block.queue_free()
@@ -6596,7 +6603,8 @@ func _bind_boss_bar(boss: Enemy) -> void:
 	_boss_bar.offset_bottom = _boss_bar.offset_top + BOSS_BAR_HEIGHT
 	_boss_bar.visible = true
 	boss.set_main_boss_mode(true)
-	boss.modulate.a = 0.0 if battle_manager != null and battle_manager.is_round_transitioning else 1.0
+	var delay_boss_visual: bool = battle_manager != null and (battle_manager.is_round_transitioning or (battle_manager.current_round == 0 and not _initial_boss_intro_shown))
+	boss.modulate.a = 0.0 if delay_boss_visual else 1.0
 
 	boss.hp_changed.connect(_on_boss_hp_changed)
 	boss.died.connect(_on_boss_died)
@@ -6637,6 +6645,304 @@ func _on_boss_hp_changed(current: int, maximum: int) -> void:
 
 func _on_boss_died(_e: Enemy) -> void:
 	_bind_boss_bar(null)
+
+
+func _on_enemy_long_pressed(enemy: Enemy) -> void:
+	_show_enemy_status_popup(enemy)
+
+
+func _show_enemy_status_popup(enemy: Enemy) -> void:
+	if _enemy_popup_layer != null or enemy == null or not is_instance_valid(enemy) or enemy.data == null:
+		return
+	var data: EnemyData = enemy.data
+	_enemy_popup_layer = CanvasLayer.new()
+	_enemy_popup_layer.layer = 83
+	var host: Node = get_tree().current_scene
+	if host == null:
+		host = self
+	host.add_child(_enemy_popup_layer)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			_close_enemy_status_popup()
+	)
+	_enemy_popup_layer.add_child(dim)
+
+	const PANEL_W: float = 480.0
+	const HEADER_H: float = 150.0
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -PANEL_W * 0.5
+	panel.offset_right = PANEL_W * 0.5
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.clip_contents = true
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.10, 0.12, 0.18, 0.97)
+	bg.border_color = Color(0.85, 0.72, 0.30)
+	bg.set_border_width_all(2)
+	bg.set_corner_radius_all(14)
+	bg.set_content_margin_all(0)
+	panel.add_theme_stylebox_override("panel", bg)
+	_enemy_popup_layer.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 0)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_child(vbox)
+
+	var header := Control.new()
+	header.custom_minimum_size = Vector2(PANEL_W, HEADER_H)
+	header.clip_contents = true
+	vbox.add_child(header)
+
+	if data.portrait_texture != null:
+		var portrait_tex := TextureRect.new()
+		portrait_tex.texture = data.portrait_texture
+		portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait_tex.anchor_left = 0.0
+		portrait_tex.anchor_top = 1.0
+		portrait_tex.anchor_right = 0.0
+		portrait_tex.anchor_bottom = 1.0
+		portrait_tex.offset_left = 4.0
+		portrait_tex.offset_top = -260.0
+		portrait_tex.offset_right = 264.0
+		portrait_tex.offset_bottom = 0.0
+		header.add_child(portrait_tex)
+
+	var info_vbox := VBoxContainer.new()
+	info_vbox.anchor_left = 0.0
+	info_vbox.anchor_top = 0.0
+	info_vbox.anchor_right = 1.0
+	info_vbox.anchor_bottom = 1.0
+	info_vbox.offset_left = 16.0
+	info_vbox.offset_right = -16.0
+	info_vbox.add_theme_constant_override("separation", 6)
+	info_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	info_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(info_vbox)
+
+	var name_lbl := Label.new()
+	name_lbl.text = Locale.tr_or(data.enemy_name, data.enemy_name)
+	name_lbl.add_theme_font_size_override("font_size", 27)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	name_lbl.add_theme_constant_override("outline_size", 4)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(name_lbl)
+
+	var meta_row := HBoxContainer.new()
+	meta_row.add_theme_constant_override("separation", 5)
+	meta_row.alignment = BoxContainer.ALIGNMENT_END
+	meta_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	meta_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_vbox.add_child(meta_row)
+
+	var elem_icon := TextureRect.new()
+	elem_icon.texture = Block.GEM_TEXTURES.get(data.element, null)
+	elem_icon.custom_minimum_size = Vector2(18, 18)
+	elem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	elem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	meta_row.add_child(elem_icon)
+
+	var lv_lbl := Label.new()
+	lv_lbl.text = "Lv. %d" % enemy.spawn_level
+	lv_lbl.add_theme_font_size_override("font_size", 23)
+	lv_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
+	lv_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lv_lbl.add_theme_constant_override("outline_size", 3)
+	lv_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	meta_row.add_child(lv_lbl)
+
+	var skills_scroll := ScrollContainer.new()
+	skills_scroll.custom_minimum_size = Vector2(PANEL_W, 220)
+	skills_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	vbox.add_child(skills_scroll)
+
+	var skills_margin := MarginContainer.new()
+	skills_margin.add_theme_constant_override("margin_left", 16)
+	skills_margin.add_theme_constant_override("margin_right", 16)
+	skills_margin.add_theme_constant_override("margin_top", 12)
+	skills_margin.add_theme_constant_override("margin_bottom", 12)
+	skills_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skills_scroll.add_child(skills_margin)
+
+	var skills_vbox := VBoxContainer.new()
+	skills_vbox.add_theme_constant_override("separation", 8)
+	skills_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	skills_margin.add_child(skills_vbox)
+
+	if int(data.passive_type) != EnemyData.PassiveType.NONE:
+		_add_enemy_popup_passive(skills_vbox, data)
+	else:
+		var empty_lbl := Label.new()
+		empty_lbl.text = Locale.tr_ui("NO_PASSIVE")
+		empty_lbl.add_theme_font_size_override("font_size", 17)
+		empty_lbl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+		skills_vbox.add_child(empty_lbl)
+
+	dim.modulate.a = 0.0
+	panel.modulate.a = 0.0
+	panel.scale = Vector2(0.88, 0.88)
+	panel.resized.connect(func() -> void:
+		panel.pivot_offset = panel.size * 0.5
+	, CONNECT_ONE_SHOT)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(dim, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, "scale", Vector2.ONE, 0.20).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+
+func _add_enemy_popup_passive(parent: VBoxContainer, data: EnemyData) -> void:
+	var entry := VBoxContainer.new()
+	entry.add_theme_constant_override("separation", 6)
+	parent.add_child(entry)
+
+	var row_wrap := MarginContainer.new()
+	entry.add_child(row_wrap)
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0, 0, 0, 0.55))
+	grad.set_color(1, Color(0, 0, 0, 0))
+	var grad_tex := GradientTexture2D.new()
+	grad_tex.gradient = grad
+	grad_tex.fill_from = Vector2(0, 0.5)
+	grad_tex.fill_to = Vector2(1, 0.5)
+	var row_bg := TextureRect.new()
+	row_bg.texture = grad_tex
+	row_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	row_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	row_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row_wrap.add_child(row_bg)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row_wrap.add_child(row)
+
+	var tag_box := PanelContainer.new()
+	var tag_style := StyleBoxFlat.new()
+	tag_style.bg_color = Color(0.4, 0.7, 0.3)
+	tag_style.set_corner_radius_all(4)
+	tag_style.content_margin_top = 1
+	tag_style.content_margin_bottom = 1
+	tag_style.content_margin_left = 5
+	tag_style.content_margin_right = 5
+	tag_box.add_theme_stylebox_override("panel", tag_style)
+	row.add_child(tag_box)
+	var tag_lbl := Label.new()
+	tag_lbl.text = Locale.tr_ui("PASSIVE")
+	tag_lbl.add_theme_font_size_override("font_size", 16)
+	tag_lbl.add_theme_color_override("font_color", Color.WHITE)
+	tag_lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
+	tag_lbl.add_theme_constant_override("shadow_offset_x", 1)
+	tag_lbl.add_theme_constant_override("shadow_offset_y", 1)
+	tag_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag_box.add_child(tag_lbl)
+
+	var nm := Label.new()
+	nm.text = _enemy_passive_name(data)
+	nm.add_theme_font_size_override("font_size", 19)
+	nm.add_theme_color_override("font_color", Color.WHITE)
+	nm.add_theme_color_override("font_outline_color", Color.BLACK)
+	nm.add_theme_constant_override("outline_size", 4)
+	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(nm)
+
+	entry.add_child(_make_enemy_passive_requirement_box(data))
+
+	var dl := Label.new()
+	dl.text = _enemy_passive_desc(data)
+	dl.add_theme_font_size_override("font_size", 16)
+	dl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	entry.add_child(dl)
+
+
+func _make_enemy_passive_requirement_box(data: EnemyData) -> Control:
+	var wrap := VBoxContainer.new()
+	wrap.add_theme_constant_override("separation", 2)
+	wrap.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var stack := Control.new()
+	stack.custom_minimum_size = Vector2(62, 54)
+	wrap.add_child(stack)
+	var gem := TextureRect.new()
+	gem.texture = Block.GEM_TEXTURES.get(data.passive_required_gem_type, null)
+	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	gem.set_anchors_preset(Control.PRESET_FULL_RECT)
+	stack.add_child(gem)
+	var num := Label.new()
+	num.text = "%d+" % EnemyData.clamp_passive_required_gem_count(data.passive_required_gem_count)
+	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	num.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
+	if font != null:
+		num.add_theme_font_override("font", font)
+	num.add_theme_font_size_override("font_size", 26)
+	num.add_theme_color_override("font_color", Color.WHITE)
+	num.add_theme_color_override("font_outline_color", Color.BLACK)
+	num.add_theme_constant_override("outline_size", 5)
+	stack.add_child(num)
+	var hint := Label.new()
+	hint.text = Locale.tr_ui("ENEMY_PASSIVE_REQUIREMENT")
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_color_override("font_color", Color(0.85, 0.85, 0.95))
+	wrap.add_child(hint)
+	return wrap
+
+
+func _enemy_passive_name(data: EnemyData) -> String:
+	match int(data.passive_type):
+		EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE:
+			return Locale.tr_or(data.passive_name, Locale.tr_ui("Gem Gate"))
+	return Locale.tr_ui("PASSIVE")
+
+
+func _enemy_passive_desc(data: EnemyData) -> String:
+	match int(data.passive_type):
+		EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE:
+			var template: String = Locale.tr_or("Gem Gate DESC", "Requires %d+ %s gems this turn to deal normal damage. Otherwise incoming damage becomes 1.")
+			return template % [EnemyData.clamp_passive_required_gem_count(data.passive_required_gem_count), _localized_element_name(data.passive_required_gem_type)]
+	return Locale.tr_or(data.passive_desc, data.passive_desc)
+
+
+func _localized_element_name(element_type: int) -> String:
+	match element_type:
+		Block.Type.RED:
+			return Locale.tr_ui("ELEMENT_FIRE")
+		Block.Type.BLUE:
+			return Locale.tr_ui("ELEMENT_WATER")
+		Block.Type.GREEN:
+			return Locale.tr_ui("ELEMENT_LEAF")
+		Block.Type.LIGHT:
+			return Locale.tr_ui("ELEMENT_LIGHT")
+		Block.Type.DARK:
+			return Locale.tr_ui("ELEMENT_DARK")
+	return str(element_type)
+
+
+func _close_enemy_status_popup() -> void:
+	if _enemy_popup_layer == null:
+		return
+	var layer := _enemy_popup_layer
+	_enemy_popup_layer = null
+	var tw := create_tween().set_parallel(true)
+	for child in layer.get_children():
+		tw.tween_property(child, "modulate:a", 0.0, 0.14).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(layer.queue_free)
 
 
 ## 偵錯：將本回合所有存活敵人 HP 扣為 0，沿用既有死亡 → 下一波 / 勝利流程

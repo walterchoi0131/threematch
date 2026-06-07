@@ -13,6 +13,7 @@ signal turn_changed(turn: int)
 signal enemy_attacked(enemy: Enemy, damage: int)
 ## Emitted when an enemy casts stone magic; Main handles board transmutation VFX.
 signal enemy_stone_magic_cast(enemy: Enemy)
+signal enemy_long_pressed(enemy: Enemy)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
 signal round_spawned(round_idx: int)  ## 一波敵人已生成完畢
 signal loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
@@ -146,6 +147,7 @@ func _spawn_round(round_idx: int) -> void:
 	for i in enemy_list.size():
 		var ed: EnemyData = enemy_list[i]
 		var enemy: Enemy = EnemyScene.instantiate()
+		enemy.battle_manager_ref = self
 		enemy_container.add_child(enemy)
 		var init_cd: int = -1
 		if i < init_cd_list.size():
@@ -163,6 +165,9 @@ func _spawn_round(round_idx: int) -> void:
 			main_boss_spawn = ed.is_main_boss
 		enemy.setup(ed, init_cd, spawn_level, estimated_team_hp, estimated_max_hp, main_boss_spawn)
 		enemy.pressed.connect(_on_enemy_pressed)
+		enemy.long_pressed.connect(func(long_enemy: Enemy) -> void:
+			enemy_long_pressed.emit(long_enemy)
+		)
 		enemy.died.connect(_on_enemy_died)
 		active_enemies.append(enemy)
 		# 同步邏輯敗人 HP 與 CD
@@ -245,6 +250,7 @@ func get_attack_data(gem_type: Block.Type, count: int) -> Array:
 		if hit_target != null:
 			mult = get_element_multiplier(c.gem_type, hit_target.data.element)
 		var dmg := int(base_dmg * mult)
+		var predicted_dmg: int = get_enemy_damage_after_passives(hit_target, dmg)
 		attacks.append({
 			"char_index": i,
 			"gem_type": gem_type,
@@ -253,7 +259,7 @@ func get_attack_data(gem_type: Block.Type, count: int) -> Array:
 			"target": hit_target,
 			"is_super": mult > 1.0,
 		})
-		sim_hp[hit_target] = int(sim_hp.get(hit_target, hit_target.current_hp)) - dmg
+		sim_hp[hit_target] = int(sim_hp.get(hit_target, hit_target.current_hp)) - predicted_dmg
 		if target == hit_target and int(sim_hp.get(hit_target, 0)) <= 0:
 			target = null
 	return attacks
@@ -273,8 +279,9 @@ func _get_best_enemy_for_attack(character: CharacterData, count: int, sim_hp: Di
 		if remaining_hp <= 0:
 			continue
 		var raw_damage: int = int(float(character.get_atk() * count) * get_element_multiplier(character.gem_type, e.data.element))
-		var effective_damage: int = mini(raw_damage, remaining_hp)
-		if raw_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
+		var predicted_damage: int = get_enemy_damage_after_passives(e, raw_damage)
+		var effective_damage: int = mini(predicted_damage, remaining_hp)
+		if predicted_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
 			kill_enemy = e
 			kill_remaining_hp = remaining_hp
 			kill_raw_damage = raw_damage
@@ -299,6 +306,18 @@ func get_element_multiplier(attacker_element: Block.Type, defender_element: Bloc
 	if attacker_element == Block.Type.BLUE and defender_element == Block.Type.RED:
 		return 1.5
 	return 1.0
+
+
+func get_enemy_damage_after_passives(enemy: Enemy, raw_damage: int) -> int:
+	if raw_damage <= 0 or enemy == null or not is_instance_valid(enemy) or enemy.data == null:
+		return maxi(0, raw_damage)
+	match int(enemy.data.passive_type):
+		EnemyData.PassiveType.REQUIRE_GEM_COUNT_DAMAGE_GATE:
+			var required_count: int = EnemyData.clamp_passive_required_gem_count(enemy.data.passive_required_gem_count)
+			var blasted_count: int = int(turn_gem_blasts.get(enemy.data.passive_required_gem_type, 0))
+			if blasted_count < required_count:
+				return mini(raw_damage, EnemyData.PASSIVE_REDUCED_DAMAGE_DEFAULT)
+	return raw_damage
 
 
 ## 取得野豬「飲水」被動的治療量（傷害的 50%）
@@ -535,7 +554,8 @@ func logic_apply_blast(gem_type: int, count: int) -> void:
 		var base_dmg: int = c.get_atk() * count
 		var mult: float = get_element_multiplier(c.gem_type, hit.data.element)
 		var dmg: int = int(base_dmg * mult)
-		logic_enemy_hp[hit] = max(0, logic_enemy_hp.get(hit, 0) - dmg)
+		var predicted_dmg: int = get_enemy_damage_after_passives(hit, dmg)
+		logic_enemy_hp[hit] = max(0, logic_enemy_hp.get(hit, 0) - predicted_dmg)
 		if target == hit and int(logic_enemy_hp.get(hit, 0)) <= 0:
 			target = null
 
@@ -572,8 +592,9 @@ func _logic_get_best_target_for_attack(character: CharacterData, count: int) -> 
 		if remaining_hp <= 0:
 			continue
 		var raw_damage: int = int(float(character.get_atk() * count) * get_element_multiplier(character.gem_type, e.data.element))
-		var effective_damage: int = mini(raw_damage, remaining_hp)
-		if raw_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
+		var predicted_damage: int = get_enemy_damage_after_passives(e, raw_damage)
+		var effective_damage: int = mini(predicted_damage, remaining_hp)
+		if predicted_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
 			kill_enemy = e
 			kill_remaining_hp = remaining_hp
 			kill_raw_damage = raw_damage
