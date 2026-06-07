@@ -462,7 +462,7 @@ func _show_line(line: _DialogLine) -> void:
 		# ── 擠壓彈跳說話動畫 ──
 		var portrait: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
 		if line.shake and line.action != "exit" and portrait != null and portrait.visible:
-			_play_squeeze_bounce(portrait)
+			_play_squeeze_bounce(portrait, _portrait_target_scale(char_id, side))
 
 		# ── 名稱 ──
 		_name_label.text = Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
@@ -592,14 +592,20 @@ func _portrait_anchor_position(side: String) -> Vector2:
 
 func _portrait_target_position(side: String, side_index: int, side_count: int = 1, active_index: int = -1) -> Vector2:
 	var anchor_position: Vector2 = _portrait_anchor_position(side)
+	var char_id: String = ""
+	if _side_characters.has(side):
+		var side_list: Array = _side_characters[side]
+		if side_index >= 0 and side_index < side_list.size():
+			char_id = String(side_list[side_index])
+	var character_offset: Vector2 = _dialog_phase_offset(char_id)
 	if side_count <= 1:
-		return anchor_position
+		return anchor_position + character_offset
 	var display_index: int = side_index
 	if active_index >= 0:
 		display_index = posmod(side_index - active_index, side_count)
 	var angle: float = -PI * 0.5 + TAU * float(display_index) / float(side_count)
 	var offset := Vector2(cos(angle) * ROTARY_X_RADIUS, -sin(angle) * ROTARY_Y_RADIUS)
-	return anchor_position + offset
+	return anchor_position + offset + character_offset
 
 
 func _side_active_speaker_id(side: String) -> String:
@@ -607,9 +613,41 @@ func _side_active_speaker_id(side: String) -> String:
 
 
 func _portrait_target_scale(char_id: String, side: String) -> Vector2:
+	var character_scale: float = _dialog_phase_scale(char_id)
 	if char_id == _side_active_speaker_id(side):
-		return Vector2(1.0, 1.0)
-	return Vector2(BACK_PORTRAIT_SCALE, BACK_PORTRAIT_SCALE)
+		return Vector2(character_scale, character_scale)
+	return Vector2(BACK_PORTRAIT_SCALE * character_scale, BACK_PORTRAIT_SCALE * character_scale)
+
+
+func _dialog_phase_scale(char_id: String) -> float:
+	var character: CharacterData = _find_character_data(char_id)
+	if character == null:
+		return 1.0
+	return maxf(0.05, character.dialog_phase_scale)
+
+
+func _dialog_phase_offset(char_id: String) -> Vector2:
+	var character: CharacterData = _find_character_data(char_id)
+	if character == null:
+		return Vector2.ZERO
+	return character.dialog_phase_offset
+
+
+func _find_character_data(char_id: String) -> CharacterData:
+	if char_id.is_empty():
+		return null
+	var gs: Node = get_node_or_null("/root/GameState")
+	if gs == null or not gs.has_method("get_character_catalog"):
+		return null
+	var lower := char_id.to_lower()
+	var catalog: Array = gs.call("get_character_catalog")
+	for entry in catalog:
+		if entry is CharacterData:
+			var c: CharacterData = entry as CharacterData
+			var path_id := c.resource_path.get_file().get_basename().trim_prefix("char_").to_lower()
+			if path_id == lower or c.character_name.to_lower() == lower:
+				return c
+	return null
 
 
 func _make_dynamic_portrait(char_id: String) -> TextureRect:
@@ -699,9 +737,9 @@ func _ensure_character_entered(char_id: String, side: String, emotion: String) -
 	portrait.modulate = ACTIVE_COLOR
 	portrait.flip_h = side == "left"
 	portrait.z_index = ACTIVE_PORTRAIT_Z
-	portrait.scale = Vector2(1.0, 1.0)
 	var active_index: int = side_list.find(char_id)
 	var target_position: Vector2 = _portrait_target_position(side, side_list.size() - 1, side_list.size(), active_index)
+	portrait.scale = _portrait_target_scale(char_id, side)
 	portrait.set_meta("home_x", target_position.x)
 	var slide_offset: float = ViewportUtils.get_size().x * SLIDE_OFFSET_RATIO
 	portrait.position = Vector2(target_position.x - slide_offset if side == "left" else target_position.x + slide_offset, target_position.y)
@@ -841,18 +879,18 @@ func _set_portrait_dim(portrait: TextureRect, dim: bool) -> void:
 	tw.tween_property(portrait, "modulate", target, DIM_DUR)
 
 
-func _play_squeeze_bounce(portrait: TextureRect) -> void:
+func _play_squeeze_bounce(portrait: TextureRect, base_scale: Vector2) -> void:
 	# 設定 pivot 到底部中心（立繪從底部擠壓）
 	portrait.pivot_offset = Vector2(portrait.size.x * 0.5, portrait.size.y)
 
 	var t: float = SQUEEZE_DUR
 	var tw := create_tween()
 	# 擠壓（壓扁）
-	tw.tween_property(portrait, "scale", Vector2(1.06, 0.92), t * 0.3) \
+	tw.tween_property(portrait, "scale", base_scale * Vector2(1.06, 0.92), t * 0.3) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	# 彈起（拉長）
-	tw.tween_property(portrait, "scale", Vector2(0.95, 1.08), t * 0.35) \
+	tw.tween_property(portrait, "scale", base_scale * Vector2(0.95, 1.08), t * 0.35) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	# 回歸
-	tw.tween_property(portrait, "scale", Vector2(1.0, 1.0), t * 0.35) \
+	tw.tween_property(portrait, "scale", base_scale, t * 0.35) \
 		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)

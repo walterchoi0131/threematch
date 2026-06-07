@@ -88,6 +88,25 @@ static func build(parent: Node, characters: Array, on_apply: Callable) -> Contro
 		)
 
 		# ── 方形卡片頭像（Square Card — 角色列表 / 準備畫面）──
+		var phase_lbl := Label.new()
+		phase_lbl.text = "  Dialog Phase"
+		phase_lbl.add_theme_font_size_override("font_size", 12)
+		phase_lbl.add_theme_color_override("font_color", Color(1.0, 0.78, 0.55))
+		section.add_child(phase_lbl)
+
+		_add_slider(section, "Phase Scale", cap.dialog_phase_scale, 0.1, 5.0, 0.05, func(v: float) -> void:
+			cap.dialog_phase_scale = v
+			_save(cap)
+		)
+		_add_slider(section, "Phase X", cap.dialog_phase_offset.x, -400, 400, 1.0, func(v: float) -> void:
+			cap.dialog_phase_offset.x = v
+			_save(cap)
+		)
+		_add_slider(section, "Phase Y", cap.dialog_phase_offset.y, -400, 400, 1.0, func(v: float) -> void:
+			cap.dialog_phase_offset.y = v
+			_save(cap)
+		)
+
 		var sq_lbl := Label.new()
 		sq_lbl.text = "  Square Card"
 		sq_lbl.add_theme_font_size_override("font_size", 12)
@@ -119,6 +138,8 @@ static func build(parent: Node, characters: Array, on_apply: Callable) -> Contro
 				cd.character_name, cd.portrait_scale, cd.portrait_offset.x, cd.portrait_offset.y])
 			print("%s  dialog_square_scale = %.2f  dialog_square_offset = Vector2(%.1f, %.1f)" % [
 				cd.character_name, cd.dialog_square_scale, cd.dialog_square_offset.x, cd.dialog_square_offset.y])
+			print("%s  dialog_phase_scale = %.2f  dialog_phase_offset = Vector2(%.1f, %.1f)" % [
+				cd.character_name, cd.dialog_phase_scale, cd.dialog_phase_offset.x, cd.dialog_phase_offset.y])
 			print("%s  square_scale = %.2f  square_offset = Vector2(%.1f, %.1f)" % [
 				cd.character_name, cd.square_scale, cd.square_offset.x, cd.square_offset.y])
 	)

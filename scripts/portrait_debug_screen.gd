@@ -4,6 +4,7 @@
 ##   1 = Square Card   (square_scale   / square_offset)     → 7 欄角色格（VP_W/7 每格）
 ##   2 = Result Row    (rectangular_scale / rectangular_offset) → 戰鬥結算列
 ##   3 = Dialog Box    (dialog_square_scale / dialog_square_offset) → 對話框底部
+##   4 = Dialog Phase  (dialog_phase_scale / dialog_phase_offset)   → 劇情對話大立繪
 ## 拖拽 = 調整 Offset，滚輪 = 調整 Scale。Save 按鈕寫回 .tres。
 extends Control
 
@@ -14,6 +15,7 @@ const _STAT_LEVEL_MAX: int = 99
 const _STAT_HP_COLOR: Color = Color(0.36, 0.82, 0.96, 1.0)
 const _STAT_MAGIC_COLOR: Color = Color(0.78, 0.58, 1.0, 1.0)
 const _STAT_ATK_COLOR: Color = Color(1.0, 0.50, 0.42, 1.0)
+const _DIALOG_PHASE_PREVIEW_MAX_H: float = 640.0
 ## 遊戲 viewport 實際寬度（由 ViewportUtils.get_size().x 動態設定，預設等於專案基準 720px）
 var _VP_W: float = 720.0
 
@@ -24,6 +26,7 @@ const _SYS: Array = [
 	["square_scale",        "square_offset",        "Square Card"],
 	["rectangular_scale",   "rectangular_offset",   "Result Row"],
 	["dialog_square_scale", "dialog_square_offset", "Dialog Box"],
+	["dialog_phase_scale",  "dialog_phase_offset",  "Dialog Phase"],
 ]
 
 var _char_data: CharacterData = null
@@ -35,11 +38,11 @@ var _wrappers: Array[Control]    = []
 ## TextureRect（或 null）for each preview card
 var _portraits: Array            = []   # untyped: TextureRect or null
 ## 是否用 anchor offset 定位（rectangular），否則用 .position
-var _is_rect: Array[bool]        = [false, false, true, false]
+var _is_rect: Array[bool]        = [false, false, true, false, false]
 
 var _scale_lbls: Array[Label]         = []
 var _offset_lbls: Array[Label]        = []
-var _drag_active: Array[bool]         = [false, false, false, false]
+var _drag_active: Array[bool]         = []
 var _drag_start_mouse: Array[Vector2] = []
 var _drag_start_offset: Array[Vector2] = []
 var _char_btns: Array[Button]         = []
@@ -62,7 +65,8 @@ var _syncing_growth_mode_options: bool = false
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	for _i: int in 4:
+	for _i: int in _SYS.size():
+		_drag_active.append(false)
 		_drag_start_mouse.append(Vector2.ZERO)
 		_drag_start_offset.append(Vector2.ZERO)
 		_portraits.append(null)
@@ -145,9 +149,7 @@ func _build() -> void:
 	preview_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_scroll.add_child(preview_vbox)
 
-	_build_stats_section(preview_vbox)
-
-	for i: int in 4:
+	for i: int in _SYS.size():
 		_build_preview_col(preview_vbox, i)
 
 	# 分割線
@@ -200,7 +202,7 @@ func _build_preview_col(parent: VBoxContainer, sys_idx: int) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.custom_minimum_size   = Vector2(0.0, 180.0)
+	row.custom_minimum_size   = Vector2(0.0, 0.0)
 	parent.add_child(row)
 
 	# ── 左側資訊欄 ──
@@ -712,7 +714,7 @@ func _rebuild_preview(idx: int) -> void:
 	# Battle: CharacterRow offset_top=-200 → offset_bottom=-140 → 高度 60px
 	# Square: VP_W / 7 ≈ 82px（同 characters_screen / prepare_screen 公式）
 	var cell: float = _VP_W / 7.0
-	var scene_heights: Array[float] = [60.0, cell, 240.0, 190.0]
+	var scene_heights: Array[float] = [60.0, cell, 112.0, 190.0, _dialog_phase_preview_height()]
 	var scene_h: float = scene_heights[idx]
 
 	match idx:
@@ -724,6 +726,8 @@ func _rebuild_preview(idx: int) -> void:
 			portrait_ref = _build_scene_result(scene, scene_h)
 		3:
 			portrait_ref = _build_scene_dialog(scene, scene_h)
+		4:
+			portrait_ref = _build_scene_dialog_phase(scene, scene_h)
 
 	scene.size = Vector2(_VP_W, scene_h)
 	_portraits[idx] = portrait_ref
@@ -838,7 +842,7 @@ func _build_scene_result(scene: Control, scene_h: float) -> TextureRect:
 	var chars: Array[CharacterData] = _debug_characters()
 	var target_idx: int = chars.find(_char_data)
 	# 顯示 2 列：目標角色在第 0 列，另一個角色作背景
-	const N_ROWS: int = 2
+	const N_ROWS: int = 1
 	var portrait_ref: TextureRect = null
 
 	for ri: int in N_ROWS:
@@ -1004,6 +1008,114 @@ func _build_scene_dialog(scene: Control, scene_h: float) -> TextureRect:
 # ─────────────────────────────────────────────────────────────
 # 工具：在 scene 上貼標籤文字
 # ─────────────────────────────────────────────────────────────
+func _build_scene_dialog_phase(scene: Control, scene_h: float) -> TextureRect:
+	const PHASE_PORTRAIT_SCALE: float = 7.2
+	const PHASE_PORTRAIT_Y_RATIO: float = 0.527
+	const PHASE_LEFT_X_RATIO: float = 0.064
+	const PHASE_PANEL_H: float = 300.0
+	var actual_vp: Vector2 = ViewportUtils.get_size()
+	var preview_scale: float = _dialog_phase_preview_scale()
+	var preview_size: Vector2 = actual_vp * preview_scale
+	scene.set_meta("debug_input_scale", preview_scale)
+
+	var viewport_root := Control.new()
+	viewport_root.size = actual_vp
+	viewport_root.scale = Vector2(preview_scale, preview_scale)
+	viewport_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scene.add_child(viewport_root)
+
+	var bg_tex: Texture2D = load("res://assets/dialog_background/dialog_bg_classroom.png") as Texture2D
+	if bg_tex != null:
+		var bg := TextureRect.new()
+		bg.texture = bg_tex
+		bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		bg.size = actual_vp
+		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		viewport_root.add_child(bg)
+	else:
+		var bg_color := ColorRect.new()
+		bg_color.color = Color(0.08, 0.09, 0.13, 1.0)
+		bg_color.size = actual_vp
+		bg_color.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		viewport_root.add_child(bg_color)
+
+	var portrait_ref: TextureRect = null
+	if _char_data.portrait_texture != null:
+		var portrait_w: float = 300.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+		var portrait_h: float = 400.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+		var base_position := Vector2(
+			actual_vp.x * PHASE_LEFT_X_RATIO - (portrait_w - 300.0) * 0.5 - 30.0,
+			actual_vp.y * PHASE_PORTRAIT_Y_RATIO - (portrait_h - 400.0)
+		)
+		var portrait := TextureRect.new()
+		portrait.texture = _char_data.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		portrait.size = Vector2(portrait_w, portrait_h)
+		portrait.custom_minimum_size = portrait.size
+		portrait.pivot_offset = Vector2(portrait_w * 0.5, portrait_h)
+		portrait.set_meta("debug_base_position", base_position)
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		viewport_root.add_child(portrait)
+		portrait_ref = portrait
+
+	var panel := PanelContainer.new()
+	panel.position = Vector2(0.0, actual_vp.y - PHASE_PANEL_H)
+	panel.size = Vector2(actual_vp.x, PHASE_PANEL_H)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0.08, 0.08, 0.14, 0.92)
+	ps.border_color = Color(0.35, 0.35, 0.5, 0.6)
+	ps.set_border_width_all(2)
+	ps.set_corner_radius_all(0)
+	ps.set_content_margin_all(24)
+	panel.add_theme_stylebox_override("panel", ps)
+	viewport_root.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var name_lbl := Label.new()
+	name_lbl.text = _char_data.character_name
+	name_lbl.add_theme_font_size_override("font_size", 28)
+	name_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(name_lbl)
+
+	var text_lbl := Label.new()
+	text_lbl.text = "Dialog phase portrait preview"
+	text_lbl.add_theme_font_size_override("font_size", 24)
+	text_lbl.add_theme_color_override("font_color", Color.WHITE)
+	text_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(text_lbl)
+
+	var outline := Panel.new()
+	outline.size = preview_size
+	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var outline_style := StyleBoxFlat.new()
+	outline_style.draw_center = false
+	outline_style.border_color = Color(0.5, 0.52, 0.68, 0.65)
+	outline_style.set_border_width_all(1)
+	outline.add_theme_stylebox_override("panel", outline_style)
+	scene.add_child(outline)
+
+	return portrait_ref
+
+
+func _dialog_phase_preview_height() -> float:
+	return ceil(ViewportUtils.get_size().y * _dialog_phase_preview_scale())
+
+
+func _dialog_phase_preview_scale() -> float:
+	var actual_vp: Vector2 = ViewportUtils.get_size()
+	if actual_vp.x <= 0.0 or actual_vp.y <= 0.0:
+		return 1.0
+	var available_w: float = maxf(_VP_W - 98.0, 360.0)
+	return minf(1.0, minf(available_w / actual_vp.x, _DIALOG_PHASE_PREVIEW_MAX_H / actual_vp.y))
+
+
 func _add_label(parent: Control, text: String, x: float, y: float, font_size: int) -> void:
 	var lbl := Label.new()
 	lbl.text = text
@@ -1088,9 +1200,8 @@ func _select_char(idx: int) -> void:
 		var sel: Node = _char_btns[j].get_node_or_null("SelBorder")
 		if sel != null:
 			(sel as Control).visible = (j == idx)
-	for i: int in 4:
+	for i: int in _SYS.size():
 		_rebuild_preview(i)
-	_refresh_stats_section()
 
 
 func _on_grant_all_owned_pressed() -> void:
@@ -1111,7 +1222,7 @@ func _rebuild_preserving_selection(selected_path: String) -> void:
 	_drag_active.clear()
 	_drag_start_mouse.clear()
 	_drag_start_offset.clear()
-	for _i: int in 4:
+	for _i: int in _SYS.size():
 		_drag_active.append(false)
 		_drag_start_mouse.append(Vector2.ZERO)
 		_drag_start_offset.append(Vector2.ZERO)
@@ -1160,7 +1271,8 @@ func _on_preview_input(ev: InputEvent, idx: int) -> void:
 	elif ev is InputEventMouseMotion and _drag_active[idx]:
 		var mm: InputEventMouseMotion = ev as InputEventMouseMotion
 		# scene は 1:1 スケールなのでマウス delta = ゲーム pixel delta
-		var delta: Vector2 = mm.global_position - _drag_start_mouse[idx]
+		var input_scale: float = _preview_input_scale(idx)
+		var delta: Vector2 = (mm.global_position - _drag_start_mouse[idx]) / input_scale
 		_set_offset(idx, _drag_start_offset[idx] + delta)
 		_refresh_preview(idx)
 
@@ -1183,7 +1295,8 @@ func _refresh_preview(idx: int) -> void:
 		portrait.offset_bottom = 0.0             + offset_v.y
 	else:
 		portrait.scale    = Vector2(scale_v, scale_v)
-		portrait.position = offset_v
+		var base_position: Vector2 = portrait.get_meta("debug_base_position", Vector2.ZERO)
+		portrait.position = base_position + offset_v
 
 	_scale_lbls[idx].text  = "Scale: %.2f" % scale_v
 	_offset_lbls[idx].text = "(%.0f, %.0f)" % [offset_v.x, offset_v.y]
@@ -1211,6 +1324,15 @@ func _set_offset(idx: int, v: Vector2) -> void:
 	if _char_data == null:
 		return
 	_char_data.set(_SYS[idx][1], v)
+
+
+func _preview_input_scale(idx: int) -> float:
+	if idx < 0 or idx >= _scene_nodes.size():
+		return 1.0
+	var scene: Control = _scene_nodes[idx]
+	if scene == null:
+		return 1.0
+	return maxf(0.01, float(scene.get_meta("debug_input_scale", 1.0)))
 
 
 func _save() -> void:

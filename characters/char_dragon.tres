@@ -1,13 +1,13 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://dqg51vowqc4vw"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://b2d3f5dn6b3om" path="res://assets/dragon.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/dragon.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
 character_name = "Milo"
 job_id = "breaker"
-level = 9
+level = 8
 base_atk = 4
 atk_growth = 8.0
 base_hp = 60

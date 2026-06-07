@@ -9,3 +9,5 @@ gem_type = 0
 max_hp = 120
 atk = 15
 portrait_color = Color(0.91, 0.26, 0.21, 1)
+dialog_phase_scale = 1.0
+dialog_phase_offset = Vector2(0, 0)
