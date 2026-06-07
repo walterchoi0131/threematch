@@ -57,7 +57,7 @@ static func make_steps(party: Array = []) -> Array:
 		{
 			"pre_dialog": [
 				_line("husky", "normal",
-					"敵人的攻擊會扣你的 HP。當 HP 被打到 0，就會戰敗。",
+					"敵人的攻擊會損耗你的 HP。當 HP 歸 0 時，就會戰鬥失敗。",
 					"Enemy attacks damage your HP. If your HP reaches 0, you lose the battle."),
 			],
 			"spotlight": {
@@ -115,7 +115,7 @@ static func _line(char_id: String, emotion: String, zh: String, en: String) -> _
 static func make_round3_dialog() -> Array:
 	return [
 		_line("husky", "normal",
-			"注意每隻敵人圖示下方的數字——\n那是它距離攻擊你還剩幾回合！",
+			"注意敵人圖示下方的數字——\n那是它距離攻擊你還剩幾回合！",
 			"Notice the number below each enemy portrait —\nthat's how many turns until it attacks you!"),
 		_line("husky", "normal",
 			"點擊敵人可以切換攻擊目標。\n優先擊倒倒計時最短的敵人！",
@@ -127,9 +127,7 @@ static func make_round3_dialog() -> Array:
 static func make_victory_dialog() -> Array:
 	return [
 		_line("husky", "normal",
-			"你做到了！第一關的所有敵人都被你打敗了！",
-			"You did it! Every enemy in Stage 1 has been defeated!"),
-		_line("husky", "normal",
-			"繼續成長吧——更強大的冒險在前方等著你！",
-			"Keep growing stronger — greater adventures lie ahead!"),
+			"你做到了！恭喜成功通過終末考試！",
+			"You did it! Congratulations on passing the final exam!"),
+		
 	]

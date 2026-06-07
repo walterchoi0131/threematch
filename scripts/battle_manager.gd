@@ -169,8 +169,6 @@ func _spawn_round(round_idx: int) -> void:
 		logic_enemy_hp[enemy] = enemy.current_hp
 		logic_enemy_cd[enemy] = enemy.turns_until_attack
 
-	if active_enemies.size() > 0:
-		_set_target(active_enemies[0])
 	round_spawned.emit(round_idx)
 
 
@@ -223,43 +221,70 @@ func get_attack_data(gem_type: Block.Type, count: int) -> Array:
 		turn_gem_blasts[gem_type] = int(turn_gem_blasts.get(gem_type, 0)) + pending
 		pending_skill_blasts[gem_type] = 0
 		turn_gem_blasts_changed.emit()
-	# 若當前目標已失效，嘗試自動切換到下一個存活敵人
+	var sim_hp: Dictionary = {}
+	for e in active_enemies:
+		if is_instance_valid(e):
+			sim_hp[e] = e.current_hp
 	var target := targeted_enemy
-	if target == null or not is_instance_valid(target) or target.current_hp <= 0:
+	if target != null and (not is_instance_valid(target) or int(sim_hp.get(target, 0)) <= 0):
 		target = null
-		for e in active_enemies:
-			if is_instance_valid(e) and e.current_hp > 0:
-				target = e
-				break
-		# fallback：若無存活敵人，接受「延遲死亡」狀態的敵人作為目標
-		# （讓高階寶石連鎖中被聖十字打死的敵人仍能被後續 VFX 攻擊「過殺」）
-		if target == null:
-			for e in active_enemies:
-				if is_instance_valid(e) and e.defer_death:
-					target = e
-					break
-		if target != null:
-			_set_target(target)
 	for i in characters.size():
 		var c := characters[i]
 		if c.gem_type != gem_type:
 			continue
-		if target == null:
+		var hit_target: Enemy = target if is_instance_valid(target) and int(sim_hp.get(target, 0)) > 0 else _get_best_enemy_for_attack(c, count, sim_hp)
+		if hit_target == null:
+			for e in active_enemies:
+				if is_instance_valid(e) and e.defer_death:
+					hit_target = e
+					break
+		if hit_target == null:
 			continue
 		var base_dmg := c.get_atk() * count
 		var mult := 1.0
-		if target != null:
-			mult = get_element_multiplier(c.gem_type, target.data.element)
+		if hit_target != null:
+			mult = get_element_multiplier(c.gem_type, hit_target.data.element)
 		var dmg := int(base_dmg * mult)
 		attacks.append({
 			"char_index": i,
 			"gem_type": gem_type,
 			"count": count,
 			"damage": dmg,
-			"target": target,
+			"target": hit_target,
 			"is_super": mult > 1.0,
 		})
+		sim_hp[hit_target] = int(sim_hp.get(hit_target, hit_target.current_hp)) - dmg
+		if target == hit_target and int(sim_hp.get(hit_target, 0)) <= 0:
+			target = null
 	return attacks
+
+
+func _get_best_enemy_for_attack(character: CharacterData, count: int, sim_hp: Dictionary) -> Enemy:
+	var kill_enemy: Enemy = null
+	var kill_remaining_hp: int = -1
+	var kill_raw_damage: int = -1
+	var best_enemy: Enemy = null
+	var best_effective_damage: int = -1
+	var best_raw_damage: int = -1
+	for e in active_enemies:
+		if not is_instance_valid(e):
+			continue
+		var remaining_hp: int = int(sim_hp.get(e, 0))
+		if remaining_hp <= 0:
+			continue
+		var raw_damage: int = int(float(character.get_atk() * count) * get_element_multiplier(character.gem_type, e.data.element))
+		var effective_damage: int = mini(raw_damage, remaining_hp)
+		if raw_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
+			kill_enemy = e
+			kill_remaining_hp = remaining_hp
+			kill_raw_damage = raw_damage
+		if effective_damage > best_effective_damage or (effective_damage == best_effective_damage and raw_damage > best_raw_damage):
+			best_enemy = e
+			best_effective_damage = effective_damage
+			best_raw_damage = raw_damage
+	if kill_enemy != null:
+		return kill_enemy
+	return best_enemy
 
 
 ## 元素克制：火→葉、葉→水、水→火 = 1.5倍
@@ -503,13 +528,16 @@ func logic_apply_blast(gem_type: int, count: int) -> void:
 	for c in characters:
 		if c.gem_type != gem_type:
 			continue
-		var hit: Enemy = target
+		var hit: Enemy = target if is_instance_valid(target) and int(logic_enemy_hp.get(target, 0)) > 0 else _logic_get_best_target_for_attack(c, count)
 		if hit == null:
 			continue
+		target = hit
 		var base_dmg: int = c.get_atk() * count
 		var mult: float = get_element_multiplier(c.gem_type, hit.data.element)
 		var dmg: int = int(base_dmg * mult)
 		logic_enemy_hp[hit] = max(0, logic_enemy_hp.get(hit, 0) - dmg)
+		if target == hit and int(logic_enemy_hp.get(hit, 0)) <= 0:
+			target = null
 
 	logic_turn += 1
 	# 邏輯敗人 CD 同步遞減
@@ -527,10 +555,35 @@ func logic_apply_blast(gem_type: int, count: int) -> void:
 func _logic_get_target(_gem_type: int = -1) -> Enemy:
 	if targeted_enemy != null and is_instance_valid(targeted_enemy) and logic_enemy_hp.get(targeted_enemy, 0) > 0:
 		return targeted_enemy
-	for e in active_enemies:
-		if is_instance_valid(e) and logic_enemy_hp.get(e, 0) > 0:
-			return e
 	return null
+
+
+func _logic_get_best_target_for_attack(character: CharacterData, count: int) -> Enemy:
+	var kill_enemy: Enemy = null
+	var kill_remaining_hp: int = -1
+	var kill_raw_damage: int = -1
+	var best_enemy: Enemy = null
+	var best_effective_damage: int = -1
+	var best_raw_damage: int = -1
+	for e in active_enemies:
+		if not is_instance_valid(e):
+			continue
+		var remaining_hp: int = int(logic_enemy_hp.get(e, 0))
+		if remaining_hp <= 0:
+			continue
+		var raw_damage: int = int(float(character.get_atk() * count) * get_element_multiplier(character.gem_type, e.data.element))
+		var effective_damage: int = mini(raw_damage, remaining_hp)
+		if raw_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
+			kill_enemy = e
+			kill_remaining_hp = remaining_hp
+			kill_raw_damage = raw_damage
+		if effective_damage > best_effective_damage or (effective_damage == best_effective_damage and raw_damage > best_raw_damage):
+			best_enemy = e
+			best_effective_damage = effective_damage
+			best_raw_damage = raw_damage
+	if kill_enemy != null:
+		return kill_enemy
+	return best_enemy
 
 
 ## 邏輯側：是否有敵人即將發動攻擊（依 logic_enemy_cd）
@@ -580,7 +633,10 @@ func resync_logic_state() -> void:
 
 ## 玩家點擊敎人時設定為攻擊目標
 func _on_enemy_pressed(enemy: Enemy) -> void:
-	_set_target(enemy)
+	if targeted_enemy == enemy:
+		_set_target(null)
+	else:
+		_set_target(enemy)
 
 
 ## 敎人死亡時：移除、重新指定目標、檢查是否進入下一波
@@ -596,8 +652,6 @@ func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
 	logic_enemy_hp.erase(dead_enemy)
 	if targeted_enemy == dead_enemy:
 		targeted_enemy = null
-		if active_enemies.size() > 0:
-			_set_target(active_enemies[0])
 
 	if not active_enemies.is_empty():
 		return

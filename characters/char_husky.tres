@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://p6qx5pm80cmm"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://b4s4lo4vm56jy" path="res://assets/husky.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/husky.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -14,13 +14,13 @@ hp_growth = 9.0
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(1, 0.92, 0.23, 1)
 portrait_scale = 1.5
-portrait_offset = Vector2(-132, -57)
-dialog_square_scale = 1.95
-dialog_square_offset = Vector2(-211.14894, -29.494873)
-square_scale = 1.7000000000000002
-square_offset = Vector2(-185, -36)
+portrait_offset = Vector2(-126, -67)
+dialog_square_scale = 1.7
+dialog_square_offset = Vector2(-178.14894, -14.494873)
+square_scale = 1.3
+square_offset = Vector2(-139, -21)
 rectangular_scale = 0.4
-rectangular_offset = Vector2(-148.9493, 337.05487)
+rectangular_offset = Vector2(-154.9493, 333.05487)
 active_skill_name = "There shall be light"
 active_skill_desc = "Enter selection mode: hover to preview a cross shape, click to convert those gems into light gems. CD: 3 turns."
 active_skill_cd = 3

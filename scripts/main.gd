@@ -86,6 +86,7 @@ var _active_selection_dim_layer: CanvasLayer = null
 var _active_selection_dim_overlay: Control = null
 var _active_selection_dim_tween: Tween = null
 var _active_selection_preview_positions: Array[Vector2i] = []
+var _stage_intro_gems_ready: bool = false
 
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
@@ -3179,6 +3180,7 @@ func _setup_fuse_hints() -> void:
 
 ## 進場動畫：黑幕淡出 → 角色卡從底部滑入 → 寶石隨機浮現
 func _play_stage_intro() -> void:
+	board.set_input_queue_locked(true)
 	board.is_busy = true
 
 	# 建立全螢幕黑色遮罩
@@ -3201,7 +3203,8 @@ func _play_stage_intro() -> void:
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	fade_tw.tween_callback(black_overlay.queue_free)
 
-	board.play_gems_intro()  # fire-and-forget，立即開始
+	_stage_intro_gems_ready = false
+	_play_stage_intro_gems()  # fire-and-forget，立即開始
 
 	# 等 0.5 秒後啟動卡片滑入
 	await get_tree().create_timer(0.5).timeout
@@ -3209,15 +3212,26 @@ func _play_stage_intro() -> void:
 	# ── 教學模式：等所有卡片動畫完成後再延遲 1 秒才啟動 ──
 	if current_stage.is_tutorial:
 		await character_panel.play_intro_slide()  # 等全部卡片滑入完畢
+		while not _stage_intro_gems_ready:
+			await get_tree().process_frame
+		board.set_input_queue_locked(false)
 		await get_tree().create_timer(1.0).timeout
 		_start_battle_tutorial()
 		return
 
 	character_panel.play_intro_slide()  # fire-and-forget
 
-	# 再等 2.9 秒（黑幕共 3.4 秒）完成後解鎖棋盤
+	# 等寶石進場完成後才解鎖棋盤
 	await get_tree().create_timer(0.1).timeout
+	while not _stage_intro_gems_ready:
+		await get_tree().process_frame
+	board.set_input_queue_locked(false)
 	board.is_busy = false
+
+
+func _play_stage_intro_gems() -> void:
+	await board.play_gems_intro()
+	_stage_intro_gems_ready = true
 
 
 ## 啟動戰鬥教學流程
@@ -4202,6 +4216,8 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 			attack["chain_mult"] = chain_mult
 			all_attacks.append(attack)
 
+	_retarget_attack_queue_by_simulated_hp(all_attacks)
+
 	# 等待所有 VFX 同時飛抵目標（僅在有攻擊時等待）
 	if all_attacks.size() > 0:
 		await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
@@ -4227,6 +4243,79 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 				enemy.finalize_death()
 
 
+func _retarget_attack_queue_by_simulated_hp(attacks: Array) -> void:
+	var sim_hp: Dictionary = {}
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			sim_hp[enemy] = enemy.current_hp
+	var manual_target: Enemy = battle_manager.targeted_enemy
+	if manual_target != null and (not is_instance_valid(manual_target) or int(sim_hp.get(manual_target, 0)) <= 0):
+		manual_target = null
+
+	for attack in attacks:
+		var target_ref: Variant = attack.get("target")
+		var target: Enemy = target_ref as Enemy if is_instance_valid(target_ref) else null
+
+		var char_index: int = int(attack.get("char_index", -1))
+		if char_index < 0 or char_index >= party.size():
+			continue
+		var char_data: CharacterData = party[char_index]
+		if char_data == null:
+			continue
+
+		var gem_type: Block.Type = attack.gem_type as Block.Type
+		var gem_count: int = int(attack.get("count", 0))
+		var chain_mult: float = float(attack.get("chain_mult", 1.0))
+		if manual_target != null and int(sim_hp.get(manual_target, 0)) > 0:
+			target = manual_target
+		else:
+			target = _get_best_sim_target_for_attack(char_data, gem_type, gem_count, chain_mult, sim_hp)
+		if target == null:
+			continue
+		var element_mult: float = battle_manager.get_element_multiplier(gem_type, target.data.element) if target.data != null else 1.0
+		var damage: int = int(float(char_data.get_atk() * gem_count) * element_mult * chain_mult)
+		attack["target"] = target
+		attack["damage"] = damage
+		attack["is_super"] = element_mult > 1.0
+		sim_hp[target] = int(sim_hp.get(target, target.current_hp)) - damage
+		if manual_target == target and int(sim_hp.get(target, 0)) <= 0:
+			manual_target = null
+
+
+func _get_best_sim_target_for_attack(character: CharacterData, gem_type: Block.Type, gem_count: int, chain_mult: float, sim_hp: Dictionary) -> Enemy:
+	var base_damage: int = character.get_atk() * gem_count
+	return _get_best_target_for_damage(gem_type, base_damage, chain_mult, sim_hp)
+
+
+func _get_best_target_for_damage(gem_type: Block.Type, base_damage: int, damage_mult: float, sim_hp: Dictionary) -> Enemy:
+	var kill_enemy: Enemy = null
+	var kill_remaining_hp: int = -1
+	var kill_raw_damage: int = -1
+	var best_enemy: Enemy = null
+	var best_effective_damage: int = -1
+	var best_raw_damage: int = -1
+	for enemy in battle_manager.active_enemies:
+		if not is_instance_valid(enemy):
+			continue
+		var remaining_hp: int = int(sim_hp.get(enemy, 0))
+		if remaining_hp <= 0:
+			continue
+		var element_mult: float = battle_manager.get_element_multiplier(gem_type, enemy.data.element) if enemy.data != null else 1.0
+		var raw_damage: int = int(float(base_damage) * element_mult * damage_mult)
+		var effective_damage: int = mini(raw_damage, remaining_hp)
+		if raw_damage >= remaining_hp and (remaining_hp > kill_remaining_hp or (remaining_hp == kill_remaining_hp and raw_damage > kill_raw_damage)):
+			kill_enemy = enemy
+			kill_remaining_hp = remaining_hp
+			kill_raw_damage = raw_damage
+		if effective_damage > best_effective_damage or (effective_damage == best_effective_damage and raw_damage > best_raw_damage):
+			best_enemy = enemy
+			best_effective_damage = effective_damage
+			best_raw_damage = raw_damage
+	if kill_enemy != null:
+		return kill_enemy
+	return best_enemy
+
+
 # ── 攻擊特效 ───────────────────────────────────────────────────
 
 ## 播放單次攻擊序列：角色卡上彈 → 攻擊特效 → 角色卡回位（全部非阻塞，fire-and-forget）
@@ -4238,14 +4327,12 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 	var target_ref: Variant = attack.get("target")
 	var target: Enemy = target_ref as Enemy if is_instance_valid(target_ref) else null
 	var is_super: bool = attack.get("is_super", false)
+	var char_data := party[char_index]
+	var chain_mult: float = attack.get("chain_mult", 1.0)
 
 	# 若原目標已失效，嘗試重新選擇一個存活敵人；若無存活敵人則過殺原目標
 	if not is_instance_valid(target) or target.current_hp <= 0:
-		var new_target: Enemy = null
-		for e in enemy_container.get_children():
-			if is_instance_valid(e) and (e as Enemy).current_hp > 0:
-				new_target = e as Enemy
-				break
+		var new_target: Enemy = _get_best_sim_target_for_attack(char_data, gem_type, gem_count, chain_mult, _get_current_enemy_hp_sim())
 		if new_target != null:
 			target = new_target
 		elif is_instance_valid(target) and target.defer_death:
@@ -4253,12 +4340,12 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 		else:
 			target = null
 
-	var char_data := party[char_index]
-	var mult: float = 1.5 if is_super else 1.0
-	var chain_mult: float = attack.get("chain_mult", 1.0)
-
 	if target == null:
 		return
+	var element_mult: float = battle_manager.get_element_multiplier(gem_type, target.data.element) if target.data != null else 1.0
+	damage = int(float(char_data.get_atk() * gem_count) * element_mult * chain_mult)
+	is_super = element_mult > 1.0
+	var mult: float = element_mult
 
 	# 角色卡片向上彈起
 	await character_panel.play_card_attack_up(char_index)
@@ -4350,6 +4437,14 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 
 	# Card moves back (non-blocking)
 	character_panel.play_card_return(char_index)
+
+
+func _get_current_enemy_hp_sim() -> Dictionary:
+	var sim_hp: Dictionary = {}
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			sim_hp[enemy] = enemy.current_hp
+	return sim_hp
 
 
 # ── responding skills ─────────────────────────────────────────────────
@@ -4582,14 +4677,11 @@ func _start_spell_chain_char_wave(char_label: Label, index: int) -> void:
 	tw.tween_interval(rest_time)
 
 
-func _get_current_living_target() -> Enemy:
+func _get_current_living_target(gem_type: Block.Type = Block.Type.BLUE, base_damage: int = 1, damage_mult: float = 1.0) -> Enemy:
 	var target: Enemy = battle_manager.targeted_enemy
 	if is_instance_valid(target) and target.current_hp > 0:
 		return target
-	for enemy in battle_manager.active_enemies:
-		if is_instance_valid(enemy) and enemy.current_hp > 0:
-			return enemy
-	return null
+	return _get_best_target_for_damage(gem_type, base_damage, damage_mult, _get_current_enemy_hp_sim())
 
 
 func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float) -> void:
@@ -4611,17 +4703,17 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	block.scale = Vector2.ONE
 	block.modulate = Color.WHITE
 
-	var target: Enemy = _get_current_living_target()
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	var base_damage: int = magic_value * ICEBALL_MAGIC_MULT
+	var target: Enemy = _get_current_living_target(Block.Type.BLUE, base_damage, spell_mult)
 	if target == null:
 		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
 		DebrisVfx.play(fx_layer, fallback_texture, start_global, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
 		block.queue_free()
 		return
 
-	var caster_index: int = int(resp.get("char_index", -1))
-	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
-	var magic_value: int = caster.get_magic() if caster != null else 1
-	var base_damage: int = magic_value * ICEBALL_MAGIC_MULT
 	var element_mult: float = battle_manager.get_element_multiplier(Block.Type.BLUE, target.data.element) if target.data != null else 1.0
 	var final_damage: int = maxi(1, int(float(base_damage) * element_mult * spell_mult))
 	var is_super: bool = element_mult > 1.0
@@ -4745,14 +4837,10 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 		var base_atk := husky_data.get_atk() if husky_data != null else 5
 		# 聖十字傷害：原 ×0.08 版本再降低 10 倍。
 		var holy_damage := int(total_enemy_gems * 50 * base_atk * chain_mult * _pending_saint_cross_count * 0.008)
-		# 選定單一目標：當前鎖定敵，若無效則取第一個存活敵
+		# 選定單一目標：有手動瞄準時優先，否則挑有效傷害最高的敵人
 		var saint_target: Enemy = battle_manager.targeted_enemy
 		if saint_target == null or not is_instance_valid(saint_target) or saint_target.current_hp <= 0:
-			saint_target = null
-			for e in battle_manager.active_enemies:
-				if is_instance_valid(e) and e.current_hp > 0:
-					saint_target = e
-					break
+			saint_target = _get_best_target_for_damage(Block.Type.LIGHT, holy_damage, 1.0, _get_current_enemy_hp_sim())
 		# 開啟延遲死亡：即使聖十字打死敵人，後續本波 VFX 攻擊仍可找到目標（過殺）
 		for enemy in battle_manager.active_enemies:
 			if is_instance_valid(enemy):
@@ -5350,19 +5438,16 @@ func _handle_active_skill(char_index: int) -> void:
 				return
 			battle_manager.use_active_skill(char_index)
 			board.is_busy = true
+			var polar_atk := c.get_atk()
+			var snowball_dmg := polar_atk * 10
+			var snowball_count := snowballs.size()
 			var target: Enemy = battle_manager.targeted_enemy
 			if target == null or not is_instance_valid(target) or target.current_hp <= 0:
-				for e in battle_manager.active_enemies:
-					if is_instance_valid(e) and e.current_hp > 0:
-						target = e
-						break
+				target = _get_best_target_for_damage(c.gem_type, snowball_dmg, 1.0, _get_current_enemy_hp_sim())
 			if target == null:
 				board.is_busy = false
 				_update_skill_ui()
 				return
-			var polar_atk := c.get_atk()
-			var snowball_dmg := polar_atk * 10
-			var snowball_count := snowballs.size()
 
 			# ── 第 1 階段：逐顆浮起 ──
 			var float_height := 32.0  # 半格高度
@@ -5411,12 +5496,8 @@ func _handle_active_skill(char_index: int) -> void:
 			var sb_supers: Array[bool] = []
 			for i in sb_blocks.size():
 				# 若目標已被模擬擊殺，切換到下一個
-				if not is_instance_valid(target) or sim_hp.get(target, 0) <= 0:
-					var new_target: Enemy = null
-					for e in battle_manager.active_enemies:
-						if is_instance_valid(e) and sim_hp.get(e, 0) > 0:
-							new_target = e
-							break
+				if not is_instance_valid(target) or int(sim_hp.get(target, 0)) <= 0:
+					var new_target: Enemy = _get_best_target_for_damage(c.gem_type, snowball_dmg, 1.0, sim_hp)
 					if new_target != null:
 						target = new_target
 				var mult: float = battle_manager.get_element_multiplier(c.gem_type, target.data.element)

@@ -29,6 +29,7 @@ var grid: Array = []          # 二維網格陣列 grid[x][y] = Block 或 null
 # is_busy 屬性後備欄位（property 用，setter 觸發 drain）
 var _is_busy_back: bool = false
 var _escape_refill_input_lock: bool = false
+var _input_queue_locked: bool = false
 # is_busy：是否正在處理動畫/消除中（防止重複點擊）
 # 改為 property — falling edge 自動觸發 deferred clicks drain
 var is_busy: bool:
@@ -412,6 +413,12 @@ func set_last_tapped_input(pos: Vector2i, local_pos: Vector2) -> void:
 	last_tapped_local_pos = local_pos
 
 
+func set_input_queue_locked(locked: bool) -> void:
+	_input_queue_locked = locked
+	if locked:
+		deferred_clicks.clear()
+
+
 func get_concurrent_fuse_tapped_local_pos() -> Vector2:
 	return _concurrent_fuse_tapped_local_pos
 
@@ -709,6 +716,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			var fuse_gp := world_to_grid(fuse_local_pos)
 			if _is_valid(fuse_gp):
 				_try_concurrent_fuse(fuse_gp, fuse_local_pos)
+			return
+		if _input_queue_locked:
 			return
 		# 逃脫/無敵人關卡沒有敵人攻擊節奏可吸收預輸入；busy 期間直接忽略點擊。
 		if _is_no_enemy_mode():

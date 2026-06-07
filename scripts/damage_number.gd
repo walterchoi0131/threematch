@@ -8,8 +8,10 @@ extends Node2D
 
 ## 顯示傷害數字（彈跳上升 + 淡出）
 func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool = false, is_super: bool = false) -> void:
+	var bounce_x: float = 0.0
 	if random_x_offset:
-		pos.x += randf_range(-40.0, 40.0)
+		pos.x += randf_range(-6.0, 6.0)
+		bounce_x = randf_range(-60.0, 60.0)
 	global_position = pos
 
 	var label := Label.new()
@@ -43,16 +45,21 @@ func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool 
 
 	add_child(label)
 
+	if random_x_offset:
+		var x_tween := create_tween()
+		x_tween.tween_property(label, "position:x", -40.0 + bounce_x, 0.45).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
 	# 彈跳動畫：往上彈起 → 回落 → 小彈跳 → 定位 → 上浮淡出
 	var tween := create_tween()
 	# 第1階：快速上彈
-	tween.tween_property(label, "position:y", -60.0, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(label, "position:y", -100.0, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	# 第2階：回落
 	tween.tween_property(label, "position:y", -30.0, 0.12).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	# 第3階：小彈跳
 	tween.tween_property(label, "position:y", -45.0, 0.1).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	# 第4階：定位
 	tween.tween_property(label, "position:y", -35.0, 0.08).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tween.tween_interval(0.5)
 	# 第5階：上浮淡出
 	tween.set_parallel(true)
 	tween.tween_property(label, "position:y", -70.0, 0.5).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
