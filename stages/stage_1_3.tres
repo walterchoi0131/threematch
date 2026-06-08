@@ -3,7 +3,30 @@
 [ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
 [ext_resource type="Resource" path="res://enemies/first_owen.tres" id="2_8kdx0"]
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="7_7ge4i"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_dline"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_dseq"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="5_milo"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="6_pan"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="7_ed"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="8_char"]
+
+[sub_resource type="Resource" id="stage13_pre_1"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "Owen！你在做什麼？那是聖域的光之水晶！立刻住手！"
+text_en = "Owen! What are you doing? That is the light crystal of the sanctuary! Stop right now!"
+
+[sub_resource type="Resource" id="stage13_pre_2"]
+script = ExtResource("3_dline")
+character_id = "owen"
+position = "right"
+text_zh = "如果我不呢？"
+text_en = "What if I don't?"
+
+[sub_resource type="Resource" id="stage13_pre_dialog"]
+script = ExtResource("4_dseq")
+lines = Array[ExtResource("3_dline")]([SubResource("stage13_pre_1"), SubResource("stage13_pre_2")])
+cast = Array[String](["husky", "owen"])
 
 [resource]
 script = ExtResource("1_script")
@@ -18,4 +41,6 @@ rounds_enemy_levels = Array[Array]([[1]])
 rounds_main_bosses = Array[Array]([[true]])
 background = 1
 bgm = ExtResource("1_lvgyu")
+pre_dialog = SubResource("stage13_pre_dialog")
+set_party = Array[ExtResource("8_char")]([ExtResource("5_milo"), ExtResource("6_pan"), ExtResource("7_ed")])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]

@@ -42,6 +42,7 @@ var current_exp: int = 0              # 當前累積經驗值（不存入 .tres�
 @export var active_skill_name: String = ""    # 主動技能名稱
 @export var active_skill_desc: String = ""    # 主動技能描述
 @export var active_skill_cd: int = 0          # 主動技能冷卻回合數
+@export var active_unlock_stage_id: String = ""  # 主動技能解鎖所需通關 stage_id；空字串 = 無限制
 @export var has_break_essence: bool = false   # 主動技能是否具「BREAK」屬性（可連同 PLANK 一併拆除）
 @export var active_skill_upgrades: Array[Dictionary] = []  # 主動技能寶石強化定義（玩家進度存在 GameState）
 

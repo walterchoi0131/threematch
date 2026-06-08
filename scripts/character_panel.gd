@@ -730,6 +730,13 @@ func update_cooldown(index: int, turns_left: int) -> void:
 	var gem_icon: TextureRect = _gem_icons.get(index)
 	var prev: int = _prev_cd.get(index, -999)
 	_prev_cd[index] = turns_left
+	if turns_left == -2:
+		cd_lbl.text = ""
+		cd_lbl.visible = false
+		if gem_icon != null:
+			gem_icon.visible = true
+		_stop_glow(index)
+		return
 	if turns_left > 0:
 		cd_lbl.text = "%d" % turns_left
 		cd_lbl.visible = true

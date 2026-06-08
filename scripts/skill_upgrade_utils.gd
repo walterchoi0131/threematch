@@ -83,6 +83,22 @@ static func effective_active_cd(character: CharacterData) -> int:
 	return maxi(0, character.active_skill_cd + delta)
 
 
+static func is_active_stage_unlocked(character: CharacterData) -> bool:
+	if character == null:
+		return false
+	var stage_id: String = character.active_unlock_stage_id.strip_edges()
+	return stage_id == "" or GameState.is_stage_cleared(stage_id)
+
+
+static func get_active_unlock_hint(character: CharacterData) -> String:
+	if character == null or is_active_stage_unlocked(character):
+		return ""
+	var stage_id: String = character.active_unlock_stage_id.strip_edges()
+	if stage_id == "":
+		return ""
+	return "Clear Stage %s to unlock." % stage_id
+
+
 static func leaf_spear_extra_cells(character: CharacterData) -> int:
 	return effect_max(character, KIND_ACTIVE, 0, "leaf_spear_extra_cells")
 
@@ -130,10 +146,13 @@ static func _get_effects(upgrade: Dictionary) -> Dictionary:
 static func get_active_description(character: CharacterData) -> String:
 	if character == null:
 		return ""
+	var unlock_hint: String = get_active_unlock_hint(character)
 	if character.active_skill_name == "Leaf Spear Call":
 		var count: int = 1 + leaf_spear_extra_cells(character)
-		return Locale.tr_ui("Leaf Spear Call DESC DYNAMIC") % [count, effective_active_cd(character)]
-	return Locale.tr_or(character.active_skill_name + " DESC", character.active_skill_desc)
+		var desc: String = Locale.tr_ui("Leaf Spear Call DESC DYNAMIC") % [count, effective_active_cd(character)]
+		return desc if unlock_hint == "" else "%s\n%s" % [desc, unlock_hint]
+	var base_desc: String = Locale.tr_or(character.active_skill_name + " DESC", character.active_skill_desc)
+	return base_desc if unlock_hint == "" else "%s\n%s" % [base_desc, unlock_hint]
 
 
 static func get_responding_description(character: CharacterData, skill_index: int, skill: Dictionary) -> String:

@@ -362,6 +362,17 @@ func _random_type() -> int:
 			1: return Block.Type.BLUE
 			2: return Block.Type.GREEN
 			_: return Block.Type.DARK
+	# 關卡 1-3：固定 32% 火 / 32% 水 / 31% 葉 / 5% 光
+	if stage != null and stage.stage_id == "1-3":
+		var r13: int = randi() % 100
+		if r13 < 32:
+			return Block.Type.RED
+		elif r13 < 64:
+			return Block.Type.BLUE
+		elif r13 < 95:
+			return Block.Type.GREEN
+		else:
+			return Block.Type.LIGHT
 	# 關卡 1-4：固定 60% 火 / 10% 水 / 10% 葉 / 20% 光
 	if stage != null and stage.stage_id == "1-4":
 		var r: int = randi() % 100

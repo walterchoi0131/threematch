@@ -39,6 +39,7 @@ var _plank_event_pending: bool = false
 var _plank_event_done: bool = false
 const _PLANK_EVENT_THRESHOLD := 200
 const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
+const _Stage1_3Owen := preload("res://dialogs/stage1_3_owen.gd")
 
 ## 主動技能完整執行完成信號（供外部事件 await 完成狀態使用）
 signal active_skill_finished(char_index: int)
@@ -67,6 +68,17 @@ const SPELL_CHAIN_WAVE_PERIOD := 0.62
 var party: Array[CharacterData] = []
 var _guest_result_exclusions: Dictionary = {}
 var current_stage: StageData = null
+var _stage13_result_party: Array[CharacterData] = []
+var _stage13_event_running: bool = false
+var _stage13_turn1_done: bool = false
+var _stage13_rescue_done: bool = false
+var _stage13_join_turn: int = -1
+var _stage13_light_hint_done: bool = false
+var _stage13_husky_active_used: bool = false
+var _stage13_owen_light_hit_pending: bool = false
+var _stage13_floor_finale_scheduled: bool = false
+var _stage13_victory_triggered: bool = false
+var _temporary_active_unlocks: Dictionary = {}
 var _upper_blast_positions: Dictionary = {}  # gem_type -> Array of global positions (for upper gem VFX)
 var _is_upper_gem_turn: bool = false  # set when an upper gem click is in progress
 var _chain_atk_bonus: float = 0.0    # accumulated chain ATK bonus (0.10 per chain)
@@ -229,6 +241,10 @@ var _stage_editor_rounds_main_bosses: Array[Array] = []
 var _stage_editor_available_enemies: Array[Dictionary] = []
 
 
+func _is_stage13_story_battle() -> bool:
+	return current_stage != null and current_stage.stage_id == "1-3"
+
+
 # ── 生命週期 ───────────────────────────────────────────────────
 
 ## 初始化：設定關卡、隊伍、連接信號、初始化戰鬥系統
@@ -247,6 +263,10 @@ func _ready() -> void:
 			party = last
 		else:
 			party = [CHAR_DRAGON, CHAR_SHARK, CHAR_PANDA, CHAR_HUSKY]
+	if _is_stage13_story_battle():
+		_stage13_result_party = party.duplicate()
+		party = [CHAR_HUSKY]
+		_guest_result_exclusions[CHAR_HUSKY] = true
 
 	if GameState.stage_edit_mode:
 		call_deferred("_setup_stage_edit_mode")
@@ -3216,6 +3236,8 @@ func _play_stage_intro() -> void:
 		await get_tree().process_frame
 	if _should_show_initial_boss_intro():
 		await _show_boss_intro()
+	if _is_stage13_story_battle():
+		await _run_stage13_turn1_dialog()
 	board.set_input_queue_locked(false)
 	board.is_busy = false
 
@@ -3291,19 +3313,48 @@ func add_temporary_guest_character(guest: CharacterData, options: Dictionary = {
 	await _play_guest_join_projectile(from_pos, target_pos, color, visual_scale)
 	var reveal_duration_scale: float = float(options.get("reveal_duration_scale", 1.0)) * 2.0
 	reveal_duration_scale = maxf(reveal_duration_scale - (0.5 / 0.34), 0.1)
-	await character_panel.reveal_temporary_card(card_index, reveal_duration_scale)
-	party.append(guest)
 	var battle_index: int = battle_manager.add_temporary_character(guest, bool(options.get("add_current_hp", true)))
 	if battle_index != card_index:
 		push_warning("Guest battle index mismatch: card=%d battle=%d" % [card_index, battle_index])
+	await character_panel.reveal_temporary_card(card_index, reveal_duration_scale)
+	party.append(guest)
 	if not bool(options.get("include_in_result", true)):
 		_guest_result_exclusions[guest] = true
 	_setup_fuse_hints()
 	_update_skill_ui()
 	_refresh_gem_meter()
-	await get_tree().create_timer(1.0).timeout
+	var post_join_pause: float = maxf(0.0, float(options.get("post_join_pause", 0.2)))
+	if post_join_pause > 0.0:
+		await get_tree().create_timer(post_join_pause).timeout
 	board.is_busy = was_busy
 	return card_index
+
+
+func add_temporary_guest_characters_staggered(entries: Array, interval: float = 0.5) -> Array[int]:
+	var results: Array[int] = []
+	results.resize(entries.size())
+	for i in results.size():
+		results[i] = -1
+	if entries.is_empty():
+		return results
+
+	var completed := [0]
+	for i in entries.size():
+		var entry: Dictionary = entries[i] as Dictionary
+		var guest: CharacterData = entry.get("guest", null) as CharacterData
+		var options: Dictionary = entry.get("options", {}) as Dictionary
+		_run_temporary_guest_join_task(guest, options, results, i, completed)
+		if i < entries.size() - 1 and interval > 0.0:
+			await get_tree().create_timer(interval).timeout
+
+	while int(completed[0]) < entries.size():
+		await get_tree().process_frame
+	return results
+
+
+func _run_temporary_guest_join_task(guest: CharacterData, options: Dictionary, results: Array, index: int, completed: Array) -> void:
+	results[index] = await add_temporary_guest_character(guest, options)
+	completed[0] = int(completed[0]) + 1
 
 
 func _play_guest_join_projectile(from_pos: Vector2, target_pos: Vector2, color: Color, visual_scale: float) -> void:
@@ -3332,6 +3383,8 @@ func _play_guest_join_projectile(from_pos: Vector2, target_pos: Vector2, color: 
 
 
 func _get_battle_result_party() -> Array[CharacterData]:
+	if _is_stage13_story_battle() and not _stage13_result_party.is_empty():
+		return _stage13_result_party.duplicate()
 	var result: Array[CharacterData] = []
 	for c: CharacterData in party:
 		if c == null:
@@ -3730,6 +3783,8 @@ func _run_attack_worker() -> void:
 		var blasted_dict: Dictionary = { item.gem_type: item.count }
 		var blast_pos_dict: Dictionary = { item.gem_type: item.global_positions }
 		await _process_blast_results(blasted_dict, blast_pos_dict)
+		if _stage13_victory_triggered:
+			break
 
 		# 執行非融合的回應技能（如葉風暴）
 		for resp in item.responses:
@@ -3995,6 +4050,8 @@ func _end_player_turn() -> void:
 	if did_attack:
 		# 等待最後一個敵人投射物落地
 		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+	if _stage13_event_running:
+		await _wait_for_stage13_event()
 
 	await _process_turn_start_passives()
 	_update_skill_ui()
@@ -4015,6 +4072,8 @@ func _end_player_turn() -> void:
 			_plank_event_pending = false
 			_plank_event_done = true
 			await _run_plank_emergency_event()
+		if _should_run_stage13_light_hint():
+			await _run_stage13_light_hint_event()
 
 
 # ── 持久化召喚物：每回合行動 ───────────────────────────────────
@@ -4238,12 +4297,18 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 	# 等待最後一位攻擊的投射物落地（最長飛行時間 + 餘裕）
 	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
 
+	var stage13_final_hit: bool = _stage13_owen_light_hit_pending
+	if stage13_final_hit:
+		_stage13_owen_light_hit_pending = false
+
 	# 攻擊序列結束：結算所有延遲死亡的敵人
 	for enemy in battle_manager.active_enemies.duplicate():
 		if is_instance_valid(enemy):
 			enemy.defer_death = false
 			if enemy.current_hp <= 0:
 				enemy.finalize_death()
+	if stage13_final_hit:
+		await _run_stage13_finale_and_win()
 
 
 func _retarget_attack_queue_by_simulated_hp(attacks: Array) -> void:
@@ -4366,7 +4431,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var target_pos := target.get_global_rect().get_center()
 				slash.deduct_hp.connect(func():
 					if is_instance_valid(target):
-						applied_damage = target.take_damage(damage)
+						applied_damage = _apply_enemy_damage_with_stage13_floor(target, damage, gem_type)
 						_spawn_damage_number(target.get_global_rect().get_center(), applied_damage, Block.COLORS[gem_type], true, is_super)
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
@@ -4434,7 +4499,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var captured_dmg := damage
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
-						applied_damage = captured_target.take_damage(captured_dmg)
+						applied_damage = _apply_enemy_damage_with_stage13_floor(captured_target, captured_dmg, gem_type)
 						_spawn_damage_number(captured_target.get_global_rect().get_center(), applied_damage, color, true, is_super)
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
@@ -4877,7 +4942,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 			# 在中途幀觸發扣血
 			get_tree().create_timer(SWORD_OF_JUSTICE_DURATION * 0.45).timeout.connect(func() -> void:
 				if is_instance_valid(captured_enemy):
-					var applied_dmg: int = captured_enemy.take_damage(captured_dmg)
+					var applied_dmg: int = _apply_enemy_damage_with_stage13_floor(captured_enemy, captured_dmg, Block.Type.LIGHT)
 					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), applied_dmg, light_color, true)
 				_play_sfx(_se_impact)
 			, CONNECT_ONE_SHOT)
@@ -4937,6 +5002,12 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 	# 重置狀態
 	_is_upper_gem_turn = false
 	_chain_atk_bonus = 0.0
+	if _stage13_owen_light_hit_pending:
+		_stage13_owen_light_hit_pending = false
+		await _run_stage13_finale_and_win()
+		return
+	if _stage13_victory_triggered:
+		return
 
 	await _end_player_turn()
 
@@ -5136,6 +5207,8 @@ func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type
 
 func _handle_active_skill(char_index: int) -> void:
 	if board.is_busy or _active_board_selection_running:
+		return
+	if not _is_active_unlocked_for_battle(char_index):
 		return
 	if not battle_manager.is_active_ready(char_index):
 		return
@@ -5567,9 +5640,23 @@ func _update_skill_ui() -> void:
 			# 無主動技能
 			character_panel.update_cooldown(i, -1)
 			continue
+		if not _is_active_unlocked_for_battle(i):
+			character_panel.update_cooldown(i, -2)
+			continue
 		character_panel.update_cooldown(i, cd)
 		if cd <= 0:
 			character_panel.start_glow(i)
+
+
+func _is_active_unlocked_for_battle(char_index: int) -> bool:
+	if char_index < 0 or char_index >= party.size():
+		return false
+	var c: CharacterData = party[char_index]
+	if c == null:
+		return false
+	if _temporary_active_unlocks.has(c):
+		return true
+	return SkillUpgradeUtils.is_active_stage_unlocked(c)
 
 
 # ── 敎人攻擊特效 ─────────────────────────────────────────────
@@ -5578,7 +5665,7 @@ func _update_skill_ui() -> void:
 ## 若棋盤上有葉盾，消耗一個葉盾並減少 50% 傷害
 func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	if not is_instance_valid(enemy):
-		battle_manager.apply_player_damage(damage)
+		_apply_player_damage_with_stage13_guard(damage)
 		return
 	var from_pos: Vector2 = enemy.get_global_rect().get_center()
 	var color: Color = enemy.data.portrait_color
@@ -5597,7 +5684,7 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 		fx_layer.add_child(trail)
 		trail.deduct_hp.connect(func() -> void:
 			board.destroy_upper_gem_at(shield_pos)
-			battle_manager.apply_player_damage(reduced_damage)
+			_apply_player_damage_with_stage13_guard(reduced_damage)
 			_spawn_damage_number(shield_global, reduced_damage, Color(1.0, 0.3, 0.3))
 			_play_sfx(_se_impact)
 			# 找到 Pan 角色用於日誌
@@ -5620,7 +5707,7 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	trail.set_script(TrailProjectileScript)
 	fx_layer.add_child(trail)
 	trail.deduct_hp.connect(func() -> void:
-		battle_manager.apply_player_damage(damage)
+		_apply_player_damage_with_stage13_guard(damage)
 		_spawn_damage_number(to_pos, damage, Color(1.0, 0.3, 0.3))
 		_play_sfx(_se_impact)
 	, CONNECT_ONE_SHOT)
@@ -6151,6 +6238,229 @@ func _wait_for_active_skill_finish(char_index: int) -> void:
 			return
 
 
+func _wait_for_stage13_event() -> void:
+	while _stage13_event_running:
+		await get_tree().process_frame
+
+
+func _run_stage13_turn1_dialog() -> void:
+	if _stage13_turn1_done:
+		return
+	_stage13_turn1_done = true
+	_stage13_event_running = true
+	var dialog: _BattleDialog = _ensure_battle_dialog()
+	dialog.visible = true
+	dialog.show_lines(_Stage1_3Owen.make_turn1_dialog())
+	await dialog.all_lines_finished
+	dialog.visible = false
+	_stage13_event_running = false
+
+
+func _apply_player_damage_with_stage13_guard(amount: int) -> void:
+	if _is_stage13_story_battle() and not _stage13_rescue_done \
+			and battle_manager.player_current_hp - amount <= 0:
+		battle_manager.player_current_hp = 1
+		battle_manager.player_hp_changed.emit(battle_manager.player_current_hp, battle_manager.player_max_hp)
+		if not _stage13_event_running:
+			_run_stage13_rescue_event()
+		return
+	battle_manager.apply_player_damage(amount)
+
+
+func _run_stage13_rescue_event() -> void:
+	if _stage13_rescue_done:
+		return
+	_stage13_rescue_done = true
+	_stage13_event_running = true
+	board.is_busy = true
+	board.set_input_queue_locked(true)
+
+	var dialog: _BattleDialog = _ensure_battle_dialog()
+	dialog.visible = true
+	dialog.show_lines(_Stage1_3Owen.make_husky_near_death_dialog())
+	await dialog.all_lines_finished
+	dialog.visible = false
+
+	await add_temporary_guest_characters_staggered([
+		{
+			"guest": CHAR_DRAGON,
+			"options": {
+				"slot_index": 1,
+				"visual_scale": 1.35,
+				"reveal_duration_scale": 1.35,
+				"post_join_pause": 0.0,
+				"include_in_result": true,
+			},
+		},
+		{
+			"guest": CHAR_PANDA,
+			"options": {
+				"slot_index": 2,
+				"visual_scale": 1.35,
+				"reveal_duration_scale": 1.35,
+				"post_join_pause": 0.0,
+				"include_in_result": true,
+			},
+		},
+		{
+			"guest": CHAR_SHARK,
+			"options": {
+				"slot_index": 3,
+				"visual_scale": 1.35,
+				"reveal_duration_scale": 1.35,
+				"post_join_pause": 0.0,
+				"include_in_result": true,
+			},
+		},
+	], 0.22)
+
+	dialog.visible = true
+	dialog.show_lines(_Stage1_3Owen.make_rescue_dialog())
+	await dialog.all_lines_finished
+	dialog.visible = false
+
+	_stage13_join_turn = battle_manager.turn
+	board.set_input_queue_locked(false)
+	board.is_busy = false
+	_stage13_event_running = false
+
+
+func _should_run_stage13_light_hint() -> bool:
+	return _is_stage13_story_battle() \
+		and _stage13_rescue_done \
+		and not _stage13_light_hint_done \
+		and _stage13_join_turn >= 0 \
+		and battle_manager.turn - _stage13_join_turn >= 2
+
+
+func _run_stage13_light_hint_event() -> void:
+	if _stage13_light_hint_done:
+		return
+	_stage13_light_hint_done = true
+	_stage13_event_running = true
+	board.is_busy = true
+	board.set_input_queue_locked(true)
+
+	var dialog: _BattleDialog = _ensure_battle_dialog()
+	dialog.visible = true
+	dialog.show_lines(_Stage1_3Owen.make_light_hint_dialog())
+	await dialog.all_lines_finished
+	dialog.visible = false
+
+	var husky_idx: int = _find_party_index_by_name("Husky")
+	if husky_idx < 0:
+		board.set_input_queue_locked(false)
+		board.is_busy = false
+		_stage13_event_running = false
+		return
+	_temporary_active_unlocks[party[husky_idx]] = true
+	battle_manager.skill_cooldowns[husky_idx] = 0
+	_update_skill_ui()
+
+	var husky_card: Control = character_panel.get_card(husky_idx)
+	if husky_card == null:
+		board.set_input_queue_locked(false)
+		board.is_busy = false
+		_stage13_event_running = false
+		return
+	var dim_layer: CanvasLayer = _setup_dim_overlay(husky_card.get_global_rect())
+	var pulse: Panel = _start_card_pulse(husky_card)
+
+	board.set_input_queue_locked(false)
+	board.is_busy = false
+	while true:
+		var activated_idx: int = await character_panel.active_skill_activated
+		if activated_idx == husky_idx:
+			break
+
+	if is_instance_valid(pulse):
+		pulse.queue_free()
+	if is_instance_valid(dim_layer):
+		dim_layer.queue_free()
+
+	await _wait_for_active_skill_finish(husky_idx)
+	_stage13_husky_active_used = true
+	_enable_stage13_owen_hp_floor()
+	_stage13_event_running = false
+
+
+func _is_stage13_owen(enemy: Enemy) -> bool:
+	return enemy != null and is_instance_valid(enemy) and enemy.data != null and enemy.data.enemy_name == "First Owen"
+
+
+func _enable_stage13_owen_hp_floor() -> void:
+	if not _is_stage13_story_battle() or _stage13_victory_triggered:
+		return
+	for enemy: Enemy in battle_manager.active_enemies:
+		if not _is_stage13_owen(enemy):
+			continue
+		enemy.set_damage_hp_floor(1)
+		var floor_callable: Callable = _on_stage13_owen_hp_floor_triggered
+		if not enemy.hp_floor_triggered.is_connected(floor_callable):
+			enemy.hp_floor_triggered.connect(floor_callable, CONNECT_ONE_SHOT)
+
+
+func _on_stage13_owen_hp_floor_triggered(enemy: Enemy) -> void:
+	if not _is_stage13_owen(enemy) or _stage13_victory_triggered:
+		return
+	_stage13_owen_light_hit_pending = true
+	_schedule_stage13_floor_finale()
+
+
+func _schedule_stage13_floor_finale() -> void:
+	if _stage13_floor_finale_scheduled or _stage13_victory_triggered:
+		return
+	_stage13_floor_finale_scheduled = true
+	_run_stage13_floor_finale_deferred()
+
+
+func _run_stage13_floor_finale_deferred() -> void:
+	await get_tree().create_timer(0.75).timeout
+	_stage13_floor_finale_scheduled = false
+	if _stage13_victory_triggered or not _stage13_owen_light_hit_pending:
+		return
+	_stage13_owen_light_hit_pending = false
+	await _run_stage13_finale_and_win()
+
+
+func _should_stage13_floor_owen_light_hit(enemy: Enemy, gem_type: Block.Type) -> bool:
+	if not _is_stage13_story_battle() or not _stage13_husky_active_used or _stage13_victory_triggered:
+		return false
+	if int(gem_type) != int(Block.Type.LIGHT):
+		return false
+	return _is_stage13_owen(enemy)
+
+
+func _apply_enemy_damage_with_stage13_floor(enemy: Enemy, amount: int, gem_type: Block.Type) -> int:
+	if _should_stage13_floor_owen_light_hit(enemy, gem_type):
+		_stage13_owen_light_hit_pending = true
+		return enemy.take_damage_with_hp_floor(amount, 1)
+	if enemy == null or not is_instance_valid(enemy):
+		return 0
+	return enemy.take_damage(amount)
+
+
+func _run_stage13_finale_and_win(emit_win_signal: bool = true) -> void:
+	if _stage13_victory_triggered:
+		return
+	_stage13_victory_triggered = true
+	_stage13_event_running = true
+	board.is_busy = true
+	board.set_input_queue_locked(true)
+
+	var dialog: _BattleDialog = _ensure_battle_dialog()
+	dialog.visible = true
+	dialog.show_lines(_Stage1_3Owen.make_finale_dialog())
+	await dialog.all_lines_finished
+	dialog.visible = false
+
+	_stage13_event_running = false
+	if emit_win_signal:
+		battle_manager.battle_won.emit()
+	else:
+		await _complete_battle_won()
+
+
 ## 主事件：木板大量降臨 → 對話 → 黯化 → 龍焰使用 → 收尾對話
 func _run_plank_emergency_event() -> void:
 	board.is_busy = true
@@ -6179,6 +6489,7 @@ func _run_plank_emergency_event() -> void:
 		return
 
 	# 4) 重置 Dragon 主動技能 CD，讓他可立即發動
+	_temporary_active_unlocks[party[dragon_idx]] = true
 	battle_manager.skill_cooldowns[dragon_idx] = 0
 	_update_skill_ui()
 
@@ -6267,6 +6578,15 @@ func _ensure_battle_dialog() -> _BattleDialog:
 
 ## 戰鬥勝利
 func _on_battle_won() -> void:
+	if _is_stage13_story_battle() and _stage13_event_running and _stage13_victory_triggered:
+		return
+	if _is_stage13_story_battle() and _stage13_husky_active_used and not _stage13_victory_triggered:
+		await _run_stage13_finale_and_win(false)
+		return
+	await _complete_battle_won()
+
+
+func _complete_battle_won() -> void:
 	board.is_busy = true
 	# ── 最後一隻敵人死亡 → 立刻交叉淡入勝利音樂 ──
 	GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")

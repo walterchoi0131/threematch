@@ -7,6 +7,7 @@ signal pressed(enemy: Enemy)  # 被點擊時發出
 signal long_pressed(enemy: Enemy)
 signal died(enemy: Enemy)     # 死亡時發出
 signal hp_changed(current: int, maximum: int)  # 血量變動時發出（含初始與受傷）
+signal hp_floor_triggered(enemy: Enemy)
 
 const MAIN_BOSS_DISPLAY_SCALE := 2.0
 const CLICK_RECT_PADDING := 4.0
@@ -24,6 +25,7 @@ var is_main_boss_spawn: bool = false
 var defer_death: bool = false     # 延遲死亡（攻擊序列中最後一隻怪的過殺機制）
 var battle_manager_ref: Node = null
 var last_applied_damage: int = 0
+var damage_hp_floor: int = -1
 var _pressing: bool = false
 var _press_start_msec: int = 0
 var _long_press_fired: bool = false
@@ -333,7 +335,7 @@ func _ensure_passive_badge() -> void:
 	var badge := PanelContainer.new()
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.custom_minimum_size = Vector2(54, 34)
-	badge.z_index = 20
+	badge.z_index = 0
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.02, 0.025, 0.04, 0.88)
 	style.border_color = Color(1.0, 0.86, 0.25, 1.0)
@@ -341,7 +343,7 @@ func _ensure_passive_badge() -> void:
 	style.set_corner_radius_all(6)
 	style.set_content_margin_all(3)
 	badge.add_theme_stylebox_override("panel", style)
-	add_child(badge)
+	portrait.add_child(badge)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 1)
@@ -372,13 +374,10 @@ func _position_passive_badge() -> void:
 	await get_tree().process_frame
 	if _passive_badge == null or portrait == null:
 		return
-	var port_rect: Rect2 = portrait.get_global_rect()
-	var inverse_transform: Transform2D = get_global_transform().affine_inverse()
-	var top_left: Vector2 = inverse_transform * port_rect.position
-	var bottom_right: Vector2 = inverse_transform * (port_rect.position + port_rect.size)
-	var rect_pos := Vector2(minf(top_left.x, bottom_right.x), minf(top_left.y, bottom_right.y))
-	var rect_size := Vector2(absf(bottom_right.x - top_left.x), absf(bottom_right.y - top_left.y))
-	_passive_badge.position = Vector2(rect_pos.x + rect_size.x - 38.0, rect_pos.y + 8.0)
+	var portrait_size: Vector2 = portrait.size
+	if portrait_size == Vector2.ZERO:
+		portrait_size = portrait.custom_minimum_size
+	_passive_badge.position = Vector2(maxf(0.0, portrait_size.x - 38.0), 8.0)
 
 
 ## 根據元素屬性設定血條顏色（黑底 + 元素色垂直漸層）
@@ -443,11 +442,36 @@ func _stop_spin() -> void:
 
 ## 受到傷害：扣血、更新血條、播放受傷閃爍、檢查死亡
 func take_damage(amount: int) -> int:
+	return _take_damage_internal(amount, -1)
+
+
+## 受到傷害，但若此次傷害會讓 HP 低於 hp_floor，直接鎖在 hp_floor 並跳過死亡流程。
+func take_damage_with_hp_floor(amount: int, hp_floor: int = 1) -> int:
+	return _take_damage_internal(amount, maxi(0, hp_floor))
+
+
+func set_damage_hp_floor(hp_floor: int) -> void:
+	damage_hp_floor = maxi(0, hp_floor)
+
+
+func clear_damage_hp_floor() -> void:
+	damage_hp_floor = -1
+
+
+func _take_damage_internal(amount: int, hp_floor: int) -> int:
 	var applied_amount: int = _apply_damage_passives(amount)
 	last_applied_damage = applied_amount
 	var prev_hp: int = current_hp
-	current_hp = max(0, current_hp - applied_amount)
+	var next_hp: int = current_hp - applied_amount
+	var effective_floor: int = maxi(hp_floor, damage_hp_floor)
+	var floor_was_triggered: bool = effective_floor >= 0 and next_hp < effective_floor
+	if floor_was_triggered:
+		current_hp = effective_floor
+	else:
+		current_hp = max(0, next_hp)
 	hp_changed.emit(current_hp, max_hp)
+	if floor_was_triggered:
+		hp_floor_triggered.emit(self)
 	if hp_bar_label:
 		hp_bar_label.text = "%d" % current_hp
 	if hp_bar_fill:

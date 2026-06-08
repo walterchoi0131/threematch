@@ -10,6 +10,7 @@ signal all_lines_finished
 # ── 設計常數 ──────────────────────────────────────────────────
 const TYPEWRITER_CPS := 30.0
 const PORTRAIT_SIZE := 142.0
+const PORTRAIT_CANVAS_SIZE := 300.0
 # 面板錨定在螢幕底部：距底部 BOTTOM_GAP 像素，高度 PANEL_HEIGHT
 const PANEL_HEIGHT := 190.0
 const PANEL_BOTTOM_GAP := 14.0
@@ -121,14 +122,17 @@ func _build_ui() -> void:
 	# 頭像裁切容器（固定大小，clip_contents）
 	_portrait_clip = Control.new()
 	_portrait_clip.custom_minimum_size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	_portrait_clip.size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	_portrait_clip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_portrait_clip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_portrait_clip.clip_contents = true
 	hbox.add_child(_portrait_clip)
 
 	_portrait = TextureRect.new()
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-	_portrait.custom_minimum_size = Vector2(300, 300)
-	_portrait.size = Vector2(300, 300)
+	_portrait.custom_minimum_size = Vector2(PORTRAIT_CANVAS_SIZE, PORTRAIT_CANVAS_SIZE)
+	_portrait.size = Vector2(PORTRAIT_CANVAS_SIZE, PORTRAIT_CANVAS_SIZE)
 	_portrait.pivot_offset = Vector2.ZERO
 	_portrait_clip.add_child(_portrait)
 
@@ -302,6 +306,7 @@ func _finish_typing() -> void:
 
 ## 依 char_id 查找角色 catalog，套用 .tres 裡的 dialog_square_scale/offset。
 func _apply_dialog_pose(char_id: String) -> void:
+	_apply_square_portrait_slot()
 	var c: CharacterData = _find_character_data(char_id)
 	if c == null:
 		_portrait.scale = Vector2.ONE
@@ -309,6 +314,15 @@ func _apply_dialog_pose(char_id: String) -> void:
 		return
 	_portrait.scale = Vector2(c.dialog_square_scale, c.dialog_square_scale)
 	_portrait.position = c.dialog_square_offset
+
+
+func _apply_square_portrait_slot() -> void:
+	var square_size := Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	var canvas_size := Vector2(PORTRAIT_CANVAS_SIZE, PORTRAIT_CANVAS_SIZE)
+	_portrait_clip.custom_minimum_size = square_size
+	_portrait_clip.size = square_size
+	_portrait.custom_minimum_size = canvas_size
+	_portrait.size = canvas_size
 
 
 func _find_character_data(char_id: String) -> CharacterData:
