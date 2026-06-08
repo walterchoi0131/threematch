@@ -174,7 +174,7 @@ func _seek_next_active_action_from(start_index: int) -> int:
 		var action_type: int = int(data.get_action_at(index))
 		if not data.is_rest_action(action_type):
 			action_pattern_index = index
-			return rest_count
+			return rest_count + 1 if rest_count > 0 else 0
 		rest_count += 1
 		index = data.get_next_action_index(index)
 	action_pattern_index = 0
