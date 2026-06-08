@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/duan.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "敦"
+job_id = "tactictian"
+gem_type = 6
+level = 6
+atk_growth = 5.0
+base_hp = 58
+hp_growth = 9.5
+base_magic = 4
+magic_growth = 7.5
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(1, 0.92, 0.23, 1)
+portrait_scale = 0.8
+portrait_offset = Vector2(-21, -49)
+dialog_square_scale = 1.1500000000000001
+dialog_square_offset = Vector2(-82, -24)
+dialog_phase_scale = 1.05
+dialog_phase_offset = Vector2(10, 120)
+square_scale = 0.9
+square_offset = Vector2(-70, -20)
+rectangular_scale = 0.25
+rectangular_offset = Vector2(-46, 163)
+active_skill_name = "希望之光"
+active_skill_desc = "Randomly turn 5 normal board cells into light gems. Avoid upper gem cells. CD: 3 turns."
+active_skill_cd = 3
+responding_skills = Array[Dictionary]([{
+"desc": "6+ light gems create a Light Shield upper gem. Triggering it grants a player HP shield equal to 65% of Duan's max HP.",
+"fuse_label": "6",
+"name": "光之盾",
+"priority": 1,
+"threshold": 6,
+"trigger_type": "count"
+}])

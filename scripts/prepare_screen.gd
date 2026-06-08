@@ -643,11 +643,35 @@ func _make_pie_radial_texture() -> GradientTexture2D:
 
 
 func _build_pie_content(parent: HBoxContainer) -> void:
-	var allowed: Array = _stage.allowed_types
+	var distribution: Dictionary = _stage.get_element_distribution()
+	var allowed: Array = []
+	var total_weight: int = 0
+	var ordered_types: Array[int] = [
+		Block.Type.RED,
+		Block.Type.BLUE,
+		Block.Type.GREEN,
+		Block.Type.LIGHT,
+		Block.Type.DARK,
+	]
+	for type_value: int in ordered_types:
+		var normalized: int = int(type_value)
+		var weight: int = int(distribution.get(normalized, 0))
+		if weight <= 0:
+			continue
+		allowed.append(normalized)
+		total_weight += weight
+	for type_variant in distribution.keys():
+		var normalized: int = int(type_variant)
+		if allowed.has(normalized):
+			continue
+		var weight: int = int(distribution.get(normalized, 0))
+		if weight <= 0:
+			continue
+		allowed.append(normalized)
+		total_weight += weight
 	var count: int = allowed.size()
-	if count == 0:
+	if count == 0 or total_weight <= 0:
 		return
-	var ratio: float = 1.0 / float(count)
 
 	const PIE_SIZE: float = 112.0
 	const ICON_SIZE: float = 44.8  # 元素圖示
@@ -677,6 +701,7 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 	# 背景切片
 	var slices: Array[Dictionary] = []
 	for t in allowed:
+		var ratio: float = float(int(distribution.get(int(t), 0))) / float(total_weight)
 		var color: Color = Block.COLORS.get(t, Color.GRAY)
 		color.a = 1.0
 		slices.append({"ratio": ratio, "color": color})
@@ -692,6 +717,7 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 	var icon_radius: float = pie_radius * 0.55 + 28.0
 	var start_angle: float = -PI * 0.5
 	for i in count:
+		var ratio: float = float(int(distribution.get(int(allowed[i]), 0))) / float(total_weight)
 		var sweep: float = ratio * TAU
 		var mid_angle: float = start_angle + sweep * 0.5
 		var icon_pos: Vector2 = pie_center + Vector2(cos(mid_angle), sin(mid_angle)) * icon_radius

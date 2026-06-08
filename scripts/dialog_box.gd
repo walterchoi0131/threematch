@@ -141,6 +141,8 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 
 	# 設定背景圖
 	_set_background_texture(sequence.background)
+	if sequence.initial_music != null:
+		_change_bgm(sequence.initial_music)
 
 	if _start_with_fade:
 		_play_start_fade_in()
@@ -412,6 +414,10 @@ func _set_auto_skip(enabled: bool) -> void:
 func _show_line(line: _DialogLine) -> void:
 	var char_id: String = line.character_id
 	var side: String = _normalize_dialog_side(line.position)
+	if line.stop_music:
+		_fade_out_dialog_bgm()
+	elif line.music != null:
+		_change_bgm(line.music)
 
 	# ── 音樂切換 ──
 	if line.action == "switch_bg":
@@ -421,15 +427,26 @@ func _show_line(line: _DialogLine) -> void:
 		_typing = false
 		_event_transitioning = true
 		switch_background(line.background, true)
-		get_tree().create_timer(BG_SWITCH_FADE_DUR * 2.0).timeout.connect(func() -> void:
+		var event_duration: float = BG_SWITCH_FADE_DUR * 2.0
+		if line.stop_music or line.music != null:
+			event_duration = maxf(event_duration, BGM_FADE_DUR)
+		get_tree().create_timer(event_duration).timeout.connect(func() -> void:
 			if is_inside_tree():
 				_event_transitioning = false
 				_advance()
 		, CONNECT_ONE_SHOT)
 		return
 
-	if line.music != null:
-		_change_bgm(line.music)
+	if line.action == "switch_bgm":
+		_name_label.text = ""
+		_text_label.text = ""
+		_text_label.visible_ratio = 1.0
+		_typing = false
+		get_tree().create_timer(BGM_FADE_DUR).timeout.connect(func() -> void:
+			if is_inside_tree():
+				_advance()
+		, CONNECT_ONE_SHOT)
+		return
 
 	# ── 旁白行（無角色）──
 	if char_id.is_empty():
@@ -466,8 +483,7 @@ func _show_line(line: _DialogLine) -> void:
 
 		# ── 名稱 ──
 		_name_label.text = Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
-		var name_color: Color = CHAR_NAME_COLORS.get(char_id, Color(1.0, 0.92, 0.5))
-		_name_label.add_theme_color_override("font_color", name_color)
+		_name_label.add_theme_color_override("font_color", _dialog_name_color(char_id))
 
 	# ── 打字機效果 ──
 	var locale_node2: Node = get_node_or_null("/root/Locale")
@@ -570,6 +586,19 @@ func _change_bgm(stream: AudioStream) -> void:
 
 # ── 立繪管理 ─────────────────────────────────────────────────
 
+func _fade_out_dialog_bgm() -> void:
+	if _bgm_player == null or not _bgm_player.playing:
+		return
+	var fade := create_tween()
+	fade.tween_property(_bgm_player, "volume_db", -40.0, BGM_FADE_DUR)
+	fade.tween_callback(func() -> void:
+		if is_instance_valid(_bgm_player):
+			_bgm_player.stop()
+			_bgm_player.stream = null
+			_bgm_player.volume_db = 0.0
+	)
+
+
 func _normalize_dialog_side(side: String) -> String:
 	return "right" if side == "right" else "left"
 
@@ -631,6 +660,14 @@ func _dialog_phase_offset(char_id: String) -> Vector2:
 	if character == null:
 		return Vector2.ZERO
 	return character.dialog_phase_offset
+
+
+func _dialog_name_color(char_id: String) -> Color:
+	var character: CharacterData = _find_character_data(char_id)
+	if character != null:
+		var element_color: Color = Block.COLORS.get(character.gem_type, Color.WHITE)
+		return element_color.lightened(0.35)
+	return CHAR_NAME_COLORS.get(char_id, Color.WHITE)
 
 
 func _find_character_data(char_id: String) -> CharacterData:

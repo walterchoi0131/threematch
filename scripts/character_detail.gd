@@ -492,6 +492,7 @@ func _resolve_responding_upper(skill_name: String) -> int:
 		"Turtle": Block.UpperType.TURTLE,
 		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
 		"Wood Spear": Block.UpperType.WOOD_SPEAR_UP,
+		"光之盾": Block.UpperType.LIGHT_SHIELD,
 	}
 	return NAME_TO_UPPER.get(skill_name, -1)
 
@@ -531,7 +532,7 @@ func _blast_pattern_for(upper_type: int) -> Array:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
-		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
+		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE, Block.UpperType.LIGHT_SHIELD:
 			# 只爆自身（中心格）
 			return [Vector2i(2, 2)]
 		Block.UpperType.BAMBOO_SUPPLY:

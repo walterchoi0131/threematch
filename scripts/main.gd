@@ -11,6 +11,7 @@ const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
+const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board: Node2D = $Board
@@ -55,7 +56,7 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
 const COMBO_UI_MARGIN := Vector2(28.0, 92.0)
@@ -100,6 +101,13 @@ var _active_selection_dim_tween: Tween = null
 var _active_selection_preview_positions: Array[Vector2i] = []
 var _stage_intro_gems_ready: bool = false
 var _initial_boss_intro_shown: bool = false
+var _player_shield_overlay: ColorRect = null
+var _player_shield_badge: Control = null
+var _player_shield_icon: TextureRect = null
+var _player_shield_label: Label = null
+var _player_shield_tween: Tween = null
+var _player_shield_badge_tween: Tween = null
+var _enemy_board_effects_pending: int = 0
 
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
@@ -145,6 +153,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.BAMBOO_SUPPLY: "res://assets/gems/gem_bamboo.png",
 	Block.UpperType.WOOD_SPEAR_UP: "res://assets/gems/gem_wood_spear.png",
 	Block.UpperType.WOOD_SPEAR_DOWN: "res://assets/gems/gem_wood_spear.png",
+	Block.UpperType.LIGHT_SHIELD: "res://assets/gems/gem_light_shield.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -154,6 +163,7 @@ var _speed_label: Label = null
 var _se_blast: AudioStream = null
 var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
+var _se_join_team: AudioStream = null
 
 # ── BGM 預覽模式狀態 ──
 var _bgm_player: AudioStreamPlayer = null   # 背景音樂播放器引用
@@ -178,9 +188,17 @@ const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 	Block.Type.ROCK,
 	Block.Type.WOOD_STRUCTURE,
 ]
+const STAGE_EDITOR_DISTRIBUTION_TYPES: Array[int] = [
+	Block.Type.RED,
+	Block.Type.BLUE,
+	Block.Type.GREEN,
+	Block.Type.LIGHT,
+	Block.Type.DARK,
+]
 const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
 const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
 const STAGE_EDITOR_DIALOG_BACKGROUND_ROOT := "res://assets/dialog_background"
+const STAGE_EDITOR_DIALOG_MUSIC_ROOT := "res://assets/music"
 const STAGE_EDITOR_TAB_BEFORE := "before"
 const STAGE_EDITOR_TAB_BOARD := "board"
 const STAGE_EDITOR_TAB_AFTER := "after"
@@ -199,12 +217,14 @@ var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
+var _stage_editor_distribution_spins: Dictionary = {}
 var _stage_editor_dialog_target: String = ""
 var _stage_editor_dialog_title_label: Label = null
 var _stage_editor_dialog_line_list: VBoxContainer = null
 var _stage_editor_dialog_cast_list: HBoxContainer = null
 var _stage_editor_dialog_add_cast_option: OptionButton = null
 var _stage_editor_dialog_background_option: OptionButton = null
+var _stage_editor_dialog_music_option: OptionButton = null
 var _stage_editor_dialog_exit_cast_option: OptionButton = null
 var _stage_editor_dialog_exit_side_option: CheckButton = null
 var _stage_editor_dialog_selected_index: int = -1
@@ -219,6 +239,7 @@ var _stage_editor_dialog_refreshing: bool = false
 var _stage_editor_character_catalog: Array[Dictionary] = []
 var _stage_editor_character_by_id: Dictionary = {}
 var _stage_editor_dialog_background_catalog: Array[Dictionary] = []
+var _stage_editor_dialog_music_catalog: Array[Dictionary] = []
 var _stage_editor_test_dialog: Control = null
 var _stage_editor_enemy_area_panel: Control = null
 var _stage_editor_prev_round_button: Button = null
@@ -234,6 +255,7 @@ var _stage_editor_rounds_expanded: bool = true
 var _stage_editor_enemy_picker_panel: PanelContainer = null
 var _stage_editor_enemy_picker_grid: GridContainer = null
 var _stage_editor_enemy_picker_round_index: int = -1
+var _stage_editor_enemy_picker_level_spin: SpinBox = null
 var _stage_editor_rounds: Array[Array] = []
 var _stage_editor_rounds_init_cd: Array[Array] = []
 var _stage_editor_rounds_enemy_levels: Array[Array] = []
@@ -291,12 +313,14 @@ func _ready() -> void:
 
 	battle_manager.enemy_container = enemy_container
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
+	battle_manager.player_shield_changed.connect(_on_player_shield_changed)
 	battle_manager.player_defeated.connect(_on_player_defeated)
 	battle_manager.round_cleared.connect(_on_round_cleared)
 	battle_manager.round_transitioning.connect(_on_round_transitioning)
 	battle_manager.battle_won.connect(_on_battle_won)
 	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
+	battle_manager.enemy_lightbreak_attacked.connect(_on_enemy_lightbreak_attacked)
 	battle_manager.enemy_stone_magic_cast.connect(_on_enemy_stone_magic_cast)
 	battle_manager.enemy_long_pressed.connect(_on_enemy_long_pressed)
 	battle_manager.loot_dropped.connect(_on_loot_dropped)
@@ -307,6 +331,7 @@ func _ready() -> void:
 	character_panel.active_skill_activated.connect(_on_active_skill_activated)
 	character_panel.active_skill_selection_cancelled.connect(_on_active_skill_selection_cancelled)
 	_setup_boss_bar()
+	_setup_player_shield_ui()
 	battle_manager.setup(current_stage, party)
 	status_label.visible = false
 	return_button.text = Locale.tr_ui("EXIT")
@@ -317,6 +342,7 @@ func _ready() -> void:
 	_se_blast = load("res://assets/se/111.wav")
 	_se_freeze = load("res://assets/se/skef_freeze.mp3")
 	_se_impact = load("res://assets/se/skef_atk1_B.mp3")
+	_se_join_team = load("res://assets/se/join_team2.mp3")
 
 	#_setup_dev_log()  # 開發日誌已隱藏
 	_update_skill_ui()
@@ -368,6 +394,8 @@ func _layout_board() -> void:
 func _on_viewport_changed(_size: Vector2) -> void:
 	_layout_board()
 	_apply_safe_area()
+	if battle_manager != null and battle_manager.player_shield > 0:
+		_update_player_shield_layout()
 	_refresh_active_selection_dim_holes()
 	_layout_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
@@ -467,6 +495,7 @@ func _hide_battle_ui_for_stage_editor() -> void:
 func _build_stage_editor_ui() -> void:
 	_stage_editor_load_character_catalog()
 	_stage_editor_load_dialog_background_catalog()
+	_stage_editor_load_dialog_music_catalog()
 	_build_stage_editor_area_panel()
 	_build_stage_editor_action_panel()
 	_build_stage_editor_tab_panel()
@@ -529,56 +558,101 @@ func _stage_editor_load_area_state() -> void:
 func _build_stage_editor_area_panel() -> void:
 	if _stage_editor_area_panel != null:
 		return
+	_stage_editor_distribution_spins.clear()
 	_stage_editor_area_panel = PanelContainer.new()
 	_stage_editor_area_panel.name = "StageEditorAreaPanel"
 	_stage_editor_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_stage_editor_area_panel.custom_minimum_size = Vector2(260, 62)
+	_stage_editor_area_panel.custom_minimum_size = Vector2(348, 66)
 	_stage_editor_area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
 	$UILayer.add_child(_stage_editor_area_panel)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_bottom", 6)
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_bottom", 4)
 	_stage_editor_area_panel.add_child(margin)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 4)
 	margin.add_child(row)
 
 	var selector_box := VBoxContainer.new()
-	selector_box.add_theme_constant_override("separation", 3)
-	selector_box.custom_minimum_size = Vector2(138, 0)
-	selector_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	selector_box.add_theme_constant_override("separation", 2)
+	selector_box.custom_minimum_size = Vector2(78, 0)
 	row.add_child(selector_box)
 
 	var title := Label.new()
 	title.text = "Map Area"
-	title.add_theme_font_size_override("font_size", 12)
+	title.add_theme_font_size_override("font_size", 11)
 	title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	selector_box.add_child(title)
 
 	_stage_editor_area_option = OptionButton.new()
 	_stage_editor_area_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_area_option.custom_minimum_size = Vector2(130, 32)
-	_stage_editor_area_option.add_theme_font_size_override("font_size", 12)
+	_stage_editor_area_option.fit_to_longest_item = false
+	_stage_editor_area_option.custom_minimum_size = Vector2(76, 28)
+	_stage_editor_area_option.add_theme_font_size_override("font_size", 11)
 	for area_key: String in StageData.AREA_KEYS:
 		var item_index: int = _stage_editor_area_option.item_count
 		_stage_editor_area_option.add_item(area_key)
 		_stage_editor_area_option.set_item_metadata(item_index, area_key)
 	_stage_editor_area_option.item_selected.connect(_on_stage_editor_area_selected)
-	_stage_editor_area_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	selector_box.add_child(_stage_editor_area_option)
 
 	_stage_editor_area_spot_preview = TextureRect.new()
 	_stage_editor_area_spot_preview.name = "SpotPreview"
-	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(72, 48)
+	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(42, 36)
 	_stage_editor_area_spot_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_stage_editor_area_spot_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_stage_editor_area_spot_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage_editor_area_spot_preview.tooltip_text = "Spot"
 	row.add_child(_stage_editor_area_spot_preview)
+
+	var distribution_box := VBoxContainer.new()
+	distribution_box.add_theme_constant_override("separation", 2)
+	distribution_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(distribution_box)
+
+	var dist_title := Label.new()
+	dist_title.text = Locale.tr_ui("ELEMENT_DISTRIBUTION")
+	dist_title.add_theme_font_size_override("font_size", 11)
+	dist_title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	distribution_box.add_child(dist_title)
+
+	var dist_row := HBoxContainer.new()
+	dist_row.add_theme_constant_override("separation", 2)
+	distribution_box.add_child(dist_row)
+
+	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
+		dist_row.add_child(_make_stage_editor_distribution_spin(type_value))
+
+
+func _make_stage_editor_distribution_spin(type_value: int) -> Control:
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(40, 0)
+	box.add_theme_constant_override("separation", 1)
+
+	var label := Label.new()
+	label.text = _stage_editor_distribution_label(type_value)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_color_override("font_color", Block.COLORS.get(type_value, Color.WHITE).lightened(0.2))
+	box.add_child(label)
+
+	var spin := SpinBox.new()
+	spin.min_value = 0
+	spin.max_value = 100
+	spin.step = 1
+	spin.value = current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1
+	spin.custom_minimum_size = Vector2(40, 24)
+	spin.get_line_edit().custom_minimum_size = Vector2(18, 0)
+	spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	spin.tooltip_text = "Random board generation weight."
+	spin.value_changed.connect(_on_stage_editor_distribution_changed.bind(type_value))
+	box.add_child(spin)
+	_stage_editor_distribution_spins[type_value] = spin
+	return box
 
 
 func _build_stage_editor_action_panel() -> void:
@@ -591,14 +665,14 @@ func _build_stage_editor_action_panel() -> void:
 	$UILayer.add_child(_stage_editor_action_panel)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_right", 8)
-	margin.add_theme_constant_override("margin_bottom", 8)
+	margin.add_theme_constant_override("margin_left", 5)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_right", 5)
+	margin.add_theme_constant_override("margin_bottom", 4)
 	_stage_editor_action_panel.add_child(margin)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
+	row.add_theme_constant_override("separation", 4)
 	margin.add_child(row)
 
 	row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
@@ -687,6 +761,19 @@ func _build_stage_editor_dialog_panel() -> void:
 	_stage_editor_dialog_background_option.custom_minimum_size = Vector2(180, 30)
 	_stage_editor_dialog_background_option.item_selected.connect(_on_stage_editor_dialog_background_selected)
 	header_row.add_child(_stage_editor_dialog_background_option)
+
+	var music_label := Label.new()
+	music_label.text = "Init BGM"
+	music_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	music_label.add_theme_font_size_override("font_size", 12)
+	music_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	header_row.add_child(music_label)
+
+	_stage_editor_dialog_music_option = OptionButton.new()
+	_stage_editor_dialog_music_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_dialog_music_option.custom_minimum_size = Vector2(180, 30)
+	_stage_editor_dialog_music_option.item_selected.connect(_on_stage_editor_dialog_music_selected)
+	header_row.add_child(_stage_editor_dialog_music_option)
 
 	header_row.add_child(_make_stage_editor_small_button("Test Play", _on_stage_editor_dialog_test_play_pressed, Vector2(86, 30)))
 
@@ -913,11 +1000,37 @@ func _stage_editor_load_dialog_background_catalog() -> void:
 		})
 
 
+func _stage_editor_load_dialog_music_catalog() -> void:
+	if not _stage_editor_dialog_music_catalog.is_empty():
+		return
+	_stage_editor_dialog_music_catalog.clear()
+	var dir := DirAccess.open(STAGE_EDITOR_DIALOG_MUSIC_ROOT)
+	if dir == null:
+		return
+	var files: PackedStringArray = dir.get_files()
+	files.sort()
+	for file_name: String in files:
+		var extension: String = file_name.get_extension().to_lower()
+		if extension != "mp3" and extension != "ogg" and extension != "wav":
+			continue
+		var resource_path: String = STAGE_EDITOR_DIALOG_MUSIC_ROOT + "/" + file_name
+		if not ResourceLoader.exists(resource_path):
+			continue
+		_stage_editor_dialog_music_catalog.append({
+			"name": _stage_editor_dialog_music_display_name(resource_path),
+			"resource_path": resource_path,
+		})
+
+
 func _stage_editor_dialog_background_display_name(resource_path: String) -> String:
 	var file_base: String = resource_path.get_file().get_basename()
 	if file_base.begins_with("dialog_bg_"):
 		file_base = file_base.substr(10)
 	return file_base.replace("_", " ").capitalize()
+
+
+func _stage_editor_dialog_music_display_name(resource_path: String) -> String:
+	return resource_path.get_file().get_basename().replace("_", " ").capitalize()
 
 
 func _stage_editor_populate_dialog_background_selector(option: OptionButton, selected_path: String, placeholder: String = "switchBG") -> void:
@@ -928,10 +1041,24 @@ func _stage_editor_populate_dialog_background_selector(option: OptionButton, sel
 	_stage_editor_select_option_value(option, selected_path)
 
 
+func _stage_editor_populate_dialog_music_selector(option: OptionButton, selected_path: String, placeholder: String = "switchBGM", include_stop: bool = true) -> void:
+	option.clear()
+	_stage_editor_add_option_item(option, placeholder, "")
+	if include_stop:
+		_stage_editor_add_option_item(option, "Stop BGM", "__stop__")
+	for entry: Dictionary in _stage_editor_dialog_music_catalog:
+		_stage_editor_add_option_item(option, String(entry.get("name", "BGM")), String(entry.get("resource_path", "")))
+	_stage_editor_select_option_value(option, selected_path)
+
+
 func _stage_editor_dialog_line_background_path(line: DialogLine) -> String:
 	if line == null or line.background == null:
 		return ""
 	return line.background.resource_path
+
+
+func _stage_editor_dialog_audio_path(stream: AudioStream) -> String:
+	return stream.resource_path if stream != null else ""
 
 
 func _stage_editor_character_id_from_path(resource_path: String) -> String:
@@ -1001,6 +1128,7 @@ func _stage_editor_make_dialog_line() -> DialogLine:
 	line.text_en = ""
 	line.action = "none"
 	line.shake = true
+	line.stop_music = false
 	return line
 
 
@@ -1014,6 +1142,7 @@ func _stage_editor_copy_dialog_line(source: DialogLine) -> DialogLine:
 	line.action = source.action
 	line.shake = source.shake
 	line.music = source.music
+	line.stop_music = source.stop_music
 	line.background = source.background
 	return line
 
@@ -1038,6 +1167,7 @@ func _refresh_stage_editor_dialog_editor() -> void:
 		_stage_editor_dialog_title_label.text = title
 	_stage_editor_ensure_dialog_cast(sequence)
 	_refresh_stage_editor_dialog_background_option(sequence)
+	_refresh_stage_editor_dialog_music_option(sequence)
 	_refresh_stage_editor_dialog_cast_controls(sequence)
 	_refresh_stage_editor_dialog_line_list()
 
@@ -1055,6 +1185,19 @@ func _refresh_stage_editor_dialog_background_option(sequence: DialogSequence) ->
 		selected_path = sequence.background.resource_path
 	_stage_editor_select_option_value(_stage_editor_dialog_background_option, selected_path)
 	_stage_editor_dialog_background_option.disabled = sequence == null
+	_stage_editor_dialog_refreshing = false
+
+
+func _refresh_stage_editor_dialog_music_option(sequence: DialogSequence) -> void:
+	if _stage_editor_dialog_music_option == null:
+		return
+	_stage_editor_dialog_refreshing = true
+	_stage_editor_populate_dialog_music_selector(
+		_stage_editor_dialog_music_option,
+		_stage_editor_dialog_audio_path(sequence.initial_music) if sequence != null else "",
+		"None",
+		false)
+	_stage_editor_dialog_music_option.disabled = sequence == null
 	_stage_editor_dialog_refreshing = false
 
 
@@ -1149,6 +1292,13 @@ func _stage_editor_make_dialog_add_row() -> Control:
 	switch_bg_option.item_selected.connect(_on_stage_editor_dialog_add_switch_bg_selected.bind(switch_bg_option))
 	row.add_child(switch_bg_option)
 
+	var switch_bgm_option := OptionButton.new()
+	switch_bgm_option.focus_mode = Control.FOCUS_NONE
+	switch_bgm_option.custom_minimum_size = Vector2(180, 38)
+	_stage_editor_populate_dialog_music_selector(switch_bgm_option, "", "switchBGM", true)
+	switch_bgm_option.item_selected.connect(_on_stage_editor_dialog_add_switch_bgm_selected.bind(switch_bgm_option))
+	row.add_child(switch_bgm_option)
+
 	return row
 
 
@@ -1215,6 +1365,15 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		_stage_editor_forward_dialog_row_drop(bg_option, line_index)
 		controls.add_child(bg_option)
 
+		var bgm_option := OptionButton.new()
+		bgm_option.focus_mode = Control.FOCUS_NONE
+		bgm_option.custom_minimum_size = Vector2(190, 30)
+		var selected_bgm_path: String = "__stop__" if line.stop_music else _stage_editor_dialog_audio_path(line.music)
+		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_path, "BGM no change", true)
+		bgm_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bgm_selected.bind(line_index, bgm_option))
+		_stage_editor_forward_dialog_row_drop(bgm_option, line_index)
+		controls.add_child(bgm_option)
+
 		var event_spacer := Control.new()
 		event_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		controls.add_child(event_spacer)
@@ -1237,7 +1396,57 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 		var description := Label.new()
 		var bg_path: String = _stage_editor_dialog_line_background_path(line)
-		description.text = "Fade switch to %s" % [_stage_editor_dialog_background_display_name(bg_path) if not bg_path.is_empty() else "None"]
+		description.text = "Fade switch to %s%s" % [
+			_stage_editor_dialog_background_display_name(bg_path) if not bg_path.is_empty() else "None",
+			_stage_editor_dialog_line_music_summary(line),
+		]
+		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		description.add_theme_font_size_override("font_size", 13)
+		description.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+		event_row.add_child(description)
+		return panel
+
+	if _stage_editor_dialog_line_is_switch_bgm(line):
+		var event_label := Label.new()
+		event_label.text = "Switch BGM"
+		event_label.custom_minimum_size = Vector2(110, 30)
+		event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		event_label.add_theme_font_size_override("font_size", 13)
+		event_label.add_theme_color_override("font_color", Color(0.95, 0.95, 1.0, 1.0))
+		controls.add_child(event_label)
+
+		var bgm_option := OptionButton.new()
+		bgm_option.focus_mode = Control.FOCUS_NONE
+		bgm_option.custom_minimum_size = Vector2(220, 30)
+		var selected_bgm_event_path: String = "__stop__" if line.stop_music else _stage_editor_dialog_audio_path(line.music)
+		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_event_path, "BGM no change", true)
+		bgm_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bgm_selected.bind(line_index, bgm_option))
+		_stage_editor_forward_dialog_row_drop(bgm_option, line_index)
+		controls.add_child(bgm_option)
+
+		var event_spacer := Control.new()
+		event_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		controls.add_child(event_spacer)
+
+		controls.add_child(_make_stage_editor_small_button("Dup", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(44, 30)))
+		controls.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(42, 30)))
+
+		var event_row := HBoxContainer.new()
+		event_row.add_theme_constant_override("separation", 6)
+		row_box.add_child(event_row)
+
+		var indicator := Label.new()
+		indicator.text = "BGM"
+		indicator.custom_minimum_size = Vector2(64, 42)
+		indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		indicator.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		indicator.add_theme_font_size_override("font_size", 14)
+		indicator.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+		event_row.add_child(indicator)
+
+		var description := Label.new()
+		description.text = _stage_editor_dialog_line_music_summary(line).strip_edges()
 		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		description.add_theme_font_size_override("font_size", 13)
@@ -1369,6 +1578,21 @@ func _stage_editor_dialog_line_is_switch_bg(line: DialogLine) -> bool:
 	return line != null and line.action == "switch_bg"
 
 
+func _stage_editor_dialog_line_is_switch_bgm(line: DialogLine) -> bool:
+	return line != null and line.action == "switch_bgm"
+
+
+func _stage_editor_dialog_line_music_summary(line: DialogLine) -> String:
+	if line == null:
+		return ""
+	if line.stop_music:
+		return " / Fade out BGM"
+	var music_path: String = _stage_editor_dialog_audio_path(line.music)
+	if music_path.is_empty():
+		return " / BGM no change"
+	return " / BGM: %s" % _stage_editor_dialog_music_display_name(music_path)
+
+
 func _stage_editor_make_row_text_edit(text_value: String, placeholder: String) -> TextEdit:
 	var edit := TextEdit.new()
 	edit.text = text_value
@@ -1496,6 +1720,8 @@ func _stage_editor_get_row_drag_data(_at_position: Vector2, source_control: Cont
 	var label_text: String = "%02d %s" % [line_index + 1, _stage_editor_character_display_name(line.character_id)]
 	if _stage_editor_dialog_line_is_switch_bg(line):
 		label_text = "%02d Switch BG" % [line_index + 1]
+	elif _stage_editor_dialog_line_is_switch_bgm(line):
+		label_text = "%02d Switch BGM" % [line_index + 1]
 	source_control.set_drag_preview(_stage_editor_make_drag_preview(label_text, _stage_editor_character_portrait_texture(line.character_id)))
 	return {"type": "dialog_row", "line_index": line_index}
 
@@ -1541,7 +1767,8 @@ func _stage_editor_drop_on_dialog_row(_at_position: Vector2, data: Variant, targ
 	var drag_data: Dictionary = data
 	var drag_type: String = String(drag_data.get("type", ""))
 	if drag_type == "cast_character":
-		if _stage_editor_dialog_line_is_switch_bg(_stage_editor_get_dialog_line_at(target_index)):
+		var target_line: DialogLine = _stage_editor_get_dialog_line_at(target_index)
+		if _stage_editor_dialog_line_is_switch_bg(target_line) or _stage_editor_dialog_line_is_switch_bgm(target_line):
 			return
 		_stage_editor_set_dialog_line_character(target_index, String(drag_data.get("char_id", "")))
 	elif drag_type == "dialog_row":
@@ -1631,6 +1858,29 @@ func _stage_editor_add_switch_bg_line(resource_path: String) -> void:
 	_refresh_stage_editor_dialog_editor()
 
 
+func _stage_editor_add_switch_bgm_line(resource_path: String, stop_music: bool = false) -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	var line := DialogLine.new()
+	line.character_id = ""
+	line.emotion = "normal"
+	line.position = "left"
+	line.text_zh = ""
+	line.text_en = ""
+	line.action = "switch_bgm"
+	line.shake = false
+	line.stop_music = stop_music
+	if not stop_music and not resource_path.is_empty():
+		line.music = load(resource_path) as AudioStream
+	if not stop_music and line.music == null:
+		return
+	var insert_index: int = sequence.lines.size()
+	sequence.lines.insert(insert_index, line)
+	_stage_editor_dialog_selected_index = insert_index
+	_refresh_stage_editor_dialog_editor()
+
+
 func _stage_editor_reorder_dialog_line(source_index: int, target_index: int) -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
 	if sequence == null:
@@ -1684,12 +1934,36 @@ func _on_stage_editor_dialog_background_selected(_item_index: int) -> void:
 	sequence.background = texture
 
 
+func _on_stage_editor_dialog_music_selected(_item_index: int) -> void:
+	if _stage_editor_dialog_refreshing:
+		return
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	var resource_path: String = _stage_editor_get_option_value(_stage_editor_dialog_music_option)
+	if resource_path.is_empty():
+		sequence.initial_music = null
+		return
+	sequence.initial_music = load(resource_path) as AudioStream
+
+
 func _on_stage_editor_dialog_add_switch_bg_selected(_item_index: int, option: OptionButton) -> void:
 	var resource_path: String = _stage_editor_get_option_value(option)
 	_stage_editor_select_option_value(option, "")
 	if resource_path.is_empty():
 		return
 	_stage_editor_add_switch_bg_line(resource_path)
+
+
+func _on_stage_editor_dialog_add_switch_bgm_selected(_item_index: int, option: OptionButton) -> void:
+	var resource_path: String = _stage_editor_get_option_value(option)
+	_stage_editor_select_option_value(option, "")
+	if resource_path.is_empty():
+		return
+	if resource_path == "__stop__":
+		_stage_editor_add_switch_bgm_line("", true)
+	else:
+		_stage_editor_add_switch_bgm_line(resource_path, false)
 
 
 func _on_stage_editor_dialog_row_switch_bg_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
@@ -1703,6 +1977,20 @@ func _on_stage_editor_dialog_row_switch_bg_selected(_item_index: int, line_index
 	if texture == null:
 		return
 	line.background = texture
+	_refresh_stage_editor_dialog_line_list()
+
+
+func _on_stage_editor_dialog_row_switch_bgm_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
+	var line: DialogLine = _stage_editor_get_dialog_line_at(line_index)
+	if line == null:
+		return
+	var resource_path: String = _stage_editor_get_option_value(option)
+	line.music = null
+	line.stop_music = false
+	if resource_path == "__stop__":
+		line.stop_music = true
+	elif not resource_path.is_empty():
+		line.music = load(resource_path) as AudioStream
 	_refresh_stage_editor_dialog_line_list()
 
 
@@ -1968,8 +2256,8 @@ func _make_stage_editor_command_button(label_text: String, callback: Callable) -
 	var button := Button.new()
 	button.text = label_text
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(88, 42)
-	button.add_theme_font_size_override("font_size", 13)
+	button.custom_minimum_size = Vector2(74, 34)
+	button.add_theme_font_size_override("font_size", 12)
 	button.pressed.connect(callback)
 	return button
 
@@ -2259,8 +2547,8 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	_stage_editor_set_control_rect(portrait, Rect2(4.0, 4.0, 42.0, 42.0))
 
 	var name_label := Label.new()
-	name_label.text = enemy_data.enemy_name
-	name_label.tooltip_text = enemy_data.resource_path if not enemy_data.resource_path.is_empty() else enemy_data.enemy_name
+	name_label.text = enemy_data.get_display_name()
+	name_label.tooltip_text = enemy_data.resource_path if not enemy_data.resource_path.is_empty() else enemy_data.get_display_name()
 	name_label.add_theme_font_size_override("font_size", 10)
 	name_label.add_theme_color_override("font_color", Color.WHITE)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2375,6 +2663,24 @@ func _build_stage_editor_enemy_picker_panel() -> void:
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(title)
+
+	var level_label := Label.new()
+	level_label.text = "Lv"
+	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	level_label.add_theme_font_size_override("font_size", 13)
+	level_label.add_theme_color_override("font_color", Color(0.86, 0.92, 1.0))
+	header_row.add_child(level_label)
+
+	_stage_editor_enemy_picker_level_spin = SpinBox.new()
+	_stage_editor_enemy_picker_level_spin.min_value = 1
+	_stage_editor_enemy_picker_level_spin.max_value = 99
+	_stage_editor_enemy_picker_level_spin.step = 1
+	_stage_editor_enemy_picker_level_spin.value = 1
+	_stage_editor_enemy_picker_level_spin.custom_minimum_size = Vector2(82, 32)
+	_stage_editor_enemy_picker_level_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_editor_enemy_picker_level_spin.tooltip_text = "Spawn level for the enemy you add."
+	header_row.add_child(_stage_editor_enemy_picker_level_spin)
+
 	header_row.add_child(_make_stage_editor_small_button("Close", _on_stage_editor_enemy_picker_close_pressed, Vector2(64, 32)))
 
 	var scroll := ScrollContainer.new()
@@ -2503,7 +2809,7 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 
 	var name_label := Label.new()
 	var source_name: String = enemy_data.resource_path.get_file() if not enemy_data.resource_path.is_empty() else "inline"
-	name_label.text = enemy_data.enemy_name
+	name_label.text = enemy_data.get_display_name()
 	name_label.tooltip_text = source_name
 	name_label.add_theme_font_size_override("font_size", 11)
 	name_label.add_theme_color_override("font_color", Color(0.9, 0.94, 1.0, 1.0))
@@ -2614,6 +2920,15 @@ func _on_stage_editor_rounds_close_pressed() -> void:
 	_layout_stage_editor_ui()
 
 
+func _stage_editor_default_picker_level(round_index: int) -> int:
+	if round_index < 0 or round_index >= _stage_editor_rounds_enemy_levels.size():
+		return 1
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	if level_list.is_empty():
+		return 1
+	return clampi(int(level_list[level_list.size() - 1]), 1, 99)
+
+
 func _on_stage_editor_add_round_pressed() -> void:
 	_stage_editor_rounds.append([])
 	_stage_editor_rounds_init_cd.append([])
@@ -2646,6 +2961,8 @@ func _on_stage_editor_add_enemy_pressed(round_index: int) -> void:
 	_stage_editor_enemy_picker_round_index = round_index
 	if _stage_editor_enemy_picker_panel == null:
 		_build_stage_editor_enemy_picker_panel()
+	if _stage_editor_enemy_picker_level_spin != null:
+		_stage_editor_enemy_picker_level_spin.value = _stage_editor_default_picker_level(round_index)
 	_stage_editor_available_enemies = _stage_editor_load_available_enemies()
 	_refresh_stage_editor_enemy_picker()
 	if _stage_editor_enemy_picker_panel != null:
@@ -2755,7 +3072,7 @@ func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
 	var resource_path: String = String(entry.get("path", ""))
 	var display_name: String = String(entry.get("name", ""))
 	if enemy_data != null:
-		display_name = enemy_data.enemy_name
+		display_name = enemy_data.get_display_name()
 	if display_name.is_empty():
 		display_name = resource_path.get_file()
 	var button := Button.new()
@@ -2773,10 +3090,12 @@ func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
 
 func _on_stage_editor_enemy_entry_picked(entry: Dictionary) -> void:
 	var enemy_data: EnemyData = entry.get("data", null) as EnemyData
-	var spawn_level: int = enemy_data.enemy_level if enemy_data != null else 1
 	if enemy_data == null:
 		_set_stage_editor_status("Enemy load failed", false)
 		return
+	var spawn_level: int = enemy_data.enemy_level
+	if _stage_editor_enemy_picker_level_spin != null:
+		spawn_level = int(_stage_editor_enemy_picker_level_spin.value)
 	_on_stage_editor_enemy_picked(enemy_data, spawn_level)
 
 
@@ -2833,7 +3152,7 @@ func _stage_editor_collect_enemy_resources(dir_path: String, results: Array[Dict
 				results.append({
 					"data": enemy_data,
 					"path": resource_path,
-					"label": "%s %s" % [enemy_data.enemy_name, resource_path],
+					"label": "%s %s" % [enemy_data.get_display_name(), resource_path],
 				})
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -2881,6 +3200,7 @@ func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
 	if display_name.is_empty():
 		display_name = String(entry.get("provisional_id", image_path.get_file())).strip_edges()
 	enemy_data.enemy_name = display_name
+	enemy_data.enemy_name_en = display_name
 	enemy_data.max_hp = EnemyData.clamp_hp_percent(int(entry.get("max_hp", EnemyData.HP_PERCENT_MIN)))
 	enemy_data.element = int(entry.get("element", Block.Type.DARK)) as Block.Type
 	if texture_resource is Texture2D:
@@ -2902,17 +3222,28 @@ func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
 		if action_index < action_percent_values.size():
 			percent_value = int(action_percent_values[action_index])
 		action_percents.append(EnemyData.clamp_attack_percent(percent_value))
+	var action_count_values: Array = entry.get("action_counts", [])
+	var action_counts: Array[int] = []
+	for action_index in action_pattern.size():
+		var count_value: int = EnemyData.ACTION_COUNT_DEFAULT
+		if action_index < action_count_values.size():
+			count_value = int(action_count_values[action_index])
+		action_counts.append(EnemyData.clamp_action_count(count_value))
 	var rest_count: int = maxi(0, int(entry.get("attack_interval", 0)))
 	var timed_pattern: Array[EnemyData.ActionType] = []
 	var timed_percents: Array[int] = []
+	var timed_counts: Array[int] = []
 	for _rest_index in rest_count:
 		timed_pattern.append(EnemyData.ActionType.REST)
 		timed_percents.append(EnemyData.ATTACK_PERCENT_DEFAULT)
+		timed_counts.append(EnemyData.ACTION_COUNT_DEFAULT)
 	for action_index in action_pattern.size():
 		timed_pattern.append(action_pattern[action_index])
 		timed_percents.append(action_percents[action_index])
+		timed_counts.append(action_counts[action_index])
 	enemy_data.action_pattern = timed_pattern
 	enemy_data.action_percents = timed_percents
+	enemy_data.action_counts = timed_counts
 	var loot := LootItem.new()
 	loot.amount_min = int(entry.get("loot_min", 1))
 	loot.amount_max = int(entry.get("loot_max", 1))
@@ -2945,6 +3276,22 @@ func _stage_editor_type_name(value: int) -> String:
 			return "Gem"
 
 
+func _stage_editor_distribution_label(value: int) -> String:
+	match value:
+		Block.Type.RED:
+			return "R"
+		Block.Type.BLUE:
+			return "B"
+		Block.Type.GREEN:
+			return "G"
+		Block.Type.LIGHT:
+			return "L"
+		Block.Type.DARK:
+			return "D"
+		_:
+			return _stage_editor_type_name(value).substr(0, 1)
+
+
 func _on_stage_editor_value_selected(value: int) -> void:
 	_stage_editor_selected_value = value
 	board.set_edit_paint_value(value)
@@ -2973,6 +3320,19 @@ func _refresh_stage_editor_area_panel() -> void:
 		var spot_path: String = StageData.get_stage_spot_path(_stage_editor_selected_area)
 		_stage_editor_area_spot_preview.texture = load(spot_path) as Texture2D
 		_stage_editor_area_spot_preview.tooltip_text = spot_path
+	if current_stage != null:
+		for key in _stage_editor_distribution_spins.keys():
+			var spin: SpinBox = _stage_editor_distribution_spins[key]
+			spin.set_value_no_signal(current_stage.get_element_weight_for_type(int(key)))
+
+
+func _on_stage_editor_distribution_changed(_value: float, _type_value: int) -> void:
+	if current_stage == null:
+		return
+	var distribution_types: Array[Block.Type] = _stage_editor_get_distribution_allowed_types_snapshot()
+	current_stage.allowed_types = distribution_types
+	current_stage.element_weights = _stage_editor_get_element_weights_snapshot(distribution_types)
+	_set_stage_editor_status("Distribution updated")
 
 
 func _on_stage_editor_area_selected(item_index: int) -> void:
@@ -3003,7 +3363,10 @@ func _on_stage_editor_save_pressed() -> void:
 	if not validation_error.is_empty():
 		_set_stage_editor_status(validation_error, false)
 		return
+	var distribution_types: Array[Block.Type] = _stage_editor_get_distribution_allowed_types_snapshot()
 	current_stage.area = StageData.normalize_area(_stage_editor_selected_area)
+	current_stage.allowed_types = distribution_types
+	current_stage.element_weights = _stage_editor_get_element_weights_snapshot(distribution_types)
 	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
 	current_stage.rounds = _stage_editor_get_rounds_snapshot()
 	current_stage.rounds_init_cd = _stage_editor_get_round_cds_snapshot()
@@ -3044,6 +3407,46 @@ func _stage_editor_get_rounds_snapshot() -> Array[Array]:
 				round_copy.append(enemy_variant)
 		snapshot.append(round_copy)
 	return snapshot
+
+
+func _stage_editor_get_distribution_allowed_types_snapshot() -> Array[Block.Type]:
+	var types: Array[Block.Type] = []
+	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
+		var weight: int = 0
+		if _stage_editor_distribution_spins.has(type_value):
+			var spin: SpinBox = _stage_editor_distribution_spins[type_value]
+			weight = maxi(0, int(round(spin.value)))
+		elif current_stage != null:
+			weight = current_stage.get_element_weight_for_type(type_value)
+		if weight > 0:
+			types.append(type_value as Block.Type)
+	if types.is_empty():
+		types.append(Block.Type.RED)
+		if _stage_editor_distribution_spins.has(Block.Type.RED):
+			var red_spin: SpinBox = _stage_editor_distribution_spins[Block.Type.RED]
+			red_spin.set_value_no_signal(1)
+	return types
+
+
+func _stage_editor_get_element_weights_snapshot(distribution_types: Array[Block.Type] = []) -> Array[int]:
+	var weights: Array[int] = []
+	if current_stage == null:
+		return weights
+	var source_types: Array[Block.Type] = distribution_types
+	if source_types.is_empty():
+		source_types = current_stage.allowed_types
+	for type_value in source_types:
+		var normalized: int = int(type_value)
+		var weight: int = 0
+		if _stage_editor_distribution_spins.has(normalized):
+			var spin: SpinBox = _stage_editor_distribution_spins[normalized]
+			weight = maxi(0, int(round(spin.value)))
+		elif current_stage.element_weights.size() > weights.size():
+			weight = maxi(0, int(current_stage.element_weights[weights.size()]))
+		else:
+			weight = current_stage.get_element_weight_for_type(normalized)
+		weights.append(weight)
+	return weights
 
 
 func _stage_editor_get_round_cds_snapshot() -> Array[Array]:
@@ -3098,8 +3501,9 @@ func _layout_stage_editor_ui() -> void:
 	var top_margin: float = 8.0 + insets.x
 	var left_margin: float = 12.0 + insets.w
 	var right_margin: float = 12.0 + insets.y
-	var horizontal_gap: float = 12.0
-	var action_width: float = 0.0
+	var vertical_gap: float = 6.0
+	var action_height: float = 0.0
+	var area_height: float = 0.0
 	var bottom_margin: float = 8.0 + insets.z
 	var tab_height: float = 58.0
 	var tab_width: float = minf(maxf(340.0, viewport_size.x * 0.54), maxf(260.0, viewport_size.x - insets.w - insets.y - 24.0))
@@ -3109,24 +3513,22 @@ func _layout_stage_editor_ui() -> void:
 	if _stage_editor_tab_panel != null:
 		_stage_editor_set_control_rect(_stage_editor_tab_panel, Rect2(tab_left, tab_top, tab_width, tab_height))
 
-	if _stage_editor_action_panel != null:
-		var action_min_size: Vector2 = _stage_editor_action_panel.get_combined_minimum_size()
-		action_width = minf(maxf(action_min_size.x, 292.0), maxf(120.0, viewport_size.x - left_margin - right_margin))
-		var action_height: float = maxf(action_min_size.y, 58.0)
-		var action_left: float = viewport_size.x - right_margin - action_width
-		_stage_editor_set_control_rect(_stage_editor_action_panel, Rect2(action_left, top_margin, action_width, action_height))
-
 	if _stage_editor_area_panel != null:
 		var available_area_width: float = viewport_size.x - left_margin - right_margin
-		if action_width > 0.0:
-			available_area_width -= action_width + horizontal_gap
 		var area_min_size: Vector2 = _stage_editor_area_panel.get_combined_minimum_size()
 		var area_width: float = minf(maxf(area_min_size.x, 260.0), maxf(160.0, available_area_width))
-		var area_height: float = maxf(area_min_size.y, 74.0)
+		area_height = maxf(area_min_size.y, 66.0)
 		_stage_editor_set_control_rect(_stage_editor_area_panel, Rect2(left_margin, top_margin, area_width, area_height))
 
+	if _stage_editor_action_panel != null:
+		var action_min_size: Vector2 = _stage_editor_action_panel.get_combined_minimum_size()
+		var action_width: float = minf(maxf(action_min_size.x, 244.0), maxf(120.0, viewport_size.x - left_margin - right_margin))
+		action_height = maxf(action_min_size.y, 42.0)
+		var action_top: float = top_margin + area_height + vertical_gap
+		_stage_editor_set_control_rect(_stage_editor_action_panel, Rect2(left_margin, action_top, action_width, action_height))
+
 	if _stage_editor_dialog_panel != null:
-		var dialog_top: float = top_margin + 86.0
+		var dialog_top: float = top_margin + area_height + action_height + vertical_gap * 2.0
 		var dialog_bottom: float = tab_top - 8.0
 		var dialog_height: float = maxf(160.0, dialog_bottom - dialog_top)
 		var dialog_width: float = maxf(260.0, viewport_size.x - left_margin - right_margin)
@@ -3316,6 +3718,7 @@ func add_temporary_guest_character(guest: CharacterData, options: Dictionary = {
 	var battle_index: int = battle_manager.add_temporary_character(guest, bool(options.get("add_current_hp", true)))
 	if battle_index != card_index:
 		push_warning("Guest battle index mismatch: card=%d battle=%d" % [card_index, battle_index])
+	_play_sfx(_se_join_team)
 	await character_panel.reveal_temporary_card(card_index, reveal_duration_scale)
 	party.append(guest)
 	if not bool(options.get("include_in_result", true)):
@@ -3430,6 +3833,8 @@ func _play_chain_sfx(chain_count: int) -> void:
 
 ## 播放關卡背景音樂
 func _play_bgm() -> void:
+	if _should_skip_default_battle_bgm_for_initial_boss():
+		return
 	if current_stage.bgm != null:
 		# 進場後延遲 1 秒再啟動，且戰鬥 BGM 循環之間插入 1 秒延遲
 		# 戰鬥 BGM 直接以全音量播放（不淡入），循環之間維持 1 秒間隔
@@ -3439,6 +3844,20 @@ func _play_bgm() -> void:
 			GameState.crossfade_bgm(stage_bgm, true, 0.0, stage_id, 1.0)
 			_bgm_player = GameState.bgm_player
 		)
+
+
+func _should_skip_default_battle_bgm_for_initial_boss() -> bool:
+	if current_stage == null or battle_manager == null:
+		return false
+	if current_stage.rounds.size() != 1:
+		return false
+	if current_stage.rounds.is_empty() or not (current_stage.rounds[0] is Array):
+		return false
+	var first_round: Array = current_stage.rounds[0]
+	if first_round.is_empty():
+		return false
+	var boss: Enemy = battle_manager.get_main_boss_for_round(0)
+	return boss != null and is_instance_valid(boss)
 
 
 ## 長按預覽開始：漸變降低 BGM 音量、播放速度、遊戲速度
@@ -3591,6 +4010,8 @@ func _upper_type_for_response_skill(skill_name: String) -> Block.UpperType:
 			return Block.UpperType.SNOWBALL
 		"Iceball":
 			return Block.UpperType.ICEBALL
+		"光之盾":
+			return Block.UpperType.LIGHT_SHIELD
 		"Water Slash":
 			return Block.UpperType.WATER_SLASH
 		"Porcupine":
@@ -4050,6 +4471,9 @@ func _end_player_turn() -> void:
 	if did_attack:
 		# 等待最後一個敵人投射物落地
 		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+		while _enemy_board_effects_pending > 0:
+			await get_tree().create_timer(0.05).timeout
+	battle_manager.settle_player_shield_after_enemy_phase()
 	if _stage13_event_running:
 		await _wait_for_stage13_event()
 
@@ -4595,6 +5019,15 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			await get_tree().create_timer(0.12).timeout
 			var spell_mult: float = _register_spell_chain()
 			await _resolve_iceball_instant(pos, resp, spell_mult)
+		"光之盾":
+			var pos: Vector2i = board.last_tapped_pos
+			if not board.place_upper_gem(pos, Block.UpperType.LIGHT_SHIELD, Block.Type.LIGHT):
+				return
+			_play_sfx(_se_freeze)
+			var _dc: CharacterData = party[resp.char_index]
+			var _dc_count: int = int(battle_manager.turn_gem_blasts.get(_dc.gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(_dc.gem_type, _dc_count, Block.UpperType.LIGHT_SHIELD), _dc.gem_type, _dc)
+			await get_tree().create_timer(0.15).timeout
 		"Water Slash":
 			# Place a Water Slash upper gem (always vertical type — chain logic ignores X/Y orientation)
 			var pos: Vector2i = board.last_tapped_pos
@@ -4887,6 +5320,17 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 			if panda_index2 >= 0:
 				character_panel.show_heal_text(panda_index2, heal_amount2)
 			_add_log_entry("[b]%s[/b] %s %s %d HP" % [Locale.tr_ui("Bamboo Supply"), _gem_bbcode(Block.Type.GREEN), Locale.tr_ui("LOG_HEAL"), heal_amount2], Block.Type.GREEN, panda_data2)
+		Block.UpperType.LIGHT_SHIELD:
+			var duan_data: CharacterData = null
+			for c: CharacterData in party:
+				if c != null and (c.character_name == "敦" or c.active_skill_name == "希望之光"):
+					duan_data = c
+					break
+			var shield_source_hp: int = duan_data.get_max_hp() if duan_data != null else 60
+			var shield_amount: int = maxi(1, int(round(float(shield_source_hp) * 0.65)))
+			battle_manager.add_player_shield(shield_amount)
+			_spawn_damage_number(player_hp_fill.get_global_rect().get_center(), shield_amount, Color(0.55, 0.85, 1.0), true, false)
+			_add_log_entry("[b]%s[/b] %s +%d Shield" % [Locale.tr_ui("光之盾"), _upper_gem_bbcode(Block.UpperType.LIGHT_SHIELD), shield_amount], Block.Type.LIGHT, duan_data)
 
 ## 高階寶石爆炸完成後：統一結算所有累積的獨有效果 + VFX 攻擊
 func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _triggered_upper: Block.UpperType) -> void:
@@ -5205,6 +5649,24 @@ func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type
 	return result
 
 
+func _get_random_convertible_cells(to_type: Block.Type, max_count: int) -> Array[Vector2i]:
+	var candidates: Array[Vector2i] = []
+	for x in board.columns:
+		for y in board.rows:
+			var b: Block = board.grid[x][y]
+			if b == null or b.is_obstacle() or b.is_upper_gem():
+				continue
+			if b.block_type == to_type:
+				continue
+			candidates.append(Vector2i(x, y))
+	candidates.shuffle()
+	var result: Array[Vector2i] = []
+	var n: int = mini(max_count, candidates.size())
+	for i in n:
+		result.append(candidates[i])
+	return result
+
+
 func _handle_active_skill(char_index: int) -> void:
 	if board.is_busy or _active_board_selection_running:
 		return
@@ -5356,6 +5818,43 @@ func _handle_active_skill(char_index: int) -> void:
 					converted += 1
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("There shall be light"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 			await get_tree().create_timer(0.4).timeout
+		"希望之光":
+			var targets: Array[Vector2i] = _get_random_convertible_cells(Block.Type.LIGHT, 5)
+			if targets.is_empty():
+				return
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			var light_color: Color = Block.COLORS.get(Block.Type.LIGHT, Color(1.0, 0.92, 0.23))
+			var from_pos: Vector2 = character_panel.get_card_screen_center(char_index)
+			var converted := 0
+			for i in targets.size():
+				var target_pos: Vector2i = targets[i]
+				var target_block: Block = board.grid[target_pos.x][target_pos.y]
+				if target_block == null or target_block.is_obstacle() or target_block.is_upper_gem() or target_block.block_type == Block.Type.LIGHT:
+					continue
+				var to_pos: Vector2 = target_block.global_position
+				var trail := Node2D.new()
+				trail.set_script(TrailProjectileScript)
+				trail.z_index = 100
+				fx_layer.add_child(trail)
+				var captured_pos: Vector2i = target_pos
+				trail.deduct_hp.connect(func() -> void:
+					if board._is_valid(captured_pos):
+						var b: Block = board.grid[captured_pos.x][captured_pos.y]
+						if b != null and not b.is_obstacle() and not b.is_upper_gem() and b.block_type != Block.Type.LIGHT:
+							board._animate_gem_morph(b, Block.Type.LIGHT)
+					_play_sfx(_se_impact, 0.7)
+				, CONNECT_ONE_SHOT)
+				var spread: float = (float(i) / maxf(float(targets.size() - 1), 1.0)) * 1.4 - 0.7 if targets.size() > 1 else 0.0
+				trail.launch(from_pos, to_pos, light_color, 0.5, spread)
+				converted += 1
+				if i < targets.size() - 1:
+					await get_tree().create_timer(0.06).timeout
+			await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.18).timeout
+			board.resync_logic_from_visual()
+			board.is_busy = false
+			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("希望之光"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 		"Leaf Spear Call":
 			var selection_count: int = 1 + SkillUpgradeUtils.leaf_spear_extra_cells(c)
 			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.GREEN, "single_top_bottom", selection_count)
@@ -5656,6 +6155,8 @@ func _is_active_unlocked_for_battle(char_index: int) -> bool:
 		return false
 	if _temporary_active_unlocks.has(c):
 		return true
+	if _is_stage13_story_battle() and c.character_name == "Husky":
+		return false
 	return SkillUpgradeUtils.is_active_stage_unlocked(c)
 
 
@@ -5714,12 +6215,27 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	trail.launch(from_pos, to_pos, color, 0.5)
 
 
+func _on_enemy_lightbreak_attacked(enemy: Enemy, damage: int, light_count: int) -> void:
+	_enemy_board_effects_pending += 1
+	var enemy_name: String = enemy.data.get_display_name() if is_instance_valid(enemy) and enemy.data != null else "Enemy"
+	var requested_count: int = EnemyData.clamp_action_count(light_count)
+	_on_enemy_attacked(enemy, damage)
+	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.05).timeout
+
+	var removed: int = await board.drop_random_gems_of_type(Block.Type.LIGHT, requested_count)
+	if removed > 0:
+		_add_log_entry("[b]%s[/b] %s：%s ×%d" % [enemy_name, Locale.tr_ui("Lightbreak Attack"), _gem_bbcode(Block.Type.LIGHT), removed], Block.Type.LIGHT)
+	else:
+		_add_log_entry("[b]%s[/b] %s：沒有%s目標" % [enemy_name, Locale.tr_ui("Lightbreak Attack"), _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT)
+	_enemy_board_effects_pending = maxi(0, _enemy_board_effects_pending - 1)
+
+
 ## 敎人石化魔法：隨機將一個普通格轉為 ROCK
 func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
 	if not is_instance_valid(enemy):
 		return
 	var target_pos: Vector2i = board.get_random_rock_transmutation_target()
-	var enemy_name: String = enemy.data.enemy_name if enemy.data != null else "Enemy"
+	var enemy_name: String = enemy.data.get_display_name() if enemy.data != null else "Enemy"
 	if target_pos == Vector2i(-1, -1):
 		_add_log_entry("[b]%s[/b] 石化魔法沒有目標" % [enemy_name], Block.Type.DARK)
 		return
@@ -5764,6 +6280,56 @@ func _play_stone_magic_gather_vfx(target_global: Vector2, _color: Color, duratio
 
 # ── 戰鬥回呼 ──────────────────────────────────────────────────
 
+func _setup_player_shield_ui() -> void:
+	if _player_shield_overlay != null:
+		return
+	var hp_bar: Control = $UILayer/PlayerHPBar
+	_player_shield_overlay = ColorRect.new()
+	_player_shield_overlay.name = "ShieldOverlay"
+	_player_shield_overlay.color = Color(0.28, 0.68, 1.0, 0.48)
+	_player_shield_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_player_shield_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_player_shield_overlay.offset_top = -4.0
+	_player_shield_overlay.offset_bottom = 4.0
+	_player_shield_overlay.scale.x = 0.0
+	_player_shield_overlay.visible = false
+	_player_shield_overlay.z_index = 3
+	hp_bar.add_child(_player_shield_overlay)
+
+	_player_shield_badge = Control.new()
+	_player_shield_badge.name = "ShieldBadge"
+	_player_shield_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_player_shield_badge.size = Vector2(84.0, 28.0)
+	_player_shield_badge.visible = false
+	_player_shield_badge.z_index = 7
+	hp_bar.add_child(_player_shield_badge)
+
+	_player_shield_icon = TextureRect.new()
+	_player_shield_icon.texture = SHIELD_ICON_TEXTURE
+	_player_shield_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_player_shield_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_player_shield_icon.size = Vector2(24.0, 24.0)
+	_player_shield_icon.position = Vector2.ZERO
+	_player_shield_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_player_shield_badge.add_child(_player_shield_icon)
+
+	_player_shield_label = Label.new()
+	_player_shield_label.position = Vector2(24.0, -1.0)
+	_player_shield_label.size = Vector2(60.0, 28.0)
+	_player_shield_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_player_shield_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_player_shield_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_player_shield_badge.add_child(_player_shield_label)
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
+	_player_shield_label.add_theme_font_override("font", font)
+	_player_shield_label.add_theme_font_size_override("font_size", 16)
+	_player_shield_label.add_theme_color_override("font_color", Color(0.80, 0.93, 1.0))
+	_player_shield_label.add_theme_color_override("font_outline_color", Color(0.02, 0.08, 0.16))
+	_player_shield_label.add_theme_constant_override("outline_size", 5)
+	player_hp_label.z_index = 8
+	_update_player_shield_layout()
+
+
 ## 玩家血量變化時更新 UI（血條動畫 + 受傷/治療閃光）
 func _on_player_hp_changed(current: int, maximum: int) -> void:
 	player_hp_label.text = "%d" % current
@@ -5783,6 +6349,77 @@ func _on_player_hp_changed(current: int, maximum: int) -> void:
 		var dmg_tween := create_tween()
 		dmg_tween.tween_property(player_hp_fill, "color", Color(1.0, 0.8, 0.8), 0.1)
 		dmg_tween.tween_property(player_hp_fill, "color", Color(0.87, 0.12, 0.12), 0.2)
+
+
+func _on_player_shield_changed(current: int, maximum: int, reason: String) -> void:
+	if _player_shield_overlay == null:
+		_setup_player_shield_ui()
+	var ratio: float = 0.0
+	if maximum > 0:
+		ratio = clampf(float(mini(current, maximum)) / float(maximum), 0.0, 1.0)
+
+	if _player_shield_tween != null and _player_shield_tween.is_valid():
+		_player_shield_tween.kill()
+	if _player_shield_badge_tween != null and _player_shield_badge_tween.is_valid():
+		_player_shield_badge_tween.kill()
+
+	if current > 0:
+		_update_player_shield_layout()
+		_player_shield_overlay.visible = true
+		_player_shield_badge.visible = true
+		_player_shield_overlay.modulate.a = 1.0
+		_player_shield_badge.modulate.a = 1.0
+		_player_shield_label.text = "%d" % current
+		_player_shield_tween = create_tween()
+		_player_shield_tween.tween_property(_player_shield_overlay, "scale:x", ratio, 0.22).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		return
+
+	if reason == "break" or reason == "falloff":
+		_play_player_shield_loss_vfx()
+		_player_shield_tween = create_tween()
+		_player_shield_tween.tween_property(_player_shield_overlay, "scale:x", 0.0, 0.22).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		_player_shield_tween.tween_callback(func() -> void:
+			if is_instance_valid(_player_shield_overlay):
+				_player_shield_overlay.visible = false
+		)
+		_player_shield_badge_tween = create_tween()
+		_player_shield_badge_tween.tween_property(_player_shield_badge, "modulate:a", 0.0, 0.35)
+		_player_shield_badge_tween.tween_callback(func() -> void:
+			if is_instance_valid(_player_shield_badge):
+				_player_shield_badge.visible = false
+				_player_shield_badge.modulate.a = 1.0
+		)
+		return
+
+	_player_shield_overlay.scale.x = 0.0
+	_player_shield_overlay.visible = false
+	_player_shield_badge.visible = false
+	_player_shield_badge.modulate.a = 1.0
+	_player_shield_label.text = "0"
+
+
+func _update_player_shield_layout() -> void:
+	if _player_shield_overlay != null:
+		_player_shield_overlay.pivot_offset = Vector2(_player_shield_overlay.size.x, _player_shield_overlay.size.y * 0.5)
+	_position_player_shield_badge(1.0)
+
+
+func _position_player_shield_badge(_ratio: float) -> void:
+	if _player_shield_badge == null:
+		return
+	var bar_size: Vector2 = player_hp_fill.size
+	if bar_size.x <= 0.0:
+		bar_size = player_hp_fill.get_rect().size
+	var badge_size: Vector2 = _player_shield_badge.size
+	var badge_x: float = maxf(0.0, bar_size.x - badge_size.x + 8.0)
+	_player_shield_badge.position = Vector2(badge_x, -24.0)
+
+
+func _play_player_shield_loss_vfx() -> void:
+	if _player_shield_icon == null or not is_instance_valid(_player_shield_icon):
+		return
+	var origin: Vector2 = _player_shield_icon.get_global_rect().get_center()
+	DebrisVfx.play(get_tree().current_scene, SHIELD_ICON_TEXTURE, origin, 7, Vector2(0.35, 0.70), Vector2(0.55, 0.95), 120, Color(0.65, 0.90, 1.0, 0.95))
 
 
 ## 回合數變更時更新 UI
@@ -6257,8 +6894,15 @@ func _run_stage13_turn1_dialog() -> void:
 
 
 func _apply_player_damage_with_stage13_guard(amount: int) -> void:
+	var shield_absorb: int = mini(maxi(amount, 0), maxi(battle_manager.player_shield, 0))
+	var hp_overflow_damage: int = maxi(0, amount - shield_absorb)
 	if _is_stage13_story_battle() and not _stage13_rescue_done \
-			and battle_manager.player_current_hp - amount <= 0:
+			and hp_overflow_damage > 0 \
+			and battle_manager.player_current_hp - hp_overflow_damage <= 0:
+		if shield_absorb > 0:
+			battle_manager.player_shield -= shield_absorb
+			battle_manager.player_shield_damaged_this_turn = true
+			battle_manager.player_shield_changed.emit(battle_manager.player_shield, battle_manager.player_max_hp, "break" if battle_manager.player_shield <= 0 else "damage")
 		battle_manager.player_current_hp = 1
 		battle_manager.player_hp_changed.emit(battle_manager.player_current_hp, battle_manager.player_max_hp)
 		if not _stage13_event_running:
@@ -6625,6 +7269,7 @@ func _show_victory_overlay() -> void:
 
 	_victory_overlay = Control.new()
 	_victory_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_victory_overlay.z_index = 200
 	ui_layer.add_child(_victory_overlay)
 
 	# 暗色背景（fade-in）
@@ -7051,7 +7696,7 @@ func _show_enemy_status_popup(enemy: Enemy) -> void:
 	header.add_child(info_vbox)
 
 	var name_lbl := Label.new()
-	name_lbl.text = Locale.tr_or(data.enemy_name, data.enemy_name)
+	name_lbl.text = data.get_display_name()
 	name_lbl.add_theme_font_size_override("font_size", 27)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -7125,13 +7770,14 @@ func _show_enemy_status_popup(enemy: Enemy) -> void:
 
 func _add_enemy_popup_passive(parent: VBoxContainer, data: EnemyData) -> void:
 	var entry := VBoxContainer.new()
-	entry.add_theme_constant_override("separation", 6)
+	entry.add_theme_constant_override("separation", 8)
+	entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(entry)
 
 	var row_wrap := MarginContainer.new()
 	entry.add_child(row_wrap)
 	var grad := Gradient.new()
-	grad.set_color(0, Color(0, 0, 0, 0.55))
+	grad.set_color(0, Color(0, 0, 0, 0.58))
 	grad.set_color(1, Color(0, 0, 0, 0))
 	var grad_tex := GradientTexture2D.new()
 	grad_tex.gradient = grad
@@ -7145,29 +7791,12 @@ func _add_enemy_popup_passive(parent: VBoxContainer, data: EnemyData) -> void:
 	row_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row_wrap.add_child(row_bg)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row_wrap.add_child(row)
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 7)
+	title_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row_wrap.add_child(title_row)
 
-	var tag_box := PanelContainer.new()
-	var tag_style := StyleBoxFlat.new()
-	tag_style.bg_color = Color(0.4, 0.7, 0.3)
-	tag_style.set_corner_radius_all(4)
-	tag_style.content_margin_top = 1
-	tag_style.content_margin_bottom = 1
-	tag_style.content_margin_left = 5
-	tag_style.content_margin_right = 5
-	tag_box.add_theme_stylebox_override("panel", tag_style)
-	row.add_child(tag_box)
-	var tag_lbl := Label.new()
-	tag_lbl.text = Locale.tr_ui("PASSIVE")
-	tag_lbl.add_theme_font_size_override("font_size", 16)
-	tag_lbl.add_theme_color_override("font_color", Color.WHITE)
-	tag_lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
-	tag_lbl.add_theme_constant_override("shadow_offset_x", 1)
-	tag_lbl.add_theme_constant_override("shadow_offset_y", 1)
-	tag_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tag_box.add_child(tag_lbl)
+	title_row.add_child(_make_enemy_passive_requirement_box(data, Vector2(30, 30), 14, true))
 
 	var nm := Label.new()
 	nm.text = _enemy_passive_name(data)
@@ -7175,52 +7804,56 @@ func _add_enemy_popup_passive(parent: VBoxContainer, data: EnemyData) -> void:
 	nm.add_theme_color_override("font_color", Color.WHITE)
 	nm.add_theme_color_override("font_outline_color", Color.BLACK)
 	nm.add_theme_constant_override("outline_size", 4)
+	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(nm)
+	title_row.add_child(nm)
 
-	entry.add_child(_make_enemy_passive_requirement_box(data))
+	var detail_row := HBoxContainer.new()
+	detail_row.add_theme_constant_override("separation", 10)
+	detail_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	detail_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	entry.add_child(detail_row)
 
 	var dl := Label.new()
 	dl.text = _enemy_passive_desc(data)
 	dl.add_theme_font_size_override("font_size", 16)
 	dl.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	entry.add_child(dl)
+	detail_row.add_child(dl)
 
 
-func _make_enemy_passive_requirement_box(data: EnemyData) -> Control:
-	var wrap := VBoxContainer.new()
-	wrap.add_theme_constant_override("separation", 2)
+func _make_enemy_passive_requirement_box(data: EnemyData, icon_size: Vector2 = Vector2(68, 68), font_size: int = 26, prefix_plus: bool = false) -> Control:
+	var wrap := Control.new()
 	wrap.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var stack := Control.new()
-	stack.custom_minimum_size = Vector2(62, 54)
-	wrap.add_child(stack)
+	wrap.custom_minimum_size = icon_size
 	var gem := TextureRect.new()
 	gem.texture = Block.GEM_TEXTURES.get(data.passive_required_gem_type, null)
 	gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	gem.set_anchors_preset(Control.PRESET_FULL_RECT)
-	stack.add_child(gem)
+	gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.add_child(gem)
 	var num := Label.new()
-	num.text = "%d+" % EnemyData.clamp_passive_required_gem_count(data.passive_required_gem_count)
+	var count: int = EnemyData.clamp_passive_required_gem_count(data.passive_required_gem_count)
+	if prefix_plus:
+		num.text = "+%d" % count
+	else:
+		num.text = "%d+" % count
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	num.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	if font != null:
 		num.add_theme_font_override("font", font)
-	num.add_theme_font_size_override("font_size", 26)
+	num.add_theme_font_size_override("font_size", font_size)
 	num.add_theme_color_override("font_color", Color.WHITE)
 	num.add_theme_color_override("font_outline_color", Color.BLACK)
 	num.add_theme_constant_override("outline_size", 5)
-	stack.add_child(num)
-	var hint := Label.new()
-	hint.text = Locale.tr_ui("ENEMY_PASSIVE_REQUIREMENT")
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 11)
-	hint.add_theme_color_override("font_color", Color(0.85, 0.85, 0.95))
-	wrap.add_child(hint)
+	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.add_child(num)
 	return wrap
 
 
@@ -7360,6 +7993,7 @@ func _debug_spawn_upper(skill_name: String) -> void:
 		"Turtle": Block.UpperType.TURTLE,
 		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
 		"Wood Spear": Block.UpperType.WOOD_SPEAR_UP,
+		"光之盾": Block.UpperType.LIGHT_SHIELD,
 	}
 	if not ut_map.has(skill_name):
 		# 倒回旧行為

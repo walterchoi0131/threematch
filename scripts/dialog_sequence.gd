@@ -12,3 +12,6 @@ const _DialogLine := preload("res://scripts/dialog_line.gd")
 
 ## 對話場景背景圖（可選）
 @export var background: Texture2D = null
+
+## Initial BGM for this dialog phase. Null means start without local dialog BGM.
+@export var initial_music: AudioStream = null

@@ -23,6 +23,7 @@ const DEFAULT_CHARACTER_PATHS := [
 	"res://characters/char_dragon.tres",
 	"res://characters/char_gory.tres",
 	"res://characters/char_owen.tres",
+	"res://characters/char_duan.tres",
 ]
 const STARTING_CHARACTER_PATHS := [
 	"res://characters/char_dragon.tres",

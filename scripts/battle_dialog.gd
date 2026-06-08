@@ -51,8 +51,11 @@ var _overlay: ColorRect
 var _panel: PanelContainer
 var _portrait_clip: Control
 var _portrait: TextureRect
+var _name_row: HBoxContainer
 var _name_label: Label
 var _text_label: RichTextLabel
+var _text_top_spacer: Control
+var _text_bottom_spacer: Control
 var _tap_zone: Button
 var _skip_btn: Button
 
@@ -143,8 +146,8 @@ func _build_ui() -> void:
 	hbox.add_child(vbox)
 
 	# 名稱列：左為名稱、右為 Skip 按鈕
-	var name_row := HBoxContainer.new()
-	vbox.add_child(name_row)
+	_name_row = HBoxContainer.new()
+	vbox.add_child(_name_row)
 
 	# 名稱
 	_name_label = Label.new()
@@ -155,7 +158,7 @@ func _build_ui() -> void:
 	_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	_name_label.add_theme_constant_override("outline_size", 2)
 	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_row.add_child(_name_label)
+	_name_row.add_child(_name_label)
 
 	# Skip 按鈕（與名稱同一列、靠右）— 點擊切換自動推進
 	_skip_btn = Button.new()
@@ -175,9 +178,14 @@ func _build_ui() -> void:
 	_skip_btn.add_theme_stylebox_override("focus", btn_empty)
 	_skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_skip_btn.pressed.connect(_on_skip_pressed)
-	name_row.add_child(_skip_btn)
+	_name_row.add_child(_skip_btn)
 
 	# 對話文字
+	_text_top_spacer = Control.new()
+	_text_top_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_text_top_spacer.visible = false
+	vbox.add_child(_text_top_spacer)
+
 	_text_label = RichTextLabel.new()
 	_text_label.bbcode_enabled = true
 	_text_label.fit_content = true
@@ -190,6 +198,11 @@ func _build_ui() -> void:
 	_text_label.add_theme_font_size_override("normal_font_size", TEXT_FONT_SIZE)
 	_text_label.add_theme_color_override("default_color", Color.WHITE)
 	vbox.add_child(_text_label)
+
+	_text_bottom_spacer = Control.new()
+	_text_bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_text_bottom_spacer.visible = false
+	vbox.add_child(_text_bottom_spacer)
 
 	# 全區域點擊
 	_tap_zone = Button.new()
@@ -275,8 +288,7 @@ func _show_line(line: _DialogLine) -> void:
 	else:
 		var name_entry: Dictionary = CHAR_NAMES.get(char_id, {})
 		_name_label.text = name_entry.get(cur_locale, char_id.capitalize())
-		var name_color: Color = CHAR_NAME_COLORS.get(char_id, Color(1.0, 0.92, 0.5))
-		_name_label.add_theme_color_override("font_color", name_color)
+		_name_label.add_theme_color_override("font_color", _dialog_name_color(char_id))
 
 	# 打字機
 	var dialog_text: String
@@ -284,7 +296,9 @@ func _show_line(line: _DialogLine) -> void:
 		dialog_text = locale_node.get_dialog_text(line)
 	else:
 		dialog_text = line.text_zh if not line.text_zh.is_empty() else line.text_en
-	_text_label.text = dialog_text
+	var is_narration: bool = char_id.is_empty()
+	_apply_text_alignment_for_line(is_narration)
+	_text_label.text = _center_dialog_text(dialog_text) if is_narration else dialog_text
 	_text_label.visible_ratio = 0.0
 	_typing = true
 
@@ -295,6 +309,24 @@ func _show_line(line: _DialogLine) -> void:
 	_type_tween = create_tween()
 	_type_tween.tween_property(_text_label, "visible_ratio", 1.0, duration)
 	_type_tween.tween_callback(func() -> void: _typing = false)
+
+
+func _apply_text_alignment_for_line(is_narration: bool) -> void:
+	if _name_row != null:
+		_name_row.visible = not is_narration
+	if _text_top_spacer != null:
+		_text_top_spacer.visible = is_narration
+	if _text_bottom_spacer != null:
+		_text_bottom_spacer.visible = is_narration
+	if _text_label == null:
+		return
+	_text_label.fit_content = is_narration
+	_text_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER if is_narration else Control.SIZE_EXPAND_FILL
+
+
+func _center_dialog_text(text: String) -> String:
+	var escaped: String = text.replace("[", "[lb]")
+	return "[center]%s[/center]" % escaped
 
 
 func _finish_typing() -> void:
@@ -323,6 +355,14 @@ func _apply_square_portrait_slot() -> void:
 	_portrait_clip.size = square_size
 	_portrait.custom_minimum_size = canvas_size
 	_portrait.size = canvas_size
+
+
+func _dialog_name_color(char_id: String) -> Color:
+	var character: CharacterData = _find_character_data(char_id)
+	if character != null:
+		var element_color: Color = Block.COLORS.get(character.gem_type, Color.WHITE)
+		return element_color.lightened(0.35)
+	return CHAR_NAME_COLORS.get(char_id, Color.WHITE)
 
 
 func _find_character_data(char_id: String) -> CharacterData:

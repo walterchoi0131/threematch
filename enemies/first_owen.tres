@@ -7,8 +7,11 @@
 [resource]
 script = ExtResource("1_script")
 enemy_name = "First Owen"
-action_pattern = Array[int]([2, 0, 2, 0])
-action_percents = Array[int]([15, 28, 15, 11])
+enemy_name_zh = "奧云"
+enemy_name_en = "Owen"
+action_pattern = Array[int]([2, 0, 2, 3])
+action_percents = Array[int]([15, 28, 15, 15])
+action_counts = Array[int]([3, 3, 3, 3])
 portrait_color = Color(0.3, 0.2, 0.45, 1)
 portrait_texture = ExtResource("2_texture")
 element = 7

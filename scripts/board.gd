@@ -354,44 +354,24 @@ func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_
 
 ## 隨機選擇一個允許的寶石類型
 func _random_type() -> int:
-	# 關卡 1-5：均分 25% 暗/火/水/葉（測試用）
-	if stage != null and stage.stage_id == "1-5":
-		var r5: int = randi() % 4
-		match r5:
-			0: return Block.Type.RED
-			1: return Block.Type.BLUE
-			2: return Block.Type.GREEN
-			_: return Block.Type.DARK
-	# 關卡 1-3：固定 32% 火 / 32% 水 / 31% 葉 / 5% 光
-	if stage != null and stage.stage_id == "1-3":
-		var r13: int = randi() % 100
-		if r13 < 32:
-			return Block.Type.RED
-		elif r13 < 64:
-			return Block.Type.BLUE
-		elif r13 < 95:
-			return Block.Type.GREEN
-		else:
-			return Block.Type.LIGHT
-	# 關卡 1-4：固定 60% 火 / 10% 水 / 10% 葉 / 20% 光
-	if stage != null and stage.stage_id == "1-4":
-		var r: int = randi() % 100
-		if r < 60:
-			return Block.Type.RED
-		elif r < 70:
-			return Block.Type.BLUE
-		elif r < 80:
-			return Block.Type.GREEN
-		else:
-			return Block.Type.LIGHT
-	var candidates: Array[int] = []
-	for value: Block.Type in allowed_types:
-		var type_value: int = int(value)
+	var distribution: Dictionary = stage.get_element_distribution() if stage != null else {}
+	var total_weight: int = 0
+	for key in distribution.keys():
+		var type_value: int = int(key)
 		if Block.is_random_gem_type_value(type_value):
-			candidates.append(type_value)
-	if candidates.is_empty():
+			total_weight += maxi(0, int(distribution[key]))
+	if total_weight <= 0:
 		return Block.Type.RED
-	return candidates[randi() % candidates.size()]
+	var roll: int = randi() % total_weight
+	var cursor: int = 0
+	for key in distribution.keys():
+		var type_value: int = int(key)
+		if not Block.is_random_gem_type_value(type_value):
+			continue
+		cursor += maxi(0, int(distribution[key]))
+		if roll < cursor:
+			return type_value
+	return Block.Type.RED
 
 
 ## 將網格座標轉換為世界像素座標（格子中心點）
@@ -1574,6 +1554,49 @@ func blast_all_of_type(type: Block.Type) -> int:
 	return effective_count
 
 
+func drop_random_gems_of_type(type: Block.Type, count: int) -> int:
+	var clamped_count: int = maxi(0, count)
+	if clamped_count <= 0:
+		return 0
+	var candidates: Array[Vector2i] = []
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block != null and block.block_type == type and not block.is_upper_gem() and not block.is_obstacle():
+				candidates.append(Vector2i(x, y))
+	if candidates.is_empty():
+		return 0
+
+	candidates.shuffle()
+	var removed_blocks: Array[Block] = []
+	var removed_count: int = mini(clamped_count, candidates.size())
+	is_busy = true
+	for i in removed_count:
+		var pos: Vector2i = candidates[i]
+		var block: Block = grid[pos.x][pos.y]
+		if block == null or block.is_upper_gem() or block.is_obstacle() or block.block_type != type:
+			continue
+		grid[pos.x][pos.y] = null
+		logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
+		removed_blocks.append(block)
+		_play_gem_break_debris(block)
+
+	if removed_blocks.is_empty():
+		is_busy = false
+		return 0
+
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		for block in removed_blocks:
+			if is_instance_valid(block):
+				block.queue_free()
+	, CONNECT_ONE_SHOT)
+
+	await get_tree().create_timer(0.25).timeout
+	await _collapse_and_fill()
+	is_busy = false
+	return removed_blocks.size()
+
+
 ## 公開的「融合/變身」闃光+彈跳動畫—可被任何「變成其它寶石」的流程調用
 func play_fuse_animation(block: Block) -> void:
 	if block == null or not is_instance_valid(block):
@@ -2439,6 +2462,8 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return _get_surrounding_positions(pos)
 		Block.UpperType.ICEBALL:
 			return _get_surrounding_positions(pos)
+		Block.UpperType.LIGHT_SHIELD:
+			return [pos]
 		Block.UpperType.BAMBOO_SUPPLY:
 			return _get_surrounding_positions(pos)
 		Block.UpperType.WATER_SLASH:

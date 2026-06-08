@@ -30,6 +30,7 @@ class _ActionPaletteRow extends HBoxContainer:
 class _ActionChip extends Button:
 	var action_type: int = EnemyData.ActionType.ATTACK_15
 	var attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT
+	var action_count: int = EnemyData.ACTION_COUNT_DEFAULT
 	var source_index: int = -1
 	var owner_screen: Control = null
 
@@ -42,9 +43,14 @@ class _ActionChip extends Button:
 		var drag_percent: int = attack_percent
 		if source_index < 0 and action_type == EnemyData.ActionType.ATTACK_15 and owner_screen != null and owner_screen.has_method("_current_attack_percent"):
 			drag_percent = int(owner_screen.call("_current_attack_percent"))
+		var drag_count: int = action_count
+		if source_index < 0 and action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK and owner_screen != null and owner_screen.has_method("_current_action_count"):
+			drag_percent = int(owner_screen.call("_current_attack_percent"))
+			drag_count = int(owner_screen.call("_current_action_count"))
 		return {
 			"action_type": action_type,
 			"attack_percent": drag_percent,
+			"action_count": drag_count,
 			"source_index": source_index,
 		}
 
@@ -124,6 +130,7 @@ var _selected_enemy: EnemyData = null
 var _selected_path: String = ""
 var _action_sequence: Array[int] = []
 var _action_percents: Array[int] = []
+var _action_counts: Array[int] = []
 var _passive_sequence: Array[int] = []
 
 var _status_lbl: Label = null
@@ -131,6 +138,8 @@ var _detail_body: Control = null
 var _enemy_row: HBoxContainer = null
 var _image_picker_panel: PanelContainer = null
 var _name_edit: LineEdit = null
+var _name_zh_edit: LineEdit = null
+var _name_en_edit: LineEdit = null
 var _hp_slider: HSlider = null
 var _hp_value_lbl: Label = null
 var _element_option: OptionButton = null
@@ -142,6 +151,8 @@ var _portrait_preview: TextureRect = null
 var _attack_percent_slider: HSlider = null
 var _attack_percent_lbl: Label = null
 var _attack_palette_chip: _ActionChip = null
+var _lightbreak_count_spin: SpinBox = null
+var _lightbreak_palette_chip: _ActionChip = null
 var _action_row: _ActionDropRow = null
 var _estimate_info_lbl: Label = null
 var _estimate_level_value: int = STAT_LEVEL_MIN
@@ -197,19 +208,13 @@ func _build_top_bar(parent: VBoxContainer) -> void:
 	top_bar.add_child(title_lbl)
 
 	_status_lbl = Label.new()
-	_status_lbl.text = "Select an enemy or create one from an image."
+	_status_lbl.text = ""
 	_status_lbl.add_theme_font_size_override("font_size", 12)
 	_status_lbl.add_theme_color_override("font_color", Color(0.78, 0.82, 0.92))
 	_status_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_bar.add_child(_status_lbl)
-
-	var new_btn := Button.new()
-	new_btn.text = "New From Image"
-	new_btn.custom_minimum_size = Vector2(136, 40)
-	new_btn.pressed.connect(_toggle_image_picker)
-	top_bar.add_child(new_btn)
 
 	var save_btn := Button.new()
 	save_btn.text = "Save"
@@ -390,7 +395,7 @@ func _collect_enemy_resources(dir_path: String, results: Array[Dictionary]) -> v
 				results.append({
 					"data": enemy_data,
 					"path": resource_path,
-					"label": "%s %s" % [enemy_data.enemy_name, resource_path],
+					"label": "%s %s" % [enemy_data.get_display_name(), resource_path],
 				})
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -474,7 +479,7 @@ func _refresh_enemy_row() -> void:
 		content.add_child(image)
 
 		var label := Label.new()
-		label.text = enemy_data.enemy_name
+		label.text = enemy_data.get_display_name()
 		label.add_theme_font_size_override("font_size", 11)
 		label.add_theme_color_override("font_color", Color.WHITE)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -537,12 +542,14 @@ func _select_enemy(index: int) -> void:
 	_selected_path = String(entry.get("path", ""))
 	_action_sequence.clear()
 	_action_percents.clear()
+	_action_counts.clear()
 	_passive_sequence.clear()
 	if _selected_enemy != null:
 		for i in _selected_enemy.action_pattern.size():
 			var action: EnemyData.ActionType = _selected_enemy.action_pattern[i]
 			_action_sequence.append(int(action))
 			_action_percents.append(_selected_enemy.get_action_percent_at(i))
+			_action_counts.append(_selected_enemy.get_action_count_at(i))
 		if int(_selected_enemy.passive_type) != EnemyData.PassiveType.NONE:
 			_passive_sequence.append(int(_selected_enemy.passive_type))
 	_refresh_detail()
@@ -550,7 +557,7 @@ func _select_enemy(index: int) -> void:
 		_estimate_level_value = STAT_LEVEL_MIN
 		_refresh_estimate_info()
 	_refresh_enemy_row()
-	_set_status("Selected %s" % _selected_enemy.enemy_name if _selected_enemy != null else "No enemy selected")
+	_set_status("")
 
 
 func _refresh_detail() -> void:
@@ -569,6 +576,8 @@ func _refresh_detail() -> void:
 	_attack_percent_slider = null
 	_attack_percent_lbl = null
 	_attack_palette_chip = null
+	_lightbreak_count_spin = null
+	_lightbreak_palette_chip = null
 	_action_row = null
 
 	if _selected_enemy == null:
@@ -633,8 +642,18 @@ func _build_fields_column(parent: HBoxContainer) -> void:
 
 	_name_edit = LineEdit.new()
 	_name_edit.text = _selected_enemy.enemy_name
-	_name_edit.placeholder_text = "Enemy name"
-	col.add_child(_make_labeled_control("Name", _name_edit))
+	_name_edit.placeholder_text = "Fallback/internal enemy name"
+	col.add_child(_make_labeled_control("Fallback", _name_edit))
+
+	_name_zh_edit = LineEdit.new()
+	_name_zh_edit.text = _selected_enemy.enemy_name_zh
+	_name_zh_edit.placeholder_text = "中文敵人名稱"
+	col.add_child(_make_labeled_control("Name ZH", _name_zh_edit))
+
+	_name_en_edit = LineEdit.new()
+	_name_en_edit.text = _selected_enemy.enemy_name_en
+	_name_en_edit.placeholder_text = "English enemy name"
+	col.add_child(_make_labeled_control("Name EN", _name_en_edit))
 
 	var hp_box := HBoxContainer.new()
 	hp_box.add_theme_constant_override("separation", 8)
@@ -665,13 +684,6 @@ func _build_fields_column(parent: HBoxContainer) -> void:
 	_add_element_option(Block.Type.DARK)
 	_select_element_option(int(_selected_enemy.element))
 	col.add_child(_make_labeled_control("Element", _element_option))
-
-	var hint_lbl := Label.new()
-	hint_lbl.text = "Enemy level, main boss, attack power, and actual HP are set by stage spawn/player estimates. This resource stores HP %."
-	hint_lbl.add_theme_font_size_override("font_size", 11)
-	hint_lbl.add_theme_color_override("font_color", Color(0.72, 0.76, 0.86))
-	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	col.add_child(hint_lbl)
 
 
 func _build_passive_column(parent: VBoxContainer) -> void:
@@ -926,7 +938,7 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_attack_percent_slider.step = 1
 	_attack_percent_slider.value = EnemyData.ATTACK_PERCENT_DEFAULT
 	_attack_percent_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_attack_percent_slider.tooltip_text = "Attack percent for new dragged Attack actions."
+	_attack_percent_slider.tooltip_text = "Attack percent for new dragged Attack and Lightbreak actions."
 	_attack_percent_slider.value_changed.connect(_on_attack_percent_changed)
 	attack_slider_row.add_child(_attack_percent_slider)
 	_attack_percent_lbl = Label.new()
@@ -939,6 +951,36 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_on_attack_percent_changed(_attack_percent_slider.value)
 
 	palette.add_child(_make_action_chip(EnemyData.ActionType.STONE_MAGIC, -1))
+
+	var lightbreak_box := VBoxContainer.new()
+	lightbreak_box.custom_minimum_size = Vector2(188, 0)
+	lightbreak_box.add_theme_constant_override("separation", 4)
+	palette.add_child(lightbreak_box)
+	_lightbreak_palette_chip = _make_action_chip(
+		EnemyData.ActionType.BREAK_LIGHT_ATTACK,
+		-1,
+		_current_attack_percent(),
+		_current_action_count()
+	)
+	lightbreak_box.add_child(_lightbreak_palette_chip)
+	var lightbreak_count_row := HBoxContainer.new()
+	lightbreak_count_row.add_theme_constant_override("separation", 6)
+	lightbreak_box.add_child(lightbreak_count_row)
+	var lightbreak_count_label := Label.new()
+	lightbreak_count_label.text = "Light"
+	lightbreak_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lightbreak_count_label.add_theme_font_size_override("font_size", 11)
+	lightbreak_count_label.add_theme_color_override("font_color", Color(0.90, 0.94, 1.0))
+	lightbreak_count_row.add_child(lightbreak_count_label)
+	_lightbreak_count_spin = SpinBox.new()
+	_lightbreak_count_spin.min_value = EnemyData.ACTION_COUNT_MIN
+	_lightbreak_count_spin.max_value = EnemyData.ACTION_COUNT_MAX
+	_lightbreak_count_spin.step = 1
+	_lightbreak_count_spin.value = EnemyData.ACTION_COUNT_DEFAULT
+	_lightbreak_count_spin.custom_minimum_size = Vector2(72, 0)
+	_lightbreak_count_spin.tooltip_text = "Light gem count removed by new Lightbreak actions."
+	_lightbreak_count_spin.value_changed.connect(_on_lightbreak_count_changed)
+	lightbreak_count_row.add_child(_lightbreak_count_spin)
 
 	var sequence_box := VBoxContainer.new()
 	sequence_box.add_theme_constant_override("separation", 8)
@@ -986,6 +1028,7 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	clear_btn.pressed.connect(func() -> void:
 		_action_sequence.clear()
 		_action_percents.clear()
+		_action_counts.clear()
 		_refresh_action_sequence()
 	)
 	row_buttons.add_child(clear_btn)
@@ -996,6 +1039,7 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	fallback_btn.pressed.connect(func() -> void:
 		_action_sequence = [EnemyData.ActionType.ATTACK_15]
 		_action_percents = [EnemyData.ATTACK_PERCENT_DEFAULT]
+		_action_counts = [EnemyData.ACTION_COUNT_DEFAULT]
 		_refresh_action_sequence()
 	)
 	row_buttons.add_child(fallback_btn)
@@ -1003,13 +1047,18 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_refresh_action_sequence()
 
 
-func _make_action_chip(action_type: int, source_index: int, attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT) -> _ActionChip:
+func _make_action_chip(
+		action_type: int,
+		source_index: int,
+		attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT,
+		action_count: int = EnemyData.ACTION_COUNT_DEFAULT) -> _ActionChip:
 	var chip := _ActionChip.new()
 	chip.owner_screen = self
 	chip.action_type = action_type
 	chip.attack_percent = _action_percent_for_type(action_type, attack_percent)
+	chip.action_count = _action_count_for_type(action_type, action_count)
 	chip.source_index = source_index
-	chip.text = _action_label(action_type, chip.attack_percent)
+	chip.text = _action_label(action_type, chip.attack_percent, chip.action_count)
 	chip.tooltip_text = "Drag into 行動序列表" if source_index < 0 else "Drag to reorder, or drag back to Action List to remove"
 	chip.custom_minimum_size = Vector2(112, 38)
 	chip.add_theme_font_size_override("font_size", 13)
@@ -1018,7 +1067,10 @@ func _make_action_chip(action_type: int, source_index: int, attack_percent: int 
 	chip.add_theme_stylebox_override("pressed", _action_style(action_type, true))
 	if source_index < 0:
 		chip.pressed.connect(func() -> void:
-			_append_action(action_type, _current_attack_percent() if action_type == EnemyData.ActionType.ATTACK_15 else attack_percent)
+			if action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+				_append_action(action_type, _current_attack_percent(), _current_action_count())
+			else:
+				_append_action(action_type, _current_attack_percent() if action_type == EnemyData.ActionType.ATTACK_15 else attack_percent, action_count)
 			_refresh_action_sequence()
 		)
 	return chip
@@ -1041,7 +1093,7 @@ func _refresh_action_sequence() -> void:
 		return
 
 	for i in _action_sequence.size():
-		_action_row.add_child(_make_action_chip(_action_sequence[i], i, _action_percent_at(i)))
+		_action_row.add_child(_make_action_chip(_action_sequence[i], i, _action_percent_at(i), _action_count_at(i)))
 
 
 func _is_action_drag_data(data: Variant) -> bool:
@@ -1071,16 +1123,21 @@ func _drop_action_at_end(data: Variant) -> void:
 	var source_index: int = int(drag_data.get("source_index", -1))
 	var action_type: int = int(drag_data.get("action_type", EnemyData.ActionType.ATTACK_15))
 	var attack_percent: int = int(drag_data.get("attack_percent", EnemyData.ATTACK_PERCENT_DEFAULT))
+	var action_count: int = int(drag_data.get("action_count", EnemyData.ACTION_COUNT_DEFAULT))
 	if source_index >= 0 and source_index < _action_sequence.size():
 		var moved_action: int = _action_sequence[source_index]
 		var moved_percent: int = _action_percent_at(source_index)
+		var moved_count: int = _action_count_at(source_index)
 		_action_sequence.remove_at(source_index)
 		if source_index < _action_percents.size():
 			_action_percents.remove_at(source_index)
+		if source_index < _action_counts.size():
+			_action_counts.remove_at(source_index)
 		_action_sequence.append(moved_action)
 		_action_percents.append(moved_percent)
+		_action_counts.append(moved_count)
 	else:
-		_append_action(action_type, attack_percent)
+		_append_action(action_type, attack_percent, action_count)
 	_refresh_action_sequence()
 
 
@@ -1091,20 +1148,26 @@ func _drop_action_on_index(target_index: int, data: Variant) -> void:
 	var source_index: int = int(drag_data.get("source_index", -1))
 	var action_type: int = int(drag_data.get("action_type", EnemyData.ActionType.ATTACK_15))
 	var attack_percent: int = int(drag_data.get("attack_percent", EnemyData.ATTACK_PERCENT_DEFAULT))
+	var action_count: int = int(drag_data.get("action_count", EnemyData.ACTION_COUNT_DEFAULT))
 	var insert_index: int = clampi(target_index, 0, _action_sequence.size())
 	if source_index >= 0 and source_index < _action_sequence.size():
 		var moved_action: int = _action_sequence[source_index]
 		var moved_percent: int = _action_percent_at(source_index)
+		var moved_count: int = _action_count_at(source_index)
 		_action_sequence.remove_at(source_index)
 		if source_index < _action_percents.size():
 			_action_percents.remove_at(source_index)
+		if source_index < _action_counts.size():
+			_action_counts.remove_at(source_index)
 		if source_index < insert_index:
 			insert_index -= 1
 		_action_sequence.insert(clampi(insert_index, 0, _action_sequence.size()), moved_action)
 		_action_percents.insert(clampi(insert_index, 0, _action_percents.size()), moved_percent)
+		_action_counts.insert(clampi(insert_index, 0, _action_counts.size()), moved_count)
 	else:
 		_action_sequence.insert(insert_index, action_type)
 		_action_percents.insert(insert_index, _action_percent_for_type(action_type, attack_percent))
+		_action_counts.insert(insert_index, _action_count_for_type(action_type, action_count))
 	_refresh_action_sequence()
 
 
@@ -1114,12 +1177,15 @@ func _remove_action(index: int) -> void:
 	_action_sequence.remove_at(index)
 	if index < _action_percents.size():
 		_action_percents.remove_at(index)
+	if index < _action_counts.size():
+		_action_counts.remove_at(index)
 	_refresh_action_sequence()
 
 
-func _append_action(action_type: int, attack_percent: int) -> void:
+func _append_action(action_type: int, attack_percent: int, action_count: int = EnemyData.ACTION_COUNT_DEFAULT) -> void:
 	_action_sequence.append(action_type)
 	_action_percents.append(_action_percent_for_type(action_type, attack_percent))
+	_action_counts.append(_action_count_for_type(action_type, action_count))
 
 
 func _action_percent_at(index: int) -> int:
@@ -1129,15 +1195,33 @@ func _action_percent_at(index: int) -> int:
 
 
 func _action_percent_for_type(action_type: int, attack_percent: int) -> int:
-	if action_type == EnemyData.ActionType.ATTACK_15:
+	if action_type == EnemyData.ActionType.ATTACK_15 or action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK:
 		return EnemyData.clamp_attack_percent(attack_percent)
 	return EnemyData.ATTACK_PERCENT_DEFAULT
+
+
+func _action_count_at(index: int) -> int:
+	if index >= 0 and index < _action_counts.size():
+		return EnemyData.clamp_action_count(int(_action_counts[index]))
+	return EnemyData.ACTION_COUNT_DEFAULT
+
+
+func _action_count_for_type(action_type: int, action_count: int) -> int:
+	if action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+		return EnemyData.clamp_action_count(action_count)
+	return EnemyData.ACTION_COUNT_DEFAULT
 
 
 func _current_attack_percent() -> int:
 	if _attack_percent_slider != null:
 		return EnemyData.clamp_attack_percent(int(round(_attack_percent_slider.value)))
 	return EnemyData.ATTACK_PERCENT_DEFAULT
+
+
+func _current_action_count() -> int:
+	if _lightbreak_count_spin != null:
+		return EnemyData.clamp_action_count(int(round(_lightbreak_count_spin.value)))
+	return EnemyData.ACTION_COUNT_DEFAULT
 
 
 func _on_attack_percent_changed(value: float) -> void:
@@ -1147,7 +1231,17 @@ func _on_attack_percent_changed(value: float) -> void:
 	if _attack_palette_chip != null:
 		_attack_palette_chip.attack_percent = percent
 		_attack_palette_chip.text = _action_label(EnemyData.ActionType.ATTACK_15, percent)
+	if _lightbreak_palette_chip != null:
+		_lightbreak_palette_chip.attack_percent = percent
+		_lightbreak_palette_chip.text = _action_label(EnemyData.ActionType.BREAK_LIGHT_ATTACK, percent, _current_action_count())
 	_refresh_estimate_info()
+
+
+func _on_lightbreak_count_changed(_value: float) -> void:
+	var count: int = _current_action_count()
+	if _lightbreak_palette_chip != null:
+		_lightbreak_palette_chip.action_count = count
+		_lightbreak_palette_chip.text = _action_label(EnemyData.ActionType.BREAK_LIGHT_ATTACK, _current_attack_percent(), count)
 
 
 func _on_hp_percent_changed(value: float) -> void:
@@ -1162,8 +1256,15 @@ func _save_selected_enemy() -> void:
 		_set_status("No enemy selected", false)
 		return
 	_selected_enemy.enemy_name = _name_edit.text.strip_edges() if _name_edit != null else _selected_enemy.enemy_name
+	_selected_enemy.enemy_name_zh = _name_zh_edit.text.strip_edges() if _name_zh_edit != null else _selected_enemy.enemy_name_zh
+	_selected_enemy.enemy_name_en = _name_en_edit.text.strip_edges() if _name_en_edit != null else _selected_enemy.enemy_name_en
 	if _selected_enemy.enemy_name.is_empty():
-		_selected_enemy.enemy_name = _selected_path.get_file().get_basename()
+		if not _selected_enemy.enemy_name_en.is_empty():
+			_selected_enemy.enemy_name = _selected_enemy.enemy_name_en
+		elif not _selected_enemy.enemy_name_zh.is_empty():
+			_selected_enemy.enemy_name = _selected_enemy.enemy_name_zh
+		else:
+			_selected_enemy.enemy_name = _selected_path.get_file().get_basename()
 	_selected_enemy.max_hp = _current_hp_percent()
 	_selected_enemy.enemy_level = 1
 	_selected_enemy.attack_damage = 0
@@ -1186,6 +1287,7 @@ func _save_selected_enemy() -> void:
 	var validated_pattern: Array[EnemyData.ActionType] = _validated_action_pattern()
 	_selected_enemy.action_pattern = validated_pattern
 	_selected_enemy.action_percents = _validated_action_percents(validated_pattern)
+	_selected_enemy.action_counts = _validated_action_counts(validated_pattern)
 	var err: int = ResourceSaver.save(_selected_enemy, _selected_path)
 	if err == OK:
 		_set_status("Saved %s" % _selected_path.get_file())
@@ -1220,6 +1322,17 @@ func _validated_action_percents(pattern: Array[EnemyData.ActionType]) -> Array[i
 	return percents
 
 
+func _validated_action_counts(pattern: Array[EnemyData.ActionType]) -> Array[int]:
+	var counts: Array[int] = []
+	if pattern.size() != _action_sequence.size():
+		for action_type: EnemyData.ActionType in pattern:
+			counts.append(_action_count_for_type(int(action_type), EnemyData.ACTION_COUNT_DEFAULT))
+		return counts
+	for i in pattern.size():
+		counts.append(_action_count_for_type(int(pattern[i]), _action_count_at(i)))
+	return counts
+
+
 func _toggle_image_picker() -> void:
 	if _image_picker_panel == null:
 		return
@@ -1237,6 +1350,7 @@ func _create_enemy_from_image(index: int) -> void:
 		return
 	var enemy := EnemyData.new()
 	enemy.enemy_name = _title_from_slug(image_path.get_file().get_basename())
+	enemy.enemy_name_en = enemy.enemy_name
 	enemy.enemy_level = 1
 	enemy.max_hp = EnemyData.HP_PERCENT_MIN
 	enemy.attack_damage = 0
@@ -1248,6 +1362,7 @@ func _create_enemy_from_image(index: int) -> void:
 	enemy.passive_type = EnemyData.PassiveType.NONE
 	enemy.action_pattern = [EnemyData.ActionType.ATTACK_15]
 	enemy.action_percents = [EnemyData.ATTACK_PERCENT_DEFAULT]
+	enemy.action_counts = [EnemyData.ACTION_COUNT_DEFAULT]
 	var save_path: String = _unique_enemy_path(enemy.enemy_name)
 	var err: int = ResourceSaver.save(enemy, save_path)
 	if err != OK:
@@ -1435,12 +1550,14 @@ func _make_section_title(text: String) -> Label:
 	return label
 
 
-func _action_label(action_type: int, attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT) -> String:
+func _action_label(action_type: int, attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT, action_count: int = EnemyData.ACTION_COUNT_DEFAULT) -> String:
 	match action_type:
 		EnemyData.ActionType.REST:
 			return "Rest"
 		EnemyData.ActionType.STONE_MAGIC:
 			return "Stone Magic"
+		EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+			return "破光 %d%% L%d" % [EnemyData.clamp_attack_percent(attack_percent), EnemyData.clamp_action_count(action_count)]
 		_:
 			return "Attack %d%%" % EnemyData.clamp_attack_percent(attack_percent)
 
@@ -1460,6 +1577,8 @@ func _action_style(action_type: int, hover: bool) -> StyleBoxFlat:
 			color = Color(0.20, 0.22, 0.28, 1.0)
 		EnemyData.ActionType.STONE_MAGIC:
 			color = Color(0.32, 0.30, 0.36, 1.0)
+		EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+			color = Color(0.48, 0.38, 0.12, 1.0)
 		_:
 			color = Color(0.42, 0.18, 0.14, 1.0)
 	if hover:

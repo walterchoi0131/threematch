@@ -23,6 +23,7 @@ var _debug_panel: Control = null       # 即時調整面板
 var _active_selection_cancel_index: int = -1
 var _active_selection_badge: Control = null
 var _active_selection_card_modulates: Dictionary = {}
+var _active_skill_locked: Dictionary = {}
 
 # 長按觸發（Flutter 風格：按住期間計時，達到閾值立即觸發，不等放手）
 const LONG_PRESS_THRESHOLD: float = 0.5  # 秒
@@ -44,6 +45,7 @@ func setup(characters: Array[CharacterData]) -> void:
 	_glow_panels.clear()
 	_cd_labels.clear()
 	_prev_cd.clear()
+	_active_skill_locked.clear()
 	_portraits.clear()
 	_gem_icons.clear()
 	_gem_rays.clear()
@@ -392,7 +394,7 @@ func _on_card_gui_input(event: InputEvent, index: int) -> void:
 		var was_long := _long_press_fired
 		_pressing_index = -1
 		_long_press_fired = false
-		if not was_long:
+		if not was_long and not _active_skill_locked.has(index):
 			active_skill_activated.emit(index)
 
 
@@ -731,12 +733,14 @@ func update_cooldown(index: int, turns_left: int) -> void:
 	var prev: int = _prev_cd.get(index, -999)
 	_prev_cd[index] = turns_left
 	if turns_left == -2:
+		_active_skill_locked[index] = true
 		cd_lbl.text = ""
 		cd_lbl.visible = false
 		if gem_icon != null:
 			gem_icon.visible = true
 		_stop_glow(index)
 		return
+	_active_skill_locked.erase(index)
 	if turns_left > 0:
 		cd_lbl.text = "%d" % turns_left
 		cd_lbl.visible = true

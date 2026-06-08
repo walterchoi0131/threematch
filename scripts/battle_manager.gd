@@ -5,12 +5,14 @@ extends Node
 const EnemyScene := preload("res://scenes/enemy.tscn")
 
 signal player_hp_changed(current: int, maximum: int)
+signal player_shield_changed(current: int, maximum: int, reason: String)
 signal player_defeated()
 signal round_cleared()
 signal battle_won()
 signal turn_changed(turn: int)
 ## Emitted when an enemy attacks; Main handles projectile VFX then calls apply_player_damage.
 signal enemy_attacked(enemy: Enemy, damage: int)
+signal enemy_lightbreak_attacked(enemy: Enemy, damage: int, light_count: int)
 ## Emitted when an enemy casts stone magic; Main handles board transmutation VFX.
 signal enemy_stone_magic_cast(enemy: Enemy)
 signal enemy_long_pressed(enemy: Enemy)
@@ -36,6 +38,8 @@ var targeted_enemy: Enemy = null
 
 var player_max_hp: int = 0
 var player_current_hp: int = 0
+var player_shield: int = 0
+var player_shield_damaged_this_turn: bool = false
 
 var is_round_transitioning: bool = false
 
@@ -75,6 +79,9 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 		player_max_hp += c.get_max_hp()
 	player_current_hp = player_max_hp
 	player_hp_changed.emit(player_current_hp, player_max_hp)
+	player_shield = 0
+	player_shield_damaged_this_turn = false
+	player_shield_changed.emit(player_shield, player_max_hp, "reset")
 
 	# 初始化技能冷卻
 	skill_cooldowns.clear()
@@ -113,6 +120,7 @@ func add_temporary_character(character: CharacterData, add_current_hp: bool = tr
 	if active_cd > 0:
 		skill_cooldowns[index] = active_cd
 	player_hp_changed.emit(player_current_hp, player_max_hp)
+	player_shield_changed.emit(player_shield, player_max_hp, "max_changed")
 	return index
 
 
@@ -336,6 +344,13 @@ func apply_heal(amount: int) -> void:
 	player_hp_changed.emit(player_current_hp, player_max_hp)
 
 
+func add_player_shield(amount: int) -> void:
+	if amount <= 0:
+		return
+	player_shield += amount
+	player_shield_changed.emit(player_shield, player_max_hp, "gain")
+
+
 ## 檢查被動技能觸發，返回最多一個觸發的技能。
 ## 融合候選優先規則：需求寶石數高者優先；同需求時隊伍前排優先。
 ## 每個項目：{ char_index, skill_name, priority, threshold, skill_dict }
@@ -475,24 +490,31 @@ func do_enemy_phase() -> bool:
 		var enemy: Enemy = attacking[i]
 		var action_type: int = enemy.get_current_action()
 		var action_percent: int = enemy.get_current_attack_percent()
+		var action_count: int = enemy.get_current_action_count()
 		# 重置下一次行動 CD（同步邏輯與視覺），REST 只聚合為 CD 不單獨播放
 		var next_cd: int = enemy.advance_to_next_active_action()
 		enemy.turns_until_attack = next_cd
 		logic_enemy_cd[enemy] = next_cd
-		enemy.flash_action(action_type, action_percent)
-		_enemy_act(enemy, action_type, action_percent)
+		enemy.flash_action(action_type, action_percent, action_count)
+		_enemy_act(enemy, action_type, action_percent, action_count)
 		if i < attacking.size() - 1:
 			await get_tree().create_timer(0.2).timeout
 	return true
 
 
 ## 敎人執行目前 pattern 行動
-func _enemy_act(enemy: Enemy, action_type: int, action_percent: int) -> void:
+func _enemy_act(enemy: Enemy, action_type: int, action_percent: int, action_count: int) -> void:
 	match action_type:
 		EnemyData.ActionType.STONE_MAGIC:
 			enemy_stone_magic_cast.emit(enemy)
 		EnemyData.ActionType.REST:
 			pass
+		EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+			enemy_lightbreak_attacked.emit(
+				enemy,
+				get_attack_percent_damage_for_level(enemy.spawn_level, action_percent),
+				EnemyData.clamp_action_count(action_count)
+			)
 		_:
 			enemy_attacked.emit(enemy, get_attack_percent_damage_for_level(enemy.spawn_level, action_percent))
 
@@ -532,10 +554,28 @@ func get_enemy_hp_for_level(enemy_data: EnemyData, level_value: int) -> int:
 
 ## 對玩家造成傷害
 func apply_player_damage(amount: int) -> void:
-	player_current_hp = max(0, player_current_hp - amount)
+	var remaining_damage: int = maxi(0, amount)
+	if remaining_damage <= 0:
+		return
+	if player_shield > 0:
+		var absorbed: int = mini(player_shield, remaining_damage)
+		player_shield -= absorbed
+		remaining_damage -= absorbed
+		player_shield_damaged_this_turn = true
+		player_shield_changed.emit(player_shield, player_max_hp, "break" if player_shield <= 0 else "damage")
+	if remaining_damage <= 0:
+		return
+	player_current_hp = max(0, player_current_hp - remaining_damage)
 	player_hp_changed.emit(player_current_hp, player_max_hp)
 	if player_current_hp <= 0:
 		player_defeated.emit()
+
+
+func settle_player_shield_after_enemy_phase() -> void:
+	if player_shield_damaged_this_turn and player_shield > 0:
+		player_shield = 0
+		player_shield_changed.emit(player_shield, player_max_hp, "falloff")
+	player_shield_damaged_this_turn = false
 
 
 # ── 邏輯狀態 API（State/UI 分離）─────────────────────────────

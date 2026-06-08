@@ -180,6 +180,7 @@ func _make_manifest_entry(sheet: Dictionary, row_index: int, column_index: int, 
 		"max_hp": int(sheet["max_hp"]),
 		"action_pattern": [ACTION_ATTACK],
 		"action_percents": [ACTION_ATTACK_PERCENT_DEFAULT],
+		"action_counts": [3],
 		"loot_min": int(sheet["loot_min"]),
 		"loot_max": int(sheet["loot_max"]),
 		"crop_rect": {"x": bounds.position.x, "y": bounds.position.y, "w": bounds.size.x, "h": bounds.size.y},
@@ -289,6 +290,7 @@ func _build_enemy_tres(entry: Dictionary) -> String:
 	var color_values: Array = entry.get("portrait_color", [1.0, 1.0, 1.0, 1.0])
 	var action_pattern: Array = entry.get("action_pattern", [ACTION_ATTACK])
 	var action_percents: Array = entry.get("action_percents", [ACTION_ATTACK_PERCENT_DEFAULT])
+	var action_counts: Array = entry.get("action_counts", [3])
 	return "" + \
 "[gd_resource type=\"Resource\" script_class=\"EnemyData\" load_steps=5 format=3]\n\n" + \
 "[ext_resource type=\"Script\" path=\"res://scripts/enemy_data.gd\" id=\"1_script\"]\n" + \
@@ -306,6 +308,7 @@ func _build_enemy_tres(entry: Dictionary) -> String:
 "max_hp = %d\n" % int(entry.get("max_hp", 50)) + \
 "action_pattern = Array[int](%s)\n" % _format_int_array(action_pattern) + \
 "action_percents = Array[int](%s)\n" % _format_int_array(action_percents) + \
+"action_counts = Array[int](%s)\n" % _format_int_array(action_counts) + \
 "portrait_color = Color(%.3f, %.3f, %.3f, %.3f)\n" % [float(color_values[0]), float(color_values[1]), float(color_values[2]), float(color_values[3])] + \
 "portrait_texture = ExtResource(\"2_texture\")\n" + \
 "element = %d\n" % int(entry.get("element", ELEMENT_DARK)) + \

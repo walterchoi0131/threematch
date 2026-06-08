@@ -31,6 +31,7 @@ var _press_start_msec: int = 0
 var _long_press_fired: bool = false
 
 @onready var intent_label: Label = $VBox/IntentRow/IntentBG/IntentLabel       # 攻擊意圖標籤
+@onready var _intent_bg: Panel = $VBox/IntentRow/IntentBG
 @onready var portrait: TextureRect = $VBox/Portrait         # 敎人頭像
 @onready var target_indicator: Label = $TargetMarker        # 目標指示器
 @onready var hp_bar_fill: TextureRect = $VBox/HPRow/HPBar/Fill    # 血條填充（垂直漸層）
@@ -43,6 +44,11 @@ var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
 var _passive_badge: Control = null
 var _passive_badge_icon: TextureRect = null
 var _passive_badge_label: Label = null
+var _lightbreak_intent_row: HBoxContainer = null
+var _lightbreak_attack_label: Label = null
+var _lightbreak_drop_label: Label = null
+var _lightbreak_gem_icon: TextureRect = null
+var _lightbreak_cd_label: Label = null
 
 
 func _process(_delta: float) -> void:
@@ -114,6 +120,12 @@ func get_current_attack_percent() -> int:
 	if data == null or not data.has_active_action():
 		return EnemyData.ATTACK_PERCENT_DEFAULT
 	return data.get_action_percent_at(action_pattern_index)
+
+
+func get_current_action_count() -> int:
+	if data == null or not data.has_active_action():
+		return EnemyData.ACTION_COUNT_DEFAULT
+	return data.get_action_count_at(action_pattern_index)
 
 
 func get_attack_damage_for_percent(attack_percent: int) -> int:
@@ -230,11 +242,14 @@ func _refresh_intent() -> void:
 	if not intent_label:
 		return
 	var action_type: int = get_current_action()
+	_set_lightbreak_intent_visible(action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK)
 	match action_type:
 		EnemyData.ActionType.STONE_MAGIC:
 			intent_label.text = "ROCK  CD %d" % [turns_until_attack]
 		EnemyData.ActionType.REST:
 			intent_label.text = "REST  CD %d" % [turns_until_attack]
+		EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+			_update_lightbreak_intent(get_current_attack_damage(), get_current_action_count(), turns_until_attack)
 		_:
 			intent_label.text = "⚔ %d  CD %d" % [get_current_attack_damage(), turns_until_attack]
 	intent_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
@@ -247,9 +262,75 @@ func _refresh_intent() -> void:
 		intent_label.modulate = Color(1.0, 0.35, 0.35)
 	else:
 		intent_label.modulate = Color(1.0, 1.0, 1.0)
+	if _lightbreak_intent_row != null:
+		_lightbreak_intent_row.modulate = intent_label.modulate
 
 
 ## 更新攻擊倒數
+func _set_lightbreak_intent_visible(visible: bool) -> void:
+	if visible:
+		_ensure_lightbreak_intent_row()
+	intent_label.visible = not visible
+	if _lightbreak_intent_row != null:
+		_lightbreak_intent_row.visible = visible
+
+
+func _ensure_lightbreak_intent_row() -> void:
+	if _lightbreak_intent_row != null:
+		return
+	if _intent_bg == null:
+		return
+	_intent_bg.custom_minimum_size = Vector2(maxf(_intent_bg.custom_minimum_size.x, 136.0), _intent_bg.custom_minimum_size.y)
+	_lightbreak_intent_row = HBoxContainer.new()
+	_lightbreak_intent_row.name = "LightbreakIntentRow"
+	_lightbreak_intent_row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_lightbreak_intent_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_lightbreak_intent_row.add_theme_constant_override("separation", 2)
+	_lightbreak_intent_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intent_bg.add_child(_lightbreak_intent_row)
+
+	_lightbreak_attack_label = _make_intent_row_label()
+	_lightbreak_drop_label = _make_intent_row_label()
+	_lightbreak_cd_label = _make_intent_row_label()
+	_lightbreak_gem_icon = TextureRect.new()
+	_lightbreak_gem_icon.texture = Block.GEM_TEXTURES.get(Block.Type.LIGHT, null)
+	_lightbreak_gem_icon.custom_minimum_size = Vector2(15.0, 15.0)
+	_lightbreak_gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_lightbreak_gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_lightbreak_gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_lightbreak_intent_row.add_child(_lightbreak_attack_label)
+	_lightbreak_intent_row.add_child(_lightbreak_drop_label)
+	_lightbreak_intent_row.add_child(_lightbreak_gem_icon)
+	_lightbreak_intent_row.add_child(_lightbreak_cd_label)
+
+
+func _make_intent_row_label() -> Label:
+	var label := Label.new()
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	label.add_theme_constant_override("shadow_offset_x", 2)
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	label.add_theme_constant_override("shadow_outline_size", 2)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 4)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func _update_lightbreak_intent(damage: int, light_count: int, cd: int) -> void:
+	_ensure_lightbreak_intent_row()
+	if _lightbreak_intent_row == null:
+		return
+	_lightbreak_attack_label.text = "⚔ %d" % damage
+	_lightbreak_drop_label.text = " -%d" % light_count
+	if cd >= 0:
+		_lightbreak_cd_label.text = " CD %d" % cd
+	else:
+		_lightbreak_cd_label.text = ""
+
+
 func update_cd(turns_left: int) -> void:
 	turns_until_attack = turns_left
 	if is_node_ready():
@@ -262,9 +343,10 @@ func flash_attack() -> void:
 
 
 ## 行動閃光提示
-func flash_action(action_type: int, attack_percent: int = -1) -> void:
+func flash_action(action_type: int, attack_percent: int = -1, action_count: int = -1) -> void:
 	if not intent_label:
 		return
+	_set_lightbreak_intent_visible(action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK)
 	match action_type:
 		EnemyData.ActionType.STONE_MAGIC:
 			intent_label.text = "ROCK!"
@@ -272,6 +354,13 @@ func flash_action(action_type: int, attack_percent: int = -1) -> void:
 		EnemyData.ActionType.REST:
 			intent_label.text = "REST"
 			intent_label.modulate = Color(0.7, 0.7, 0.78)
+		EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+			var percent: int = get_current_attack_percent() if attack_percent <= 0 else attack_percent
+			var count: int = get_current_action_count() if action_count <= 0 else action_count
+			_update_lightbreak_intent(get_attack_damage_for_percent(percent), count, -1)
+			intent_label.modulate = Color(1.0, 0.86, 0.2)
+			if _lightbreak_intent_row != null:
+				_lightbreak_intent_row.modulate = intent_label.modulate
 		_:
 			var percent: int = get_current_attack_percent() if attack_percent <= 0 else attack_percent
 			intent_label.text = "⚔ %d ATTACK!" % [get_attack_damage_for_percent(percent)]

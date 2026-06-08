@@ -121,6 +121,11 @@ static func _ensure_init() -> void:
 		"Iceball",
 		"res://assets/music/IceShatter_2_96x96.png", 49, 1, 49, 3.0, 0.03,
 	)
+	_defs[Block.UpperType.LIGHT_SHIELD] = Def.new(
+		Block.Type.LIGHT,
+		Color(0.55, 0.82, 1.0),
+		"Light Shield",
+	)
 	_defs[Block.UpperType.WATER_SLASH] = Def.new(
 		Block.Type.BLUE,
 		Color(0.25, 0.60, 1.0),

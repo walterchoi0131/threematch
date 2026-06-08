@@ -118,6 +118,68 @@ static func get_battle_background_path(area_key: String) -> String:
 	var path: String = info.get("battle_bg_path", FALLBACK_BATTLE_BG_PATH) as String
 	return FALLBACK_BATTLE_BG_PATH if path.is_empty() else path
 
+
+func get_element_distribution() -> Dictionary:
+	var distribution: Dictionary = {}
+	if not element_weights.is_empty():
+		for i in allowed_types.size():
+			var type_value: int = int(allowed_types[i])
+			if not Block.is_random_gem_type_value(type_value):
+				continue
+			var weight: int = 0
+			if i < element_weights.size():
+				weight = int(element_weights[i])
+			if weight > 0:
+				distribution[type_value] = weight
+	if distribution.is_empty():
+		distribution = _default_element_distribution()
+	return distribution
+
+
+func get_element_weight_for_type(type_value: int) -> int:
+	var distribution: Dictionary = get_element_distribution()
+	return int(distribution.get(type_value, 0))
+
+
+func get_element_weights_for_allowed_types() -> Array[int]:
+	var weights: Array[int] = []
+	var distribution: Dictionary = get_element_distribution()
+	for type_value in allowed_types:
+		weights.append(maxi(0, int(distribution.get(int(type_value), 0))))
+	return weights
+
+
+func _default_element_distribution() -> Dictionary:
+	match stage_id:
+		"1-3":
+			return {
+				Block.Type.RED: 32,
+				Block.Type.BLUE: 32,
+				Block.Type.GREEN: 31,
+				Block.Type.LIGHT: 5,
+			}
+		"1-4":
+			return {
+				Block.Type.RED: 60,
+				Block.Type.BLUE: 10,
+				Block.Type.GREEN: 10,
+				Block.Type.LIGHT: 20,
+			}
+		"1-5":
+			return {
+				Block.Type.RED: 25,
+				Block.Type.BLUE: 25,
+				Block.Type.GREEN: 25,
+				Block.Type.DARK: 25,
+			}
+
+	var distribution: Dictionary = {}
+	for type_value in allowed_types:
+		var normalized: int = int(type_value)
+		if Block.is_random_gem_type_value(normalized):
+			distribution[normalized] = 1
+	return distribution
+
 ## 關卡編號（Chapter-Stage 格式，例如 "1-1"）。用於存檔與解鎖判定。
 @export var stage_id: String = ""
 ## 前置關卡 id：必須先通關此關卡才會解鎖本關。空字串 = 無前置（一律可玩）。
@@ -125,6 +187,7 @@ static func get_battle_background_path(area_key: String) -> String:
 ## 世界地圖連線：本關卡通往下一關的 stage_id 列表（可一對多）。
 @export var connects_to: Array[String] = []
 @export var stage_name: String = "Stage 1"  # 關卡名稱
+@export var element_weights: Array[int] = []
 @export var allowed_types: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE, Block.Type.GREEN]  # 允許的寶石類型
 @export var min_match: int = 2   # 最少連接數才可消除
 @export var columns: int = 8     # 棋盤欄位數
