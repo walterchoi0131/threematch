@@ -214,7 +214,7 @@ func _build_character_cell(parent: HBoxContainer, row: _StatRow) -> void:
 	portrait_wrap.add_child(card)
 
 	var name_lbl := Label.new()
-	name_lbl.text = character.character_name
+	name_lbl.text = Locale.tr_ui(character.character_name)
 	name_lbl.add_theme_font_size_override("font_size", 13)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -479,11 +479,11 @@ func _commit_row_edits(row: _StatRow) -> void:
 func _on_row_save_pressed(row: _StatRow) -> void:
 	var err: int = _save_row(row)
 	if err == OK:
-		_set_status("Saved %s" % row.character.character_name)
+		_set_status("Saved %s" % Locale.tr_ui(row.character.character_name))
 	elif err == ERR_UNAVAILABLE:
-		_set_status("Cannot save %s: no resource path" % row.character.character_name)
+		_set_status("Cannot save %s: no resource path" % Locale.tr_ui(row.character.character_name))
 	else:
-		_set_status("Save failed for %s (err=%d)" % [row.character.character_name, err])
+		_set_status("Save failed for %s (err=%d)" % [Locale.tr_ui(row.character.character_name), err])
 
 
 func _on_save_all_pressed() -> void:

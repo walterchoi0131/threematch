@@ -30,5 +30,8 @@ extends Resource
 ## If true, this line fades out the current dialog BGM instead of switching to a new track.
 @export var stop_music: bool = false
 
+## Optional sound effect played when this dialog line appears.
+@export var sound_effect: AudioStream = null
+
 ## Special dialog event payload. Used by action == "switch_bg" to fade-switch AVG background.
 @export var background: Texture2D = null

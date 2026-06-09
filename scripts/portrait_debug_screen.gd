@@ -885,7 +885,7 @@ func _build_scene_result(scene: Control, scene_h: float) -> TextureRect:
 		hbox.add_child(rvb)
 
 		var nl := Label.new()
-		nl.text = c.character_name
+		nl.text = Locale.tr_ui(c.character_name)
 		nl.add_theme_font_size_override("font_size", 18)
 		nl.add_theme_color_override("font_color", Color.WHITE)
 		nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -988,7 +988,7 @@ func _build_scene_dialog(scene: Control, scene_h: float) -> TextureRect:
 	hbox.add_child(text_vbox)
 
 	var name_lbl := Label.new()
-	name_lbl.text = _char_data.character_name
+	name_lbl.text = Locale.tr_ui(_char_data.character_name)
 	name_lbl.add_theme_font_size_override("font_size", 20)
 	name_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1078,7 +1078,7 @@ func _build_scene_dialog_phase(scene: Control, scene_h: float) -> TextureRect:
 	panel.add_child(vbox)
 
 	var name_lbl := Label.new()
-	name_lbl.text = _char_data.character_name
+	name_lbl.text = Locale.tr_ui(_char_data.character_name)
 	name_lbl.add_theme_font_size_override("font_size", 28)
 	name_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1163,7 +1163,7 @@ func _build_char_btn(parent: HBoxContainer, c: CharacterData, idx: int) -> void:
 	btn.add_child(name_bg)
 
 	var name_lbl := Label.new()
-	name_lbl.text = c.character_name
+	name_lbl.text = Locale.tr_ui(c.character_name)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.add_theme_font_size_override("font_size", 11)
 	name_lbl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)

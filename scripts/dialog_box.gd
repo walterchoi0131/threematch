@@ -413,6 +413,7 @@ func _set_auto_skip(enabled: bool) -> void:
 
 func _show_line(line: _DialogLine) -> void:
 	var char_id: String = line.character_id
+	_play_line_sound_effect(line)
 	var side: String = _normalize_dialog_side(line.position)
 	if line.stop_music:
 		_fade_out_dialog_bgm()
@@ -514,6 +515,16 @@ func _finish_typing() -> void:
 
 func _on_typing_done() -> void:
 	_typing = false
+
+
+func _play_line_sound_effect(line: _DialogLine) -> void:
+	if line == null or line.sound_effect == null:
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = line.sound_effect
+	player.finished.connect(player.queue_free)
+	add_child(player)
+	player.play()
 
 
 func _finish_dialog() -> void:

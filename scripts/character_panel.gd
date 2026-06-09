@@ -914,7 +914,7 @@ func _build_debug_panel() -> void:
 		vbox.add_child(section)
 
 		var name_lbl := Label.new()
-		name_lbl.text = "── %s ──" % c.character_name
+		name_lbl.text = "── %s ──" % Locale.tr_ui(c.character_name)
 		name_lbl.add_theme_font_size_override("font_size", 14)
 		name_lbl.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
 		section.add_child(name_lbl)

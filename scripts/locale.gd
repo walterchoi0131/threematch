@@ -115,7 +115,8 @@ var _translations: Dictionary = {
 	"Elder Raccoon": {"zh": "浣熊長老", "en": "Elder Raccoon"},
 	"Panda": {"zh": "阿潘", "en": "Pan"},
 	"Fox": {"zh": "小狐", "en": "Fox"},
-	"Husky": {"zh": "哈士奇", "en": "Husky"},
+	"Husky": {"zh": "索爾", "en": "Thor"},
+	"Thor": {"zh": "索爾", "en": "Thor"},
 	"Polar": {"zh": "阿極", "en": "Polar"},
 	"Polarz": {"zh": "極極", "en": "Polarz"},
 	"Dragon": {"zh": "米洛", "en": "Milo"},
@@ -130,7 +131,7 @@ var _translations: Dictionary = {
 	"Hero": {"zh": "英雄", "en": "Hero"},
 
 	# ── 對話用角色暱稱（與正式名稱可不同；key = "DIALOG_" + char_id 大寫） ──
-	"DIALOG_husky":   {"zh": "哈士奇老師", "en": "Prof. Husky"},
+	"DIALOG_husky":   {"zh": "索爾", "en": "Thor"},
 	"DIALOG_fox":     {"zh": "小狐",       "en": "Fox"},
 	"DIALOG_polar":   {"zh": "阿極",       "en": "Polar"},
 	"DIALOG_polarz":  {"zh": "極極",       "en": "Polarz"},

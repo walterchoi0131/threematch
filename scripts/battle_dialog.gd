@@ -23,7 +23,7 @@ const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 
 # 角色名稱（雙語）
 const CHAR_NAMES := {
-	"husky":   { "zh": "哈士奇老師", "en": "Prof. Husky" },
+	"husky":   { "zh": "索爾", "en": "Thor" },
 	"fox":     { "zh": "小狐",       "en": "Fox" },
 	"polar":   { "zh": "白熊",       "en": "Polar" },
 	"raccoon": { "zh": "小浣",       "en": "Raccoon" },
@@ -269,6 +269,7 @@ func _set_auto_skip(enabled: bool) -> void:
 
 func _show_line(line: _DialogLine) -> void:
 	var char_id: String = line.character_id
+	_play_line_sound_effect(line)
 
 	# 頭像
 	var tex: Texture2D = _load_portrait(char_id, line.emotion)
@@ -281,13 +282,10 @@ func _show_line(line: _DialogLine) -> void:
 
 	# 名稱
 	var locale_node: Node = get_node_or_null("/root/Locale")
-	var cur_locale: String = locale_node.current_locale if locale_node != null else "zh"
-
 	if char_id.is_empty():
 		_name_label.text = ""
 	else:
-		var name_entry: Dictionary = CHAR_NAMES.get(char_id, {})
-		_name_label.text = name_entry.get(cur_locale, char_id.capitalize())
+		_name_label.text = Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
 		_name_label.add_theme_color_override("font_color", _dialog_name_color(char_id))
 
 	# 打字機
@@ -309,6 +307,16 @@ func _show_line(line: _DialogLine) -> void:
 	_type_tween = create_tween()
 	_type_tween.tween_property(_text_label, "visible_ratio", 1.0, duration)
 	_type_tween.tween_callback(func() -> void: _typing = false)
+
+
+func _play_line_sound_effect(line: _DialogLine) -> void:
+	if line == null or line.sound_effect == null:
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = line.sound_effect
+	player.finished.connect(player.queue_free)
+	add_child(player)
+	player.play()
 
 
 func _apply_text_alignment_for_line(is_narration: bool) -> void:

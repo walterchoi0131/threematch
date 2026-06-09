@@ -682,8 +682,9 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(center)
 
-	var pie_container := Control.new()
+	var pie_container := _RotatingPieContainer.new()
 	pie_container.custom_minimum_size = Vector2(PIE_SIZE, PIE_SIZE)
+	pie_container.size = Vector2(PIE_SIZE, PIE_SIZE)
 	pie_container.clip_contents = false
 	pie_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center.add_child(pie_container)
@@ -724,12 +725,13 @@ func _build_pie_content(parent: HBoxContainer) -> void:
 		var t: int = allowed[i]
 		var gem_tex: Texture2D = Block.GEM_TEXTURES.get(t)
 		if gem_tex:
-			var icon := TextureRect.new()
+			var icon := _CounterRotatingPieIcon.new()
 			icon.texture = gem_tex
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
 			icon.size = Vector2(ICON_SIZE, ICON_SIZE)
+			icon.pivot_offset = icon.size * 0.5
 			icon.position = icon_pos - Vector2(ICON_SIZE * 0.5, ICON_SIZE * 0.5)
 			icon.modulate = Color.WHITE
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1186,3 +1188,36 @@ class _PieDrawer extends Control:
 			var angle: float = float(j) / float(seg_count) * TAU - PI * 0.5
 			outline_pts.append(center + Vector2(cos(angle), sin(angle)) * radius)
 		draw_polyline(outline_pts, Color(0.4, 0.4, 0.5, 0.6), 1.5)
+
+
+class _RotatingPieContainer extends Control:
+	const ROTATION_SPEED: float = TAU / 80.0
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pivot_offset = size * 0.5
+		set_process(true)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			pivot_offset = size * 0.5
+
+	func _process(delta: float) -> void:
+		rotation = fmod(rotation + ROTATION_SPEED * delta, TAU)
+
+
+class _CounterRotatingPieIcon extends TextureRect:
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pivot_offset = size * 0.5
+		set_process(true)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			pivot_offset = size * 0.5
+
+	func _process(_delta: float) -> void:
+		var parent_control: Control = get_parent() as Control
+		if parent_control == null:
+			return
+		rotation = -parent_control.rotation

@@ -5,7 +5,7 @@
 
 [resource]
 script = ExtResource("1_script")
-character_name = "Husky"
+character_name = "Thor"
 job_id = "attacker"
 gem_type = 6
 base_hp = 55

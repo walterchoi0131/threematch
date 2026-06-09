@@ -2,9 +2,11 @@
 extends RefCounted
 
 const _DialogLine := preload("res://scripts/dialog_line.gd")
+const HEAVY_PUNCH_SOUND := preload("res://assets/se/heavy_punch_sound.mp3")
+const HEAVY_BODY_FALL_DOWN := preload("res://assets/se/heavy_body_fall_down.mp3")
 
 
-static func _line(char_id: String, emotion: String, zh: String, en: String, position: String = "left") -> _DialogLine:
+static func _line(char_id: String, emotion: String, zh: String, en: String, position: String = "left", sound_effect: AudioStream = null) -> _DialogLine:
 	var dl := _DialogLine.new()
 	dl.character_id = char_id
 	dl.emotion = emotion
@@ -13,11 +15,12 @@ static func _line(char_id: String, emotion: String, zh: String, en: String, posi
 	dl.text_zh = zh
 	dl.text_en = en
 	dl.shake = false
+	dl.sound_effect = sound_effect
 	return dl
 
 
-static func _narration(zh: String, en: String) -> _DialogLine:
-	return _line("", "normal", zh, en)
+static func _narration(zh: String, en: String, sound_effect: AudioStream = null) -> _DialogLine:
+	return _line("", "normal", zh, en, "left", sound_effect)
 
 
 static func make_turn1_dialog() -> Array:
@@ -53,6 +56,9 @@ static func make_rescue_dialog() -> Array:
 		_line("panda", "normal",
 			"老師！你還好嗎？",
 			"Teacher! Are you okay?"),
+			_line("husky", "normal",
+			"大家！",
+			"Guys!"),
 		_line("shark", "normal",
 			"看來我們總算趕上了。",
 			"Guess we have made up on time."),
@@ -112,9 +118,9 @@ static func make_finale_dialog() -> Array:
 			"這或許能為你們爭取足夠時間逃跑...",
 			"This may buy you guys enough time to escape..."),
 		_line("husky", "normal",
-			"跑……現在就跑！！",
+			"去常茂森林...現在！！快跑！！",
 			"Run..run now!!"),
-		_narration("Husky 倒下了。", "Husky fell down."),
+		_narration("索爾倒下了。", "Thor fell down.", HEAVY_BODY_FALL_DOWN),
 		_line("panda", "normal",
 			"老師！",
 			"Teacher!"),
@@ -128,7 +134,7 @@ static func make_finale_dialog() -> Array:
 			"你這混蛋！！",
 			"You damn!!"),
 		_line("shark", "normal",
-			"米洛！我們得跑！！不能辜負老師的犧牲！！",
+			"米洛！我們得跑！！不能辜負老師的付託！！",
 			"Run! Teacher said run!!"),
 		_line("dragon", "normal",
 			"我不會拋下我的老師！",
@@ -151,7 +157,7 @@ static func make_finale_dialog() -> Array:
 			"I am not leaving!! If you gonna leave leave by yourself coward!"),
 		_line("shark", "normal",
 			"*揍了 米洛 一拳*",
-			"*punched milo*"),
+			"*punched milo*", "left", HEAVY_PUNCH_SOUND),
 		 _line("shark", "normal",
 			"清醒一點！！這不是什麼逞英雄遊戲！！",
 			"Wake up!! This is not a game of heroics!!"),

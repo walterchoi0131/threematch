@@ -164,6 +164,7 @@ var _se_blast: AudioStream = null
 var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
 var _se_join_team: AudioStream = null
+var _se_thor_active: AudioStream = null
 
 # ── BGM 預覽模式狀態 ──
 var _bgm_player: AudioStreamPlayer = null   # 背景音樂播放器引用
@@ -343,6 +344,7 @@ func _ready() -> void:
 	_se_freeze = load("res://assets/se/skef_freeze.mp3")
 	_se_impact = load("res://assets/se/skef_atk1_B.mp3")
 	_se_join_team = load("res://assets/se/join_team2.mp3")
+	_se_thor_active = load("res://assets/se/magical_star_transmu.mp3")
 
 	#_setup_dev_log()  # 開發日誌已隱藏
 	_update_skill_ui()
@@ -758,7 +760,9 @@ func _build_stage_editor_dialog_panel() -> void:
 
 	_stage_editor_dialog_background_option = OptionButton.new()
 	_stage_editor_dialog_background_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_dialog_background_option.custom_minimum_size = Vector2(180, 30)
+	_stage_editor_dialog_background_option.custom_minimum_size = Vector2(132, 30)
+	_stage_editor_dialog_background_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_make_compact_option_button(_stage_editor_dialog_background_option)
 	_stage_editor_dialog_background_option.item_selected.connect(_on_stage_editor_dialog_background_selected)
 	header_row.add_child(_stage_editor_dialog_background_option)
 
@@ -771,7 +775,9 @@ func _build_stage_editor_dialog_panel() -> void:
 
 	_stage_editor_dialog_music_option = OptionButton.new()
 	_stage_editor_dialog_music_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_dialog_music_option.custom_minimum_size = Vector2(180, 30)
+	_stage_editor_dialog_music_option.custom_minimum_size = Vector2(132, 30)
+	_stage_editor_dialog_music_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_make_compact_option_button(_stage_editor_dialog_music_option)
 	_stage_editor_dialog_music_option.item_selected.connect(_on_stage_editor_dialog_music_selected)
 	header_row.add_child(_stage_editor_dialog_music_option)
 
@@ -965,7 +971,7 @@ func _stage_editor_load_character_catalog() -> void:
 		if character == null:
 			continue
 		var char_id: String = _stage_editor_character_id_from_path(resource_path)
-		var display_name: String = character.character_name
+		var display_name: String = Locale.tr_ui(character.character_name)
 		if display_name.strip_edges().is_empty():
 			display_name = char_id.capitalize()
 		var entry: Dictionary = {
@@ -1034,6 +1040,7 @@ func _stage_editor_dialog_music_display_name(resource_path: String) -> String:
 
 
 func _stage_editor_populate_dialog_background_selector(option: OptionButton, selected_path: String, placeholder: String = "switchBG") -> void:
+	_stage_editor_make_compact_option_button(option)
 	option.clear()
 	_stage_editor_add_option_item(option, placeholder, "")
 	for entry: Dictionary in _stage_editor_dialog_background_catalog:
@@ -1042,6 +1049,7 @@ func _stage_editor_populate_dialog_background_selector(option: OptionButton, sel
 
 
 func _stage_editor_populate_dialog_music_selector(option: OptionButton, selected_path: String, placeholder: String = "switchBGM", include_stop: bool = true) -> void:
+	_stage_editor_make_compact_option_button(option)
 	option.clear()
 	_stage_editor_add_option_item(option, placeholder, "")
 	if include_stop:
@@ -1049,6 +1057,12 @@ func _stage_editor_populate_dialog_music_selector(option: OptionButton, selected
 	for entry: Dictionary in _stage_editor_dialog_music_catalog:
 		_stage_editor_add_option_item(option, String(entry.get("name", "BGM")), String(entry.get("resource_path", "")))
 	_stage_editor_select_option_value(option, selected_path)
+
+
+func _stage_editor_make_compact_option_button(option: OptionButton) -> void:
+	option.fit_to_longest_item = false
+	option.clip_text = true
+	option.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
 
 func _stage_editor_dialog_line_background_path(line: DialogLine) -> String:
@@ -1143,6 +1157,7 @@ func _stage_editor_copy_dialog_line(source: DialogLine) -> DialogLine:
 	line.shake = source.shake
 	line.music = source.music
 	line.stop_music = source.stop_music
+	line.sound_effect = source.sound_effect
 	line.background = source.background
 	return line
 
@@ -1287,14 +1302,16 @@ func _stage_editor_make_dialog_add_row() -> Control:
 
 	var switch_bg_option := OptionButton.new()
 	switch_bg_option.focus_mode = Control.FOCUS_NONE
-	switch_bg_option.custom_minimum_size = Vector2(180, 38)
+	switch_bg_option.custom_minimum_size = Vector2(120, 38)
+	switch_bg_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_populate_dialog_background_selector(switch_bg_option, "", "switchBG")
 	switch_bg_option.item_selected.connect(_on_stage_editor_dialog_add_switch_bg_selected.bind(switch_bg_option))
 	row.add_child(switch_bg_option)
 
 	var switch_bgm_option := OptionButton.new()
 	switch_bgm_option.focus_mode = Control.FOCUS_NONE
-	switch_bgm_option.custom_minimum_size = Vector2(180, 38)
+	switch_bgm_option.custom_minimum_size = Vector2(120, 38)
+	switch_bgm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_populate_dialog_music_selector(switch_bgm_option, "", "switchBGM", true)
 	switch_bgm_option.item_selected.connect(_on_stage_editor_dialog_add_switch_bgm_selected.bind(switch_bgm_option))
 	row.add_child(switch_bgm_option)
@@ -1320,10 +1337,12 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	var row_box := VBoxContainer.new()
 	row_box.add_theme_constant_override("separation", 6)
+	row_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	margin.add_child(row_box)
 
 	var controls := HBoxContainer.new()
 	controls.add_theme_constant_override("separation", 5)
+	controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row_box.add_child(controls)
 
 	var drag_handle := Label.new()
@@ -1351,7 +1370,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	if _stage_editor_dialog_line_is_switch_bg(line):
 		var event_label := Label.new()
 		event_label.text = "Switch BG"
-		event_label.custom_minimum_size = Vector2(110, 30)
+		event_label.custom_minimum_size = Vector2(86, 30)
 		event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		event_label.add_theme_font_size_override("font_size", 13)
 		event_label.add_theme_color_override("font_color", Color(0.95, 0.95, 1.0, 1.0))
@@ -1359,7 +1378,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 		var bg_option := OptionButton.new()
 		bg_option.focus_mode = Control.FOCUS_NONE
-		bg_option.custom_minimum_size = Vector2(190, 30)
+		bg_option.custom_minimum_size = Vector2(108, 30)
+		bg_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_stage_editor_populate_dialog_background_selector(bg_option, _stage_editor_dialog_line_background_path(line), "BG")
 		bg_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bg_selected.bind(line_index, bg_option))
 		_stage_editor_forward_dialog_row_drop(bg_option, line_index)
@@ -1367,7 +1387,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 		var bgm_option := OptionButton.new()
 		bgm_option.focus_mode = Control.FOCUS_NONE
-		bgm_option.custom_minimum_size = Vector2(190, 30)
+		bgm_option.custom_minimum_size = Vector2(108, 30)
+		bgm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var selected_bgm_path: String = "__stop__" if line.stop_music else _stage_editor_dialog_audio_path(line.music)
 		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_path, "BGM no change", true)
 		bgm_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bgm_selected.bind(line_index, bgm_option))
@@ -1402,6 +1423,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		]
 		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		description.clip_text = true
+		description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		description.add_theme_font_size_override("font_size", 13)
 		description.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 		event_row.add_child(description)
@@ -1410,7 +1433,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	if _stage_editor_dialog_line_is_switch_bgm(line):
 		var event_label := Label.new()
 		event_label.text = "Switch BGM"
-		event_label.custom_minimum_size = Vector2(110, 30)
+		event_label.custom_minimum_size = Vector2(92, 30)
 		event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		event_label.add_theme_font_size_override("font_size", 13)
 		event_label.add_theme_color_override("font_color", Color(0.95, 0.95, 1.0, 1.0))
@@ -1418,7 +1441,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 		var bgm_option := OptionButton.new()
 		bgm_option.focus_mode = Control.FOCUS_NONE
-		bgm_option.custom_minimum_size = Vector2(220, 30)
+		bgm_option.custom_minimum_size = Vector2(126, 30)
+		bgm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var selected_bgm_event_path: String = "__stop__" if line.stop_music else _stage_editor_dialog_audio_path(line.music)
 		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_event_path, "BGM no change", true)
 		bgm_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bgm_selected.bind(line_index, bgm_option))
@@ -1449,6 +1473,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		description.text = _stage_editor_dialog_line_music_summary(line).strip_edges()
 		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		description.clip_text = true
+		description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		description.add_theme_font_size_override("font_size", 13)
 		description.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 		event_row.add_child(description)
@@ -1456,7 +1482,9 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	var speaker_option := OptionButton.new()
 	speaker_option.focus_mode = Control.FOCUS_NONE
-	speaker_option.custom_minimum_size = Vector2(142, 30)
+	speaker_option.custom_minimum_size = Vector2(112, 30)
+	speaker_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_make_compact_option_button(speaker_option)
 	_stage_editor_populate_cast_dropdown(speaker_option, sequence, line.character_id)
 	speaker_option.item_selected.connect(_on_stage_editor_dialog_row_speaker_selected.bind(line_index, speaker_option))
 	_stage_editor_forward_dialog_row_drop(speaker_option, line_index)
@@ -1464,7 +1492,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	var side_switch := CheckButton.new()
 	side_switch.focus_mode = Control.FOCUS_NONE
-	side_switch.custom_minimum_size = Vector2(96, 30)
+	side_switch.custom_minimum_size = Vector2(76, 30)
 	side_switch.button_pressed = line.position == "right"
 	side_switch.text = "Right" if side_switch.button_pressed else "Left"
 	side_switch.toggled.connect(_on_stage_editor_dialog_row_side_toggled.bind(line_index, side_switch))
@@ -1473,7 +1501,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	var action_option := OptionButton.new()
 	action_option.focus_mode = Control.FOCUS_NONE
-	action_option.custom_minimum_size = Vector2(86, 30)
+	action_option.custom_minimum_size = Vector2(76, 30)
+	_stage_editor_make_compact_option_button(action_option)
 	_stage_editor_add_option_item(action_option, "none", "none")
 	_stage_editor_add_option_item(action_option, "enter", "enter")
 	_stage_editor_add_option_item(action_option, "exit", "exit")
@@ -1486,7 +1515,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	shake_check.text = "Shake"
 	shake_check.focus_mode = Control.FOCUS_NONE
 	shake_check.button_pressed = line.shake
-	shake_check.custom_minimum_size = Vector2(82, 30)
+	shake_check.custom_minimum_size = Vector2(70, 30)
 	shake_check.toggled.connect(_on_stage_editor_dialog_row_shake_toggled.bind(line_index))
 	controls.add_child(shake_check)
 
@@ -1499,6 +1528,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	var text_row := HBoxContainer.new()
 	text_row.add_theme_constant_override("separation", 6)
+	text_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row_box.add_child(text_row)
 
 	text_row.add_child(_stage_editor_make_character_indicator(line.character_id))
@@ -1597,8 +1627,9 @@ func _stage_editor_make_row_text_edit(text_value: String, placeholder: String) -
 	var edit := TextEdit.new()
 	edit.text = text_value
 	edit.placeholder_text = placeholder
-	edit.custom_minimum_size = Vector2(0, 64)
+	edit.custom_minimum_size = Vector2(96, 64)
 	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.size_flags_stretch_ratio = 1.0
 	edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	return edit
 
@@ -5342,7 +5373,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 		var total_enemy_gems := 0
 		for bt in blasted_by_type:
 			total_enemy_gems += blasted_by_type[bt] as int
-		# 找到 Husky 角色計算 ATK
+		# 找到索爾角色計算 ATK
 		var husky_data: CharacterData = null
 		var husky_index := -1
 		for i in party.size():
@@ -5806,6 +5837,7 @@ func _handle_active_skill(char_index: int) -> void:
 				return
 			battle_manager.use_active_skill(char_index)
 			_update_skill_ui()
+			_play_sfx(_se_thor_active)
 			# 轉換十字範圍內的寶石
 			var converted := 0
 			for pos in positions:
@@ -6155,7 +6187,7 @@ func _is_active_unlocked_for_battle(char_index: int) -> bool:
 		return false
 	if _temporary_active_unlocks.has(c):
 		return true
-	if _is_stage13_story_battle() and c.character_name == "Husky":
+	if _is_stage13_story_battle() and _is_thor_character(c):
 		return false
 	return SkillUpgradeUtils.is_active_stage_unlocked(c)
 
@@ -6690,7 +6722,17 @@ func _find_party_index_by_name(name: String) -> int:
 	for i in party.size():
 		if party[i] != null and party[i].character_name == name:
 			return i
+		if name == "Thor" and _is_thor_character(party[i]):
+			return i
 	return -1
+
+
+func _is_thor_character(character: CharacterData) -> bool:
+	if character == null:
+		return false
+	if character.character_name == "Thor" or character.character_name == "Husky":
+		return true
+	return character.resource_path.get_file().get_basename().to_lower() == "char_husky"
 
 
 ## 木板從天而降：在棋盤中央 cols 3-4, rows 2-5 一次性掉落 8 片 BURNING PLANK
@@ -6786,12 +6828,13 @@ func _setup_dim_overlay(card_rect: Rect2) -> CanvasLayer:
 		var hand := Sprite2D.new()
 		hand.texture = hand_tex
 		hand.scale = Vector2(1, 1)
-		hand.position = Vector2(center.x, card_rect.position.y )
+		var hand_base_pos := Vector2(center.x, card_rect.position.y + card_rect.size.y * 0.52)
+		hand.position = hand_base_pos
 		hand.z_index = 6
 		layer.add_child(hand)
 		var ht: Tween = hand.create_tween().set_loops()
-		ht.tween_property(hand, "position:y", hand.position.y - 18, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		ht.tween_property(hand, "position:y", hand.position.y, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		ht.tween_property(hand, "position:y", hand_base_pos.y - 12, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		ht.tween_property(hand, "position:y", hand_base_pos.y + 8, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 	# 提示文字（畫面正中央）
 	var prompt := Label.new()
@@ -6991,7 +7034,7 @@ func _run_stage13_light_hint_event() -> void:
 	await dialog.all_lines_finished
 	dialog.visible = false
 
-	var husky_idx: int = _find_party_index_by_name("Husky")
+	var husky_idx: int = _find_party_index_by_name("Thor")
 	if husky_idx < 0:
 		board.set_input_queue_locked(false)
 		board.is_busy = false
