@@ -10,11 +10,12 @@ const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
+const _DialogLine := preload("res://scripts/dialog_line.gd")
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
 
 # ── scene references ──────────────────────────────────────────────────
-@onready var board: Node2D = $Board
+@onready var board = $Board
 @onready var battle_manager: BattleManager = $BattleManager
 @onready var fx_layer: CanvasLayer = $FXLayer
 @onready var score_label: Label = $UILayer/TopBar/ScoreLabel
@@ -29,16 +30,28 @@ const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
 @onready var return_button: Button = $UILayer/ReturnButton
 @onready var _battle_bg_rect: TextureRect = $BattleBackground
 @onready var _escape_refill_label: Label = $UILayer/EscapeRefillLabel
+var _player_hp_gradient_fill: TextureRect = null
 
 # ── 逃脫模式狀態 ─────────────────────────────────────────────
 var _escape_mode: bool = false
-var _escape_refill_remaining: int = 0
+var _escape_distance_target: int = 0
+var _escape_distance_traveled: int = 0
+var _escape_distance_remaining: int = 0
+var _escape_distance_displayed: int = 0
 var _escape_won: bool = false
+var _escape_distance_number_label: Label = null
+var _escape_distance_unit_label: Label = null
+var _escape_distance_tween: Tween = null
+var _stage14_escape_intro_done: bool = false
+var _escape_failed: bool = false
 
 # ── Stage 1-4 急難奇蹟事件 ─────────────────────────────────
 var _plank_event_pending: bool = false
 var _plank_event_done: bool = false
-const _PLANK_EVENT_THRESHOLD := 200
+var _plank_event_deferred_check_running: bool = false
+const ESCAPE_METERS_PER_ROW := 5
+const ESCAPE_SCROLL_RESET_ROW := 1
+const _PLANK_EVENT_DISTANCE := 200
 const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
 const _Stage1_3Owen := preload("res://dialogs/stage1_3_owen.gd")
 
@@ -304,6 +317,7 @@ func _ready() -> void:
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
 	board.gems_refilled.connect(_on_gems_refilled)
+	board.escape_marker_moved.connect(_on_escape_marker_moved)
 	# 燃燒數到定時：在每次實際點擊拆除回合有新寶石生成前由連鎖回呼觸發
 	board.pre_refill_hook = func() -> void:
 		if board._blast_refill_armed:
@@ -350,6 +364,7 @@ func _ready() -> void:
 	_update_skill_ui()
 	_setup_fuse_hints()
 	_style_player_hp_label()
+	_style_player_hp_bar()
 	_play_bgm()
 
 	_apply_stage_background()
@@ -431,6 +446,8 @@ func _position_combo_ui() -> void:
 	if has_normal and has_spell:
 		spell_origin.x += COMBO_UI_SLOT_GAP
 	_position_combo_pair(_spell_chain_header, _spell_chain_label, spell_origin)
+	if _escape_mode:
+		_position_escape_distance_label()
 
 
 
@@ -3671,6 +3688,8 @@ func _play_stage_intro() -> void:
 		await _show_boss_intro()
 	if _is_stage13_story_battle():
 		await _run_stage13_turn1_dialog()
+	if _should_run_stage14_escape_intro():
+		await _run_stage14_escape_intro()
 	board.set_input_queue_locked(false)
 	board.is_busy = false
 
@@ -6358,7 +6377,7 @@ func _setup_player_shield_ui() -> void:
 	_player_shield_label.add_theme_color_override("font_color", Color(0.80, 0.93, 1.0))
 	_player_shield_label.add_theme_color_override("font_outline_color", Color(0.02, 0.08, 0.16))
 	_player_shield_label.add_theme_constant_override("outline_size", 5)
-	player_hp_label.z_index = 8
+	player_hp_label.z_index = 6
 	_update_player_shield_layout()
 
 
@@ -6375,12 +6394,12 @@ func _on_player_hp_changed(current: int, maximum: int) -> void:
 	# 治療時閃綠，受傷時閃紅
 	if ratio > current_ratio:
 		var heal_tween := create_tween()
-		heal_tween.tween_property(player_hp_fill, "color", Color(0.2, 0.9, 0.3), 0.1)
-		heal_tween.tween_property(player_hp_fill, "color", Color(0.87, 0.12, 0.12), 0.2)
+		heal_tween.tween_property(player_hp_fill, "modulate", Color(1.25, 1.35, 1.15, 1.0), 0.1)
+		heal_tween.tween_property(player_hp_fill, "modulate", Color.WHITE, 0.2)
 	else:
 		var dmg_tween := create_tween()
-		dmg_tween.tween_property(player_hp_fill, "color", Color(1.0, 0.8, 0.8), 0.1)
-		dmg_tween.tween_property(player_hp_fill, "color", Color(0.87, 0.12, 0.12), 0.2)
+		dmg_tween.tween_property(player_hp_fill, "modulate", Color(1.45, 0.78, 0.78, 1.0), 0.1)
+		dmg_tween.tween_property(player_hp_fill, "modulate", Color.WHITE, 0.2)
 
 
 func _on_player_shield_changed(current: int, maximum: int, reason: String) -> void:
@@ -6486,16 +6505,59 @@ func _style_player_hp_label() -> void:
 	player_hp_label.add_theme_constant_override("margin_left", 8)
 
 
+func _style_player_hp_bar() -> void:
+	player_hp_fill.color = Color(1, 1, 1, 0)
+	player_hp_fill.modulate = Color.WHITE
+	if is_instance_valid(_player_hp_gradient_fill):
+		return
+
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.48, 1.0])
+	gradient.colors = PackedColorArray([
+		Color(0.08, 0.68, 0.96, 1.0),
+		Color(0.05, 0.78, 0.78, 1.0),
+		Color(0.16, 0.96, 0.55, 1.0),
+	])
+
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 512
+	texture.height = 24
+	texture.fill_from = Vector2(0.0, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+
+	_player_hp_gradient_fill = TextureRect.new()
+	_player_hp_gradient_fill.name = "BlueGreenFill"
+	_player_hp_gradient_fill.texture = texture
+	_player_hp_gradient_fill.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_player_hp_gradient_fill.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_player_hp_gradient_fill.stretch_mode = TextureRect.STRETCH_SCALE
+	_player_hp_gradient_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_hp_fill.add_child(_player_hp_gradient_fill)
+
+
 ## 玩家戰敗
 func _on_player_defeated() -> void:
+	_escape_failed = true
+	_plank_event_pending = false
+	_plank_event_deferred_check_running = false
 	board.is_busy = true
 	# 交叉淡入 One More Run（存於 GameState）
 	GameState.crossfade_bgm(load("res://assets/music/One More Run.mp3"), false, 0.6, "defeat")
 	_bgm_player = GameState.bgm_player
+	await _wait_for_board_motion_idle()
+	if _escape_mode and board.has_method("play_escape_marker_scatter"):
+		call_deferred("_play_escape_marker_scatter_after_delay", 1.0)
 	# 寶石散落動畫
 	if board.has_method("play_lose_animation"):
 		await board.play_lose_animation()
 	_show_defeat_overlay()
+
+
+func _play_escape_marker_scatter_after_delay(delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	if _escape_mode and board != null and board.has_method("play_escape_marker_scatter"):
+		await board.play_escape_marker_scatter()
 
 
 ## 顯示敗戰覆蓋層
@@ -6508,6 +6570,7 @@ func _show_defeat_overlay() -> void:
 	_defeat_overlay = Control.new()
 	_defeat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_defeat_overlay.modulate = Color(1, 1, 1, 0)
+	_defeat_overlay.z_index = 120
 	ui_layer.add_child(_defeat_overlay)
 
 	# 暗色背景（fade-in，慢速）
@@ -6682,37 +6745,239 @@ func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int) -
 		dn.show_text(popup_pos, label_text, color)
 
 
-## 設定逃脫模式 HUD：依關卡 mode 顯示/隱藏「Left to refill」計數
+## 設定逃脫模式 HUD：依關卡 mode 顯示/隱藏剩餘距離
 func _setup_escape_hud() -> void:
 	_escape_mode = current_stage != null and current_stage.mode == StageData.Mode.ESCAPE
 	_escape_won = false
+	_escape_failed = false
 	if _escape_mode:
-		_escape_refill_remaining = current_stage.escape_refill_target
+		_escape_distance_target = maxi(current_stage.escape_refill_target, 0)
+		_escape_distance_traveled = 0
+		_escape_distance_remaining = _escape_distance_target
+		_escape_distance_displayed = _escape_distance_remaining
 		_escape_refill_label.visible = true
-		_update_escape_refill_label()
+		_setup_escape_distance_label_style()
+		_update_escape_distance_label(false, true)
+		var start_pos := Vector2i(board.columns / 2, ESCAPE_SCROLL_RESET_ROW)
+		board.set_escape_marker_colors(_get_party_escape_marker_colors())
+		board.enable_escape_marker(start_pos)
 	else:
-		_escape_refill_remaining = 0
+		_escape_distance_target = 0
+		_escape_distance_traveled = 0
+		_escape_distance_remaining = 0
+		_escape_distance_displayed = 0
+		_escape_failed = false
 		_escape_refill_label.visible = false
+		if is_instance_valid(_escape_distance_number_label):
+			_escape_distance_number_label.visible = false
+		if is_instance_valid(_escape_distance_unit_label):
+			_escape_distance_unit_label.visible = false
 
 
-func _update_escape_refill_label() -> void:
-	_escape_refill_label.text = "Left to refill: %d" % maxi(_escape_refill_remaining, 0)
+func _get_party_escape_marker_colors() -> Array[Color]:
+	var colors: Array[Color] = []
+	for c: CharacterData in party:
+		if c == null:
+			continue
+		var color: Color = Block.COLORS.get(c.gem_type, Color.WHITE)
+		color.a = 0.95
+		colors.append(color)
+	if colors.is_empty():
+		colors.append(Color.WHITE)
+	var source: Array[Color] = colors.duplicate()
+	var idx: int = 0
+	while colors.size() < 3 and not source.is_empty():
+		colors.append(source[idx % source.size()])
+		idx += 1
+	return colors
 
 
-## board.gems_refilled 處理：累計已補充寶石數量；達標時觸發逃脫勝利
-func _on_gems_refilled(count: int) -> void:
-	if not _escape_mode or _escape_won:
+func _setup_escape_distance_label_style() -> void:
+	if _escape_refill_label == null:
 		return
-	_escape_refill_remaining = maxi(_escape_refill_remaining - count, 0)
-	_update_escape_refill_label()
-	# Stage 1-4 急難事件：剩餘需填充首次低於門檻時觸發（只一次）
+	_escape_refill_label.label_settings = null
+	_escape_refill_label.add_theme_font_size_override("font_size", 28)
+	_escape_refill_label.add_theme_color_override("font_color", Color.WHITE)
+	_escape_refill_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_escape_refill_label.add_theme_constant_override("outline_size", 8)
+	_escape_refill_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_escape_refill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_escape_refill_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_escape_refill_label.z_index = 6
+	_escape_refill_label.text = "剩餘"
+	if not is_instance_valid(_escape_distance_number_label):
+		_escape_distance_number_label = _make_escape_distance_part_label()
+		_escape_distance_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		$UILayer.add_child(_escape_distance_number_label)
+	if not is_instance_valid(_escape_distance_unit_label):
+		_escape_distance_unit_label = _make_escape_distance_part_label()
+		_escape_distance_unit_label.text = "米"
+		_escape_distance_unit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		$UILayer.add_child(_escape_distance_unit_label)
+	_escape_distance_number_label.visible = true
+	_escape_distance_unit_label.visible = true
+	_position_escape_distance_label()
+
+
+func _make_escape_distance_part_label() -> Label:
+	var label := Label.new()
+	label.label_settings = null
+	label.add_theme_font_size_override("font_size", 28)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 9)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.z_index = 6
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func _position_escape_distance_label() -> void:
+	if _escape_refill_label == null:
+		return
+	var right: float = board.position.x + float(board.columns * board.CELL_SIZE)
+	var top: float = board.position.y
+	var y: float = maxf(top - 46.0, 4.0)
+	_escape_refill_label.position = Vector2(right , y)
+	_escape_refill_label.size = Vector2(72.0, 42.0)
+	if is_instance_valid(_escape_distance_number_label):
+		_escape_distance_number_label.position = Vector2(right + 70.0, y+3)
+		_escape_distance_number_label.size = Vector2(64.0, 42.0)
+	if is_instance_valid(_escape_distance_unit_label):
+		_escape_distance_unit_label.position = Vector2(right + 138.0, y)
+		_escape_distance_unit_label.size = Vector2(28.0, 42.0)
+
+
+func _update_escape_distance_label(animate_digits: bool = false, immediate: bool = false) -> void:
+	if _escape_refill_label == null:
+		return
+	_escape_refill_label.label_settings = null
+	_escape_refill_label.text = "剩餘"
+	_escape_refill_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_escape_refill_label.add_theme_constant_override("outline_size", 9)
+	_position_escape_distance_label()
+	if not is_instance_valid(_escape_distance_number_label):
+		return
+	var target: int = maxi(_escape_distance_remaining, 0)
+	if immediate or not animate_digits:
+		_escape_distance_displayed = target
+		_escape_distance_number_label.text = "%d" % target
+		_position_escape_distance_label()
+		return
+	_animate_escape_distance_digits(_escape_distance_displayed, target)
+
+
+func _animate_escape_distance_digits(from_value: int, to_value: int) -> void:
+	if not is_instance_valid(_escape_distance_number_label):
+		return
+	if _escape_distance_tween != null and _escape_distance_tween.is_valid():
+		_escape_distance_tween.kill()
+	_escape_distance_number_label.scale = Vector2.ONE
+	var direction: int = -1 if to_value < from_value else 1
+	var step_size: int = 5
+	var values: Array[int] = []
+	var current: int = from_value
+	while current != to_value and values.size() < 80:
+		var next_value: int = current + direction * step_size
+		if direction < 0 and next_value < to_value:
+			next_value = to_value
+		elif direction > 0 and next_value > to_value:
+			next_value = to_value
+		values.append(next_value)
+		current = next_value
+	if values.is_empty():
+		return
+	var base_pos: Vector2 = _escape_distance_number_label.position
+	_escape_distance_tween = create_tween()
+	for next_value in values:
+		_escape_distance_tween.tween_property(_escape_distance_number_label, "position:y", base_pos.y + 16.0, 0.035) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		_escape_distance_tween.tween_callback(_set_escape_distance_digit_frame.bind(next_value, base_pos.y))
+		_escape_distance_tween.tween_property(_escape_distance_number_label, "position:y", base_pos.y, 0.035) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+func _set_escape_distance_digit_frame(value: int, base_y: float) -> void:
+	if not is_instance_valid(_escape_distance_number_label):
+		return
+	_escape_distance_number_label.text = "%d" % value
+	_escape_distance_number_label.position.y = base_y - 14.0
+	_escape_distance_displayed = value
+
+
+## board.gems_refilled 保留給既有系統；Escape 進度改由位置石實際下降計算
+func _on_gems_refilled(_count: int) -> void:
+	pass
+
+
+func _on_escape_marker_moved(rows_dropped: int) -> void:
+	if not _escape_mode or _escape_won or _escape_failed:
+		return
+	if battle_manager != null and battle_manager.player_current_hp <= 0:
+		_escape_failed = true
+		return
+	var gained: int = maxi(rows_dropped, 0) * ESCAPE_METERS_PER_ROW
+	if gained <= 0:
+		return
+	_escape_distance_traveled = mini(_escape_distance_traveled + gained, _escape_distance_target)
+	_escape_distance_remaining = maxi(_escape_distance_target - _escape_distance_traveled, 0)
+	_update_escape_distance_label(true)
+	# Stage 1-4 急難事件：走到 200m 後只觸發一次
+	var triggered_plank_event: bool = false
 	if current_stage != null and current_stage.stage_id == "1-4" \
 			and not _plank_event_done and not _plank_event_pending \
-			and _escape_refill_remaining > 0 and _escape_refill_remaining < _PLANK_EVENT_THRESHOLD:
+			and _escape_distance_traveled >= _PLANK_EVENT_DISTANCE \
+			and _escape_distance_remaining > 0:
 		_plank_event_pending = true
-	if _escape_refill_remaining <= 0:
+		triggered_plank_event = true
+	if _plank_event_pending and not _plank_event_done:
+		_schedule_pending_plank_event_after_upper_flow()
+	if _escape_distance_remaining <= 0:
 		_escape_won = true
 		battle_manager.battle_won.emit()
+		return
+	if not _plank_event_pending and not triggered_plank_event:
+		_check_escape_scroll_after_marker_move()
+
+
+func _schedule_pending_plank_event_after_upper_flow() -> void:
+	if _escape_failed:
+		return
+	if _plank_event_deferred_check_running:
+		return
+	_plank_event_deferred_check_running = true
+	call_deferred("_run_pending_plank_event_after_upper_flow")
+
+
+func _run_pending_plank_event_after_upper_flow() -> void:
+	await get_tree().process_frame
+	while _plank_event_pending and not _plank_event_done \
+			and not _escape_failed \
+			and (_is_upper_gem_turn or board.is_busy or _attack_worker_running or board.is_board_motion_running()):
+		await get_tree().create_timer(0.05).timeout
+	if _plank_event_pending and not _plank_event_done and not _escape_failed:
+		_plank_event_pending = false
+		_plank_event_done = true
+		await _run_plank_emergency_event()
+	_plank_event_deferred_check_running = false
+
+
+func _wait_for_board_motion_idle() -> void:
+	while board != null and board.is_board_motion_running():
+		await get_tree().create_timer(0.05).timeout
+	await get_tree().process_frame
+
+
+func _check_escape_scroll_after_marker_move() -> void:
+	if not _escape_mode or _escape_won or _escape_failed:
+		return
+	if board == null:
+		return
+	var marker_pos: Vector2i = board.get_escape_marker_grid_pos()
+	var trigger_row: int = maxi(board.rows - 3, 0)
+	if marker_pos.y >= trigger_row:
+		await board.force_escape_scroll_to_row(ESCAPE_SCROLL_RESET_ROW, false)
+		board.is_busy = false
 
 
 # ── Stage 1-4 急難奇蹟事件：龍焰登場 ─────────────────────────
@@ -6724,6 +6989,8 @@ func _find_party_index_by_name(name: String) -> int:
 			return i
 		if name == "Thor" and _is_thor_character(party[i]):
 			return i
+		if name == "Dragon" and _is_dragon_character(party[i]):
+			return i
 	return -1
 
 
@@ -6733,6 +7000,17 @@ func _is_thor_character(character: CharacterData) -> bool:
 	if character.character_name == "Thor" or character.character_name == "Husky":
 		return true
 	return character.resource_path.get_file().get_basename().to_lower() == "char_husky"
+
+
+func _is_dragon_character(character: CharacterData) -> bool:
+	if character == null:
+		return false
+	if character == CHAR_DRAGON:
+		return true
+	if character.active_skill_name == "Dragon Flame Domain":
+		return true
+	var base_name: String = character.resource_path.get_file().get_basename().to_lower()
+	return base_name == "char_dragon"
 
 
 ## 木板從天而降：在棋盤中央 cols 3-4, rows 2-5 一次性掉落 8 片 BURNING PLANK
@@ -7075,6 +7353,195 @@ func _is_stage13_owen(enemy: Enemy) -> bool:
 	return enemy != null and is_instance_valid(enemy) and enemy.data != null and enemy.data.enemy_name == "First Owen"
 
 
+func _should_run_stage14_escape_intro() -> bool:
+	return not _stage14_escape_intro_done \
+		and current_stage != null \
+		and current_stage.stage_id == "1-4" \
+		and current_stage.mode == StageData.Mode.ESCAPE
+
+
+func _run_stage14_escape_intro() -> void:
+	if not _should_run_stage14_escape_intro():
+		return
+	_stage14_escape_intro_done = true
+	board.is_busy = true
+	board.set_input_queue_locked(true)
+
+	var dialog: _BattleDialog = _ensure_battle_dialog()
+	dialog.visible = true
+	dialog.show_lines([
+		_make_stage14_escape_line("panda", "normal",
+			"這裡在崩塌！地面一直往下陷！",
+			"The place is collapsing! The floor keeps giving way!"),
+		_make_stage14_escape_line("shark", "normal",
+			"別回頭，往前跑。只要跟著路徑石下降，我們就能逃出去。",
+			"Don't look back. Move. If we keep the path stone dropping, we can get out."),
+	])
+	await dialog.all_lines_finished
+	dialog.visible = false
+	await _show_stage14_escape_rules_canvas()
+
+
+func _make_stage14_escape_line(char_id: String, emotion: String, zh: String, en: String) -> _DialogLine:
+	var line := _DialogLine.new()
+	line.character_id = char_id
+	line.emotion = emotion
+	line.position = "left"
+	line.action = "none"
+	line.text_zh = zh
+	line.text_en = en
+	line.shake = false
+	return line
+
+
+func _show_stage14_escape_rules_canvas() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 70
+	$UILayer.add_child(layer)
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(root)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.66)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(dim)
+
+	var viewport_size: Vector2 = ViewportUtils.get_size()
+	var panel_w: float = minf(680.0, viewport_size.x - 28.0)
+	var panel_h: float = minf(430.0, viewport_size.y - 42.0)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -panel_w * 0.5
+	panel.offset_right = panel_w * 0.5
+	panel.offset_top = -panel_h * 0.5
+	panel.offset_bottom = panel_h * 0.5
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.10, 0.16, 0.97)
+	style.border_color = Color(0.85, 0.72, 0.30, 1.0)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	style.set_content_margin_all(18)
+	panel.add_theme_stylebox_override("panel", style)
+	root.add_child(panel)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 18)
+	panel.add_child(content)
+
+	var top_row := HBoxContainer.new()
+	top_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	top_row.add_theme_constant_override("separation", 18)
+	content.add_child(top_row)
+
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = 1.05
+	left.add_theme_constant_override("separation", 12)
+	top_row.add_child(left)
+
+	var title := _stage14_canvas_label("", 28, Color(1.0, 0.92, 0.30))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	left.add_child(title)
+
+	var info := _stage14_canvas_label("", 18, Color(0.90, 0.94, 1.0))
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(info)
+
+	var image_panel := PanelContainer.new()
+	image_panel.custom_minimum_size = Vector2(panel_w * 0.43, panel_h - 94.0)
+	image_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var image_style := StyleBoxFlat.new()
+	image_style.bg_color = Color(0.03, 0.04, 0.07, 0.92)
+	image_style.border_color = Color(0.25, 0.42, 0.62, 0.82)
+	image_style.set_border_width_all(1)
+	image_style.set_corner_radius_all(8)
+	image_style.set_content_margin_all(8)
+	image_panel.add_theme_stylebox_override("panel", image_style)
+	top_row.add_child(image_panel)
+
+	var image := TextureRect.new()
+	image.texture = CHAR_DRAGON.portrait_texture
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	image.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	image_panel.add_child(image)
+
+	var button_row := HBoxContainer.new()
+	button_row.custom_minimum_size = Vector2(0, 44)
+	button_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 12)
+	content.add_child(button_row)
+	var prev_btn := Button.new()
+	prev_btn.text = "Back"
+	prev_btn.custom_minimum_size = Vector2(118, 38)
+	button_row.add_child(prev_btn)
+	var next_btn := Button.new()
+	next_btn.text = "Next"
+	next_btn.custom_minimum_size = Vector2(118, 38)
+	button_row.add_child(next_btn)
+
+	var pages: Array[Dictionary] = [
+		{
+			"title": "逃脫模式",
+			"info": "點擊盤面寶石，讓玩家位置石像寶石一樣往下掉。\n\n位置石每下降 1 row，代表前進 5 米。\n當位置石接近盤面底部時，畫面會往下滑動並顯示新的路段。\n右上角會顯示剩餘距離，歸零就成功逃出。",
+		},
+		{
+			"title": "燒著啦!",
+			"info": "部分寶石會被火焰包圍，形成燃燒寶石。\n\n燃燒寶石仍然可以正常點擊爆破，也會跟著盤面掉落。\n每當盤面補充新寶石前，仍在場上的燃燒寶石會造成傷害。\n盡快清掉燃燒寶石，避免逃脫途中被持續消耗生命。",
+		},
+		{
+			"title": "障礙方塊",
+			"info": "木板會阻擋路線，也會卡住寶石掉落。\n\n相鄰爆破或特定技能可以破壞木板。\nStage 1-4 中途會有大量木板落下，使用米洛的龍焰領域燒開道路。",
+		},
+	]
+	var page_state := {"index": 0}
+	var closed := {"done": false}
+	var render_page := func() -> void:
+		var page_index: int = int(page_state.index)
+		var page: Dictionary = pages[page_index]
+		title.text = str(page.get("title", ""))
+		info.text = str(page.get("info", ""))
+		prev_btn.visible = page_index > 0
+		next_btn.text = "OK" if page_index >= pages.size() - 1 else "Next"
+	render_page.call()
+
+	prev_btn.pressed.connect(func() -> void:
+		page_state.index = maxi(int(page_state.index) - 1, 0)
+		render_page.call()
+	)
+	next_btn.pressed.connect(func() -> void:
+		if int(page_state.index) < pages.size() - 1:
+			page_state.index = int(page_state.index) + 1
+			render_page.call()
+		else:
+			closed.done = true
+	)
+	while not bool(closed.done):
+		await get_tree().process_frame
+	layer.queue_free()
+
+
+func _stage14_canvas_label(text: String, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 5)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
 func _enable_stage13_owen_hp_floor() -> void:
 	if not _is_stage13_story_battle() or _stage13_victory_triggered:
 		return
@@ -7150,9 +7617,23 @@ func _run_stage13_finale_and_win(emit_win_signal: bool = true) -> void:
 
 ## 主事件：木板大量降臨 → 對話 → 黯化 → 龍焰使用 → 收尾對話
 func _run_plank_emergency_event() -> void:
+	if _escape_failed:
+		return
 	board.is_busy = true
+	board.set_input_queue_locked(true)
+	await _wait_for_board_motion_idle()
+	board.snap_visual_blocks_to_grid()
 
-	# 1) 木板從天而降
+	# 1) Escape 事件先把位置石拉回上方，再讓木板從天而降
+	if _escape_mode:
+		if _escape_failed:
+			board.set_input_queue_locked(false)
+			board.is_busy = false
+			return
+		await board.force_escape_scroll_to_row(ESCAPE_SCROLL_RESET_ROW, true)
+		await _wait_for_board_motion_idle()
+		board.snap_visual_blocks_to_grid()
+
 	await _drop_plank_pile_animation()
 
 	# 必要時懶建戰鬥對話面板（非教學關卡預設為 null）
@@ -7172,6 +7653,7 @@ func _run_plank_emergency_event() -> void:
 	var dragon_idx: int = _find_party_index_by_name("Dragon")
 	if dragon_idx < 0:
 		# 隊伍中無龍 → 無法執行此事件（仍標記為已完成）
+		board.set_input_queue_locked(false)
 		board.is_busy = false
 		return
 
@@ -7183,6 +7665,7 @@ func _run_plank_emergency_event() -> void:
 	# 5) 黯化全螢幕（保留 Dragon 卡片區域）+ 卡片邊界脈動
 	var dragon_card: Control = character_panel.get_card(dragon_idx)
 	if dragon_card == null:
+		board.set_input_queue_locked(false)
 		board.is_busy = false
 		return
 	var card_rect: Rect2 = dragon_card.get_global_rect()
@@ -7190,6 +7673,7 @@ func _run_plank_emergency_event() -> void:
 	var pulse: Panel = _start_card_pulse(dragon_card)
 
 	# 6) 解除 board.is_busy 讓 Dragon 主動技能可被觸發（黯化覆蓋層阻擋了棋盤輸入）
+	board.set_input_queue_locked(false)
 	board.is_busy = false
 
 	# 7) 等待 Dragon 卡片被點擊（active_skill_activated 信號），但不等整個技能流程

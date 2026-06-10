@@ -32,6 +32,11 @@ var _burst_pos := Vector2.ZERO
 var _burst_scale := 1.0
 var _burst_alpha := 0.0
 var _visual_size_multiplier: float = 1.0
+var _orbiting := false
+var _orbit_center_global := Vector2.ZERO
+var _orbit_radius := 28.0
+var _orbit_angle := 0.0
+var _orbit_speed := 2.6
 
 
 ## 初始化（池模式呼叫一次）
@@ -50,6 +55,7 @@ func set_visual_size_multiplier(value: float) -> void:
 ## 發射：從 from 到 to（全域座標），沿 Bezier 弧線飛行
 func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0) -> void:
 	is_available = false
+	_orbiting = false
 	duration = duration / speed_divisor  # 速度加快
 	_color = color
 	_trail.clear()
@@ -101,8 +107,76 @@ func _set_head_position(pos: Vector2) -> void:
 	queue_redraw()
 
 
+func start_orbit(center_global: Vector2, radius: float, color: Color, start_angle: float = 0.0, speed: float = 2.6, visual_size: float = 0.72) -> void:
+	is_available = false
+	_orbiting = true
+	_flying = true
+	_bursting = false
+	_color = color
+	_orbit_center_global = center_global
+	_orbit_radius = radius
+	_orbit_angle = start_angle
+	_orbit_speed = speed
+	_trail.clear()
+	top_level = true
+	global_position = Vector2.ZERO
+	visible = true
+	modulate.a = 1.0
+	set_visual_size_multiplier(visual_size)
+	if _particles == null:
+		_build_particles()
+	_apply_particle_size()
+	_apply_particle_color(color)
+	_particles.emitting = true
+	set_process(true)
+	for i in TRAIL_LENGTH:
+		var tail_angle: float = start_angle - float(i) * 0.035
+		_set_head_position(_orbit_center_global + Vector2(cos(tail_angle), sin(tail_angle)) * _orbit_radius)
+
+
+func set_orbit_center(center_global: Vector2) -> void:
+	_orbit_center_global = center_global
+
+
+func scatter_from_orbit(direction: Vector2, distance: float = 280.0, duration: float = 0.55) -> void:
+	if _tween and _tween.is_valid():
+		_tween.kill()
+	_orbiting = false
+	_flying = true
+	is_available = false
+	visible = true
+	var dir: Vector2 = direction.normalized() if direction.length_squared() > 0.001 else Vector2.RIGHT
+	var start_pos: Vector2 = _head_pos
+	var end_pos: Vector2 = start_pos + dir * distance
+	if _particles:
+		_particles.emitting = true
+	_tween = create_tween().set_parallel(true)
+	_tween.tween_method(func(t: float) -> void:
+		_set_head_position(start_pos.lerp(end_pos, t))
+	, 0.0, 1.0, duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_tween.tween_property(self, "modulate:a", 0.0, duration).set_ease(Tween.EASE_IN)
+	_tween.chain().tween_callback(func() -> void:
+		if _particles:
+			_particles.emitting = false
+		visible = false
+		modulate.a = 1.0
+		_trail.clear()
+		_flying = false
+		is_available = true
+		released.emit()
+	)
+
+
+func _process(delta: float) -> void:
+	if not _orbiting:
+		return
+	_orbit_angle = fmod(_orbit_angle + _orbit_speed * delta, TAU)
+	_set_head_position(_orbit_center_global + Vector2(cos(_orbit_angle), sin(_orbit_angle)) * _orbit_radius)
+
+
 func launch_guest_join(from: Vector2, to: Vector2, color: Color, duration: float = 1.0, spread: float = 0.35) -> void:
 	is_available = false
+	_orbiting = false
 	duration = duration / speed_divisor
 	_color = color
 	_trail.clear()
@@ -200,6 +274,7 @@ func _on_guest_join_arrived() -> void:
 func force_release() -> void:
 	if _tween and _tween.is_valid():
 		_tween.kill()
+	_orbiting = false
 	_flying = false
 	_bursting = false
 	if _particles:

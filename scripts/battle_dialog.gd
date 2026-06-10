@@ -70,6 +70,7 @@ var _skip_timer: Timer = null
 
 
 func _ready() -> void:
+	z_index = 80
 	_build_ui()
 	_tap_zone.pressed.connect(_advance)
 	visible = false

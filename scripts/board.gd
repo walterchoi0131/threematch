@@ -6,6 +6,7 @@ const FALL_SPEED := 800.0      # 掉落速度（像素/秒）— 掉落與填充
 var chain_blast_interval := 0.2  # 連鎖爆炸之間的間隔（秒）
 
 const BlockScene := preload("res://scenes/block.tscn")  # 寶石場景預載
+const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const PLANK_DEBRIS_TEXTURE := preload("res://assets/blocks/wood.png")
 const WOOD_SPEAR_THRUST_TEXTURE := preload("res://assets/leafspear.png")
 const GEM_DEBRIS_Z_INDEX := 90
@@ -36,7 +37,7 @@ var is_busy: bool:
 	get:
 		return _is_busy_back
 	set(v):
-		if not v and _escape_refill_input_lock:
+		if not v and (_escape_refill_input_lock or _escape_scroll_running):
 			return
 		var was: bool = _is_busy_back
 		_is_busy_back = v
@@ -65,6 +66,7 @@ const LOGIC_UPPER := -1
 const LOGIC_PLANK := -2
 const LOGIC_ROCK := -3
 const LOGIC_WOOD_STRUCTURE := -4
+const LOGIC_ESCAPE_MARKER := -5
 const EDIT_RANDOM := -1
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
@@ -119,6 +121,19 @@ var _edit_dragging: bool = false
 var _edit_last_painted: Vector2i = Vector2i(-1, -1)
 var _edit_layout_values: Array = []
 
+var _escape_marker_enabled: bool = false
+var _escape_marker_pos: Vector2i = Vector2i(-1, -1)
+var _escape_marker_node: Node2D = null
+var _escape_marker_trails: Array[Node2D] = []
+var _escape_marker_spin: float = 0.0
+var _escape_scroll_running: bool = false
+var _collapse_and_fill_running: bool = false
+var _escape_marker_colors: Array[Color] = [
+	Color(1.0, 0.22, 0.16, 0.95),
+	Color(0.18, 0.55, 1.0, 0.95),
+	Color(0.18, 1.0, 0.36, 0.95),
+]
+
 ## collapse-and-fill 前置回呼：在現有寶石落定後、新寶石生成前由外部（main.gd）設定。
 ## 設定後每次有新寶石填入前會 await 此 Callable（可用於燃燒扣血等需要視覺節奏的效果）。
 ## 回呼以 async func() 形式提供（回傳值忽略），可在內部使用 await。
@@ -142,6 +157,8 @@ signal meteor_requested(global_pos: Vector2)  # FIREBALL 高階寶石引爆時�
 
 
 ## 初始化：讀取關卡資料並建立棋盤
+signal escape_marker_moved(rows_dropped: int)
+
 func _ready() -> void:
 	if GameState.selected_stage != null:
 		stage = GameState.selected_stage
@@ -172,6 +189,7 @@ func _draw() -> void:
 
 ## 每幀更新：追蹤長按計時，超過閾值時顯示爆炸預覽
 func _process(delta: float) -> void:
+	_update_escape_marker_vfx(delta)
 	if _longpress_pos == Vector2i(-1, -1) or _longpress_active:
 		return
 	_longpress_timer += delta
@@ -217,6 +235,9 @@ func _init_logic_grid_from_visual() -> void:
 		logic_grid[x] = []
 		logic_grid[x].resize(rows)
 		for y in rows:
+			if is_escape_marker_pos(Vector2i(x, y)):
+				logic_grid[x][y] = LOGIC_ESCAPE_MARKER
+				continue
 			var b: Block = grid[x][y]
 			if b == null:
 				logic_grid[x][y] = LOGIC_UNKNOWN
@@ -237,6 +258,11 @@ func _init_logic_grid_from_visual() -> void:
 func _sync_logic_unknowns_from_visual() -> void:
 	for x in columns:
 		for y in rows:
+			if is_escape_marker_pos(Vector2i(x, y)):
+				logic_grid[x][y] = LOGIC_ESCAPE_MARKER
+				continue
+			if logic_grid[x][y] == LOGIC_ESCAPE_MARKER:
+				logic_grid[x][y] = LOGIC_UNKNOWN
 			if logic_grid[x][y] == LOGIC_UNKNOWN:
 				var b: Block = grid[x][y]
 				if b != null:
@@ -393,6 +419,245 @@ func _is_valid(pos: Vector2i) -> bool:
 
 func _is_no_enemy_mode() -> bool:
 	return stage != null and stage.mode == StageData.Mode.ESCAPE
+
+
+func is_escape_marker_pos(pos: Vector2i) -> bool:
+	return _escape_marker_enabled and pos == _escape_marker_pos
+
+
+func enable_escape_marker(start_pos: Vector2i) -> void:
+	if not _is_valid(start_pos):
+		return
+	_escape_marker_enabled = true
+	_escape_marker_pos = start_pos
+	var existing: Block = grid[start_pos.x][start_pos.y]
+	if existing != null and is_instance_valid(existing):
+		grid[start_pos.x][start_pos.y] = null
+		existing.queue_free()
+	_create_escape_marker_node()
+	_position_escape_marker_node(false)
+	_init_logic_grid_from_visual()
+
+
+func set_escape_marker_colors(colors: Array[Color]) -> void:
+	if colors.is_empty():
+		return
+	_escape_marker_colors = colors.duplicate()
+	for trail in _escape_marker_trails:
+		if is_instance_valid(trail):
+			trail.queue_free()
+	_escape_marker_trails.clear()
+	if is_instance_valid(_escape_marker_node):
+		_create_escape_marker_trails()
+
+
+func get_escape_marker_grid_pos() -> Vector2i:
+	return _escape_marker_pos
+
+
+func is_board_motion_running() -> bool:
+	return _collapse_and_fill_running or _escape_scroll_running
+
+
+func snap_visual_blocks_to_grid() -> void:
+	var live_blocks: Dictionary = {}
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null or not is_instance_valid(block):
+				continue
+			live_blocks[block] = true
+			var pos := Vector2i(x, y)
+			block.grid_pos = pos
+			block.set_board_columns(columns)
+			block.position = grid_to_world(pos)
+	for child in get_children():
+		if child is Block and not live_blocks.has(child):
+			child.queue_free()
+	if _escape_marker_enabled:
+		_position_escape_marker_node(false)
+
+
+func force_escape_scroll_to_row(target_y: int, dramatic: bool = false) -> void:
+	if not _escape_marker_enabled or _escape_scroll_running:
+		return
+	var clamped_target: int = clampi(target_y, 0, rows - 1)
+	var shift: int = maxi(_escape_marker_pos.y - clamped_target, 0)
+	var was_busy: bool = is_busy
+	_escape_scroll_running = true
+	is_busy = true
+	if shift <= 0:
+		await _play_escape_marker_scroll_shake(dramatic)
+		_escape_scroll_running = false
+		is_busy = was_busy
+		return
+
+	var old_grid: Array = _copy_grid_state()
+	var new_grid: Array = []
+	new_grid.resize(columns)
+	for x in columns:
+		new_grid[x] = []
+		new_grid[x].resize(rows)
+		for y in rows:
+			new_grid[x][y] = null
+
+	var removed_blocks: Array[Block] = []
+	var tween := create_tween().set_parallel(true)
+	var duration: float = 0.58 if dramatic else 0.34
+	var row_delay: float = 0.075 if dramatic else 0.045
+	var max_scroll_delay: float = 0.0
+	var new_row_start_y: int = maxi(rows - shift, 0)
+	var marker_target_pos := Vector2i(_escape_marker_pos.x, clamped_target)
+
+	for x in columns:
+		for old_y in rows:
+			var cell: Variant = old_grid[x][old_y]
+			if not (cell is Block):
+				continue
+			var block: Block = cell as Block
+			var new_y: int = old_y - shift
+			var delay: float = float(old_y) * row_delay
+			max_scroll_delay = maxf(max_scroll_delay, delay)
+			if new_y < 0 or Vector2i(x, new_y) == marker_target_pos:
+				removed_blocks.append(block)
+				var exit_y: int = new_y if new_y < 0 else new_y - shift
+				tween.tween_property(block, "position", grid_to_world(Vector2i(x, exit_y)), duration) \
+					.set_delay(delay) \
+					.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
+				tween.tween_property(block, "modulate:a", 0.0, duration * 0.75) \
+					.set_delay(delay)
+				continue
+			new_grid[x][new_y] = block
+			block.grid_pos = Vector2i(x, new_y)
+			tween.tween_property(block, "position", grid_to_world(block.grid_pos), duration) \
+				.set_delay(delay) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
+
+	for x in columns:
+		for y in range(new_row_start_y, rows):
+			if Vector2i(x, y) == marker_target_pos:
+				continue
+			if new_grid[x][y] != null:
+				continue
+			var start_pos: Vector2 = grid_to_world(Vector2i(x, y + shift))
+			var block: Block = _create_block(x, y, start_pos, true)
+			block.modulate.a = 0.0
+			new_grid[x][y] = block
+			var delay: float = float(y - new_row_start_y) * row_delay + duration * 0.35
+			max_scroll_delay = maxf(max_scroll_delay, delay)
+			tween.tween_property(block, "position", grid_to_world(Vector2i(x, y)), duration) \
+				.set_delay(delay) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
+			tween.tween_property(block, "modulate:a", 1.0, duration * 0.65) \
+				.set_delay(delay)
+
+	for x in columns:
+		for y in rows:
+			grid[x][y] = new_grid[x][y]
+
+	_escape_marker_pos.y = clamped_target
+	if is_instance_valid(_escape_marker_node):
+		tween.tween_property(_escape_marker_node, "position", grid_to_world(_escape_marker_pos), duration) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
+
+	await get_tree().create_timer(duration + max_scroll_delay + 0.05).timeout
+	for block in removed_blocks:
+		if is_instance_valid(block):
+			block.queue_free()
+	_init_logic_grid_from_visual()
+	_update_fuse_hints()
+	_escape_scroll_running = false
+	is_busy = was_busy
+
+
+func _create_escape_marker_node() -> void:
+	if is_instance_valid(_escape_marker_node):
+		return
+	_escape_marker_node = Node2D.new()
+	_escape_marker_node.name = "EscapeMarker"
+	_escape_marker_node.z_index = 125
+	_escape_marker_node.process_mode = Node.PROCESS_MODE_INHERIT
+	add_child(_escape_marker_node)
+	_create_escape_marker_trails()
+
+
+func _create_escape_marker_trails() -> void:
+	_escape_marker_trails.clear()
+	var colors: Array[Color] = _escape_marker_colors.duplicate()
+	if colors.is_empty():
+		colors = [Color.WHITE]
+	for i in colors.size():
+		var trail := Node2D.new()
+		trail.name = "OrbitAttackTrail%d" % i
+		trail.set_script(TrailProjectileScript)
+		add_child(trail)
+		trail.call("setup")
+		trail.z_index = 126
+		trail.call("start_orbit", to_global(grid_to_world(_escape_marker_pos)), 40.5, colors[i], TAU * float(i) / float(colors.size()), 2.8, 0.93)
+		_escape_marker_trails.append(trail)
+
+
+func play_escape_marker_scatter() -> void:
+	if _escape_marker_trails.is_empty():
+		return
+	var count: int = _escape_marker_trails.size()
+	for i in count:
+		var trail: Node2D = _escape_marker_trails[i]
+		if not is_instance_valid(trail):
+			continue
+		var angle: float = -PI * 0.5 + TAU * float(i) / float(count)
+		var dir := Vector2(cos(angle), sin(angle))
+		trail.call("scatter_from_orbit", dir, 300.0, 0.62)
+	if is_instance_valid(_escape_marker_node):
+		var fade := create_tween()
+		fade.tween_property(_escape_marker_node, "modulate:a", 0.0, 0.3)
+		fade.tween_callback(func() -> void:
+			if is_instance_valid(_escape_marker_node):
+				_escape_marker_node.modulate.a = 1.0
+				_escape_marker_node.visible = false
+		)
+	await get_tree().create_timer(0.68).timeout
+
+
+func _position_escape_marker_node(animated: bool = true) -> void:
+	if not is_instance_valid(_escape_marker_node):
+		return
+	var target_pos: Vector2 = grid_to_world(_escape_marker_pos)
+	if animated:
+		var tw := create_tween()
+		tw.tween_property(_escape_marker_node, "position", target_pos, 0.18) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	else:
+		_escape_marker_node.position = target_pos
+	_update_escape_marker_orbit_center()
+
+
+func _update_escape_marker_vfx(delta: float) -> void:
+	if not is_instance_valid(_escape_marker_node):
+		return
+	_escape_marker_spin = fmod(_escape_marker_spin + delta * 2.2, TAU)
+	_update_escape_marker_orbit_center()
+
+
+func _update_escape_marker_orbit_center() -> void:
+	if not is_instance_valid(_escape_marker_node):
+		return
+	var center_global: Vector2 = to_global(_escape_marker_node.position)
+	for trail in _escape_marker_trails:
+		if is_instance_valid(trail):
+			trail.call("set_orbit_center", center_global)
+
+
+func _play_escape_marker_scroll_shake(dramatic: bool) -> void:
+	if not is_instance_valid(_escape_marker_node):
+		return
+	var base_pos: Vector2 = _escape_marker_node.position
+	var offset: float = 18.0 if dramatic else 8.0
+	var tw := create_tween()
+	tw.tween_property(_escape_marker_node, "position:y", base_pos.y + offset, 0.08)
+	tw.tween_property(_escape_marker_node, "position:y", base_pos.y - offset * 0.45, 0.08)
+	tw.tween_property(_escape_marker_node, "position:y", base_pos.y, 0.10)
+	await tw.finished
 
 
 func _is_static_obstacle(block: Block) -> bool:
@@ -891,7 +1156,8 @@ func _logic_value_blocks_matching(value: int) -> bool:
 		or value == LOGIC_UPPER \
 		or value == LOGIC_PLANK \
 		or value == LOGIC_ROCK \
-		or value == LOGIC_WOOD_STRUCTURE
+		or value == LOGIC_WOOD_STRUCTURE \
+		or value == LOGIC_ESCAPE_MARKER
 
 
 ## 預測：此次爆破是否會觸發任何融合（回應）技能
@@ -1142,19 +1408,39 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 
 ## 掉落與填充：新寶石只從棋盤頂部進入；ROCK 下方空洞只能靠鄰欄斜向滑入
 func _collapse_and_fill() -> void:
+	_collapse_and_fill_running = true
 	var collapse_plan: Dictionary = _build_collapse_plan()
 	var fall_moves: Array = collapse_plan.get("falls", [])
 	var total_new_count: int = int(collapse_plan.get("new_count", 0))
 	var longest_dur: float = 0.0
+	var marker_rows_dropped: int = 0
 
 	# 在填入新寶石前觸發前置回呼，例如燃燒扣血。
 	var any_new: bool = total_new_count > 0
 	if any_new and pre_refill_hook.is_valid():
 		await pre_refill_hook.call()
+		if battle_manager_ref != null and int(battle_manager_ref.get("player_current_hp")) <= 0:
+			_collapse_and_fill_running = false
+			_sync_logic_unknowns_from_visual()
+			_update_fuse_hints()
+			return
 
 	for fall_data in fall_moves:
 		var from_pos: Vector2
 		var target_pos: Vector2 = fall_data.to_pos
+		if bool(fall_data.get("is_escape_marker", false)):
+			if not is_instance_valid(_escape_marker_node):
+				continue
+			from_pos = _escape_marker_node.position
+			var marker_dist: float = from_pos.distance_to(target_pos)
+			var marker_dur: float = marker_dist / FALL_SPEED
+			longest_dur = maxf(longest_dur, marker_dur)
+			marker_rows_dropped += int(fall_data.get("rows_dropped", 0))
+			if marker_dist >= 0.5:
+				var marker_tw := create_tween()
+				marker_tw.tween_property(_escape_marker_node, "position", target_pos, marker_dur) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			continue
 		if bool(fall_data.is_new):
 			var spawn_x: int = int(fall_data.spawn_x)
 			var spawn_idx: int = int(fall_data.spawn_idx)
@@ -1181,12 +1467,18 @@ func _collapse_and_fill() -> void:
 	if longest_dur == 0.0:
 		_sync_logic_unknowns_from_visual()
 		_update_fuse_hints()
+		_collapse_and_fill_running = false
+		if marker_rows_dropped > 0:
+			escape_marker_moved.emit(marker_rows_dropped)
 		return
 	if total_new_count > 0:
 		gems_refilled.emit(total_new_count)
 	await get_tree().create_timer(longest_dur + Block.BOUNCE_DUR + 0.05).timeout
 	_sync_logic_unknowns_from_visual()
 	_update_fuse_hints()
+	_collapse_and_fill_running = false
+	if marker_rows_dropped > 0:
+		escape_marker_moved.emit(marker_rows_dropped)
 
 
 func _build_collapse_plan() -> Dictionary:
@@ -1223,6 +1515,22 @@ func _build_collapse_plan() -> Dictionary:
 					})
 			elif cell is Dictionary:
 				var cell_data: Dictionary = cell
+				if bool(cell_data.get("escape_marker", false)):
+					var old_y: int = int(cell_data.get("original_y", row_index))
+					var new_pos := Vector2i(column_index, row_index)
+					var dropped_rows: int = maxi(row_index - old_y, 0)
+					_escape_marker_pos = new_pos
+					if dropped_rows > 0:
+						fall_moves.append({
+							to_pos = grid_to_world(new_pos),
+							is_escape_marker = true,
+							rows_dropped = dropped_rows,
+							is_new = false
+						})
+					else:
+						_position_escape_marker_node(false)
+					grid[column_index][row_index] = null
+					continue
 				var spawn_x: int = int(cell_data["spawn_x"])
 				grid[column_index][row_index] = null
 				new_count += 1
@@ -1247,7 +1555,10 @@ func _copy_grid_state() -> Array:
 		state[column_index] = []
 		state[column_index].resize(rows)
 		for row_index in rows:
-			state[column_index][row_index] = grid[column_index][row_index]
+			if is_escape_marker_pos(Vector2i(column_index, row_index)):
+				state[column_index][row_index] = {"escape_marker": true, "original_y": row_index}
+			else:
+				state[column_index][row_index] = grid[column_index][row_index]
 	return state
 
 
@@ -1373,44 +1684,53 @@ func play_lose_animation() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var max_total: float = 0.0
+	var blocks_to_animate: Array[Block] = []
+	var seen: Dictionary = {}
 	for x in columns:
 		for y in rows:
 			var block: Block = grid[x][y]
-			if block == null:
+			if block == null or not is_instance_valid(block) or seen.has(block):
 				continue
-			var delay: float = rng.randf_range(0.0, 0.25)
-			var jump_h: float = rng.randf_range(40.0, 110.0)
-			var dx: float = rng.randf_range(-220.0, 220.0)
-			var fall_dy: float = rng.randf_range(700.0, 1000.0)
-			var spin: float = rng.randf_range(-PI * 1.6, PI * 1.6)
-			var up_dur: float = 0.22
-			var down_dur: float = 0.85
-			var total_dur: float = up_dur + down_dur
-			var start_pos: Vector2 = block.position
-			block.z_index = 50
-			# 旋轉：與位置動畫同時開始（並行，貫穿整段）
-			var spin_tw := create_tween()
-			spin_tw.tween_interval(delay)
-			spin_tw.tween_property(block, "rotation", spin, total_dur)
-			# X 方向：與位置同時開始，整段時間內線性飄移
-			var x_tw := create_tween()
-			x_tw.tween_interval(delay)
-			x_tw.tween_property(block, "position:x", start_pos.x + dx, total_dur) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-			# Y 方向：拋物線 — 先上拋（短）再落下（長）
-			var y_tw := create_tween()
-			y_tw.tween_interval(delay)
-			y_tw.tween_property(block, "position:y", start_pos.y - jump_h, up_dur) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-			y_tw.tween_property(block, "position:y", start_pos.y + fall_dy, down_dur) \
-				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-			# 淡出：在落下後段才開始
-			var fade_tw := create_tween()
-			fade_tw.tween_interval(delay + total_dur - 0.45)
-			fade_tw.tween_property(block, "modulate:a", 0.0, 0.45)
-			var total: float = delay + total_dur
-			if total > max_total:
-				max_total = total
+			seen[block] = true
+			blocks_to_animate.append(block)
+	for child in get_children():
+		if child is Block and is_instance_valid(child) and not seen.has(child):
+			seen[child] = true
+			blocks_to_animate.append(child as Block)
+	for block in blocks_to_animate:
+		var delay: float = rng.randf_range(0.0, 0.25)
+		var jump_h: float = rng.randf_range(40.0, 110.0)
+		var dx: float = rng.randf_range(-220.0, 220.0)
+		var fall_dy: float = rng.randf_range(700.0, 1000.0)
+		var spin: float = rng.randf_range(-PI * 1.6, PI * 1.6)
+		var up_dur: float = 0.22
+		var down_dur: float = 0.85
+		var total_dur: float = up_dur + down_dur
+		var start_pos: Vector2 = block.position
+		block.z_index = 50
+		# 旋轉：與位置動畫同時開始（並行，貫穿整段）
+		var spin_tw := create_tween()
+		spin_tw.tween_interval(delay)
+		spin_tw.tween_property(block, "rotation", spin, total_dur)
+		# X 方向：與位置同時開始，整段時間內線性飄移
+		var x_tw := create_tween()
+		x_tw.tween_interval(delay)
+		x_tw.tween_property(block, "position:x", start_pos.x + dx, total_dur) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		# Y 方向：拋物線 — 先上拋（短）再落下（長）
+		var y_tw := create_tween()
+		y_tw.tween_interval(delay)
+		y_tw.tween_property(block, "position:y", start_pos.y - jump_h, up_dur) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		y_tw.tween_property(block, "position:y", start_pos.y + fall_dy, down_dur) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		# 淡出：在落下後段才開始
+		var fade_tw := create_tween()
+		fade_tw.tween_interval(delay + total_dur - 0.45)
+		fade_tw.tween_property(block, "modulate:a", 0.0, 0.45)
+		var total: float = delay + total_dur
+		if total > max_total:
+			max_total = total
 	if max_total <= 0.0:
 		max_total = 0.4
 	await get_tree().create_timer(max_total + 0.05).timeout
@@ -1948,6 +2268,8 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 ## 在指定位置放置高階寶石（若該格為空則先建立寶石，顏色由 gem_type 決定）
 func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = Block.Type.RED) -> bool:
 	if not _is_valid(pos):
+		return false
+	if is_escape_marker_pos(pos):
 		return false
 	var block: Block = grid[pos.x][pos.y]
 	if block != null and block.is_obstacle():
