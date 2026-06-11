@@ -22,6 +22,8 @@ const BACKGROUND_PATHS: Dictionary = {
 }
 
 const DEFAULT_AREA: String = "ruin"
+const CELL_HOLE: int = -10
+const CELL_WATER_SWORD: int = -11
 const FALLBACK_BATTLE_BG_PATH: String = "res://assets/battle_background/battle_bg_forest.png"
 const AREA_KEYS: Array[String] = [
 	"aurora",
@@ -193,6 +195,8 @@ func _default_element_distribution() -> Dictionary:
 @export var columns: int = 8     # 棋盤欄位數
 @export var rows: int = 8        # 棋盤行數
 @export_enum("aurora", "church", "dessert", "dungeon", "forest", "heaven", "iceberg", "meadow", "ruin", "school", "swamp", "underwater", "volcano") var area: String = DEFAULT_AREA  # 關卡地區 key
+@export var battle_background_override_path: String = ""
+@export var stretch_battle_background: bool = false
 
 ## 每一波是一個 EnemyData 陣列。
 ## rounds[0] = 第一波，rounds[1] = 第二波，以此類推。
@@ -233,3 +237,4 @@ const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 ## 固定棋盤佈局（二維陣列 [x][y] = Block.Type）。空陣列 = 隨機生成。
 ## 可部分指定：負值或未寫入的格子會保留開場隨機寶石。
 @export var fixed_layout: Array = []
+@export var drop_start_rows: Array[int] = []

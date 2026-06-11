@@ -67,7 +67,9 @@ const LOGIC_PLANK := -2
 const LOGIC_ROCK := -3
 const LOGIC_WOOD_STRUCTURE := -4
 const LOGIC_ESCAPE_MARKER := -5
+const LOGIC_HOLE := -6
 const EDIT_RANDOM := -1
+const VISUAL_HOLE := &"hole"
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
 var deferred_clicks: Array[Vector2i] = []
@@ -180,14 +182,72 @@ func _apply_stage(s: StageData) -> void:
 func _draw() -> void:
 	var light_brown := Color(46.0/255, 32.0/255, 7.0/255)
 	var dark_brown := Color(34.0/255, 22.0/255, 2.0/255)
+	if _has_any_hole():
+		_draw_cell_area_background()
 	for x in columns:
 		for y in rows:
 			var rect := Rect2(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+			if _is_hole_pos(Vector2i(x, y)):
+				if _edit_mode:
+					draw_rect(rect.grow(-4.0), Color(0.0, 0.0, 0.0, 0.76))
+					draw_rect(rect.grow(-5.0), Color(0.5, 0.62, 0.88, 0.82), false, 2.0)
+				continue
 			var c := light_brown if (x + y) % 2 == 0 else dark_brown
 			draw_rect(rect, c)
+	if _edit_mode:
+		for x in columns:
+			var marker_y: int = _get_drop_start_row(x)
+			var top_left := Vector2(float(x * CELL_SIZE), float(marker_y * CELL_SIZE))
+			var marker_color := Color(1.0, 0.22, 0.18, 0.95) if _is_hole_pos(Vector2i(x, marker_y)) else Color(0.35, 0.88, 1.0, 0.9)
+			draw_line(top_left + Vector2(8.0, 8.0), top_left + Vector2(CELL_SIZE - 8.0, 8.0), marker_color, 3.0)
+			draw_colored_polygon(
+				PackedVector2Array([
+					top_left + Vector2(CELL_SIZE * 0.5, 18.0),
+					top_left + Vector2(CELL_SIZE * 0.5 - 7.0, 8.0),
+					top_left + Vector2(CELL_SIZE * 0.5 + 7.0, 8.0),
+				]),
+				marker_color
+			)
 
 
 ## 每幀更新：追蹤長按計時，超過閾值時顯示爆炸預覽
+func _draw_cell_area_background() -> void:
+	var bg_color := Color(0.13, 0.13, 0.2, 1.0)
+	var pad := 6.0
+	for x in columns:
+		for y in rows:
+			var pos := Vector2i(x, y)
+			if _is_hole_pos(pos):
+				continue
+			var rect := Rect2(float(x * CELL_SIZE), float(y * CELL_SIZE), float(CELL_SIZE), float(CELL_SIZE))
+			draw_rect(rect, bg_color)
+			_draw_cell_area_background_edges(rect, pos, bg_color, pad)
+
+
+func _draw_cell_area_background_edges(rect: Rect2, pos: Vector2i, bg_color: Color, pad: float) -> void:
+	if _is_hole_or_outside(pos + Vector2i.LEFT):
+		draw_rect(Rect2(rect.position.x - pad, rect.position.y, pad, rect.size.y), bg_color)
+	if _is_hole_or_outside(pos + Vector2i.RIGHT):
+		draw_rect(Rect2(rect.end.x, rect.position.y, pad, rect.size.y), bg_color)
+	if _is_hole_or_outside(pos + Vector2i.UP):
+		draw_rect(Rect2(rect.position.x, rect.position.y - pad, rect.size.x, pad), bg_color)
+	if _is_hole_or_outside(pos + Vector2i.DOWN):
+		draw_rect(Rect2(rect.position.x, rect.end.y, rect.size.x, pad), bg_color)
+
+	if _is_hole_or_outside(pos + Vector2i.LEFT) and _is_hole_or_outside(pos + Vector2i.UP):
+		draw_rect(Rect2(rect.position.x - pad, rect.position.y - pad, pad, pad), bg_color)
+	if _is_hole_or_outside(pos + Vector2i.RIGHT) and _is_hole_or_outside(pos + Vector2i.UP):
+		draw_rect(Rect2(rect.end.x, rect.position.y - pad, pad, pad), bg_color)
+	if _is_hole_or_outside(pos + Vector2i.LEFT) and _is_hole_or_outside(pos + Vector2i.DOWN):
+		draw_rect(Rect2(rect.position.x - pad, rect.end.y, pad, pad), bg_color)
+	if _is_hole_or_outside(pos + Vector2i.RIGHT) and _is_hole_or_outside(pos + Vector2i.DOWN):
+		draw_rect(Rect2(rect.end.x, rect.end.y, pad, pad), bg_color)
+
+
+func _is_hole_or_outside(pos: Vector2i) -> bool:
+	return not _is_valid(pos) or _is_hole_pos(pos)
+
+
 func _process(delta: float) -> void:
 	_update_escape_marker_vfx(delta)
 	if _longpress_pos == Vector2i(-1, -1) or _longpress_active:
@@ -213,6 +273,14 @@ func initialize_board() -> void:
 			for y in rows:
 				if y < col.size() and grid[x][y] != null:
 					var t: int = int(col[y])
+					if t == StageData.CELL_HOLE:
+						grid[x][y].queue_free()
+						grid[x][y] = null
+						continue
+					if t == StageData.CELL_WATER_SWORD:
+						grid[x][y].set_block_type(Block.Type.BLUE)
+						grid[x][y].set_upper_type(Block.UpperType.WATER_SLASH)
+						continue
 					if t < 0 or not Block.is_valid_type_value(t):
 						continue
 					grid[x][y].set_block_type(t)
@@ -224,6 +292,7 @@ func initialize_board() -> void:
 				if b != null and b.is_block():
 					b.add_extra(Block.ExtraEffect.BURNING)
 	_init_logic_grid_from_visual()
+	_refresh_background_visibility()
 	_update_fuse_hints()
 
 
@@ -235,7 +304,11 @@ func _init_logic_grid_from_visual() -> void:
 		logic_grid[x] = []
 		logic_grid[x].resize(rows)
 		for y in rows:
-			if is_escape_marker_pos(Vector2i(x, y)):
+			var pos := Vector2i(x, y)
+			if _is_hole_pos(pos):
+				logic_grid[x][y] = LOGIC_HOLE
+				continue
+			if is_escape_marker_pos(pos):
 				logic_grid[x][y] = LOGIC_ESCAPE_MARKER
 				continue
 			var b: Block = grid[x][y]
@@ -258,7 +331,11 @@ func _init_logic_grid_from_visual() -> void:
 func _sync_logic_unknowns_from_visual() -> void:
 	for x in columns:
 		for y in rows:
-			if is_escape_marker_pos(Vector2i(x, y)):
+			var pos := Vector2i(x, y)
+			if _is_hole_pos(pos):
+				logic_grid[x][y] = LOGIC_HOLE
+				continue
+			if is_escape_marker_pos(pos):
 				logic_grid[x][y] = LOGIC_ESCAPE_MARKER
 				continue
 			if logic_grid[x][y] == LOGIC_ESCAPE_MARKER:
@@ -276,6 +353,20 @@ func _sync_logic_unknowns_from_visual() -> void:
 						logic_grid[x][y] = LOGIC_WOOD_STRUCTURE
 					else:
 						logic_grid[x][y] = int(b.block_type)
+
+
+func _refresh_background_visibility() -> void:
+	var bg: CanvasItem = get_node_or_null("Background") as CanvasItem
+	if bg != null:
+		bg.visible = not _has_any_hole()
+
+
+func _has_any_hole() -> bool:
+	for x in columns:
+		for y in rows:
+			if _is_hole_pos(Vector2i(x, y)):
+				return true
+	return false
 
 
 ## 完整將 logic_grid 重置為視覺狀態（無 queued click 時的安全點呼叫，例如波次轉換後）
@@ -364,6 +455,8 @@ func brighten_all_gems(duration: float = 0.4) -> void:
 
 ## 在指定格子建立一個新寶石
 func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_pos: bool = false) -> Block:
+	if not _cell_accepts_block(Vector2i(x, y)):
+		return null
 	var block: Block = BlockScene.instantiate()
 	block.grid_pos = Vector2i(x, y)
 	block.set_board_columns(columns)
@@ -417,6 +510,46 @@ func _is_valid(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < columns and pos.y >= 0 and pos.y < rows
 
 
+func _is_hole_pos(pos: Vector2i) -> bool:
+	if not _is_valid(pos):
+		return false
+	if _edit_mode:
+		_ensure_edit_layout_values()
+		if pos.x < _edit_layout_values.size() and _edit_layout_values[pos.x] is Array:
+			var edit_col: Array = _edit_layout_values[pos.x]
+			if pos.y < edit_col.size():
+				return int(edit_col[pos.y]) == StageData.CELL_HOLE
+	if stage == null or stage.fixed_layout.size() != columns:
+		return false
+	if not (stage.fixed_layout[pos.x] is Array):
+		return false
+	var col: Array = stage.fixed_layout[pos.x]
+	return pos.y < col.size() and int(col[pos.y]) == StageData.CELL_HOLE
+
+
+func _cell_accepts_block(pos: Vector2i) -> bool:
+	return _is_valid(pos) and not _is_hole_pos(pos)
+
+
+func _get_drop_start_row(column_index: int) -> int:
+	if stage == null or column_index < 0 or column_index >= columns:
+		return 0
+	if column_index >= stage.drop_start_rows.size():
+		return 0
+	return clampi(int(stage.drop_start_rows[column_index]), 0, rows - 1)
+
+
+func _get_drop_spawn_capacity(column_index: int) -> int:
+	if column_index < 0 or column_index >= columns:
+		return 0
+	var spawn_row: int = _get_drop_start_row(column_index)
+	var capacity: int = 0
+	for row_index in range(spawn_row, rows):
+		if not _is_hole_pos(Vector2i(column_index, row_index)):
+			capacity += 1
+	return capacity
+
+
 func _is_no_enemy_mode() -> bool:
 	return stage != null and stage.mode == StageData.Mode.ESCAPE
 
@@ -426,7 +559,16 @@ func is_escape_marker_pos(pos: Vector2i) -> bool:
 
 
 func enable_escape_marker(start_pos: Vector2i) -> void:
-	if not _is_valid(start_pos):
+	if not _cell_accepts_block(start_pos):
+		for y in rows:
+			for x in columns:
+				var candidate := Vector2i(x, y)
+				if _cell_accepts_block(candidate):
+					start_pos = candidate
+					break
+			if _cell_accepts_block(start_pos):
+				break
+	if not _cell_accepts_block(start_pos):
 		return
 	_escape_marker_enabled = true
 	_escape_marker_pos = start_pos
@@ -518,7 +660,7 @@ func force_escape_scroll_to_row(target_y: int, dramatic: bool = false) -> void:
 			var new_y: int = old_y - shift
 			var delay: float = float(old_y) * row_delay
 			max_scroll_delay = maxf(max_scroll_delay, delay)
-			if new_y < 0 or Vector2i(x, new_y) == marker_target_pos:
+			if new_y < 0 or Vector2i(x, new_y) == marker_target_pos or _is_hole_pos(Vector2i(x, new_y)):
 				removed_blocks.append(block)
 				var exit_y: int = new_y if new_y < 0 else new_y - shift
 				tween.tween_property(block, "position", grid_to_world(Vector2i(x, exit_y)), duration) \
@@ -536,6 +678,8 @@ func force_escape_scroll_to_row(target_y: int, dramatic: bool = false) -> void:
 	for x in columns:
 		for y in range(new_row_start_y, rows):
 			if Vector2i(x, y) == marker_target_pos:
+				continue
+			if _is_hole_pos(Vector2i(x, y)):
 				continue
 			if new_grid[x][y] != null:
 				continue
@@ -713,6 +857,8 @@ func set_edit_mode(enabled: bool) -> void:
 		_apply_edit_layout_to_visuals()
 	else:
 		_edit_layout_values.clear()
+	_refresh_background_visibility()
+	queue_redraw()
 
 
 func set_edit_input_enabled(enabled: bool) -> void:
@@ -734,6 +880,8 @@ func paint_cell(pos: Vector2i, value: int) -> void:
 	var col: Array = _edit_layout_values[pos.x]
 	col[pos.y] = normalized
 	_set_edit_cell_visual(pos, normalized)
+	_refresh_background_visibility()
+	queue_redraw()
 	_edit_last_painted = pos
 
 
@@ -744,6 +892,8 @@ func clear_fixed_layout() -> void:
 		for y in rows:
 			col[y] = EDIT_RANDOM
 			_set_edit_cell_visual(Vector2i(x, y), EDIT_RANDOM)
+	_refresh_background_visibility()
+	queue_redraw()
 
 
 func get_fixed_layout_snapshot() -> Array:
@@ -836,17 +986,19 @@ func _apply_edit_layout_to_visuals() -> void:
 		for y in rows:
 			_set_edit_cell_visual(Vector2i(x, y), int(col[y]))
 	_init_logic_grid_from_visual()
+	_refresh_background_visibility()
+	queue_redraw()
 
 
 func _set_edit_cell_visual(pos: Vector2i, value: int) -> void:
 	var normalized: int = _normalize_edit_value(value)
-	if normalized == EDIT_RANDOM:
+	if normalized == EDIT_RANDOM or normalized == StageData.CELL_HOLE:
 		var old_block: Block = grid[pos.x][pos.y]
 		if old_block != null:
 			old_block.visible = false
 			old_block.queue_free()
 			grid[pos.x][pos.y] = null
-		_sync_edit_logic_cell(pos, EDIT_RANDOM)
+		_sync_edit_logic_cell(pos, normalized)
 		return
 
 	var block: Block = grid[pos.x][pos.y]
@@ -860,7 +1012,11 @@ func _set_edit_cell_visual(pos: Vector2i, value: int) -> void:
 	block.z_index = 0
 	block.clear_extras()
 	block.set_upper_type(Block.UpperType.NONE)
-	block.set_block_type(normalized)
+	if normalized == StageData.CELL_WATER_SWORD:
+		block.set_block_type(Block.Type.BLUE)
+		block.set_upper_type(Block.UpperType.WATER_SLASH)
+	else:
+		block.set_block_type(normalized)
 	grid[pos.x][pos.y] = block
 	_sync_edit_logic_cell(pos, normalized)
 
@@ -876,6 +1032,10 @@ func _sync_edit_logic_cell(pos: Vector2i, value: int) -> void:
 	var normalized: int = _normalize_edit_value(value)
 	if normalized == EDIT_RANDOM:
 		logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
+	elif normalized == StageData.CELL_HOLE:
+		logic_grid[pos.x][pos.y] = LOGIC_HOLE
+	elif normalized == StageData.CELL_WATER_SWORD:
+		logic_grid[pos.x][pos.y] = LOGIC_UPPER
 	elif normalized == Block.Type.PLANK:
 		logic_grid[pos.x][pos.y] = LOGIC_PLANK
 	elif normalized == Block.Type.ROCK:
@@ -889,6 +1049,10 @@ func _sync_edit_logic_cell(pos: Vector2i, value: int) -> void:
 func _normalize_edit_value(value: int) -> int:
 	if value == EDIT_RANDOM:
 		return EDIT_RANDOM
+	if value == StageData.CELL_HOLE:
+		return StageData.CELL_HOLE
+	if value == StageData.CELL_WATER_SWORD:
+		return StageData.CELL_WATER_SWORD
 	if Block.is_valid_type_value(value):
 		return value
 	return EDIT_RANDOM
@@ -912,7 +1076,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var local_pos := get_local_mouse_position()
 			var gp := world_to_grid(local_pos)
-			if _is_valid(gp):
+			if _cell_accepts_block(gp):
 				var clicked_block: Block = grid[gp.x][gp.y]
 				var positions := _get_selection_positions(gp)
 				if positions.is_empty():
@@ -970,7 +1134,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_fusing and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var fuse_local_pos := get_local_mouse_position()
 			var fuse_gp := world_to_grid(fuse_local_pos)
-			if _is_valid(fuse_gp):
+			if _cell_accepts_block(fuse_gp):
 				_try_concurrent_fuse(fuse_gp, fuse_local_pos)
 			return
 		if _input_queue_locked:
@@ -982,13 +1146,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var queue_local_pos := get_local_mouse_position()
 			var queue_gp := world_to_grid(queue_local_pos)
-			if _is_valid(queue_gp):
+			if _cell_accepts_block(queue_gp):
 				_try_queue_click(queue_gp)
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var local_pos := get_local_mouse_position()
 		var gp := world_to_grid(local_pos)
-		if _is_valid(gp) and grid[gp.x][gp.y] != null:
+		if _cell_accepts_block(gp) and grid[gp.x][gp.y] != null:
 			var clicked_block: Block = grid[gp.x][gp.y]
 			set_last_tapped_input(gp, local_pos)
 			if clicked_block.is_upper_gem():
@@ -1004,7 +1168,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## 從起始位置在 logic_grid 上找連通同色普通寶石（與 _find_connected 同 BFS 邏輯，但讀邏輯狀態）
 func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
-	if not _is_valid(start):
+	if not _cell_accepts_block(start):
 		return []
 	var target: int = logic_grid[start.x][start.y]
 	if _logic_value_blocks_matching(target):
@@ -1016,7 +1180,7 @@ func _find_connected_logic(start: Vector2i) -> Array[Vector2i]:
 		var current: Vector2i = queue.pop_front()
 		if visited.has(current):
 			continue
-		if not _is_valid(current):
+		if not _cell_accepts_block(current):
 			continue
 		var cur: int = logic_grid[current.x][current.y]
 		if cur != target:
@@ -1049,6 +1213,10 @@ func _logic_destroy_and_collapse(positions: Array[Vector2i]) -> void:
 
 func _settle_logic_grid_with_rocks() -> void:
 	var max_iterations: int = maxi(1, columns * rows * (columns + rows + 4))
+	var spawn_counts: Array = []
+	spawn_counts.resize(columns)
+	for column_index in columns:
+		spawn_counts[column_index] = 0
 	var iteration: int = 0
 	while iteration < max_iterations:
 		var changed: bool = false
@@ -1056,7 +1224,7 @@ func _settle_logic_grid_with_rocks() -> void:
 			changed = true
 		if _logic_apply_rock_slide_step(iteration):
 			changed = true
-		if _logic_spawn_top_unknowns():
+		if _logic_spawn_top_unknowns(spawn_counts):
 			changed = true
 		if not changed:
 			break
@@ -1122,25 +1290,29 @@ func _logic_target_has_stationary_roof(target_x: int, target_y: int) -> bool:
 	var row_index: int = target_y - 1
 	while row_index >= 0:
 		var value: int = int(logic_grid[target_x][row_index])
-		if value == LOGIC_UNKNOWN:
+		if value == LOGIC_UNKNOWN or value == LOGIC_HOLE:
 			row_index -= 1
 			continue
 		return _logic_value_is_stationary_obstacle(value)
 	return false
 
 
-func _logic_spawn_top_unknowns() -> bool:
+func _logic_spawn_top_unknowns(spawn_counts: Array) -> bool:
 	var spawned: bool = false
 	for column_index in columns:
-		if int(logic_grid[column_index][0]) != LOGIC_UNKNOWN:
+		if int(spawn_counts[column_index]) >= _get_drop_spawn_capacity(column_index):
 			continue
-		logic_grid[column_index][0] = LOGIC_SPAWNED_UNKNOWN
+		var spawn_row: int = _get_drop_start_row(column_index)
+		if int(logic_grid[column_index][spawn_row]) != LOGIC_UNKNOWN:
+			continue
+		logic_grid[column_index][spawn_row] = LOGIC_SPAWNED_UNKNOWN
+		spawn_counts[column_index] = int(spawn_counts[column_index]) + 1
 		spawned = true
 	return spawned
 
 
 func _logic_cell_can_move(value: int) -> bool:
-	return value != LOGIC_UNKNOWN and not _logic_value_is_stationary_obstacle(value)
+	return value != LOGIC_UNKNOWN and value != LOGIC_HOLE and not _logic_value_is_stationary_obstacle(value)
 
 
 func _logic_value_is_stationary_obstacle(value: int) -> bool:
@@ -1157,7 +1329,8 @@ func _logic_value_blocks_matching(value: int) -> bool:
 		or value == LOGIC_PLANK \
 		or value == LOGIC_ROCK \
 		or value == LOGIC_WOOD_STRUCTURE \
-		or value == LOGIC_ESCAPE_MARKER
+		or value == LOGIC_ESCAPE_MARKER \
+		or value == LOGIC_HOLE
 
 
 ## 預測：此次爆破是否會觸發任何融合（回應）技能
@@ -1178,7 +1351,7 @@ func _try_queue_click(pos: Vector2i) -> void:
 		return
 	if not battle_manager_ref.logic_can_blast():
 		return
-	if not _is_valid(pos):
+	if not _cell_accepts_block(pos):
 		return
 	if _tutorial_filter.size() > 0 and not _tutorial_filter.has(pos):
 		return
@@ -1243,6 +1416,8 @@ func notify_external_attack_busy(busy: bool) -> void:
 ## 如果連接數 >= min_match → 消除並掉落填充
 ## 否則 → 抖動提示無效
 func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位置
+	if not _cell_accepts_block(pos):
+		return
 	if _tutorial_filter.size() > 0 and not _tutorial_filter.has(pos):
 		return
 
@@ -1309,6 +1484,8 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 
 ## 從起始位置開始，找出所有相連的同類型寶石（BFS 洪水填充）
 func _find_connected(start: Vector2i) -> Array[Vector2i]:
+	if not _cell_accepts_block(start):
+		return []
 	var block: Block = grid[start.x][start.y]
 	if block == null:
 		return []
@@ -1326,7 +1503,7 @@ func _find_connected(start: Vector2i) -> Array[Vector2i]:
 
 		if visited.has(current):
 			continue
-		if not _is_valid(current):
+		if not _cell_accepts_block(current):
 			continue
 		if grid[current.x][current.y] == null:
 			continue
@@ -1444,7 +1621,7 @@ func _collapse_and_fill() -> void:
 		if bool(fall_data.is_new):
 			var spawn_x: int = int(fall_data.spawn_x)
 			var spawn_idx: int = int(fall_data.spawn_idx)
-			var spawn_y: int = -1 - spawn_idx
+			var spawn_y: int = int(fall_data.get("spawn_y", -1 - spawn_idx))
 			from_pos = grid_to_world(Vector2i(spawn_x, spawn_y))
 		else:
 			if not is_instance_valid(fall_data.block):
@@ -1540,6 +1717,7 @@ func _build_collapse_plan() -> Dictionary:
 					gx = column_index,
 					gy = row_index,
 					spawn_x = spawn_x,
+					spawn_y = int(cell_data.get("spawn_y", -1 - int(cell_data["spawn_idx"]))),
 					spawn_idx = int(cell_data["spawn_idx"]),
 					spawn_count = int(spawn_counts[spawn_x])
 				})
@@ -1555,7 +1733,10 @@ func _copy_grid_state() -> Array:
 		state[column_index] = []
 		state[column_index].resize(rows)
 		for row_index in rows:
-			if is_escape_marker_pos(Vector2i(column_index, row_index)):
+			var pos := Vector2i(column_index, row_index)
+			if _is_hole_pos(pos):
+				state[column_index][row_index] = VISUAL_HOLE
+			elif is_escape_marker_pos(pos):
 				state[column_index][row_index] = {"escape_marker": true, "original_y": row_index}
 			else:
 				state[column_index][row_index] = grid[column_index][row_index]
@@ -1632,7 +1813,7 @@ func _visual_target_has_stationary_roof(state: Array, target_x: int, target_y: i
 	var row_index: int = target_y - 1
 	while row_index >= 0:
 		var cell: Variant = state[target_x][row_index]
-		if cell == null:
+		if cell == null or _variant_cell_is_hole(cell):
 			row_index -= 1
 			continue
 		return _variant_cell_is_stationary_obstacle(cell)
@@ -1642,11 +1823,15 @@ func _visual_target_has_stationary_roof(state: Array, target_x: int, target_y: i
 func _visual_spawn_top_blocks(state: Array, spawn_counts: Array) -> bool:
 	var spawned: bool = false
 	for column_index in columns:
-		if state[column_index][0] != null:
+		if int(spawn_counts[column_index]) >= _get_drop_spawn_capacity(column_index):
 			continue
-		state[column_index][0] = {
+		var spawn_row: int = _get_drop_start_row(column_index)
+		if state[column_index][spawn_row] != null:
+			continue
+		state[column_index][spawn_row] = {
 			"is_new": true,
 			"spawn_x": column_index,
+			"spawn_y": spawn_row - 1 - int(spawn_counts[column_index]),
 			"spawn_idx": int(spawn_counts[column_index])
 		}
 		spawn_counts[column_index] = int(spawn_counts[column_index]) + 1
@@ -1655,11 +1840,15 @@ func _visual_spawn_top_blocks(state: Array, spawn_counts: Array) -> bool:
 
 
 func _variant_cell_can_move(cell: Variant) -> bool:
-	return cell != null and not _variant_cell_is_stationary_obstacle(cell)
+	return cell != null and not _variant_cell_is_hole(cell) and not _variant_cell_is_stationary_obstacle(cell)
 
 
 func _variant_cell_is_stationary_obstacle(cell: Variant) -> bool:
 	return cell is Block and (cell as Block).is_stationary_obstacle()
+
+
+func _variant_cell_is_hole(cell: Variant) -> bool:
+	return cell is StringName and cell == VISUAL_HOLE
 
 
 ## 重新開始：清除棋盤並重新初始化
@@ -2841,13 +3030,13 @@ func _get_area_positions(center: Vector2i, _size: int = 0) -> Array[Vector2i]:
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
 			var p := Vector2i(center.x + dx, center.y + dy)
-			if _is_valid(p):
+			if _cell_accepts_block(p):
 				result.append(p)
 	# 上下左右各延伸1格
 	var extensions: Array[Vector2i] = [Vector2i(0, -2), Vector2i(0, 2), Vector2i(-2, 0), Vector2i(2, 0)]
 	for ext: Vector2i in extensions:
 		var p: Vector2i = center + ext
-		if _is_valid(p):
+		if _cell_accepts_block(p):
 			result.append(p)
 	return result
 
@@ -2860,7 +3049,7 @@ func _get_surrounding_positions(center: Vector2i) -> Array[Vector2i]:
 			if dx == 0 and dy == 0:
 				continue
 			var p := Vector2i(center.x + dx, center.y + dy)
-			if _is_valid(p):
+			if _cell_accepts_block(p):
 				result.append(p)
 	return result
 
@@ -2943,7 +3132,9 @@ func _play_shield_break_anim(block: Block) -> void:
 func _get_row_positions(row: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for x in columns:
-		result.append(Vector2i(x, row))
+		var pos := Vector2i(x, row)
+		if _cell_accepts_block(pos):
+			result.append(pos)
 	return result
 
 
@@ -2951,7 +3142,9 @@ func _get_row_positions(row: int) -> Array[Vector2i]:
 func _get_col_positions(col: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for y in rows:
-		result.append(Vector2i(col, y))
+		var pos := Vector2i(col, y)
+		if _cell_accepts_block(pos):
+			result.append(pos)
 	return result
 
 
@@ -3064,12 +3257,12 @@ func has_line_match(positions: Array[Vector2i], threshold: int) -> bool:
 ## 取得十字形爆炸/預覽位置：中心 + 上下左右各延伸2格
 func _get_cross_positions(center: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	if _is_valid(center):
+	if _cell_accepts_block(center):
 		result.append(center)
 	for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		for dist in range(1, 3):
 			var p: Vector2i = center + dir * dist
-			if _is_valid(p):
+			if _cell_accepts_block(p):
 				result.append(p)
 	return result
 
@@ -3154,19 +3347,19 @@ func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
 		return _get_area_positions(center)
 	if _selection_pattern == "single":
 		var result: Array[Vector2i] = []
-		if _is_valid(center):
+		if _cell_accepts_block(center):
 			result.append(center)
 		return result
 	if _selection_pattern == "single_top_bottom":
 		var result: Array[Vector2i] = []
-		if _is_valid(center) and (center.y == 0 or center.y == rows - 1):
+		if _cell_accepts_block(center) and (center.y == 0 or center.y == rows - 1):
 			result.append(center)
 		return result
 	return _get_cross_positions(center)
 
 
 func _is_selection_center_viable(center: Vector2i) -> bool:
-	if not _is_valid(center):
+	if not _cell_accepts_block(center):
 		return false
 	match _selection_pattern:
 		"single":
@@ -3176,7 +3369,7 @@ func _is_selection_center_viable(center: Vector2i) -> bool:
 			if center.y != 0 and center.y != rows - 1:
 				return false
 			var block: Block = grid[center.x][center.y]
-			return not _is_static_obstacle(block)
+			return block != null and not _is_static_obstacle(block)
 		_:
 			return true
 
@@ -3480,10 +3673,11 @@ func _simulate_post_collapse_grid() -> Array:
 		sim[x] = []
 		sim[x].resize(rows)
 		for y in rows:
-			sim[x][y] = grid[x][y]
+			var pos := Vector2i(x, y)
+			sim[x][y] = VISUAL_HOLE if _is_hole_pos(pos) else grid[x][y]
 
 	# 融合流程中，上階寶石將被放置在 last_tapped_pos（尚未放置時模擬為佔位）
-	if _is_valid(last_tapped_pos) and sim[last_tapped_pos.x][last_tapped_pos.y] == null:
+	if _cell_accepts_block(last_tapped_pos) and sim[last_tapped_pos.x][last_tapped_pos.y] == null:
 		sim[last_tapped_pos.x][last_tapped_pos.y] = &"upper_placeholder"
 
 	# 模擬掉落：ROCK 固定，新寶石從頂部進入，ROCK 下方空洞可由鄰欄斜向滑入。

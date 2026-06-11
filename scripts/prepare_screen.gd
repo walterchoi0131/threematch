@@ -55,6 +55,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_debug_panel()
 
 
+func _start_alpha_pulse(target: CanvasItem, low_alpha: float, high_alpha: float, duration: float) -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	var safe_duration: float = maxf(duration, 0.05)
+	var tw: Tween = target.create_tween()
+	tw.tween_property(target, "modulate:a", low_alpha, safe_duration) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(target, "modulate:a", high_alpha, safe_duration) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	tw.finished.connect(func() -> void:
+		if is_instance_valid(target):
+			_start_alpha_pulse(target, low_alpha, high_alpha, safe_duration)
+	)
+
+
 func _toggle_debug_panel() -> void:
 	if _debug_panel != null:
 		_debug_panel.queue_free()
@@ -456,11 +471,7 @@ func _refresh_team_summary() -> void:
 			_team_summary.add_child(slot)
 			var blink_label: Label = slot.get_node_or_null("Label") as Label
 			if blink_label != null and not locked_empty:
-				var blink_tw: Tween = create_tween().set_loops()
-				blink_tw.tween_property(blink_label, "modulate:a", 0.25, 0.6) \
-				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-				blink_tw.tween_property(blink_label, "modulate:a", 1.0, 0.6) \
-				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+				_start_alpha_pulse(blink_label, 0.25, 1.0, 0.6)
 			_team_summary_cards.append(slot)
 
 	if _confirm_btn:
@@ -841,9 +852,7 @@ func _add_state_overlay(panel: PanelContainer, text: String) -> Control:
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(lbl)
 
-	var tw := lbl.create_tween().set_loops()
-	tw.tween_property(lbl, "modulate:a", 0.35, 0.7)
-	tw.tween_property(lbl, "modulate:a", 1.0, 0.7)
+	_start_alpha_pulse(lbl, 0.35, 1.0, 0.7)
 	return overlay
 
 

@@ -201,6 +201,8 @@ const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 	Block.Type.PLANK,
 	Block.Type.ROCK,
 	Block.Type.WOOD_STRUCTURE,
+	StageData.CELL_WATER_SWORD,
+	StageData.CELL_HOLE,
 ]
 const STAGE_EDITOR_DISTRIBUTION_TYPES: Array[int] = [
 	Block.Type.RED,
@@ -223,6 +225,7 @@ var _stage_editor_area_panel: PanelContainer = null
 var _stage_editor_action_panel: PanelContainer = null
 var _stage_editor_tab_panel: PanelContainer = null
 var _stage_editor_dialog_panel: PanelContainer = null
+var _stage_editor_palette_scroll: ScrollContainer = null
 var _stage_editor_palette_grid: GridContainer = null
 var _stage_editor_value_buttons: Dictionary = {}
 var _stage_editor_tab_buttons: Dictionary = {}
@@ -230,8 +233,11 @@ var _stage_editor_current_tab: String = STAGE_EDITOR_TAB_BOARD
 var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
 var _stage_editor_area_option: OptionButton = null
+var _stage_editor_bg_override_option: OptionButton = null
+var _stage_editor_stretch_bg_check: CheckButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
 var _stage_editor_distribution_spins: Dictionary = {}
+var _stage_editor_drop_start_spins: Dictionary = {}
 var _stage_editor_dialog_target: String = ""
 var _stage_editor_dialog_title_label: Label = null
 var _stage_editor_dialog_line_list: VBoxContainer = null
@@ -380,7 +386,10 @@ func _apply_stage_background() -> void:
 	if current_stage == null:
 		_battle_bg_rect.visible = false
 		return
-	var path: String = StageData.get_battle_background_path(current_stage.area)
+	var override_path: String = current_stage.battle_background_override_path.strip_edges()
+	var path: String = override_path if not override_path.is_empty() else StageData.get_battle_background_path(current_stage.area)
+	if not override_path.is_empty() and not ResourceLoader.exists(path):
+		path = StageData.get_battle_background_path(current_stage.area)
 	if path.is_empty():
 		_battle_bg_rect.visible = false
 		return
@@ -402,9 +411,12 @@ func _layout_board() -> void:
 	var s: float = max(0.1, max_w / board_w)
 	board.scale = Vector2(s, s)
 	board.position = Vector2((vp.x - board_w * s) * 0.5, vp.y * 0.22)
-	# 背景圖片：從畫面最頂端延伸到棋盤頂端（cover fit）
 	_battle_bg_rect.position = Vector2(0.0, 0.0)
-	_battle_bg_rect.size = Vector2(vp.x, board.position.y)
+	if current_stage != null and current_stage.stretch_battle_background:
+		_battle_bg_rect.size = vp
+	else:
+		var battle_bg_height: float = maxf(board.position.y + 16.0, vp.y * 0.34)
+		_battle_bg_rect.size = Vector2(vp.x, battle_bg_height)
 
 
 ## Viewport 改變時重排棋盤與 UI。
@@ -424,8 +436,6 @@ func _get_combo_ui_origin() -> Vector2:
 	var bg_left: float = _battle_bg_rect.position.x if is_instance_valid(_battle_bg_rect) else 0.0
 	var bg_top: float = _battle_bg_rect.position.y if is_instance_valid(_battle_bg_rect) else 0.0
 	var bg_bottom: float = board.position.y
-	if is_instance_valid(_battle_bg_rect) and _battle_bg_rect.size.y > 0.0:
-		bg_bottom = _battle_bg_rect.position.y + _battle_bg_rect.size.y
 	var y: float = maxf(bg_top + COMBO_UI_MIN_TOP_GAP, bg_bottom - COMBO_UI_MARGIN.y)
 	return Vector2(bg_left + COMBO_UI_MARGIN.x, y)
 
@@ -548,18 +558,37 @@ func _build_stage_editor_ui() -> void:
 	margin.add_child(root_box)
 	_stage_editor_root_box = root_box
 
+	var palette_scroll := ScrollContainer.new()
+	palette_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	palette_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	palette_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root_box.add_child(palette_scroll)
+	_stage_editor_palette_scroll = palette_scroll
+
 	var button_grid := GridContainer.new()
 	button_grid.columns = STAGE_EDITOR_GEM_TYPES.size()
-	button_grid.add_theme_constant_override("h_separation", 6)
+	button_grid.add_theme_constant_override("h_separation", 4)
 	button_grid.add_theme_constant_override("v_separation", 6)
 	button_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root_box.add_child(button_grid)
+	palette_scroll.add_child(button_grid)
 	_stage_editor_palette_grid = button_grid
 
 	for gem_type: int in STAGE_EDITOR_GEM_TYPES:
 		var value_button: Button = _make_stage_editor_value_button(gem_type, _stage_editor_type_name(gem_type))
 		button_grid.add_child(value_button)
 		_stage_editor_value_buttons[gem_type] = value_button
+
+	var drop_row := GridContainer.new()
+	drop_row.columns = current_stage.columns if current_stage != null else 8
+	drop_row.add_theme_constant_override("h_separation", 2)
+	drop_row.add_theme_constant_override("v_separation", 0)
+	drop_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root_box.add_child(drop_row)
+
+	_stage_editor_drop_start_spins.clear()
+	var editor_columns: int = current_stage.columns if current_stage != null else 8
+	for column_index in editor_columns:
+		drop_row.add_child(_make_stage_editor_drop_start_spin(column_index))
 
 	_refresh_stage_editor_value_buttons()
 	_refresh_stage_editor_area_panel()
@@ -581,7 +610,7 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_panel = PanelContainer.new()
 	_stage_editor_area_panel.name = "StageEditorAreaPanel"
 	_stage_editor_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_stage_editor_area_panel.custom_minimum_size = Vector2(348, 66)
+	_stage_editor_area_panel.custom_minimum_size = Vector2(348, 54)
 	_stage_editor_area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
 	$UILayer.add_child(_stage_editor_area_panel)
 
@@ -597,20 +626,20 @@ func _build_stage_editor_area_panel() -> void:
 	margin.add_child(row)
 
 	var selector_box := VBoxContainer.new()
-	selector_box.add_theme_constant_override("separation", 2)
-	selector_box.custom_minimum_size = Vector2(78, 0)
+	selector_box.add_theme_constant_override("separation", 1)
+	selector_box.custom_minimum_size = Vector2(116, 0)
 	row.add_child(selector_box)
 
 	var title := Label.new()
 	title.text = "Map Area"
-	title.add_theme_font_size_override("font_size", 11)
+	title.add_theme_font_size_override("font_size", 9)
 	title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	selector_box.add_child(title)
 
 	_stage_editor_area_option = OptionButton.new()
 	_stage_editor_area_option.focus_mode = Control.FOCUS_NONE
 	_stage_editor_area_option.fit_to_longest_item = false
-	_stage_editor_area_option.custom_minimum_size = Vector2(76, 28)
+	_stage_editor_area_option.custom_minimum_size = Vector2(112, 28)
 	_stage_editor_area_option.add_theme_font_size_override("font_size", 11)
 	for area_key: String in StageData.AREA_KEYS:
 		var item_index: int = _stage_editor_area_option.item_count
@@ -619,14 +648,41 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_option.item_selected.connect(_on_stage_editor_area_selected)
 	selector_box.add_child(_stage_editor_area_option)
 
+	var override_label := Label.new()
+	override_label.text = "BG Override"
+	override_label.add_theme_font_size_override("font_size", 8)
+	override_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	selector_box.add_child(override_label)
+
+	_stage_editor_bg_override_option = OptionButton.new()
+	_stage_editor_bg_override_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_bg_override_option.custom_minimum_size = Vector2(112, 24)
+	_stage_editor_bg_override_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_make_compact_option_button(_stage_editor_bg_override_option)
+	_stage_editor_bg_override_option.item_selected.connect(_on_stage_editor_bg_override_selected)
+	selector_box.add_child(_stage_editor_bg_override_option)
+
+	var spot_box := HBoxContainer.new()
+	spot_box.add_theme_constant_override("separation", 2)
+	row.add_child(spot_box)
+
 	_stage_editor_area_spot_preview = TextureRect.new()
 	_stage_editor_area_spot_preview.name = "SpotPreview"
-	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(42, 36)
+	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(48, 44)
 	_stage_editor_area_spot_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_stage_editor_area_spot_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_stage_editor_area_spot_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage_editor_area_spot_preview.tooltip_text = "Spot"
-	row.add_child(_stage_editor_area_spot_preview)
+	spot_box.add_child(_stage_editor_area_spot_preview)
+
+	_stage_editor_stretch_bg_check = CheckButton.new()
+	_stage_editor_stretch_bg_check.text = "Full BG"
+	_stage_editor_stretch_bg_check.focus_mode = Control.FOCUS_NONE
+	_stage_editor_stretch_bg_check.custom_minimum_size = Vector2(66, 20)
+	_stage_editor_stretch_bg_check.add_theme_font_size_override("font_size", 8)
+	_stage_editor_stretch_bg_check.tooltip_text = "Stretch battle background to the full screen."
+	_stage_editor_stretch_bg_check.toggled.connect(_on_stage_editor_stretch_bg_toggled)
+	spot_box.add_child(_stage_editor_stretch_bg_check)
 
 	var distribution_box := VBoxContainer.new()
 	distribution_box.add_theme_constant_override("separation", 2)
@@ -674,6 +730,57 @@ func _make_stage_editor_distribution_spin(type_value: int) -> Control:
 	return box
 
 
+func _make_stage_editor_drop_start_spin(column_index: int) -> Control:
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(48, 0)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 1)
+
+	var label := Label.new()
+	label.text = "C%d" % (column_index + 1)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 9)
+	label.add_theme_color_override("font_color", Color(0.72, 0.86, 1.0, 1.0))
+	box.add_child(label)
+
+	var stepper := HBoxContainer.new()
+	stepper.add_theme_constant_override("separation", 1)
+	stepper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(stepper)
+
+	var minus_button := Button.new()
+	minus_button.text = "-"
+	minus_button.focus_mode = Control.FOCUS_NONE
+	minus_button.custom_minimum_size = Vector2(14, 22)
+	minus_button.add_theme_font_size_override("font_size", 10)
+	minus_button.tooltip_text = "Move drop start up."
+	minus_button.pressed.connect(_on_stage_editor_drop_start_step.bind(column_index, -1))
+	stepper.add_child(minus_button)
+
+	var value_edit := LineEdit.new()
+	value_edit.text = str(_stage_editor_get_drop_start_value(column_index))
+	value_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value_edit.custom_minimum_size = Vector2(20, 22)
+	value_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	value_edit.add_theme_font_size_override("font_size", 12)
+	value_edit.tooltip_text = "Gem drop start row for this column."
+	value_edit.text_submitted.connect(_on_stage_editor_drop_start_text_submitted.bind(column_index))
+	value_edit.focus_exited.connect(_on_stage_editor_drop_start_focus_exited.bind(column_index))
+	stepper.add_child(value_edit)
+
+	var plus_button := Button.new()
+	plus_button.text = "+"
+	plus_button.focus_mode = Control.FOCUS_NONE
+	plus_button.custom_minimum_size = Vector2(14, 22)
+	plus_button.add_theme_font_size_override("font_size", 10)
+	plus_button.tooltip_text = "Move drop start down."
+	plus_button.pressed.connect(_on_stage_editor_drop_start_step.bind(column_index, 1))
+	stepper.add_child(plus_button)
+
+	_stage_editor_drop_start_spins[column_index] = value_edit
+	return box
+
+
 func _build_stage_editor_action_panel() -> void:
 	if _stage_editor_action_panel != null:
 		return
@@ -685,9 +792,9 @@ func _build_stage_editor_action_panel() -> void:
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 5)
-	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_top", 1)
 	margin.add_theme_constant_override("margin_right", 5)
-	margin.add_theme_constant_override("margin_bottom", 4)
+	margin.add_theme_constant_override("margin_bottom", 1)
 	_stage_editor_action_panel.add_child(margin)
 
 	var row := HBoxContainer.new()
@@ -2289,7 +2396,13 @@ func _make_stage_editor_value_button(value: int, label_text: String) -> Button:
 	button.custom_minimum_size = Vector2(58, 58)
 	button.tooltip_text = label_text
 	button.add_theme_font_size_override("font_size", 13)
-	if Block.GEM_TEXTURES.has(value):
+	if value == StageData.CELL_HOLE:
+		button.text = "X"
+		button.add_theme_color_override("font_color", Color(0.78, 0.86, 1.0, 1.0))
+	elif value == StageData.CELL_WATER_SWORD:
+		button.icon = load(UPPER_GEM_ICON_PATHS[Block.UpperType.WATER_SLASH]) as Texture2D
+		button.expand_icon = true
+	elif Block.GEM_TEXTURES.has(value):
 		var icon_texture: Texture2D = Block.GEM_TEXTURES[value]
 		button.icon = icon_texture
 		button.expand_icon = true
@@ -2304,7 +2417,7 @@ func _make_stage_editor_command_button(label_text: String, callback: Callable) -
 	var button := Button.new()
 	button.text = label_text
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(74, 34)
+	button.custom_minimum_size = Vector2(74, 26)
 	button.add_theme_font_size_override("font_size", 12)
 	button.pressed.connect(callback)
 	return button
@@ -3320,6 +3433,10 @@ func _stage_editor_type_name(value: int) -> String:
 			return "Rock"
 		Block.Type.WOOD_STRUCTURE:
 			return "woodStructure"
+		StageData.CELL_WATER_SWORD:
+			return "Water Sword"
+		StageData.CELL_HOLE:
+			return "Hole"
 		_:
 			return "Gem"
 
@@ -3368,10 +3485,26 @@ func _refresh_stage_editor_area_panel() -> void:
 		var spot_path: String = StageData.get_stage_spot_path(_stage_editor_selected_area)
 		_stage_editor_area_spot_preview.texture = load(spot_path) as Texture2D
 		_stage_editor_area_spot_preview.tooltip_text = spot_path
+	if _stage_editor_bg_override_option != null:
+		var selected_override: String = current_stage.battle_background_override_path if current_stage != null else ""
+		_stage_editor_populate_dialog_background_selector(_stage_editor_bg_override_option, selected_override, "NULL")
+	if _stage_editor_stretch_bg_check != null:
+		_stage_editor_stretch_bg_check.set_pressed_no_signal(current_stage != null and current_stage.stretch_battle_background)
 	if current_stage != null:
 		for key in _stage_editor_distribution_spins.keys():
 			var spin: SpinBox = _stage_editor_distribution_spins[key]
 			spin.set_value_no_signal(current_stage.get_element_weight_for_type(int(key)))
+		for key in _stage_editor_drop_start_spins.keys():
+			var drop_edit: LineEdit = _stage_editor_drop_start_spins[key]
+			drop_edit.text = str(_stage_editor_get_drop_start_value(int(key)))
+
+
+func _stage_editor_get_drop_start_value(column_index: int) -> int:
+	if current_stage == null or column_index < 0 or column_index >= current_stage.columns:
+		return 0
+	if column_index >= current_stage.drop_start_rows.size():
+		return 0
+	return clampi(int(current_stage.drop_start_rows[column_index]), 0, current_stage.rows - 1)
 
 
 func _on_stage_editor_distribution_changed(_value: float, _type_value: int) -> void:
@@ -3381,6 +3514,50 @@ func _on_stage_editor_distribution_changed(_value: float, _type_value: int) -> v
 	current_stage.allowed_types = distribution_types
 	current_stage.element_weights = _stage_editor_get_element_weights_snapshot(distribution_types)
 	_set_stage_editor_status("Distribution updated")
+
+
+func _on_stage_editor_drop_start_changed(_value: float, _column_index: int) -> void:
+	if current_stage != null:
+		current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
+	if board != null:
+		board.queue_redraw()
+	_set_stage_editor_status("Drop start updated")
+
+
+func _on_stage_editor_drop_start_step(column_index: int, delta: int) -> void:
+	_stage_editor_set_drop_start_value(column_index, _stage_editor_get_drop_start_value_from_ui(column_index) + delta)
+
+
+func _on_stage_editor_drop_start_text_submitted(_text: String, column_index: int) -> void:
+	_stage_editor_set_drop_start_value(column_index, _stage_editor_get_drop_start_value_from_ui(column_index))
+
+
+func _on_stage_editor_drop_start_focus_exited(column_index: int) -> void:
+	_stage_editor_set_drop_start_value(column_index, _stage_editor_get_drop_start_value_from_ui(column_index))
+
+
+func _stage_editor_set_drop_start_value(column_index: int, value: int) -> void:
+	if current_stage == null:
+		return
+	var clamped_value: int = clampi(value, 0, maxi(0, current_stage.rows - 1))
+	if _stage_editor_drop_start_spins.has(column_index):
+		var drop_edit: LineEdit = _stage_editor_drop_start_spins[column_index]
+		drop_edit.text = str(clamped_value)
+	current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
+	if board != null:
+		board.queue_redraw()
+	_set_stage_editor_status("Drop start updated")
+
+
+func _on_stage_editor_reset_drop_pressed() -> void:
+	for key in _stage_editor_drop_start_spins.keys():
+		var drop_edit: LineEdit = _stage_editor_drop_start_spins[key]
+		drop_edit.text = "0"
+	if current_stage != null:
+		current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
+	if board != null:
+		board.queue_redraw()
+	_set_stage_editor_status("Drop starts reset")
 
 
 func _on_stage_editor_area_selected(item_index: int) -> void:
@@ -3398,6 +3575,26 @@ func _on_stage_editor_area_selected(item_index: int) -> void:
 	_set_stage_editor_status("Area: %s" % _stage_editor_selected_area)
 
 
+func _on_stage_editor_bg_override_selected(_item_index: int) -> void:
+	if _stage_editor_bg_override_option == null:
+		return
+	var selected_path: String = _stage_editor_get_option_value(_stage_editor_bg_override_option)
+	if current_stage != null:
+		current_stage.battle_background_override_path = selected_path
+	_apply_stage_background()
+	_layout_board()
+	_set_stage_editor_status("BG Override: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
+
+
+func _on_stage_editor_stretch_bg_toggled(button_pressed: bool) -> void:
+	if current_stage != null:
+		current_stage.stretch_battle_background = button_pressed
+	_layout_board()
+	_layout_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+	_set_stage_editor_status("Full BG: %s" % ("On" if button_pressed else "Off"))
+
+
 func _on_stage_editor_clear_pressed() -> void:
 	board.clear_fixed_layout()
 	_set_stage_editor_status("Cleared")
@@ -3413,9 +3610,14 @@ func _on_stage_editor_save_pressed() -> void:
 		return
 	var distribution_types: Array[Block.Type] = _stage_editor_get_distribution_allowed_types_snapshot()
 	current_stage.area = StageData.normalize_area(_stage_editor_selected_area)
+	if _stage_editor_bg_override_option != null:
+		current_stage.battle_background_override_path = _stage_editor_get_option_value(_stage_editor_bg_override_option)
+	if _stage_editor_stretch_bg_check != null:
+		current_stage.stretch_battle_background = _stage_editor_stretch_bg_check.button_pressed
 	current_stage.allowed_types = distribution_types
 	current_stage.element_weights = _stage_editor_get_element_weights_snapshot(distribution_types)
 	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
+	current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
 	current_stage.rounds = _stage_editor_get_rounds_snapshot()
 	current_stage.rounds_init_cd = _stage_editor_get_round_cds_snapshot()
 	current_stage.rounds_enemy_levels = _stage_editor_get_round_levels_snapshot()
@@ -3431,6 +3633,13 @@ func _on_stage_editor_save_pressed() -> void:
 func _stage_editor_validate_rounds_for_save() -> String:
 	if current_stage == null:
 		return "Save failed: no stage"
+	var layout_snapshot: Array = board.get_fixed_layout_snapshot()
+	for column_index in current_stage.columns:
+		var drop_row: int = _stage_editor_get_drop_start_value_from_ui(column_index)
+		if column_index < layout_snapshot.size() and layout_snapshot[column_index] is Array:
+			var col: Array = layout_snapshot[column_index]
+			if drop_row < col.size() and int(col[drop_row]) == StageData.CELL_HOLE:
+				return "Save failed: C%d drop start is a hole" % (column_index + 1)
 	if current_stage.mode == StageData.Mode.ESCAPE:
 		return ""
 	if _stage_editor_rounds.is_empty():
@@ -3495,6 +3704,25 @@ func _stage_editor_get_element_weights_snapshot(distribution_types: Array[Block.
 			weight = current_stage.get_element_weight_for_type(normalized)
 		weights.append(weight)
 	return weights
+
+
+func _stage_editor_get_drop_start_value_from_ui(column_index: int) -> int:
+	if current_stage == null:
+		return 0
+	var max_row: int = maxi(0, current_stage.rows - 1)
+	if _stage_editor_drop_start_spins.has(column_index):
+		var drop_edit: LineEdit = _stage_editor_drop_start_spins[column_index]
+		return clampi(int(drop_edit.text.to_int()), 0, max_row)
+	return _stage_editor_get_drop_start_value(column_index)
+
+
+func _stage_editor_get_drop_start_rows_snapshot() -> Array[int]:
+	var snapshot: Array[int] = []
+	if current_stage == null:
+		return snapshot
+	for column_index in current_stage.columns:
+		snapshot.append(_stage_editor_get_drop_start_value_from_ui(column_index))
+	return snapshot
 
 
 func _stage_editor_get_round_cds_snapshot() -> Array[Array]:
@@ -3565,13 +3793,13 @@ func _layout_stage_editor_ui() -> void:
 		var available_area_width: float = viewport_size.x - left_margin - right_margin
 		var area_min_size: Vector2 = _stage_editor_area_panel.get_combined_minimum_size()
 		var area_width: float = minf(maxf(area_min_size.x, 260.0), maxf(160.0, available_area_width))
-		area_height = maxf(area_min_size.y, 66.0)
+		area_height = maxf(area_min_size.y, 54.0)
 		_stage_editor_set_control_rect(_stage_editor_area_panel, Rect2(left_margin, top_margin, area_width, area_height))
 
 	if _stage_editor_action_panel != null:
 		var action_min_size: Vector2 = _stage_editor_action_panel.get_combined_minimum_size()
 		var action_width: float = minf(maxf(action_min_size.x, 244.0), maxf(120.0, viewport_size.x - left_margin - right_margin))
-		action_height = maxf(action_min_size.y, 42.0)
+		action_height = maxf(action_min_size.y, 30.0)
 		var action_top: float = top_margin + area_height + vertical_gap
 		_stage_editor_set_control_rect(_stage_editor_action_panel, Rect2(left_margin, action_top, action_width, action_height))
 
@@ -3588,26 +3816,37 @@ func _layout_stage_editor_ui() -> void:
 	var board_rows: int = current_stage.rows if current_stage != null else 8
 	var board_width: float = float(board_columns) * 64.0 * board.scale.x
 	var board_height: float = float(board_rows) * 64.0 * board.scale.y
-	var panel_width: float = maxf(240.0, board_width)
-	var gap: float = 6.0
-	var palette_columns: int = maxi(1, STAGE_EDITOR_GEM_TYPES.size())
+	var panel_width: float = minf(maxf(240.0, board_width + 24.0), viewport_size.x - insets.w - insets.y - 16.0)
+	var gap: float = 4.0
 	var inner_width: float = maxf(64.0, panel_width - 16.0)
+	var target_button_size := 56.0
+	var palette_columns: int = clampi(
+		int(floor((inner_width + gap) / (target_button_size + gap))),
+		1,
+		STAGE_EDITOR_GEM_TYPES.size()
+	)
 	var button_size: float = floor((inner_width - gap * float(palette_columns - 1)) / float(palette_columns))
-	button_size = maxf(24.0, button_size)
+	button_size = clampf(button_size, 42.0, 64.0)
 	for button_variant in _stage_editor_value_buttons.values():
 		var button: Button = button_variant as Button
 		if button != null:
 			button.custom_minimum_size = Vector2(button_size, button_size)
 	if _stage_editor_palette_grid != null:
-		_stage_editor_palette_grid.custom_minimum_size = Vector2(inner_width, button_size)
-	var panel_height: float = button_size + 16.0
+		_stage_editor_palette_grid.columns = palette_columns
+		_stage_editor_palette_grid.custom_minimum_size = Vector2(inner_width, 0.0)
+	var palette_rows: int = ceili(float(STAGE_EDITOR_GEM_TYPES.size()) / float(palette_columns))
+	var visible_palette_rows: int = mini(2, palette_rows)
+	var palette_height: float = (float(visible_palette_rows) * button_size + float(maxi(0, visible_palette_rows - 1)) * 6.0 + 8.0) * 2.2
+	if _stage_editor_palette_scroll != null:
+		_stage_editor_palette_scroll.custom_minimum_size = Vector2(inner_width, palette_height)
+	var panel_height: float = palette_height + 48.0
 	var preferred_top: float = board.position.y + board_height + 12.0
 	var max_top: float = minf(viewport_size.y - panel_height - insets.z - 8.0, tab_top - panel_height - 8.0)
 	var min_top: float = 8.0 + insets.x
 	if max_top < min_top:
 		max_top = min_top
 	var panel_top: float = clampf(preferred_top, min_top, max_top)
-	var panel_left: float = board.position.x
+	var panel_left: float = clampf(board.position.x - maxf(0.0, panel_width - board_width) * 0.5, insets.w + 8.0, viewport_size.x - insets.y - panel_width - 8.0)
 	_stage_editor_set_control_rect(_stage_editor_panel, Rect2(panel_left, panel_top, panel_width, panel_height))
 
 
