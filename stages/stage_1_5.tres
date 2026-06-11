@@ -67,6 +67,7 @@ stage_name = "Stage 1-5 (Dark Test)"
 element_weights = Array[int]([25, 25])
 allowed_types = Array[int]([0, 2])
 area = "aurora"
+battle_music_override_path = "res://assets/music/Puzzles.mp3"
 rounds = Array[Array]([[ExtResource("2_rxw68"), ExtResource("2_rxw68"), ExtResource("2_rxw68")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
 rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0, 0], [0]])
 rounds_enemy_levels = Array[Array]([[1, 1, 1], [7, 7, 7], [8]])

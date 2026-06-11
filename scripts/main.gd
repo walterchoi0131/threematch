@@ -234,6 +234,7 @@ var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_bg_override_option: OptionButton = null
+var _stage_editor_music_override_option: OptionButton = null
 var _stage_editor_stretch_bg_check: CheckButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
 var _stage_editor_distribution_spins: Dictionary = {}
@@ -662,9 +663,13 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_bg_override_option.item_selected.connect(_on_stage_editor_bg_override_selected)
 	selector_box.add_child(_stage_editor_bg_override_option)
 
-	var spot_box := HBoxContainer.new()
-	spot_box.add_theme_constant_override("separation", 2)
+	var spot_box := VBoxContainer.new()
+	spot_box.add_theme_constant_override("separation", 1)
 	row.add_child(spot_box)
+
+	var spot_top_row := HBoxContainer.new()
+	spot_top_row.add_theme_constant_override("separation", 2)
+	spot_box.add_child(spot_top_row)
 
 	_stage_editor_area_spot_preview = TextureRect.new()
 	_stage_editor_area_spot_preview.name = "SpotPreview"
@@ -673,7 +678,7 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_spot_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_stage_editor_area_spot_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage_editor_area_spot_preview.tooltip_text = "Spot"
-	spot_box.add_child(_stage_editor_area_spot_preview)
+	spot_top_row.add_child(_stage_editor_area_spot_preview)
 
 	_stage_editor_stretch_bg_check = CheckButton.new()
 	_stage_editor_stretch_bg_check.text = "Full BG"
@@ -682,7 +687,26 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_stretch_bg_check.add_theme_font_size_override("font_size", 8)
 	_stage_editor_stretch_bg_check.tooltip_text = "Stretch battle background to the full screen."
 	_stage_editor_stretch_bg_check.toggled.connect(_on_stage_editor_stretch_bg_toggled)
-	spot_box.add_child(_stage_editor_stretch_bg_check)
+	spot_top_row.add_child(_stage_editor_stretch_bg_check)
+
+	var music_box := VBoxContainer.new()
+	music_box.add_theme_constant_override("separation", 1)
+	music_box.custom_minimum_size = Vector2(96, 0)
+	spot_box.add_child(music_box)
+
+	var music_override_label := Label.new()
+	music_override_label.text = "Music Override"
+	music_override_label.add_theme_font_size_override("font_size", 8)
+	music_override_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	music_box.add_child(music_override_label)
+
+	_stage_editor_music_override_option = OptionButton.new()
+	_stage_editor_music_override_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_music_override_option.custom_minimum_size = Vector2(96, 22)
+	_stage_editor_music_override_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_make_compact_option_button(_stage_editor_music_override_option)
+	_stage_editor_music_override_option.item_selected.connect(_on_stage_editor_music_override_selected)
+	music_box.add_child(_stage_editor_music_override_option)
 
 	var distribution_box := VBoxContainer.new()
 	distribution_box.add_theme_constant_override("separation", 2)
@@ -3488,6 +3512,9 @@ func _refresh_stage_editor_area_panel() -> void:
 	if _stage_editor_bg_override_option != null:
 		var selected_override: String = current_stage.battle_background_override_path if current_stage != null else ""
 		_stage_editor_populate_dialog_background_selector(_stage_editor_bg_override_option, selected_override, "NULL")
+	if _stage_editor_music_override_option != null:
+		var selected_music_override: String = current_stage.battle_music_override_path if current_stage != null else ""
+		_stage_editor_populate_dialog_music_selector(_stage_editor_music_override_option, selected_music_override, "NULL", false)
 	if _stage_editor_stretch_bg_check != null:
 		_stage_editor_stretch_bg_check.set_pressed_no_signal(current_stage != null and current_stage.stretch_battle_background)
 	if current_stage != null:
@@ -3586,6 +3613,17 @@ func _on_stage_editor_bg_override_selected(_item_index: int) -> void:
 	_set_stage_editor_status("BG Override: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
 
 
+func _on_stage_editor_music_override_selected(_item_index: int) -> void:
+	if _stage_editor_music_override_option == null:
+		return
+	var selected_path: String = _stage_editor_get_option_value(_stage_editor_music_override_option)
+	if current_stage != null:
+		current_stage.battle_music_override_path = selected_path
+	GameState.fade_out_bgm(0.15)
+	_play_bgm()
+	_set_stage_editor_status("Music Override: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
+
+
 func _on_stage_editor_stretch_bg_toggled(button_pressed: bool) -> void:
 	if current_stage != null:
 		current_stage.stretch_battle_background = button_pressed
@@ -3612,6 +3650,8 @@ func _on_stage_editor_save_pressed() -> void:
 	current_stage.area = StageData.normalize_area(_stage_editor_selected_area)
 	if _stage_editor_bg_override_option != null:
 		current_stage.battle_background_override_path = _stage_editor_get_option_value(_stage_editor_bg_override_option)
+	if _stage_editor_music_override_option != null:
+		current_stage.battle_music_override_path = _stage_editor_get_option_value(_stage_editor_music_override_option)
 	if _stage_editor_stretch_bg_check != null:
 		current_stage.stretch_battle_background = _stage_editor_stretch_bg_check.button_pressed
 	current_stage.allowed_types = distribution_types
@@ -4124,11 +4164,18 @@ func _play_chain_sfx(chain_count: int) -> void:
 func _play_bgm() -> void:
 	if _should_skip_default_battle_bgm_for_initial_boss():
 		return
-	if current_stage.bgm != null:
+	var override_path: String = current_stage.battle_music_override_path.strip_edges() if current_stage != null else ""
+	var stage_bgm: AudioStream = null
+	var stage_id: String = ""
+	if not override_path.is_empty() and ResourceLoader.exists(override_path):
+		stage_bgm = load(override_path) as AudioStream
+		stage_id = "stage_override:" + override_path
+	elif current_stage.bgm != null:
+		stage_bgm = current_stage.bgm
+		stage_id = "stage:" + current_stage.stage_name
+	if stage_bgm != null:
 		# 進場後延遲 1 秒再啟動，且戰鬥 BGM 循環之間插入 1 秒延遲
 		# 戰鬥 BGM 直接以全音量播放（不淡入），循環之間維持 1 秒間隔
-		var stage_bgm: AudioStream = current_stage.bgm
-		var stage_id: String = "stage:" + current_stage.stage_name
 		get_tree().create_timer(1.0).timeout.connect(func() -> void:
 			GameState.crossfade_bgm(stage_bgm, true, 0.0, stage_id, 1.0)
 			_bgm_player = GameState.bgm_player

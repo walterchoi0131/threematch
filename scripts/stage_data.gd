@@ -196,6 +196,7 @@ func _default_element_distribution() -> Dictionary:
 @export var rows: int = 8        # 棋盤行數
 @export_enum("aurora", "church", "dessert", "dungeon", "forest", "heaven", "iceberg", "meadow", "ruin", "school", "swamp", "underwater", "volcano") var area: String = DEFAULT_AREA  # 關卡地區 key
 @export var battle_background_override_path: String = ""
+@export var battle_music_override_path: String = ""
 @export var stretch_battle_background: bool = false
 
 ## 每一波是一個 EnemyData 陣列。
