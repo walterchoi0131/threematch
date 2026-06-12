@@ -24,7 +24,7 @@ rectangular_offset = Vector2(-56, 235)
 active_skill_name = "Resurgence+"
 active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/融合時計為 5 顆）。CD：6 回合。"
 active_skill_cd = 6
-active_unlock_stage_id = "1-6"
+active_unlock_stage_id = "1-8"
 responding_skills = Array[Dictionary]([{
 "desc": "create a Bamboo Supply gem at tapped cell. Blasts surrounding 8 cells and heals Pan for magic × 4.8 HP.",
 "fuse_label": "6",

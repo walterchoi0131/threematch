@@ -59,7 +59,7 @@ var _puzzle_goal_number_label: Label = null
 var _puzzle_goal_target_label: Label = null
 var _puzzle_goal_tween: Tween = null
 
-# ── Stage 1-4 急難奇蹟事件 ─────────────────────────────────
+# ── Stage 1-6 急難奇蹟事件 ─────────────────────────────────
 var _plank_event_pending: bool = false
 var _plank_event_done: bool = false
 var _plank_event_deferred_check_running: bool = false
@@ -68,6 +68,8 @@ const ESCAPE_SCROLL_RESET_ROW := 1
 const _PLANK_EVENT_DISTANCE := 200
 const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
 const _Stage1_3Owen := preload("res://dialogs/stage1_3_owen.gd")
+const OWEN_STORY_STAGE_ID := "1-5"
+const ESCAPE_PLANK_STAGE_ID := "1-6"
 
 ## 主動技能完整執行完成信號（供外部事件 await 完成狀態使用）
 signal active_skill_finished(char_index: int)
@@ -262,6 +264,9 @@ var _stage_editor_stretch_bg_check: CheckButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
 var _stage_editor_distribution_spins: Dictionary = {}
 var _stage_editor_drop_start_spins: Dictionary = {}
+var _stage_editor_reward_item_option: OptionButton = null
+var _stage_editor_reward_amount_edit: LineEdit = null
+var _stage_editor_reward_character_option: OptionButton = null
 var _stage_editor_dialog_target: String = ""
 var _stage_editor_dialog_title_label: Label = null
 var _stage_editor_dialog_line_list: VBoxContainer = null
@@ -310,7 +315,7 @@ var _stage_editor_available_enemies: Array[Dictionary] = []
 
 
 func _is_stage13_story_battle() -> bool:
-	return current_stage != null and current_stage.stage_id == "1-3"
+	return current_stage != null and current_stage.stage_id == OWEN_STORY_STAGE_ID
 
 
 # ── 生命週期 ───────────────────────────────────────────────────
@@ -618,6 +623,8 @@ func _build_stage_editor_ui() -> void:
 	for column_index in editor_columns:
 		drop_row.add_child(_make_stage_editor_drop_start_spin(column_index))
 
+	root_box.add_child(_make_stage_editor_reward_row())
+
 	_refresh_stage_editor_value_buttons()
 	_refresh_stage_editor_area_panel()
 	_layout_stage_editor_ui()
@@ -830,6 +837,49 @@ func _make_stage_editor_drop_start_spin(column_index: int) -> Control:
 
 	_stage_editor_drop_start_spins[column_index] = value_edit
 	return box
+
+
+func _make_stage_editor_reward_row() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var reward_label := Label.new()
+	reward_label.text = "Reward"
+	reward_label.custom_minimum_size = Vector2(50, 22)
+	reward_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	reward_label.add_theme_font_size_override("font_size", 10)
+	reward_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	row.add_child(reward_label)
+
+	_stage_editor_reward_item_option = OptionButton.new()
+	_stage_editor_reward_item_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_reward_item_option.custom_minimum_size = Vector2(92, 24)
+	_stage_editor_reward_item_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_make_compact_option_button(_stage_editor_reward_item_option)
+	_stage_editor_reward_item_option.item_selected.connect(_on_stage_editor_reward_changed)
+	row.add_child(_stage_editor_reward_item_option)
+
+	_stage_editor_reward_amount_edit = LineEdit.new()
+	_stage_editor_reward_amount_edit.custom_minimum_size = Vector2(48, 24)
+	_stage_editor_reward_amount_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_editor_reward_amount_edit.add_theme_font_size_override("font_size", 11)
+	_stage_editor_reward_amount_edit.tooltip_text = "One-time reward item amount."
+	_stage_editor_reward_amount_edit.text_submitted.connect(func(_text: String) -> void: _on_stage_editor_reward_changed(0))
+	_stage_editor_reward_amount_edit.focus_exited.connect(func() -> void: _on_stage_editor_reward_changed(0))
+	row.add_child(_stage_editor_reward_amount_edit)
+
+	_stage_editor_reward_character_option = OptionButton.new()
+	_stage_editor_reward_character_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_reward_character_option.custom_minimum_size = Vector2(150, 24)
+	_stage_editor_reward_character_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_reward_character_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_make_compact_option_button(_stage_editor_reward_character_option)
+	_stage_editor_reward_character_option.item_selected.connect(_on_stage_editor_reward_changed)
+	row.add_child(_stage_editor_reward_character_option)
+
+	_refresh_stage_editor_reward_controls()
+	return row
 
 
 func _build_stage_editor_action_panel() -> void:
@@ -3729,6 +3779,7 @@ func _refresh_stage_editor_area_panel() -> void:
 		for key in _stage_editor_drop_start_spins.keys():
 			var drop_edit: LineEdit = _stage_editor_drop_start_spins[key]
 			drop_edit.text = str(_stage_editor_get_drop_start_value(int(key)))
+	_refresh_stage_editor_reward_controls()
 
 
 func _stage_editor_get_drop_start_value(column_index: int) -> int:
@@ -3737,6 +3788,74 @@ func _stage_editor_get_drop_start_value(column_index: int) -> int:
 	if column_index >= current_stage.drop_start_rows.size():
 		return 0
 	return clampi(int(current_stage.drop_start_rows[column_index]), 0, current_stage.rows - 1)
+
+
+func _refresh_stage_editor_reward_controls() -> void:
+	if _stage_editor_reward_item_option != null:
+		_stage_editor_reward_item_option.clear()
+		_stage_editor_add_option_item(_stage_editor_reward_item_option, "None", "")
+		_stage_editor_add_option_item(_stage_editor_reward_item_option, ItemDefs.get_display_name(ItemDefs.Type.GOLD), str(int(ItemDefs.Type.GOLD)))
+		_stage_editor_add_option_item(_stage_editor_reward_item_option, ItemDefs.get_display_name(ItemDefs.Type.SAPPHIRE), str(int(ItemDefs.Type.SAPPHIRE)))
+		var selected_item: String = ""
+		if current_stage != null and current_stage.one_time_reward_item_amount > 0:
+			selected_item = str(int(current_stage.one_time_reward_item_type))
+		_stage_editor_select_option_value(_stage_editor_reward_item_option, selected_item)
+
+	if _stage_editor_reward_amount_edit != null:
+		var amount: int = current_stage.one_time_reward_item_amount if current_stage != null else 0
+		_stage_editor_reward_amount_edit.text = str(maxi(0, amount))
+
+	if _stage_editor_reward_character_option != null:
+		_stage_editor_reward_character_option.clear()
+		_stage_editor_add_option_item(_stage_editor_reward_character_option, "No Character", "")
+		for entry: Dictionary in _stage_editor_character_catalog:
+			_stage_editor_add_option_item(
+				_stage_editor_reward_character_option,
+				String(entry.get("name", "Character")),
+				String(entry.get("resource_path", ""))
+			)
+		var selected_character: String = ""
+		if current_stage != null and current_stage.one_time_reward_character != null:
+			selected_character = current_stage.one_time_reward_character.resource_path
+		_stage_editor_select_option_value(_stage_editor_reward_character_option, selected_character)
+
+
+func _on_stage_editor_reward_changed(_item_index: int) -> void:
+	if current_stage == null:
+		return
+	current_stage.one_time_reward_item_type = _stage_editor_get_reward_item_type_from_ui()
+	current_stage.one_time_reward_item_amount = _stage_editor_get_reward_amount_from_ui()
+	current_stage.one_time_reward_character = _stage_editor_get_reward_character_from_ui()
+	if _stage_editor_reward_amount_edit != null:
+		_stage_editor_reward_amount_edit.text = str(current_stage.one_time_reward_item_amount)
+	_set_stage_editor_status("Reward updated")
+
+
+func _stage_editor_get_reward_item_type_from_ui() -> ItemDefs.Type:
+	if _stage_editor_reward_item_option == null:
+		return ItemDefs.Type.GOLD
+	var value: String = _stage_editor_get_option_value(_stage_editor_reward_item_option)
+	if value.is_empty():
+		return ItemDefs.Type.GOLD
+	return int(value)
+
+
+func _stage_editor_get_reward_amount_from_ui() -> int:
+	if _stage_editor_reward_amount_edit == null:
+		return 0
+	if _stage_editor_reward_item_option != null and _stage_editor_get_option_value(_stage_editor_reward_item_option).is_empty():
+		return 0
+	return maxi(0, int(_stage_editor_reward_amount_edit.text.to_int()))
+
+
+func _stage_editor_get_reward_character_from_ui() -> CharacterData:
+	if _stage_editor_reward_character_option == null:
+		return null
+	var path: String = _stage_editor_get_option_value(_stage_editor_reward_character_option)
+	if path.is_empty():
+		return null
+	var resource: Resource = load(path)
+	return resource as CharacterData
 
 
 func _on_stage_editor_distribution_changed(_value: float, _type_value: int) -> void:
@@ -3926,6 +4045,9 @@ func _on_stage_editor_save_pressed() -> void:
 		current_stage.battle_music_override_path = _stage_editor_get_option_value(_stage_editor_music_override_option)
 	if _stage_editor_stretch_bg_check != null:
 		current_stage.stretch_battle_background = _stage_editor_stretch_bg_check.button_pressed
+	current_stage.one_time_reward_item_type = _stage_editor_get_reward_item_type_from_ui()
+	current_stage.one_time_reward_item_amount = _stage_editor_get_reward_amount_from_ui()
+	current_stage.one_time_reward_character = _stage_editor_get_reward_character_from_ui()
 	current_stage.allowed_types = distribution_types
 	current_stage.element_weights = _stage_editor_get_element_weights_snapshot(distribution_types)
 	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
@@ -4160,7 +4282,7 @@ func _layout_stage_editor_ui() -> void:
 	var palette_height: float = (float(visible_palette_rows) * button_size + float(maxi(0, visible_palette_rows - 1)) * 6.0 + 8.0) * 2.2
 	if _stage_editor_palette_scroll != null:
 		_stage_editor_palette_scroll.custom_minimum_size = Vector2(inner_width, palette_height)
-	var panel_height: float = palette_height + 48.0
+	var panel_height: float = palette_height + 78.0
 	var preferred_top: float = board.position.y + board_height + 12.0
 	var max_top: float = minf(viewport_size.y - panel_height - insets.z - 8.0, tab_top - panel_height - 8.0)
 	var min_top: float = 8.0 + insets.x
@@ -5108,7 +5230,7 @@ func _end_player_turn() -> void:
 		# 	board.brighten_all_gems(0.3)
 		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
 		board.is_busy = false
-		# Stage 1-4 急難事件：在玩家下一個回合開始前該發
+		# Stage 1-6 急難事件：在玩家下一個回合開始前該發
 		if _plank_event_pending and not _plank_event_done:
 			_plank_event_pending = false
 			_plank_event_done = true
@@ -7685,9 +7807,9 @@ func _on_escape_marker_moved(rows_dropped: int) -> void:
 	_escape_distance_traveled = mini(_escape_distance_traveled + gained, _escape_distance_target)
 	_escape_distance_remaining = maxi(_escape_distance_target - _escape_distance_traveled, 0)
 	_update_escape_distance_label(true)
-	# Stage 1-4 急難事件：走到 200m 後只觸發一次
+	# Stage 1-6 急難事件：走到 200m 後只觸發一次
 	var triggered_plank_event: bool = false
-	if current_stage != null and current_stage.stage_id == "1-4" \
+	if current_stage != null and current_stage.stage_id == ESCAPE_PLANK_STAGE_ID \
 			and not _plank_event_done and not _plank_event_pending \
 			and _escape_distance_traveled >= _PLANK_EVENT_DISTANCE \
 			and _escape_distance_remaining > 0:
@@ -7743,7 +7865,7 @@ func _check_escape_scroll_after_marker_move() -> void:
 		board.is_busy = false
 
 
-# ── Stage 1-4 急難奇蹟事件：龍焰登場 ─────────────────────────
+# ── Stage 1-6 急難奇蹟事件：龍焰登場 ─────────────────────────
 
 ## 找出隊伍中第一位指定名稱的角色 index（找不到回傳 -1）
 func _find_party_index_by_name(name: String) -> int:
@@ -8138,7 +8260,7 @@ func _is_stage13_owen(enemy: Enemy) -> bool:
 func _should_run_stage14_escape_intro() -> bool:
 	return not _stage14_escape_intro_done \
 		and current_stage != null \
-		and current_stage.stage_id == "1-4" \
+		and current_stage.stage_id == ESCAPE_PLANK_STAGE_ID \
 		and current_stage.mode == StageData.Mode.ESCAPE
 
 
@@ -8283,7 +8405,7 @@ func _show_stage14_escape_rules_canvas() -> void:
 		},
 		{
 			"title": "障礙方塊",
-			"info": "木板會阻擋路線，也會卡住寶石掉落。\n\n相鄰爆破或特定技能可以破壞木板。\nStage 1-4 中途會有大量木板落下，使用米洛的龍焰領域燒開道路。",
+			"info": "木板會阻擋路線，也會卡住寶石掉落。\n\n相鄰爆破或特定技能可以破壞木板。\nStage 1-6 中途會有大量木板落下，使用米洛的龍焰領域燒開道路。",
 		},
 	]
 	var page_state := {"index": 0}
@@ -8550,6 +8672,9 @@ func _complete_battle_won() -> void:
 		await _battle_dialog.all_lines_finished
 		_battle_dialog.visible = false
 
+	GameState.last_battle_reward_characters.clear()
+	_apply_stage_one_time_rewards()
+
 	# 將本場戰利品存入 GameState
 	for type: ItemDefs.Type in _battle_loot:
 		GameState.add_loot(type, _battle_loot[type])
@@ -8567,6 +8692,30 @@ func _complete_battle_won() -> void:
 	GameState.last_battle_exp = _battle_exp
 
 	_show_victory_overlay()
+
+
+func _apply_stage_one_time_rewards() -> void:
+	if current_stage == null:
+		return
+	var stage_id: String = current_stage.stage_id.strip_edges()
+	if stage_id.is_empty() or GameState.is_stage_reward_claimed(stage_id):
+		return
+	var has_item_reward: bool = current_stage.one_time_reward_item_amount > 0
+	var has_character_reward: bool = current_stage.one_time_reward_character != null
+	if not has_item_reward and not has_character_reward:
+		return
+
+	if has_item_reward:
+		var reward_type: ItemDefs.Type = current_stage.one_time_reward_item_type
+		var current_amount: int = int(_battle_loot.get(reward_type, 0))
+		_battle_loot[reward_type] = current_amount + current_stage.one_time_reward_item_amount
+
+	if has_character_reward:
+		var reward_character: CharacterData = current_stage.one_time_reward_character
+		if GameState.grant_character(reward_character, true):
+			GameState.last_battle_reward_characters.append(reward_character)
+
+	GameState.mark_stage_reward_claimed(stage_id, false)
 
 
 ## 顯示勝利覆蓋層（5 秒後或點擊後跳轉結算場景）

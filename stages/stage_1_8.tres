@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="2_uwcxs"]
+
+[resource]
+script = ExtResource("1_script")
+stage_id = "1-8"
+prerequisite_stage_id = "1-7"
+stage_name = "Stage 1-8"
+element_weights = Array[int]([25])
+allowed_types = Array[int]([2])
+battle_music_override_path = "res://assets/music/Puzzles.mp3"
+mode = 2
+puzzle_goal_target_type = 8
+puzzle_goal_required_count = 48
+fixed_layout = [[-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1], [-1, 8, 8, 8, 8, 8, 8, -1]]
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

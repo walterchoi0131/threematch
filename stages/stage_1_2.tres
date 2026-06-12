@@ -1,148 +1,20 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://b3hm5l4s0mqh4"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="AudioStream" uid="uid://cbn55o3jnga0q" path="res://assets/music/PondryHilllBattle.mp3" id="1_lvgyu"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="2_s56y8"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="3_21e67"]
-[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
-[ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
-[ext_resource type="Resource" uid="uid://b36ybo223i810" path="res://enemies/bone_wizard.tres" id="5_8ceh8"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_8hubh"]
-
-[sub_resource type="Resource" id="Resource_s56y8"]
-script = ExtResource("2_s56y8")
-character_id = "boar"
-text_zh = "123"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_sqaa3"]
-script = ExtResource("2_s56y8")
-character_id = "boar"
-action = "exit"
-shake = false
-
-[sub_resource type="Resource" id="Resource_21e67"]
-script = ExtResource("3_21e67")
-lines = Array[ExtResource("2_s56y8")]([SubResource("Resource_s56y8"), SubResource("Resource_sqaa3")])
-cast = Array[String](["boar"])
-
-[sub_resource type="Resource" id="Resource_m1ng8"]
-script = ExtResource("2_s56y8")
-character_id = "husky"
-text_zh = "hi1"
-
-[sub_resource type="Resource" id="Resource_2sd5u"]
-script = ExtResource("2_s56y8")
-character_id = "husky"
-action = "exit"
-shake = false
-
-[sub_resource type="Resource" id="Resource_o30ma"]
-script = ExtResource("2_s56y8")
-character_id = "panda"
-text_zh = "yo1"
-
-[sub_resource type="Resource" id="Resource_06egh"]
-script = ExtResource("2_s56y8")
-character_id = "raccoon"
-text_zh = "yo2"
-
-[sub_resource type="Resource" id="Resource_41gpv"]
-script = ExtResource("2_s56y8")
-character_id = "husky"
-text_zh = "yi1"
-
-[sub_resource type="Resource" id="Resource_5rlrb"]
-script = ExtResource("2_s56y8")
-character_id = "boar"
-
-[sub_resource type="Resource" id="Resource_no18u"]
-script = ExtResource("3_21e67")
-lines = Array[ExtResource("2_s56y8")]([SubResource("Resource_m1ng8"), SubResource("Resource_2sd5u"), SubResource("Resource_o30ma"), SubResource("Resource_06egh"), SubResource("Resource_41gpv"), SubResource("Resource_5rlrb")])
-cast = Array[String](["boar", "panda", "raccoon", "husky", "dragon"])
-
-[sub_resource type="Resource" id="gold_loot_shared"]
-script = ExtResource("5_loot")
-amount_min = 15
-amount_max = 28
-
-[sub_resource type="Resource" id="slime_a1"]
-script = ExtResource("2_enemy")
-enemy_level = 4
-max_hp = 1100
-attack_damage = 16
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_a2"]
-script = ExtResource("2_enemy")
-enemy_level = 4
-max_hp = 1100
-attack_damage = 16
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_b1"]
-script = ExtResource("2_enemy")
-enemy_level = 4
-max_hp = 1300
-attack_damage = 18
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_b2"]
-script = ExtResource("2_enemy")
-enemy_level = 4
-max_hp = 1300
-attack_damage = 18
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="slime_b3"]
-script = ExtResource("2_enemy")
-enemy_level = 4
-max_hp = 1300
-attack_damage = 18
-attack_interval = 2
-portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
-
-[sub_resource type="Resource" id="sapphire_loot"]
-script = ExtResource("5_loot")
-item_type = 1
-drop_chance = 0.85
-
-[sub_resource type="Resource" id="slime_boss"]
-script = ExtResource("2_enemy")
-enemy_name = "Greater Slime"
-enemy_level = 5
-max_hp = 5200
-attack_damage = 42
-attack_interval = 1
-portrait_color = Color(0.25, 0.47, 0.85, 1)
-portrait_texture = ExtResource("4_blueslime")
-element = 1
-is_main_boss = true
-loot_table = Array[ExtResource("5_loot")]([SubResource("sapphire_loot")])
+[ext_resource type="Resource" path="res://enemies/slime.tres" id="1_0e11v"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="3_t8um1"]
 
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-2"
 prerequisite_stage_id = "1-1"
+connects_to = Array[String](["1-3"])
 stage_name = "Stage 1-2"
-allowed_types = Array[int]([0, 1, 2, 6])
-area = "underwater"
-rounds = Array[Array]([[SubResource("slime_a1"), SubResource("slime_a2"), ExtResource("5_8ceh8")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])
-rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0, 0], [0]])
-rounds_enemy_levels = Array[Array]([[4, 4, 7], [4, 4, 4], [5]])
-background = 1
-bgm = ExtResource("1_lvgyu")
-pre_dialog = SubResource("Resource_no18u")
-post_dialog = SubResource("Resource_21e67")
-fixed_layout = [[-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1], [-1, -1, 10, -1, -1, -1, -1, -1]]
+element_weights = Array[int]([1, 1, 1])
+area = "meadow"
+rounds = Array[Array]([[ExtResource("1_0e11v")]])
+rounds_init_cd = Array[Array]([[0]])
+rounds_enemy_levels = Array[Array]([[1]])
+rounds_main_bosses = Array[Array]([[false]])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

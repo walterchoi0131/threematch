@@ -160,21 +160,21 @@ func get_element_weights_for_allowed_types() -> Array[int]:
 
 func _default_element_distribution() -> Dictionary:
 	match stage_id:
-		"1-3":
+		"1-5":
 			return {
 				Block.Type.RED: 32,
 				Block.Type.BLUE: 32,
 				Block.Type.GREEN: 31,
 				Block.Type.LIGHT: 5,
 			}
-		"1-4":
+		"1-6":
 			return {
 				Block.Type.RED: 60,
 				Block.Type.BLUE: 10,
 				Block.Type.GREEN: 10,
 				Block.Type.LIGHT: 20,
 			}
-		"1-5":
+		"1-7":
 			return {
 				Block.Type.RED: 25,
 				Block.Type.BLUE: 25,
@@ -205,6 +205,9 @@ func _default_element_distribution() -> Dictionary:
 @export var battle_background_override_path: String = ""
 @export var battle_music_override_path: String = ""
 @export var stretch_battle_background: bool = false
+@export var one_time_reward_item_type: ItemDefs.Type = ItemDefs.Type.GOLD
+@export var one_time_reward_item_amount: int = 0
+@export var one_time_reward_character: CharacterData = null
 
 ## 每一波是一個 EnemyData 陣列。
 ## rounds[0] = 第一波，rounds[1] = 第二波，以此類推。

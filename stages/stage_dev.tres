@@ -268,6 +268,7 @@ loot_table = Array[ExtResource("5_loot")]([SubResource("sapphire_loot")])
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-1"
+connects_to = Array[String](["1-2"])
 stage_name = "1-1 畢業測驗"
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "school"

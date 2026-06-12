@@ -25,7 +25,7 @@ rectangular_offset = Vector2(-82, 227)
 active_skill_name = "居合。水"
 active_skill_desc = "Blast all water gems on the board. The destroyed count is stored and added to the next water attack. CD: 5 turns."
 active_skill_cd = 5
-active_unlock_stage_id = "1-5"
+active_unlock_stage_id = "1-7"
 responding_skills = Array[Dictionary]([{
 "desc": "create a Water Slash gem at tapped cell. Click to chain across all Water Slashes on the board (lines between swords + final vertical column).",
 "fuse_label": "4",

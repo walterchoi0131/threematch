@@ -8,7 +8,14 @@ signal save_cleared
 
 const MAX_PARTY_SIZE := 4  # 隊伍最大人數
 const SAVE_PATH := "user://save.json"
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
+const _STAGE_ID_MIGRATION_V1_TO_V2 := {
+	"1-2": "1-4",
+	"1-3": "1-5",
+	"1-4": "1-6",
+	"1-5": "1-7",
+	"1-6": "1-8",
+}
 const DEFAULT_CHARACTER_LEVEL := 5
 const DEFAULT_CHARACTER_EXP := 0
 const DEFAULT_CHARACTER_PATHS := [
@@ -41,6 +48,7 @@ var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 var gold: int = 0                      # 玩家持有金幣
 var inventory: Dictionary = {}         # 玩家物品庫存，key = ItemDefs.Type，value = int
 var skill_upgrade_levels: Dictionary = {}  # key = SkillUpgradeUtils.get_skill_key(), value = int
+var claimed_stage_rewards: Dictionary = {}
 
 ## 已通關的關卡 id 集合（例如 "1-1"）。用於世界地圖解鎖。
 var cleared_stages: Dictionary = {}    # key = stage_id (String), value = true
@@ -78,10 +86,23 @@ func mark_stage_cleared(stage_id: String) -> void:
 func is_stage_cleared(stage_id: String) -> bool:
 	return stage_id != "" and cleared_stages.has(stage_id)
 
+
+func is_stage_reward_claimed(stage_id: String) -> bool:
+	return stage_id != "" and claimed_stage_rewards.has(stage_id)
+
+
+func mark_stage_reward_claimed(stage_id: String, auto_save: bool = true) -> void:
+	if stage_id == "":
+		return
+	claimed_stage_rewards[stage_id] = true
+	if auto_save:
+		save_game()
+
 # ── 戰鬥結算暫存（戰鬥勝利後寫入，結算場景讀取） ──
 var last_battle_loot: Dictionary = {}              # key=ItemDefs.Type, value=int
 var last_battle_party: Array[CharacterData] = []   # 出戰角色（結算用）
 var last_battle_exp: int = 0                       # 本場獲得的總經驗值
+var last_battle_reward_characters: Array[CharacterData] = []
 
 # ── 持久化 BGM 播放器（跨場景存活）──
 var bgm_player: AudioStreamPlayer = null
@@ -354,10 +375,10 @@ func load_game() -> bool:
 		return false
 	var d: Dictionary = parsed
 	var ver: int = int(d.get("version", 0))
-	if ver != SAVE_VERSION:
-		push_warning("GameState: save version %d is not supported (expect %d); ignoring" % [ver, SAVE_VERSION])
+	if ver < 1 or ver > SAVE_VERSION:
+		push_warning("GameState: save version %d is not supported (expect 1..%d); ignoring" % [ver, SAVE_VERSION])
 		return false
-	_deserialize(d)
+	_deserialize(d, ver)
 	return true
 
 
@@ -373,12 +394,14 @@ func clear_save() -> void:
 	cleared_stages.clear()
 	inventory.clear()
 	skill_upgrade_levels.clear()
+	claimed_stage_rewards.clear()
 	selected_party.clear()
 	detail_character = null
 	last_used_party_paths.clear()
 	last_battle_loot.clear()
 	last_battle_party.clear()
 	last_battle_exp = 0
+	last_battle_reward_characters.clear()
 	gold = 0
 	owned_characters.clear()
 	_ensure_starting_characters_if_empty()
@@ -395,6 +418,7 @@ func reset_owned_character_progress(auto_save: bool = true) -> void:
 
 func reset_map_progress(auto_save: bool = true) -> void:
 	cleared_stages.clear()
+	claimed_stage_rewards.clear()
 	last_used_party_paths.clear()
 	if auto_save:
 		save_game()
@@ -492,11 +516,12 @@ func _serialize() -> Dictionary:
 		"inventory": inv,
 		"skill_upgrade_levels": skill_upgrade_levels.duplicate(),
 		"cleared_stages": cleared_stages.keys(),
+		"claimed_stage_rewards": claimed_stage_rewards.keys(),
 		"last_used_party": Array(last_used_party_paths),
 	}
 
 
-func _deserialize(d: Dictionary) -> void:
+func _deserialize(d: Dictionary, save_version: int = SAVE_VERSION) -> void:
 	gold = int(d.get("gold", 0))
 
 	var loaded_chars: Array[CharacterData] = []
@@ -539,13 +564,23 @@ func _deserialize(d: Dictionary) -> void:
 
 	cleared_stages.clear()
 	for sid in d.get("cleared_stages", []):
-		cleared_stages[str(sid)] = true
+		cleared_stages[_migrate_stage_id(str(sid), save_version)] = true
+
+	claimed_stage_rewards.clear()
+	for sid in d.get("claimed_stage_rewards", []):
+		claimed_stage_rewards[_migrate_stage_id(str(sid), save_version)] = true
 
 	last_used_party_paths.clear()
 	for p in d.get("last_used_party", []):
 		var s := str(p)
 		if s != "":
 			last_used_party_paths.append(s)
+
+
+func _migrate_stage_id(stage_id: String, save_version: int) -> String:
+	if save_version <= 1 and _STAGE_ID_MIGRATION_V1_TO_V2.has(stage_id):
+		return String(_STAGE_ID_MIGRATION_V1_TO_V2[stage_id])
+	return stage_id
 
 
 ## 建構第一關固定棋盤佈局（8×8）

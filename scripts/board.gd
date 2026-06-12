@@ -285,8 +285,8 @@ func initialize_board() -> void:
 					if t < 0 or not Block.is_valid_type_value(t):
 						continue
 					grid[x][y].set_block_type(t)
-	# 關卡 1-4：所有 PLANK 自動掛載 BURNING 效果
-	if stage != null and stage.stage_id == "1-4":
+	# 關卡 1-6：所有 PLANK 自動掛載 BURNING 效果
+	if stage != null and stage.stage_id == "1-6":
 		for x in columns:
 			for y in rows:
 				var b: Block = grid[x][y]
@@ -466,8 +466,8 @@ func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_
 	block.position = start_pos if use_start_pos else grid_to_world(Vector2i(x, y))
 	add_child(block)
 	grid[x][y] = block
-	# 關卡 1-4：火屬性寶石自動掛載 BURNING 額外效果（含初始填充與天空補充）
-	if stage != null and stage.stage_id == "1-4" and block.block_type == Block.Type.RED:
+	# 關卡 1-6：火屬性寶石自動掛載 BURNING 額外效果（含初始填充與天空補充）
+	if stage != null and stage.stage_id == "1-6" and block.block_type == Block.Type.RED:
 		block.add_extra(Block.ExtraEffect.BURNING)
 	return block
 

@@ -18,6 +18,7 @@ var _loot: Dictionary = {}                    # 從 GameState 讀取
 var _party: Array[CharacterData] = []         # 從 GameState 讀取
 var _total_exp: int = 0                       # 從 GameState 讀取
 var _gold_amount: int = 0                     # 本場金幣總量
+var _reward_characters: Array[CharacterData] = []
 
 # ── UI 節點 ──
 var _content: VBoxContainer = null            # 主內容容器
@@ -38,6 +39,7 @@ func _ready() -> void:
 	_loot = GameState.last_battle_loot.duplicate()
 	_party = GameState.last_battle_party.duplicate()
 	_total_exp = GameState.last_battle_exp
+	_reward_characters = GameState.last_battle_reward_characters.duplicate()
 	_gold_amount = _loot.get(ItemDefs.Type.GOLD, 0)
 
 	_build_ui()
@@ -128,6 +130,34 @@ func _build_loot_section() -> void:
 
 		_loot_container.add_child(item_row)
 		_loot_items.append(item_row)
+
+	for character: CharacterData in _reward_characters:
+		if character == null:
+			continue
+		var char_row := _make_reward_character_row(character)
+		_loot_container.add_child(char_row)
+		_loot_items.append(char_row)
+
+
+func _make_reward_character_row(character: CharacterData) -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	row.modulate.a = 0.0
+	row.scale = Vector2(0.0, 0.0)
+	row.pivot_offset = Vector2(90, 20)
+
+	if character.portrait_texture != null:
+		var portrait := TextureRect.new()
+		portrait.texture = character.portrait_texture
+		portrait.custom_minimum_size = Vector2(42, 42)
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		row.add_child(portrait)
+
+	var label := _make_styled_label("New Character  %s" % Locale.tr_ui(character.character_name), 24, Color(1.0, 0.86, 0.25))
+	row.add_child(label)
+	return row
 
 
 func _build_exp_section() -> void:
