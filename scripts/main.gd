@@ -45,6 +45,20 @@ var _escape_distance_tween: Tween = null
 var _stage14_escape_intro_done: bool = false
 var _escape_failed: bool = false
 
+# ── Puzzle 模式狀態 ───────────────────────────────────────────
+var _puzzle_mode: bool = false
+var _puzzle_goal_required: int = 0
+var _puzzle_goal_progress: int = 0
+var _puzzle_goal_remaining: int = 0
+var _puzzle_goal_displayed: int = 0
+var _puzzle_goal_completed: bool = false
+var _puzzle_goal_panel: PanelContainer = null
+var _puzzle_goal_icon: TextureRect = null
+var _puzzle_goal_prefix_label: Label = null
+var _puzzle_goal_number_label: Label = null
+var _puzzle_goal_target_label: Label = null
+var _puzzle_goal_tween: Tween = null
+
 # ── Stage 1-4 急難奇蹟事件 ─────────────────────────────────
 var _plank_event_pending: bool = false
 var _plank_event_done: bool = false
@@ -211,6 +225,14 @@ const STAGE_EDITOR_DISTRIBUTION_TYPES: Array[int] = [
 	Block.Type.LIGHT,
 	Block.Type.DARK,
 ]
+const STAGE_EDITOR_GOAL_TARGET_TYPES: Array[int] = [
+	Block.Type.RED,
+	Block.Type.BLUE,
+	Block.Type.GREEN,
+	Block.Type.LIGHT,
+	Block.Type.DARK,
+	Block.Type.PLANK,
+]
 const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
 const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
 const STAGE_EDITOR_DIALOG_BACKGROUND_ROOT := "res://assets/dialog_background"
@@ -229,6 +251,7 @@ var _stage_editor_palette_scroll: ScrollContainer = null
 var _stage_editor_palette_grid: GridContainer = null
 var _stage_editor_value_buttons: Dictionary = {}
 var _stage_editor_tab_buttons: Dictionary = {}
+var _stage_editor_mode_buttons: Dictionary = {}
 var _stage_editor_current_tab: String = STAGE_EDITOR_TAB_BOARD
 var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
@@ -269,6 +292,8 @@ var _stage_editor_add_round_button: Button = null
 var _stage_editor_remove_round_button: Button = null
 var _stage_editor_enemy_area_round_label: Label = null
 var _stage_editor_enemy_area_slots: Control = null
+var _stage_editor_goal_target_option: OptionButton = null
+var _stage_editor_goal_count_spin: SpinBox = null
 var _stage_editor_current_round_index: int = 0
 var _stage_editor_rounds_container: VBoxContainer = null
 var _stage_editor_rounds_list: VBoxContainer = null
@@ -325,6 +350,7 @@ func _ready() -> void:
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
 	board.gems_refilled.connect(_on_gems_refilled)
 	board.escape_marker_moved.connect(_on_escape_marker_moved)
+	board.goal_cells_broken.connect(_on_goal_cells_broken)
 	# 燃燒數到定時：在每次實際點擊拆除回合有新寶石生成前由連鎖回呼觸發
 	board.pre_refill_hook = func() -> void:
 		if board._blast_refill_armed:
@@ -360,6 +386,7 @@ func _ready() -> void:
 	return_button.visible = true
 	_setup_kill_all_button()
 	_setup_escape_hud()
+	_setup_puzzle_goal_hud()
 
 	_se_blast = load("res://assets/se/111.wav")
 	_se_freeze = load("res://assets/se/skef_freeze.mp3")
@@ -825,9 +852,13 @@ func _build_stage_editor_action_panel() -> void:
 	row.add_theme_constant_override("separation", 4)
 	margin.add_child(row)
 
+	row.add_child(_make_stage_editor_mode_button("Normal", StageData.Mode.NORMAL))
+	row.add_child(_make_stage_editor_mode_button("Escape", StageData.Mode.ESCAPE))
+	row.add_child(_make_stage_editor_mode_button("Puzzle", StageData.Mode.PUZZLE))
 	row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
 	row.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
 	row.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
+	_refresh_stage_editor_mode_buttons()
 
 
 func _build_stage_editor_tab_panel() -> void:
@@ -2447,6 +2478,28 @@ func _make_stage_editor_command_button(label_text: String, callback: Callable) -
 	return button
 
 
+func _make_stage_editor_mode_button(label_text: String, mode_value: int) -> Button:
+	var button := Button.new()
+	button.text = label_text
+	button.toggle_mode = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(68, 26)
+	button.add_theme_font_size_override("font_size", 12)
+	button.tooltip_text = "Stage mode: %s" % label_text
+	button.pressed.connect(_on_stage_editor_mode_button_pressed.bind(mode_value))
+	_stage_editor_mode_buttons[mode_value] = button
+	return button
+
+
+func _refresh_stage_editor_mode_buttons() -> void:
+	if current_stage == null:
+		return
+	for mode_key in _stage_editor_mode_buttons.keys():
+		var button: Button = _stage_editor_mode_buttons[mode_key]
+		if button != null:
+			button.set_pressed_no_signal(int(mode_key) == int(current_stage.mode))
+
+
 func _make_stage_editor_small_button(label_text: String, callback: Callable, min_size: Vector2 = Vector2(34, 32)) -> Button:
 	var button := Button.new()
 	button.text = label_text
@@ -2640,14 +2693,162 @@ func _layout_stage_editor_enemy_area() -> void:
 	_stage_editor_set_control_rect(_stage_editor_enemy_area_slots, Rect2(8.0, 42.0, panel_width - 16.0, 82.0))
 
 
+func _stage_editor_is_normal_mode() -> bool:
+	return current_stage == null or int(current_stage.mode) == int(StageData.Mode.NORMAL)
+
+
+func _stage_editor_is_valid_goal_target(type_value: int) -> bool:
+	return STAGE_EDITOR_GOAL_TARGET_TYPES.has(type_value)
+
+
+func _stage_editor_goal_target_label(type_value: int) -> String:
+	return _stage_editor_type_name(type_value).to_upper()
+
+
+func _stage_editor_sync_enemy_area_mode_controls() -> void:
+	var normal_mode: bool = _stage_editor_is_normal_mode()
+	for button in [
+		_stage_editor_prev_round_button,
+		_stage_editor_next_round_button,
+		_stage_editor_add_round_button,
+		_stage_editor_remove_round_button,
+	]:
+		if button != null:
+			button.visible = normal_mode
+	if _stage_editor_rounds_container != null:
+		_stage_editor_rounds_container.visible = normal_mode and _stage_editor_rounds_expanded
+	if _stage_editor_enemy_picker_panel != null and not normal_mode:
+		_stage_editor_enemy_picker_panel.visible = false
+
+
+func _refresh_stage_editor_no_enemy_area(title_text: String, detail_text: String) -> void:
+	if _stage_editor_enemy_area_round_label != null:
+		_stage_editor_enemy_area_round_label.text = title_text
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	_stage_editor_enemy_area_slots.add_child(box)
+	_stage_editor_set_control_rect(box, Rect2(0.0, 4.0, 360.0, 72.0))
+
+	var title := Label.new()
+	title.text = title_text
+	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	box.add_child(title)
+
+	var detail := Label.new()
+	detail.text = detail_text
+	detail.add_theme_font_size_override("font_size", 13)
+	detail.add_theme_color_override("font_color", Color(0.78, 0.86, 0.95, 1.0))
+	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(detail)
+
+
+func _refresh_stage_editor_goal_area() -> void:
+	if current_stage == null:
+		return
+	current_stage.puzzle_goal_kind = StageData.PuzzleGoalKind.BREAK_COUNT
+	if not _stage_editor_is_valid_goal_target(int(current_stage.puzzle_goal_target_type)):
+		current_stage.puzzle_goal_target_type = Block.Type.RED
+	if _stage_editor_enemy_area_round_label != null:
+		_stage_editor_enemy_area_round_label.text = "Puzzle Goal"
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.11, 0.12, 0.18, 0.94)))
+	_stage_editor_enemy_area_slots.add_child(panel)
+	_stage_editor_set_control_rect(panel, Rect2(0.0, 0.0, 430.0, 78.0))
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	panel.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	margin.add_child(row)
+
+	var icon := TextureRect.new()
+	icon.texture = Block.GEM_TEXTURES.get(int(current_stage.puzzle_goal_target_type), null)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.custom_minimum_size = Vector2(44, 44)
+	row.add_child(icon)
+
+	var target_box := VBoxContainer.new()
+	target_box.add_theme_constant_override("separation", 2)
+	target_box.custom_minimum_size = Vector2(132, 0)
+	row.add_child(target_box)
+
+	var target_label := Label.new()
+	target_label.text = "Target"
+	target_label.add_theme_font_size_override("font_size", 11)
+	target_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
+	target_box.add_child(target_label)
+
+	_stage_editor_goal_target_option = OptionButton.new()
+	_stage_editor_goal_target_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_goal_target_option.custom_minimum_size = Vector2(122, 28)
+	var selected_index := 0
+	for type_value: int in STAGE_EDITOR_GOAL_TARGET_TYPES:
+		var item_index: int = _stage_editor_goal_target_option.item_count
+		_stage_editor_goal_target_option.add_item(_stage_editor_goal_target_label(type_value))
+		_stage_editor_goal_target_option.set_item_metadata(item_index, type_value)
+		if type_value == int(current_stage.puzzle_goal_target_type):
+			selected_index = item_index
+	_stage_editor_goal_target_option.select(selected_index)
+	_stage_editor_goal_target_option.item_selected.connect(_on_stage_editor_goal_target_selected)
+	target_box.add_child(_stage_editor_goal_target_option)
+
+	var count_box := VBoxContainer.new()
+	count_box.add_theme_constant_override("separation", 2)
+	count_box.custom_minimum_size = Vector2(96, 0)
+	row.add_child(count_box)
+
+	var count_label := Label.new()
+	count_label.text = "Required"
+	count_label.add_theme_font_size_override("font_size", 11)
+	count_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
+	count_box.add_child(count_label)
+
+	_stage_editor_goal_count_spin = SpinBox.new()
+	_stage_editor_goal_count_spin.min_value = 0
+	_stage_editor_goal_count_spin.max_value = 999
+	_stage_editor_goal_count_spin.step = 1
+	_stage_editor_goal_count_spin.value = maxi(0, current_stage.puzzle_goal_required_count)
+	_stage_editor_goal_count_spin.custom_minimum_size = Vector2(92, 28)
+	_stage_editor_goal_count_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_editor_goal_count_spin.value_changed.connect(_on_stage_editor_goal_count_changed)
+	count_box.add_child(_stage_editor_goal_count_spin)
+
+	var hint := Label.new()
+	hint.text = "Break Count"
+	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_color_override("font_color", Color(0.95, 0.82, 0.42, 1.0))
+	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(hint)
+
+
 func _refresh_stage_editor_enemy_area() -> void:
 	if _stage_editor_enemy_area_slots == null:
 		return
-	_stage_editor_normalize_cd_lists()
-	_stage_editor_clamp_current_round_index()
+	_stage_editor_sync_enemy_area_mode_controls()
+	_stage_editor_goal_target_option = null
+	_stage_editor_goal_count_spin = null
 	for child in _stage_editor_enemy_area_slots.get_children():
 		_stage_editor_enemy_area_slots.remove_child(child)
 		child.queue_free()
+
+	if current_stage != null and current_stage.mode == StageData.Mode.PUZZLE:
+		_refresh_stage_editor_goal_area()
+		return
+
+	if current_stage != null and current_stage.mode == StageData.Mode.ESCAPE:
+		_refresh_stage_editor_no_enemy_area("Escape Mode", "No monster waves. Escape distance decides victory.")
+		return
+
+	_stage_editor_normalize_cd_lists()
+	_stage_editor_clamp_current_round_index()
 
 	if _stage_editor_rounds.is_empty():
 		if _stage_editor_enemy_area_round_label != null:
@@ -2783,7 +2984,7 @@ func _build_stage_editor_rounds_panel() -> void:
 	_stage_editor_rounds_container = VBoxContainer.new()
 	_stage_editor_rounds_container.name = "StageEditorRoundsInline"
 	_stage_editor_rounds_container.add_theme_constant_override("separation", 6)
-	_stage_editor_rounds_container.visible = _stage_editor_rounds_expanded
+	_stage_editor_rounds_container.visible = _stage_editor_is_normal_mode() and _stage_editor_rounds_expanded
 	_stage_editor_rounds_container.custom_minimum_size = Vector2(0, 154)
 	_stage_editor_rounds_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_root_box.add_child(_stage_editor_rounds_container)
@@ -2883,7 +3084,11 @@ func _build_stage_editor_enemy_picker_panel() -> void:
 
 
 func _refresh_stage_editor_rounds_panel() -> void:
+	if _stage_editor_rounds_container != null:
+		_stage_editor_rounds_container.visible = _stage_editor_is_normal_mode() and _stage_editor_rounds_expanded
 	if _stage_editor_rounds_list == null:
+		return
+	if not _stage_editor_is_normal_mode():
 		return
 	_stage_editor_normalize_cd_lists()
 	for child in _stage_editor_rounds_list.get_children():
@@ -3100,7 +3305,7 @@ func _on_stage_editor_remove_current_round_pressed() -> void:
 func _on_stage_editor_rounds_close_pressed() -> void:
 	_stage_editor_rounds_expanded = true
 	if _stage_editor_rounds_container != null:
-		_stage_editor_rounds_container.visible = true
+		_stage_editor_rounds_container.visible = _stage_editor_is_normal_mode()
 		_refresh_stage_editor_rounds_panel()
 	_layout_stage_editor_ui()
 
@@ -3633,15 +3838,82 @@ func _on_stage_editor_stretch_bg_toggled(button_pressed: bool) -> void:
 	_set_stage_editor_status("Full BG: %s" % ("On" if button_pressed else "Off"))
 
 
+func _on_stage_editor_mode_button_pressed(mode_value: int) -> void:
+	if current_stage == null:
+		return
+	if mode_value != StageData.Mode.NORMAL and mode_value != StageData.Mode.ESCAPE and mode_value != StageData.Mode.PUZZLE:
+		return
+	current_stage.mode = mode_value
+	if current_stage.mode == StageData.Mode.PUZZLE:
+		current_stage.puzzle_goal_kind = StageData.PuzzleGoalKind.BREAK_COUNT
+		if not _stage_editor_is_valid_goal_target(int(current_stage.puzzle_goal_target_type)):
+			current_stage.puzzle_goal_target_type = Block.Type.RED
+		if current_stage.puzzle_goal_required_count < 0:
+			current_stage.puzzle_goal_required_count = 0
+	_refresh_stage_editor_mode_buttons()
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_layout_stage_editor_ui()
+	var mode_name := "Normal"
+	if current_stage.mode == StageData.Mode.ESCAPE:
+		mode_name = "Escape"
+	elif current_stage.mode == StageData.Mode.PUZZLE:
+		mode_name = "Puzzle"
+	_set_stage_editor_status("Mode: %s" % mode_name)
+
+
+func _on_stage_editor_goal_target_selected(item_index: int) -> void:
+	if current_stage == null or _stage_editor_goal_target_option == null:
+		return
+	var type_value: int = int(_stage_editor_goal_target_option.get_item_metadata(item_index))
+	if not _stage_editor_is_valid_goal_target(type_value):
+		return
+	current_stage.puzzle_goal_target_type = type_value
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Goal target: %s" % _stage_editor_goal_target_label(type_value))
+
+
+func _on_stage_editor_goal_count_changed(value: float) -> void:
+	if current_stage == null:
+		return
+	current_stage.puzzle_goal_required_count = maxi(0, int(round(value)))
+	_set_stage_editor_status("Goal count: %d" % current_stage.puzzle_goal_required_count)
+
+
 func _on_stage_editor_clear_pressed() -> void:
 	board.clear_fixed_layout()
 	_set_stage_editor_status("Cleared")
+
+
+func _stage_editor_get_goal_target_from_ui() -> int:
+	if _stage_editor_goal_target_option != null:
+		var selected_index: int = _stage_editor_goal_target_option.selected
+		if selected_index >= 0:
+			return int(_stage_editor_goal_target_option.get_item_metadata(selected_index))
+	return int(current_stage.puzzle_goal_target_type) if current_stage != null else int(Block.Type.RED)
+
+
+func _stage_editor_get_goal_count_from_ui() -> int:
+	if _stage_editor_goal_count_spin != null:
+		return maxi(0, int(round(_stage_editor_goal_count_spin.value)))
+	return int(current_stage.puzzle_goal_required_count) if current_stage != null else 0
+
+
+func _stage_editor_apply_puzzle_goal_from_ui() -> void:
+	if current_stage == null:
+		return
+	if current_stage.mode != StageData.Mode.PUZZLE:
+		return
+	current_stage.puzzle_goal_kind = StageData.PuzzleGoalKind.BREAK_COUNT
+	current_stage.puzzle_goal_target_type = _stage_editor_get_goal_target_from_ui()
+	current_stage.puzzle_goal_required_count = _stage_editor_get_goal_count_from_ui()
 
 
 func _on_stage_editor_save_pressed() -> void:
 	if current_stage == null or current_stage.resource_path.is_empty():
 		_set_stage_editor_status("Save failed: no stage resource", false)
 		return
+	_stage_editor_apply_puzzle_goal_from_ui()
 	var validation_error: String = _stage_editor_validate_rounds_for_save()
 	if not validation_error.is_empty():
 		_set_stage_editor_status(validation_error, false)
@@ -3681,6 +3953,15 @@ func _stage_editor_validate_rounds_for_save() -> String:
 			if drop_row < col.size() and int(col[drop_row]) == StageData.CELL_HOLE:
 				return "Save failed: C%d drop start is a hole" % (column_index + 1)
 	if current_stage.mode == StageData.Mode.ESCAPE:
+		return ""
+	if current_stage.mode == StageData.Mode.PUZZLE:
+		_stage_editor_apply_puzzle_goal_from_ui()
+		if current_stage.puzzle_goal_kind != StageData.PuzzleGoalKind.BREAK_COUNT:
+			return "Save failed: unsupported puzzle goal"
+		if not _stage_editor_is_valid_goal_target(int(current_stage.puzzle_goal_target_type)):
+			return "Save failed: invalid puzzle goal target"
+		if current_stage.puzzle_goal_required_count <= 0:
+			return "Save failed: puzzle goal count must be > 0"
 		return ""
 	if _stage_editor_rounds.is_empty():
 		return "Save failed: add at least one round"
@@ -5553,6 +5834,8 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
 		DebrisVfx.play(fx_layer, fallback_texture, start_global, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
 		block.queue_free()
+		await board._collapse_and_fill()
+		board.is_busy = false
 		return
 
 	var element_mult: float = battle_manager.get_element_multiplier(Block.Type.BLUE, target.data.element) if target.data != null else 1.0
@@ -7189,6 +7472,200 @@ func _set_escape_distance_digit_frame(value: int, base_y: float) -> void:
 	_escape_distance_number_label.text = "%d" % value
 	_escape_distance_number_label.position.y = base_y - 14.0
 	_escape_distance_displayed = value
+
+
+func _setup_puzzle_goal_hud() -> void:
+	_puzzle_mode = current_stage != null and current_stage.mode == StageData.Mode.PUZZLE
+	_puzzle_goal_completed = false
+	if _puzzle_goal_tween != null and _puzzle_goal_tween.is_valid():
+		_puzzle_goal_tween.kill()
+	if not _puzzle_mode:
+		_puzzle_goal_required = 0
+		_puzzle_goal_progress = 0
+		_puzzle_goal_remaining = 0
+		_puzzle_goal_displayed = 0
+		if is_instance_valid(_puzzle_goal_panel):
+			_puzzle_goal_panel.queue_free()
+		_puzzle_goal_panel = null
+		return
+
+	_puzzle_goal_required = maxi(current_stage.puzzle_goal_required_count, 0)
+	_puzzle_goal_progress = 0
+	_puzzle_goal_remaining = _puzzle_goal_required
+	_puzzle_goal_displayed = _puzzle_goal_remaining
+	for child in enemy_container.get_children():
+		enemy_container.remove_child(child)
+		child.queue_free()
+	enemy_container.visible = true
+	_build_puzzle_goal_panel()
+	_update_puzzle_goal_panel(false, true)
+
+
+func _build_puzzle_goal_panel() -> void:
+	if is_instance_valid(_puzzle_goal_panel):
+		return
+	_puzzle_goal_panel = PanelContainer.new()
+	_puzzle_goal_panel.name = "PuzzleGoalPanel"
+	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 66)
+	_puzzle_goal_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.06, 0.09, 0.86)
+	style.border_color = Color(0.95, 0.78, 0.32, 0.92)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(8)
+	_puzzle_goal_panel.add_theme_stylebox_override("panel", style)
+	enemy_container.add_child(_puzzle_goal_panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 6)
+	_puzzle_goal_panel.add_child(margin)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	margin.add_child(row)
+
+	_puzzle_goal_icon = TextureRect.new()
+	_puzzle_goal_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_puzzle_goal_icon.custom_minimum_size = Vector2(44, 44)
+	row.add_child(_puzzle_goal_icon)
+
+	_puzzle_goal_prefix_label = _make_puzzle_goal_part_label(20)
+	_puzzle_goal_prefix_label.text = "剩餘"
+	_puzzle_goal_prefix_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_puzzle_goal_prefix_label)
+
+	_puzzle_goal_number_label = _make_puzzle_goal_part_label(30)
+	_puzzle_goal_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_puzzle_goal_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_puzzle_goal_number_label.custom_minimum_size = Vector2(58, 42)
+	row.add_child(_puzzle_goal_number_label)
+
+	_puzzle_goal_target_label = _make_puzzle_goal_part_label(18)
+	_puzzle_goal_target_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_puzzle_goal_target_label.custom_minimum_size = Vector2(80, 42)
+	row.add_child(_puzzle_goal_target_label)
+
+
+func _make_puzzle_goal_part_label(font_size: int) -> Label:
+	var label := Label.new()
+	label.label_settings = null
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 7)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func _puzzle_goal_target_name(type_value: int) -> String:
+	match type_value:
+		Block.Type.RED:
+			return "紅寶石"
+		Block.Type.BLUE:
+			return "藍寶石"
+		Block.Type.GREEN:
+			return "綠寶石"
+		Block.Type.LIGHT:
+			return "光寶石"
+		Block.Type.DARK:
+			return "暗寶石"
+		Block.Type.PLANK:
+			return "木板"
+		_:
+			return "目標"
+
+
+func _update_puzzle_goal_panel(animate_digits: bool = false, immediate: bool = false) -> void:
+	if not _puzzle_mode or not is_instance_valid(_puzzle_goal_panel):
+		return
+	var target_type: int = int(current_stage.puzzle_goal_target_type) if current_stage != null else int(Block.Type.RED)
+	if is_instance_valid(_puzzle_goal_icon):
+		_puzzle_goal_icon.texture = Block.GEM_TEXTURES.get(target_type, null)
+	if is_instance_valid(_puzzle_goal_prefix_label):
+		_puzzle_goal_prefix_label.text = "達成" if _puzzle_goal_completed else "剩餘"
+	if is_instance_valid(_puzzle_goal_target_label):
+		_puzzle_goal_target_label.text = _puzzle_goal_target_name(target_type)
+	if not is_instance_valid(_puzzle_goal_number_label):
+		return
+	var target: int = maxi(_puzzle_goal_remaining, 0)
+	if immediate or not animate_digits:
+		_puzzle_goal_displayed = target
+		_puzzle_goal_number_label.text = "%d" % target
+		return
+	_animate_puzzle_goal_digits(_puzzle_goal_displayed, target)
+
+
+func _animate_puzzle_goal_digits(from_value: int, to_value: int) -> void:
+	if not is_instance_valid(_puzzle_goal_number_label):
+		return
+	if _puzzle_goal_tween != null and _puzzle_goal_tween.is_valid():
+		_puzzle_goal_tween.kill()
+	_puzzle_goal_number_label.scale = Vector2.ONE
+	var direction: int = -1 if to_value < from_value else 1
+	var delta: int = abs(to_value - from_value)
+	var step_size: int = maxi(1, int(ceil(float(delta) / 30.0)))
+	var values: Array[int] = []
+	var current: int = from_value
+	while current != to_value and values.size() < 80:
+		var next_value: int = current + direction * step_size
+		if direction < 0 and next_value < to_value:
+			next_value = to_value
+		elif direction > 0 and next_value > to_value:
+			next_value = to_value
+		values.append(next_value)
+		current = next_value
+	if values.is_empty():
+		return
+	var base_pos: Vector2 = _puzzle_goal_number_label.position
+	_puzzle_goal_tween = create_tween()
+	for next_value in values:
+		_puzzle_goal_tween.tween_property(_puzzle_goal_number_label, "position:y", base_pos.y + 14.0, 0.035) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		_puzzle_goal_tween.tween_callback(_set_puzzle_goal_digit_frame.bind(next_value, base_pos.y))
+		_puzzle_goal_tween.tween_property(_puzzle_goal_number_label, "position:y", base_pos.y, 0.035) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+func _set_puzzle_goal_digit_frame(value: int, base_y: float) -> void:
+	if not is_instance_valid(_puzzle_goal_number_label):
+		return
+	_puzzle_goal_number_label.text = "%d" % value
+	_puzzle_goal_number_label.position.y = base_y - 12.0
+	_puzzle_goal_displayed = value
+
+
+func _on_goal_cells_broken(block_type: int, count: int, _global_positions: Array) -> void:
+	if not _puzzle_mode or _puzzle_goal_completed:
+		return
+	if current_stage == null or current_stage.mode != StageData.Mode.PUZZLE:
+		return
+	if current_stage.puzzle_goal_kind != StageData.PuzzleGoalKind.BREAK_COUNT:
+		return
+	if int(block_type) != int(current_stage.puzzle_goal_target_type):
+		return
+	var gained: int = maxi(count, 0)
+	if gained <= 0:
+		return
+	_puzzle_goal_progress = mini(_puzzle_goal_progress + gained, _puzzle_goal_required)
+	_puzzle_goal_remaining = maxi(_puzzle_goal_required - _puzzle_goal_progress, 0)
+	if _puzzle_goal_remaining <= 0:
+		_puzzle_goal_completed = true
+	_update_puzzle_goal_panel(true)
+	if _puzzle_goal_completed:
+		call_deferred("_finish_puzzle_goal_after_feedback")
+
+
+func _finish_puzzle_goal_after_feedback() -> void:
+	await get_tree().create_timer(0.35).timeout
+	if not _puzzle_mode or not _puzzle_goal_completed:
+		return
+	if _victory_overlay != null:
+		return
+	battle_manager.battle_won.emit()
 
 
 ## board.gems_refilled 保留給既有系統；Escape 進度改由位置石實際下降計算

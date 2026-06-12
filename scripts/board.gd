@@ -146,6 +146,7 @@ var _blast_refill_armed: bool = false
 
 signal score_changed(new_score: int)      # 分數變更時發出
 signal gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)  # 寶石消除時發出
+signal goal_cells_broken(block_type: int, count: int, global_positions: Array)  # Puzzle goal 用：實際破壞格數
 signal upper_gem_clicked()                # 高階寶石被點擊時發出
 signal upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, triggered_upper: Block.UpperType)  # 高階爆炸完成時發出
 signal upper_gem_chain_triggered(upper_type: Block.UpperType)  # 連鎖中特殊高階寶石被觸發時發出
@@ -551,7 +552,27 @@ func _get_drop_spawn_capacity(column_index: int) -> int:
 
 
 func _is_no_enemy_mode() -> bool:
-	return stage != null and stage.mode == StageData.Mode.ESCAPE
+	return stage != null and (stage.mode == StageData.Mode.ESCAPE or stage.mode == StageData.Mode.PUZZLE)
+
+
+func _emit_goal_cells_for_blocks(blocks: Array) -> void:
+	var count_by_type: Dictionary = {}
+	var positions_by_type: Dictionary = {}
+	for value in blocks:
+		var block: Block = value as Block
+		if block == null or not is_instance_valid(block) or block.is_upper_gem():
+			continue
+		var type_value: int = int(block.block_type)
+		if type_value != int(Block.Type.PLANK) and not Block.is_random_gem_type_value(type_value):
+			continue
+		if type_value == int(Block.Type.PLANK) or not block.is_obstacle():
+			count_by_type[type_value] = int(count_by_type.get(type_value, 0)) + 1
+			if not positions_by_type.has(type_value):
+				positions_by_type[type_value] = []
+			(positions_by_type[type_value] as Array).append(block.global_position)
+	for type_key in count_by_type.keys():
+		var positions: Array = positions_by_type[type_key] as Array
+		goal_cells_broken.emit(int(type_key), int(count_by_type[type_key]), positions)
 
 
 func is_escape_marker_pos(pos: Vector2i) -> bool:
@@ -1568,6 +1589,9 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 	score += positions.size() * 10
 	score_changed.emit(score)
 	gems_blasted.emit(gem_type, effective_count, blast_positions)
+	var goal_blocks: Array = blocks.duplicate()
+	goal_blocks.append_array(planks_to_remove)
+	_emit_goal_cells_for_blocks(goal_blocks)
 
 	for block in blocks:
 		_play_gem_break_debris(block)
@@ -2051,6 +2075,7 @@ func blast_all_of_type(type: Block.Type) -> int:
 
 	for b in blocks:
 		_play_gem_break_debris(b)
+	_emit_goal_cells_for_blocks(blocks)
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
 		for b in blocks:
 			if is_instance_valid(b):
@@ -2094,6 +2119,7 @@ func drop_random_gems_of_type(type: Block.Type, count: int) -> int:
 		is_busy = false
 		return 0
 
+	_emit_goal_cells_for_blocks(removed_blocks)
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
 		for block in removed_blocks:
 			if is_instance_valid(block):
@@ -2160,6 +2186,7 @@ func silently_destroy_breakable_structure(pos: Vector2i) -> bool:
 	logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
 	b.play_destroy_animation()
 	_spawn_plank_debris(origin)
+	_emit_goal_cells_for_blocks([b])
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
 		if is_instance_valid(b):
 			b.queue_free()
@@ -2377,6 +2404,7 @@ func _destroy_wood_spear_row_group(group: Array, total_blasted_by_type: Dictiona
 
 	for bt in blast_positions_by_type:
 		gems_blasted.emit(bt as Block.Type, blast_count_by_type[bt] as int, blast_positions_by_type[bt])
+	_emit_goal_cells_for_blocks(blocks_to_free)
 
 	if not blocks_to_free.is_empty():
 		var captured_blocks := blocks_to_free.duplicate()
@@ -2439,6 +2467,7 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 		for bt in by_type:
 			var gpos: Array = by_type[bt]
 			gems_blasted.emit(bt as Block.Type, count_by_type[bt] as int, gpos)
+		_emit_goal_cells_for_blocks(blocks_to_free)
 
 		# 延遲釋放節點
 		var captured_blocks := blocks_to_free.duplicate()
@@ -2610,6 +2639,9 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 	for bt in blast_positions_by_type:
 		var gpos: Array = blast_positions_by_type[bt]
 		gems_blasted.emit(bt as Block.Type, blast_count_by_type[bt] as int, gpos)
+	var upper_goal_blocks: Array = blocks_to_free.duplicate()
+	upper_goal_blocks.append_array(planks_to_free)
+	_emit_goal_cells_for_blocks(upper_goal_blocks)
 
 	# 動畫結束後釋放節點
 	get_tree().create_timer(0.2).timeout.connect(func() -> void:
@@ -2806,6 +2838,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 
 		for bt in blast_pos_by_type:
 			gems_blasted.emit(bt as Block.Type, blast_count_by_type[bt] as int, blast_pos_by_type[bt])
+		_emit_goal_cells_for_blocks(blocks_to_free)
 
 		get_tree().create_timer(0.2).timeout.connect(func() -> void:
 			for b in blocks_to_free:

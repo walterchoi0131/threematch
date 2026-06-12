@@ -1,12 +1,12 @@
 ## MapDebugPanel — 世界地圖 F9 浮動 debug 面板。
-## 目前提供：清除存檔（刪除 user://save.json + 重置記憶體狀態）。
+## 目前提供：地圖進度、角色清單與道具的快速調整。
 class_name MapDebugPanel
 extends RefCounted
 
 
 ## 建立浮動面板並回傳節點本身（呼叫端負責 free / queue_free）。
 ##   parent: 將面板加為子節點的容器（CanvasLayer 或 Control）。
-##   on_cleared: Callable() -> void，於清除存檔後被呼叫，畫面端負責即時刷新。
+##   on_cleared: Callable() -> void，於 debug 狀態變更後被呼叫，畫面端負責即時刷新。
 static func build(parent: Node, on_cleared: Callable) -> Control:
 	var panel := PanelContainer.new()
 	panel.z_index = 100
@@ -14,7 +14,7 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	panel.offset_left = -274
 	panel.offset_top = 4
 	panel.offset_right = -4
-	panel.offset_bottom = 236
+	panel.offset_bottom = 250
 	panel.anchor_left = 1.0
 	panel.anchor_right = 1.0
 
@@ -42,16 +42,20 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	info.text = _make_info_text()
 	vbox.add_child(info)
 
-	# 清除存檔按鈕
-	var clear_btn := Button.new()
-	clear_btn.text = "Clear Save (delete save.json + reset)"
-	clear_btn.add_theme_color_override("font_color", Color(1.0, 0.7, 0.7))
-	vbox.add_child(clear_btn)
+	var reset_map_btn := Button.new()
+	reset_map_btn.text = "Reset map progress"
+	reset_map_btn.add_theme_color_override("font_color", Color(1.0, 0.78, 0.62))
+	vbox.add_child(reset_map_btn)
 
-	var reset_chars_btn := Button.new()
-	reset_chars_btn.text = "Reset character state (+1 Sapphire)"
-	reset_chars_btn.add_theme_color_override("font_color", Color(0.7, 1.0, 0.85))
-	vbox.add_child(reset_chars_btn)
+	var reset_owned_btn := Button.new()
+	reset_owned_btn.text = "Reset owned character list"
+	reset_owned_btn.add_theme_color_override("font_color", Color(0.72, 0.95, 1.0))
+	vbox.add_child(reset_owned_btn)
+
+	var sapphire_btn := Button.new()
+	sapphire_btn.text = "+1 Sapphire"
+	sapphire_btn.add_theme_color_override("font_color", Color(0.62, 0.82, 1.0))
+	vbox.add_child(sapphire_btn)
 
 	var status := Label.new()
 	status.add_theme_font_size_override("font_size", 11)
@@ -59,18 +63,25 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	status.text = ""
 	vbox.add_child(status)
 
-	clear_btn.pressed.connect(func() -> void:
-		GameState.clear_save()
-		status.text = "Save cleared."
+	reset_map_btn.pressed.connect(func() -> void:
+		GameState.reset_map_progress()
+		status.text = "Map progress reset."
 		info.text = _make_info_text()
 		if on_cleared.is_valid():
 			on_cleared.call()
 	)
 
-	reset_chars_btn.pressed.connect(func() -> void:
-		GameState.reset_owned_character_progress(false)
+	reset_owned_btn.pressed.connect(func() -> void:
+		GameState.reset_owned_character_list()
+		status.text = "Owned character list reset."
+		info.text = _make_info_text()
+		if on_cleared.is_valid():
+			on_cleared.call()
+	)
+
+	sapphire_btn.pressed.connect(func() -> void:
 		GameState.add_loot(ItemDefs.Type.SAPPHIRE, 1)
-		status.text = "Characters reset. Sapphire +1."
+		status.text = "Sapphire +1."
 		info.text = _make_info_text()
 		if on_cleared.is_valid():
 			on_cleared.call()

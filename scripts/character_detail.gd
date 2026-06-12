@@ -1041,6 +1041,9 @@ func _run_upgrade_hold_completion(kind: String, skill_index: int, dialog_layer: 
 	if bool(result.get("ok", false)):
 		_set_upgrade_row_fill_ratio(1.0, row_info)
 		await _play_upgrade_hold_success(row_info, elem_color, dialog_layer)
+		if not is_instance_valid(dialog_layer):
+			_upgrade_hold_completed = false
+			return
 		_rebuild_ui_preserving_upgrade_dialog(dialog_layer)
 		_rebuild_upgrade_dialog_content(dialog_layer, kind, skill_index, elem_color)
 		_upgrade_hold_completed = false

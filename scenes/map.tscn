@@ -13,6 +13,7 @@
 [ext_resource type="Resource" uid="uid://br27x7fourclr" path="res://stages/stage_board_7x7_4c.tres" id="11_board_7x7_4c"]
 [ext_resource type="Resource" uid="uid://br28x8fiveclr" path="res://stages/stage_board_8x8_5c.tres" id="12_board_8x8_5c"]
 [ext_resource type="Resource" uid="uid://br3ayafiveclr" path="res://stages/stage_board_9x9_5c.tres" id="13_board_9x9_5c"]
+[ext_resource type="Resource" path="res://stages/stage_1_6.tres" id="14_stage_1_6"]
 
 [sub_resource type="StyleBoxFlat" id="SBF_nav"]
 bg_color = Color(0.08, 0.1, 0.14, 0.92)
@@ -99,6 +100,15 @@ offset_top = 714.0
 offset_right = 525.0
 offset_bottom = 824.0
 stage = ExtResource("8_stage_1_5")
+
+[node name="Stage1_6" parent="UILayer/Pages/MapPage" instance=ExtResource("3_stagebtn")]
+custom_minimum_size = Vector2(140, 110)
+anchors_preset = 0
+offset_left = 535.0
+offset_top = 704.0
+offset_right = 675.0
+offset_bottom = 814.0
+stage = ExtResource("14_stage_1_6")
 
 [node name="StageBoard5x5_3C" parent="UILayer/Pages/MapPage" unique_id=990013204 instance=ExtResource("3_stagebtn")]
 custom_minimum_size = Vector2(140, 110)

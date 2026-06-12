@@ -393,6 +393,26 @@ func reset_owned_character_progress(auto_save: bool = true) -> void:
 		save_game()
 
 
+func reset_map_progress(auto_save: bool = true) -> void:
+	cleared_stages.clear()
+	last_used_party_paths.clear()
+	if auto_save:
+		save_game()
+
+
+func reset_owned_character_list(auto_save: bool = true) -> void:
+	owned_characters.clear()
+	selected_party.clear()
+	detail_character = null
+	last_used_party_paths.clear()
+	for path: String in STARTING_CHARACTER_PATHS:
+		var res: Resource = load(path)
+		if res is CharacterData:
+			grant_character(res as CharacterData, true)
+	if auto_save:
+		save_game()
+
+
 func _ensure_starting_characters_if_empty() -> void:
 	if owned_characters.size() > 0:
 		return
