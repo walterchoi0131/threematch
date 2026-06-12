@@ -7312,7 +7312,6 @@ func _drop_plank_pile_animation() -> void:
 			var existing: Block = board.grid[x][y]
 			if existing != null and is_instance_valid(existing):
 				board.grid[x][y] = null
-				existing.queue_free()
 			# 在天空位置生成新 PLANK，並以墜落動畫落到目標格
 			var sky_pos: Vector2 = board.grid_to_world(Vector2i(x, -2 - idx % 4))
 			var target_pos: Vector2 = board.grid_to_world(Vector2i(x, y))
@@ -7322,18 +7321,38 @@ func _drop_plank_pile_animation() -> void:
 			pb.set_block_type(Block.Type.PLANK)
 			pb.grid_pos = Vector2i(x, y)
 			pb.add_extra(Block.ExtraEffect.BURNING)
+			pb.z_index = 4
 			board.grid[x][y] = pb
 			board.logic_grid[x][y] = -2  # LOGIC_PLANK
 			# 以掉落動畫滑落到位
 			var tw: Tween = pb.create_tween()
 			tw.tween_property(pb, "position", target_pos, drop_dur) \
 				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			tw.tween_callback(Callable(self, "_play_plank_impact_crush").bind(existing, board.to_global(target_pos)))
 			idx += 1
 			await get_tree().create_timer(stagger).timeout
 	await get_tree().create_timer(drop_dur + 0.1).timeout
 	# 同步邏輯網格（plank 狀態），並刷新融合提示
 	board.resync_logic_from_visual()
 
+func _play_plank_impact_crush(crushed_block: Block, impact_pos: Vector2) -> void:
+	if board != null:
+		board._spawn_plank_debris(impact_pos)
+	if crushed_block == null or not is_instance_valid(crushed_block):
+		return
+	if crushed_block.is_breakable_structure():
+		crushed_block.play_destroy_animation()
+		if board != null:
+			board._spawn_plank_debris(crushed_block.global_position)
+	else:
+		if board != null:
+			board._play_gem_break_debris(crushed_block, crushed_block.is_upper_gem())
+		else:
+			crushed_block.play_destroy_animation()
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		if is_instance_valid(crushed_block):
+			crushed_block.queue_free()
+	, CONNECT_ONE_SHOT)
 
 ## 在指定卡片周圍建立「四條」全螢幕黯化條（保留卡片區域為亮）+ STOP 滑鼠
 func _setup_dim_overlay(card_rect: Rect2) -> CanvasLayer:
