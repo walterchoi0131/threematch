@@ -60,6 +60,7 @@ var logic_enemy_cd: Dictionary = {}        # Enemy node -> int
 var logic_turn: int = 0
 # 預測下回合會觸發敵人攻擊（阻擋玩家輸入直到視覺敵人攻擊播完）
 var logic_pending_enemy_attack: bool = false
+var auto_enemy_action_handler: Callable = Callable()
 
 
 # ── 初始化 ─────────────────────────────────────────────────────
@@ -460,7 +461,7 @@ func has_enemies_to_attack() -> bool:
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
-		if enemy.turns_until_attack <= 0:
+		if enemy.get_current_action() == EnemyData.ActionType.AUTO or enemy.turns_until_attack <= 0:
 			return true
 	return false
 
@@ -482,7 +483,7 @@ func do_enemy_phase() -> bool:
 	for enemy: Enemy in active_enemies:
 		if not is_instance_valid(enemy):
 			continue
-		if enemy.turns_until_attack <= 0:
+		if enemy.get_current_action() == EnemyData.ActionType.AUTO or enemy.turns_until_attack <= 0:
 			attacking.append(enemy)
 	if attacking.is_empty():
 		return false
@@ -492,11 +493,11 @@ func do_enemy_phase() -> bool:
 		var action_percent: int = enemy.get_current_attack_percent()
 		var action_count: int = enemy.get_current_action_count()
 		# 重置下一次行動 CD（同步邏輯與視覺），REST 只聚合為 CD 不單獨播放
-		var next_cd: int = enemy.advance_to_next_active_action()
+		var next_cd: int = 0 if action_type == EnemyData.ActionType.AUTO else enemy.advance_to_next_active_action()
 		enemy.turns_until_attack = next_cd
 		logic_enemy_cd[enemy] = next_cd
 		enemy.flash_action(action_type, action_percent, action_count)
-		_enemy_act(enemy, action_type, action_percent, action_count)
+		await _enemy_act(enemy, action_type, action_percent, action_count)
 		if i < attacking.size() - 1:
 			await get_tree().create_timer(0.2).timeout
 	return true
@@ -515,6 +516,9 @@ func _enemy_act(enemy: Enemy, action_type: int, action_percent: int, action_coun
 				get_attack_percent_damage_for_level(enemy.spawn_level, action_percent),
 				EnemyData.clamp_action_count(action_count)
 			)
+		EnemyData.ActionType.AUTO:
+			if auto_enemy_action_handler.is_valid():
+				await auto_enemy_action_handler.call(enemy)
 		_:
 			enemy_attacked.emit(enemy, get_attack_percent_damage_for_level(enemy.spawn_level, action_percent))
 

@@ -137,6 +137,7 @@ var _player_shield_label: Label = null
 var _player_shield_tween: Tween = null
 var _player_shield_badge_tween: Tween = null
 var _enemy_board_effects_pending: int = 0
+var _auto_enemy_active_cds: Dictionary = {}
 
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
@@ -353,6 +354,7 @@ func _ready() -> void:
 	board.selection_preview_changed.connect(_on_board_selection_preview_changed)
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
+	board.enemy_break_pulse.connect(_on_enemy_break_pulse)
 	board.gems_refilled.connect(_on_gems_refilled)
 	board.escape_marker_moved.connect(_on_escape_marker_moved)
 	board.goal_cells_broken.connect(_on_goal_cells_broken)
@@ -365,6 +367,7 @@ func _ready() -> void:
 	board.battle_manager_ref = battle_manager
 
 	battle_manager.enemy_container = enemy_container
+	battle_manager.auto_enemy_action_handler = Callable(self, "_handle_auto_enemy_action")
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
 	battle_manager.player_shield_changed.connect(_on_player_shield_changed)
 	battle_manager.player_defeated.connect(_on_player_defeated)
@@ -3684,6 +3687,13 @@ func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
 	enemy_data.action_pattern = timed_pattern
 	enemy_data.action_percents = timed_percents
 	enemy_data.action_counts = timed_counts
+	var auto_character_path: String = String(entry.get("auto_character", "")).strip_edges()
+	if not auto_character_path.is_empty():
+		var auto_character_resource: Resource = load(auto_character_path)
+		if auto_character_resource is CharacterData:
+			enemy_data.auto_character = auto_character_resource as CharacterData
+	enemy_data.auto_gem_atk_power = maxf(float(entry.get("auto_gem_atk_power", enemy_data.auto_gem_atk_power)), 0.0)
+	enemy_data.auto_use_max_skill_upgrades = bool(entry.get("auto_use_max_skill_upgrades", enemy_data.auto_use_max_skill_upgrades))
 	var loot := LootItem.new()
 	loot.amount_min = int(entry.get("loot_min", 1))
 	loot.amount_max = int(entry.get("loot_max", 1))
@@ -4627,6 +4637,10 @@ func _on_blast_preview_exited() -> void:
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	_bgm_preview_tween.tween_property(Engine, "time_scale", 1.0, BGM_FADE_DUR) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+func _on_enemy_break_pulse() -> void:
+	_play_sfx(_se_blast, 0.8)
 
 
 # ── 開發戰鬥日誌 ──────────────────────────────────────────────
@@ -6902,6 +6916,450 @@ func _is_active_unlocked_for_battle(char_index: int) -> bool:
 	return SkillUpgradeUtils.is_active_stage_unlocked(c)
 
 
+func _handle_auto_enemy_action(enemy: Enemy) -> void:
+	if not is_instance_valid(enemy) or enemy.data == null:
+		return
+	var data: EnemyData = enemy.data
+	var auto_character: CharacterData = data.auto_character
+	if auto_character == null:
+		return
+	var enemy_name: String = data.get_display_name()
+	var owner_id: int = enemy.get_instance_id()
+	board.is_busy = true
+
+	if _auto_enemy_can_use_active(enemy, auto_character):
+		var used_active: bool = await _run_auto_enemy_active_skill(enemy, auto_character)
+		if used_active:
+			_auto_enemy_active_cds[owner_id] = _auto_effective_active_cd(data, auto_character)
+			_add_log_entry("[b]%s[/b] AUTO：%s" % [enemy_name, Locale.tr_ui(auto_character.active_skill_name)], auto_character.gem_type)
+			await get_tree().create_timer(0.15).timeout
+
+	if not is_instance_valid(enemy) or battle_manager.player_current_hp <= 0:
+		board.is_busy = false
+		return
+
+	var fuse_result: bool = await _try_auto_enemy_fuse(enemy, auto_character)
+	if fuse_result and (not is_instance_valid(enemy) or battle_manager.player_current_hp <= 0):
+		board.is_busy = false
+		return
+
+	var upper_result: Dictionary = await _try_auto_enemy_upper(enemy, auto_character)
+	if int(upper_result.get("count", 0)) > 0:
+		board.is_busy = false
+		var upper_damage_count: int = _auto_enemy_damage_count_for_type(upper_result, auto_character.gem_type)
+		var upper_damage_positions: Array = _auto_enemy_damage_positions_for_type(upper_result, auto_character.gem_type)
+		if upper_damage_count > 0:
+			await _apply_auto_enemy_gem_damage(enemy, upper_damage_count, auto_character.gem_type, "Upper", upper_damage_positions)
+		return
+	elif bool(upper_result.get("acted", false)):
+		board.is_busy = false
+		return
+
+	var group: Array[Vector2i] = _choose_auto_enemy_blast_group(auto_character)
+	if group.is_empty():
+		board.is_busy = false
+		return
+	await _play_auto_enemy_cursor_tap(group[0], auto_character.gem_type)
+	var pre_damage_count: int = _auto_enemy_group_count_for_type(group, auto_character.gem_type)
+	var pre_damage_positions: Array = _auto_enemy_group_positions_for_type(group, auto_character.gem_type)
+	var vfx_wait: float = 0.0
+	var vfx_start_msec: int = 0
+	if pre_damage_count > 0:
+		vfx_start_msec = Time.get_ticks_msec()
+		vfx_wait = _launch_auto_enemy_element_vfx_to_enemy(enemy, pre_damage_positions, auto_character.gem_type, pre_damage_count)
+	var blast_result: Dictionary = await board.enemy_blast_group(group)
+	board.is_busy = false
+	var destroyed_count: int = int(blast_result.get("count", 0))
+	if destroyed_count > 0:
+		var damage_count: int = _auto_enemy_damage_count_for_type(blast_result, auto_character.gem_type)
+		var damage_positions: Array = _auto_enemy_damage_positions_for_type(blast_result, auto_character.gem_type)
+		if damage_count > 0:
+			if vfx_wait > 0.0:
+				var elapsed: float = float(Time.get_ticks_msec() - vfx_start_msec) / 1000.0
+				var remaining: float = vfx_wait - elapsed
+				if remaining > 0.0:
+					await get_tree().create_timer(remaining).timeout
+			await _apply_auto_enemy_gem_damage(enemy, damage_count, auto_character.gem_type, "Blast", damage_positions, pre_damage_count > 0)
+
+
+func _auto_enemy_can_use_active(enemy: Enemy, auto_character: CharacterData) -> bool:
+	var owner_id: int = enemy.get_instance_id()
+	var remaining: int = int(_auto_enemy_active_cds.get(owner_id, 0))
+	if remaining > 0:
+		remaining -= 1
+		_auto_enemy_active_cds[owner_id] = remaining
+	return remaining <= 0 and auto_character.active_skill_name.strip_edges() != ""
+
+
+func _run_auto_enemy_active_skill(enemy: Enemy, auto_character: CharacterData) -> bool:
+	if auto_character.active_skill_name == "Leaf Spear Call":
+		return await _run_auto_gory_leaf_spear_call(enemy, auto_character)
+	return false
+
+
+func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData) -> bool:
+	var owner_id: int = enemy.get_instance_id()
+	var place_count: int = 1 + _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_ACTIVE, 0, "leaf_spear_extra_cells")
+	var candidates: Array[Dictionary] = []
+	for x in board.columns:
+		for y in board.rows:
+			var pos := Vector2i(x, y)
+			if not _auto_enemy_can_place_spear_at(pos):
+				continue
+			for ut in [Block.UpperType.WOOD_SPEAR_DOWN, Block.UpperType.WOOD_SPEAR_UP]:
+				var score: Dictionary = _auto_score_wood_spear_cell(pos, ut)
+				score["pos"] = pos
+				score["ut"] = ut
+				score["tie"] = randf()
+				candidates.append(score)
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var upper_a: int = int(a.get("player_upper_hits", 0))
+		var upper_b: int = int(b.get("player_upper_hits", 0))
+		if upper_a != upper_b:
+			return upper_a > upper_b
+		var leaf_a: int = int(a.get("leaf_hits", 0))
+		var leaf_b: int = int(b.get("leaf_hits", 0))
+		if leaf_a != leaf_b:
+			return leaf_a > leaf_b
+		return float(a.get("tie", 0.0)) > float(b.get("tie", 0.0))
+	)
+	var placed_count: int = 0
+	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
+	var pierces_breakable: bool = _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_RESPONDING, responding_index, "wood_spear_pierce_breakable") > 0
+	for entry in candidates:
+		if placed_count >= place_count:
+			break
+		var pos: Vector2i = entry["pos"] as Vector2i
+		var ut: Block.UpperType = entry["ut"] as Block.UpperType
+		if board.place_upper_gem(pos, ut, auto_character.gem_type, Block.UpperOwnerTeam.ENEMY, owner_id):
+			var placed_block: Block = board.grid[pos.x][pos.y]
+			if placed_block != null:
+				placed_block.wood_spear_pierce_breakable = pierces_breakable
+			placed_count += 1
+	if placed_count > 0:
+		board.resync_logic_from_visual()
+		_play_sfx(_se_freeze)
+	return placed_count > 0
+
+
+func _auto_enemy_can_place_spear_at(pos: Vector2i) -> bool:
+	if not board._cell_accepts_block(pos) or board.is_escape_marker_pos(pos):
+		return false
+	var block: Block = board.grid[pos.x][pos.y]
+	if block == null:
+		return true
+	return not block.is_obstacle() and not block.is_upper_gem()
+
+
+func _auto_score_wood_spear_cell(pos: Vector2i, ut: Block.UpperType) -> Dictionary:
+	var direction_y: int = -1 if ut == Block.UpperType.WOOD_SPEAR_UP else 1
+	var player_upper_hits: int = 0
+	var leaf_hits: int = 0
+	var current: Vector2i = pos + Vector2i(0, direction_y)
+	while board._is_valid(current):
+		if board.is_escape_marker_pos(current):
+			current += Vector2i(0, direction_y)
+			continue
+		var block: Block = board.grid[current.x][current.y]
+		if block == null:
+			current += Vector2i(0, direction_y)
+			continue
+		if block.is_rock():
+			break
+		if block.is_upper_gem():
+			if block.upper_owner_team == Block.UpperOwnerTeam.PLAYER:
+				player_upper_hits += 1
+		elif block.block_type == Block.Type.GREEN and not block.is_obstacle():
+			leaf_hits += 1
+		if block.is_obstacle() and not block.is_breakable_structure():
+			break
+		current += Vector2i(0, direction_y)
+	return {
+		"player_upper_hits": player_upper_hits,
+		"leaf_hits": leaf_hits,
+	}
+
+
+func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
+	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
+	if responding_index < 0:
+		return false
+	var skill: Dictionary = auto_character.responding_skills[responding_index] as Dictionary
+	var threshold: int = maxi(1, int(skill.get("threshold", 1)) + _auto_effect_sum(enemy.data, auto_character, SkillUpgradeUtils.KIND_RESPONDING, responding_index, "threshold_delta"))
+	var group: Array[Vector2i] = board.find_auto_fuse_group(auto_character.gem_type, threshold)
+	if group.is_empty():
+		return false
+	var best_pos: Vector2i = group[0]
+	var best_score: int = -1
+	var best_ut: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
+	var pierces_breakable: bool = _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_RESPONDING, responding_index, "wood_spear_pierce_breakable") > 0
+	for p in group:
+		var ut: Block.UpperType = board.get_best_wood_spear_type_for_pos(p)
+		var score_data: Dictionary = _auto_score_wood_spear_cell(p, ut)
+		var score: int = int(score_data.get("player_upper_hits", 0)) * 1000 + int(score_data.get("leaf_hits", 0))
+		if score > best_score:
+			best_score = score
+			best_pos = p
+			best_ut = ut
+	await _play_auto_enemy_cursor_tap(best_pos, auto_character.gem_type)
+	_play_sfx(_se_freeze)
+	await _play_auto_enemy_fuse_projectiles(group, best_pos, auto_character.gem_type)
+	var ok: bool = await board.enemy_fuse_upper_from_group(group, best_pos, best_ut, auto_character.gem_type, enemy.get_instance_id(), pierces_breakable)
+	if ok:
+		_add_log_entry("[b]%s[/b] AUTO：%s%d → %s" % [
+			enemy.data.get_display_name(),
+			_gem_bbcode(auto_character.gem_type),
+			group.size(),
+			_upper_gem_bbcode(best_ut)
+		], auto_character.gem_type)
+	return ok
+
+
+func _try_auto_enemy_upper(enemy: Enemy, auto_character: CharacterData) -> Dictionary:
+	var owner_id: int = enemy.get_instance_id()
+	var uppers: Array[Vector2i] = board.find_owned_upper_gems(owner_id)
+	if uppers.is_empty():
+		return {"acted": false, "count": 0}
+	var best_pos: Vector2i = uppers[0]
+	var best_score: int = -1
+	for pos in uppers:
+		var score: int = board.get_enemy_upper_preview_count(pos, owner_id)
+		if score > best_score:
+			best_score = score
+			best_pos = pos
+	var best_upper_type: Block.UpperType = Block.UpperType.NONE
+	if board._is_valid(best_pos):
+		var best_block: Block = board.grid[best_pos.x][best_pos.y]
+		if best_block != null:
+			best_upper_type = best_block.upper_type
+	await _play_auto_enemy_cursor_tap(best_pos, auto_character.gem_type)
+	var result: Dictionary = await board.enemy_trigger_owned_upper(best_pos, owner_id)
+	result["acted"] = true
+	if int(result.get("count", 0)) > 0:
+		_add_log_entry("[b]%s[/b] AUTO：%s ×%d" % [
+			enemy.data.get_display_name(),
+			_upper_gem_bbcode(best_upper_type) if best_upper_type != Block.UpperType.NONE else "Upper",
+			int(result.get("count", 0))
+		], auto_character.gem_type)
+	return result
+
+
+func _choose_auto_enemy_blast_group(auto_character: CharacterData) -> Array[Vector2i]:
+	var own_group: Array[Vector2i] = board.find_best_auto_group(int(auto_character.gem_type))
+	var any_group: Array[Vector2i] = board.find_best_auto_group(-1)
+	if own_group.is_empty():
+		return any_group
+	if any_group.is_empty():
+		return own_group
+	if randf() < 0.5:
+		return own_group
+	return any_group
+
+
+func _auto_enemy_damage_count_for_type(result: Dictionary, gem_type: Block.Type) -> int:
+	var counts_by_type: Dictionary = result.get("counts_by_type", {})
+	return int(counts_by_type.get(gem_type, 0))
+
+
+func _auto_enemy_damage_positions_for_type(result: Dictionary, gem_type: Block.Type) -> Array:
+	var positions_by_type: Dictionary = result.get("positions_by_type", {})
+	var positions: Array = positions_by_type.get(gem_type, [])
+	return positions
+
+
+func _auto_enemy_group_count_for_type(group: Array[Vector2i], gem_type: Block.Type) -> int:
+	var count: int = 0
+	for pos in group:
+		if not board._cell_accepts_block(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if block != null and not block.is_obstacle() and not block.is_upper_gem() and block.block_type == gem_type:
+			count += 1
+	return count
+
+
+func _auto_enemy_group_positions_for_type(group: Array[Vector2i], gem_type: Block.Type) -> Array:
+	var positions: Array = []
+	for pos in group:
+		if not board._cell_accepts_block(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if block != null and not block.is_obstacle() and not block.is_upper_gem() and block.block_type == gem_type:
+			positions.append(block.global_position)
+	return positions
+
+
+func _play_auto_enemy_cursor_tap(target_pos: Vector2i, gem_type: Block.Type) -> void:
+	if not board._cell_accepts_block(target_pos):
+		return
+	var target_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
+	target_global += Vector2(15.0, 15.0)
+	var cursor_texture: Texture2D = load("res://assets/Hand3.png")
+	if cursor_texture == null:
+		return
+
+	var cursor := Sprite2D.new()
+	cursor.texture = cursor_texture
+	cursor.centered = true
+	cursor.z_index = 220
+	var max_side: float = maxf(float(cursor_texture.get_width()), float(cursor_texture.get_height()))
+	var base_scale: float = 54.0 / maxf(max_side, 1.0)
+	cursor.scale = Vector2(base_scale, base_scale)
+	cursor.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	cursor.position = target_global + Vector2(-74.0, -56.0)
+	fx_layer.add_child(cursor)
+
+	var press_pos: Vector2 = target_global + Vector2(-20.0, -18.0)
+	var color: Color = Block.COLORS.get(gem_type, Color.WHITE)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(cursor, "modulate:a", 1.0, 0.16)
+	tw.tween_property(cursor, "position", press_pos, 0.36).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(cursor, "scale", Vector2(base_scale * 0.86, base_scale * 0.86), 0.36).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	await tw.finished
+
+	_spawn_auto_enemy_tap_ring(target_global, color)
+	var release_tw := create_tween()
+	release_tw.set_parallel(true)
+	release_tw.tween_property(cursor, "position", press_pos + Vector2(8.0, -10.0), 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	release_tw.tween_property(cursor, "scale", Vector2(base_scale, base_scale), 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	release_tw.tween_property(cursor, "modulate:a", 0.0, 0.32).set_delay(0.12)
+	await release_tw.finished
+	if is_instance_valid(cursor):
+		cursor.queue_free()
+
+
+func _spawn_auto_enemy_tap_ring(center_global: Vector2, color: Color) -> void:
+	var ring_script := GDScript.new()
+	ring_script.source_code = (
+		"extends Node2D\n"
+		+ "var radius: float = 8.0\n"
+		+ "var ring_alpha: float = 0.9\n"
+		+ "var ring_color: Color = Color.WHITE\n"
+		+ "func _draw() -> void:\n"
+		+ "\tdraw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(ring_color.r, ring_color.g, ring_color.b, ring_alpha), 5.0, true)\n"
+		+ "func _process(_dt: float) -> void:\n"
+		+ "\tqueue_redraw()\n"
+	)
+	ring_script.reload()
+	var ring := Node2D.new()
+	ring.set_script(ring_script)
+	ring.set("ring_color", color)
+	ring.position = center_global
+	ring.z_index = 210
+	fx_layer.add_child(ring)
+	var ring_tw := create_tween().set_parallel(true)
+	ring_tw.tween_property(ring, "radius", 42.0, 0.34).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	ring_tw.tween_property(ring, "ring_alpha", 0.0, 0.34).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	ring_tw.finished.connect(ring.queue_free, CONNECT_ONE_SHOT)
+
+
+func _play_auto_enemy_fuse_projectiles(group: Array[Vector2i], target_pos: Vector2i, gem_type: Block.Type) -> void:
+	if group.is_empty() or not board._cell_accepts_block(target_pos):
+		return
+	var target_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
+	var color: Color = Block.COLORS.get(gem_type, Color.WHITE)
+	var starts: Array[Vector2] = []
+	for p in group:
+		if not board._cell_accepts_block(p):
+			continue
+		var block: Block = board.grid[p.x][p.y]
+		if block == null or block.is_obstacle() or block.is_upper_gem():
+			continue
+		starts.append(block.global_position)
+	if starts.is_empty():
+		return
+
+	var particle_duration: float = 1.05
+	var fuse_total: int = mini(starts.size(), MAX_VFX_PARTICLES)
+	for idx in fuse_total:
+		var particle: Node2D = _acquire_particle()
+		if particle == null:
+			break
+		var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
+		particle.launch(starts[idx], target_global, color, particle_duration, spread)
+	await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
+
+
+func _play_auto_enemy_element_vfx_to_enemy(enemy: Enemy, source_positions: Array, gem_type: Block.Type, destroyed_count: int) -> void:
+	var wait_time: float = _launch_auto_enemy_element_vfx_to_enemy(enemy, source_positions, gem_type, destroyed_count)
+	if wait_time > 0.0:
+		await get_tree().create_timer(wait_time).timeout
+
+
+func _launch_auto_enemy_element_vfx_to_enemy(enemy: Enemy, source_positions: Array, gem_type: Block.Type, destroyed_count: int) -> float:
+	if not is_instance_valid(enemy):
+		return 0.0
+	var target_pos: Vector2 = enemy.get_global_rect().get_center()
+	var color: Color = Block.COLORS.get(gem_type, Color.WHITE)
+	var starts: Array[Vector2] = []
+	for value in source_positions:
+		if value is Vector2:
+			starts.append(value as Vector2)
+	if starts.is_empty():
+		starts.append(board.to_global(Vector2(board.columns * 32.0, board.rows * 32.0)))
+
+	var particle_duration: float = 1.05
+	var raw: int = mini(maxi(destroyed_count, starts.size()), 8)
+	var total: int = mini(raw, MAX_VFX_PARTICLES)
+	for idx in total:
+		var particle: Node2D = _acquire_particle()
+		if particle == null:
+			break
+		var from_pos: Vector2 = starts[idx % starts.size()]
+		var spread: float = (float(idx) / max(total - 1, 1)) * 2.0 - 1.0 if total > 1 else 0.0
+		particle.launch(from_pos, target_pos, color, particle_duration, spread)
+	if total > 0:
+		return particle_duration / TrailProjectileScript.speed_divisor + 0.05
+	return 0.0
+
+
+func _apply_auto_enemy_gem_damage(enemy: Enemy, destroyed_count: int, gem_type: Block.Type, source_label: String, source_positions: Array = [], element_vfx_already_played: bool = false) -> void:
+	if not is_instance_valid(enemy) or enemy.data == null or destroyed_count <= 0:
+		return
+	var percent: float = float(destroyed_count) * maxf(enemy.data.auto_gem_atk_power, 0.0)
+	if percent <= 0.0:
+		return
+	var estimated_hp: int = battle_manager.estimate_team_max_hp_for_level(enemy.spawn_level)
+	var damage: int = maxi(1, int(round(float(estimated_hp) * percent / 100.0)))
+	_add_log_entry("[b]%s[/b] AUTO %s：%s ×%d = %.1f%% / %d" % [
+		enemy.data.get_display_name(),
+		source_label,
+		_gem_bbcode(gem_type),
+		destroyed_count,
+		percent,
+		damage
+	], gem_type)
+	if not element_vfx_already_played:
+		await _play_auto_enemy_element_vfx_to_enemy(enemy, source_positions, gem_type, destroyed_count)
+	_on_enemy_attacked(enemy, damage)
+	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.08).timeout
+
+
+func _auto_effective_active_cd(data: EnemyData, auto_character: CharacterData) -> int:
+	return maxi(0, auto_character.active_skill_cd + _auto_effect_sum(data, auto_character, SkillUpgradeUtils.KIND_ACTIVE, 0, "active_cd_delta"))
+
+
+func _auto_effect_sum(data: EnemyData, auto_character: CharacterData, kind: String, skill_index: int, effect_key: String) -> int:
+	var total: int = 0
+	var defs: Array[Dictionary] = SkillUpgradeUtils.get_upgrade_defs(auto_character, kind, skill_index)
+	var level_count: int = defs.size() if data != null and data.auto_use_max_skill_upgrades else mini(SkillUpgradeUtils.get_unlocked_level(auto_character, kind, skill_index), defs.size())
+	for i in range(level_count):
+		var effects: Dictionary = SkillUpgradeUtils._get_effects(defs[i])
+		total += int(effects.get(effect_key, 0))
+	return total
+
+
+func _auto_effect_max(data: EnemyData, auto_character: CharacterData, kind: String, skill_index: int, effect_key: String) -> int:
+	var best: int = 0
+	var defs: Array[Dictionary] = SkillUpgradeUtils.get_upgrade_defs(auto_character, kind, skill_index)
+	var level_count: int = defs.size() if data != null and data.auto_use_max_skill_upgrades else mini(SkillUpgradeUtils.get_unlocked_level(auto_character, kind, skill_index), defs.size())
+	for i in range(level_count):
+		var effects: Dictionary = SkillUpgradeUtils._get_effects(defs[i])
+		best = maxi(best, int(effects.get(effect_key, 0)))
+	return best
+
+
 # ── 敎人攻擊特效 ─────────────────────────────────────────────
 
 ## 敎人攻擊時：拖尾弧光從敎人飛向玩家血條
@@ -8992,8 +9450,20 @@ func _setup_kill_all_button() -> void:
 
 ## 一波敵人生成完畢 — 評估是否顯示 Boss 條
 func _on_round_spawned(round_idx: int) -> void:
+	for enemy: Enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy) and not enemy.died.is_connected(_on_auto_enemy_died):
+			enemy.died.connect(_on_auto_enemy_died)
 	var boss: Enemy = battle_manager.get_main_boss_for_round(round_idx)
 	_bind_boss_bar(boss)
+
+
+func _on_auto_enemy_died(enemy: Enemy) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var owner_id: int = enemy.get_instance_id()
+	_auto_enemy_active_cds.erase(owner_id)
+	if board != null:
+		board.destroy_enemy_upper_gems_for_owner(owner_id)
 
 
 ## 將 Boss 條綁定到指定敵人；傳 null 則隱藏

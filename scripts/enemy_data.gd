@@ -1,8 +1,8 @@
-## EnemyData（敎人資料）— 定義敵人的基本資料與行動序列。
+﻿## EnemyData嚗?鈭箄?????摰儔?萎犖??祈???銵?摨???class_name EnemyData
 class_name EnemyData
 extends Resource
 
-enum ActionType { ATTACK_15, STONE_MAGIC, REST, BREAK_LIGHT_ATTACK }
+enum ActionType { ATTACK_15, STONE_MAGIC, REST, BREAK_LIGHT_ATTACK, AUTO }
 enum PassiveType { NONE, REQUIRE_GEM_COUNT_DAMAGE_GATE }
 
 const HP_PERCENT_MIN: int = 500
@@ -16,30 +16,33 @@ const ACTION_COUNT_DEFAULT: int = 3
 const PASSIVE_REQUIRED_GEM_COUNT_DEFAULT: int = 9
 const PASSIVE_REDUCED_DAMAGE_DEFAULT: int = 1
 
-@export var enemy_name: String = "Slime"     # 敎人名稱
+@export var enemy_name: String = "Slime"     # ?犖?迂
 @export var enemy_name_zh: String = ""       # Localized Chinese display name
 @export var enemy_name_en: String = ""       # Localized English display name
-@export var enemy_level: int = 1              # Legacy: 新流程由關卡 spawn level 決定
-@export var max_hp: int = HP_PERCENT_MIN      # HP 百分比：實際 HP = 同等級玩家隊伍估算 ATK × max_hp%
-@export var attack_damage: int = 0            # Legacy: 新流程使用 Attack X%
-@export var attack_coeff: float = 1.0         # Legacy: 新流程不使用固定攻擊係數
-@export var attack_interval: int = 0          # Legacy: 新流程由 REST 行動聚合為 CD
-@export var action_pattern: Array[ActionType] = [ActionType.ATTACK_15]  # REST 會聚合成 CD，非 REST 才會實際行動
-@export var action_percents: Array[int] = [ATTACK_PERCENT_DEFAULT]       # 與 action_pattern 平行；攻擊行動的 X%
-@export var action_counts: Array[int] = [ACTION_COUNT_DEFAULT]           # 與 action_pattern 平行；特殊行動的 Y 數量
-@export var portrait_color: Color = Color(0.2, 0.7, 0.2)  # 敎人頭像色
-@export var portrait_texture: Texture2D = null  # 敎人頭像貼圖
-## 元素屬性：RED=火、BLUE=水、GREEN=葉
+@export var enemy_level: int = 1              # Legacy: ?唳?蝔? spawn level 瘙箏?
+@export var max_hp: int = HP_PERCENT_MIN      # HP ?曉?瘥?撖阡? HP = ??蝝摰園?隡摯蝞?ATK ? max_hp%
+@export var attack_damage: int = 0            # Legacy: ?唳?蝔蝙??Attack X%
+@export var attack_coeff: float = 1.0         # Legacy: ?唳?蝔?雿輻?箏??餅?靽
+@export var attack_interval: int = 0          # Legacy: ?唳?蝔 REST 銵?????CD
+@export var action_pattern: Array[ActionType] = [ActionType.ATTACK_15]  # REST ???? CD嚗? REST ??撖阡?銵?
+@export var action_percents: Array[int] = [ATTACK_PERCENT_DEFAULT]       # ??action_pattern 撟唾?嚗???? X%
+@export var action_counts: Array[int] = [ACTION_COUNT_DEFAULT]           # ??action_pattern 撟唾?嚗畾??? Y ?賊?
+@export var auto_character: CharacterData = null
+@export var auto_gem_atk_power: float = 1.0
+@export var auto_use_max_skill_upgrades: bool = true
+@export var portrait_color: Color = Color(0.2, 0.7, 0.2)
+@export var portrait_texture: Texture2D = null
 @export var element: Block.Type = Block.Type.GREEN
-## Legacy: 主要 Boss 現在由關卡 spawn 設定，保留此欄位只為讀取舊資源
+## ??撅祆改?RED=?怒LUE=瘞氬REEN=??@export var element: Block.Type = Block.Type.GREEN
+## Legacy: 銝餉? Boss ?曉?梢???spawn 閮剖?嚗??迨甈??芰霈??鞈?
 @export var is_main_boss: bool = false
 @export var passive_type: PassiveType = PassiveType.NONE
 @export var passive_required_gem_type: Block.Type = Block.Type.LIGHT
 @export var passive_required_gem_count: int = PASSIVE_REQUIRED_GEM_COUNT_DEFAULT
 @export var passive_name: String = ""
 @export_multiline var passive_desc: String = ""
-## 掉落表：敵人死亡時依序擲骰每個條目
 @export var loot_table: Array[LootItem] = []
+## ?銵剁??萎犖甇颱滿??摨撉唳?????@export var loot_table: Array[LootItem] = []
 
 
 func get_hp_percent() -> int:
@@ -87,7 +90,7 @@ static func clamp_passive_required_gem_count(value: int) -> int:
 	return maxi(1, value)
 
 
-## 取得指定 pattern index 對應的行動；空 pattern 退回普通攻擊
+## ???? pattern index 撠?????蝛?pattern ?????func get_action_at(pattern_index: int) -> ActionType:
 func get_action_at(pattern_index: int) -> ActionType:
 	if action_pattern.is_empty():
 		return ActionType.ATTACK_15
@@ -113,7 +116,7 @@ func get_action_count_at(pattern_index: int) -> int:
 	return clamp_action_count(int(action_counts[index]))
 
 
-## 取得下一個行動 index；空 pattern 維持 0
+## ??銝?????index嚗征 pattern 蝬剜? 0
 func get_next_action_index(pattern_index: int) -> int:
 	if action_pattern.is_empty():
 		return 0
@@ -141,11 +144,13 @@ func get_action_label(action_type: int, attack_percent: int = ATTACK_PERCENT_DEF
 			return "Rest"
 		ActionType.BREAK_LIGHT_ATTACK:
 			return "Lightbreak %d%% x%d" % [clamp_attack_percent(attack_percent), clamp_action_count(action_count)]
+		ActionType.AUTO:
+			return "Auto"
 		_:
 			return "Attack %d%%" % clamp_attack_percent(attack_percent)
 
 
-## 計算此敵人掉落的經驗值
+## 閮?甇斗鈭箸??賜?蝬???func get_exp_drop_for_level(level_value: int) -> int:
 func get_exp_drop_for_level(level_value: int) -> int:
 	var clamped_level: int = clampi(level_value, 1, 99)
 	return int(floor(25.0 * pow(clamped_level, 1.2)))

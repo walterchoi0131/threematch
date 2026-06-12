@@ -2,6 +2,7 @@ extends Control
 
 const ENEMY_ROOT: String = "res://enemies"
 const ENEMY_IMAGE_ROOT: String = "res://assets/enemy"
+const CHARACTER_ROOT: String = "res://characters"
 const STAT_LEVEL_MIN: int = CharacterData.STAT_LEVEL_MIN
 const STAT_LEVEL_MAX: int = CharacterData.STAT_LEVEL_MAX
 
@@ -153,6 +154,9 @@ var _attack_percent_lbl: Label = null
 var _attack_palette_chip: _ActionChip = null
 var _lightbreak_count_spin: SpinBox = null
 var _lightbreak_palette_chip: _ActionChip = null
+var _auto_character_option: OptionButton = null
+var _auto_power_spin: SpinBox = null
+var _auto_max_skill_check: CheckBox = null
 var _action_row: _ActionDropRow = null
 var _estimate_info_lbl: Label = null
 var _estimate_level_value: int = STAT_LEVEL_MIN
@@ -982,6 +986,28 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_lightbreak_count_spin.value_changed.connect(_on_lightbreak_count_changed)
 	lightbreak_count_row.add_child(_lightbreak_count_spin)
 
+	var auto_box := VBoxContainer.new()
+	auto_box.custom_minimum_size = Vector2(190, 0)
+	auto_box.add_theme_constant_override("separation", 4)
+	palette.add_child(auto_box)
+	auto_box.add_child(_make_action_chip(EnemyData.ActionType.AUTO, -1))
+	_auto_character_option = OptionButton.new()
+	_auto_character_option.custom_minimum_size = Vector2(176, 28)
+	_auto_character_option.tooltip_text = "Character skill kit used by Auto enemies."
+	_populate_auto_character_option()
+	auto_box.add_child(_make_labeled_control("Auto Character", _auto_character_option))
+	_auto_power_spin = SpinBox.new()
+	_auto_power_spin.min_value = 0.0
+	_auto_power_spin.max_value = 50.0
+	_auto_power_spin.step = 0.1
+	_auto_power_spin.value = _selected_enemy.auto_gem_atk_power if _selected_enemy != null else 1.0
+	_auto_power_spin.custom_minimum_size = Vector2(84, 28)
+	auto_box.add_child(_make_labeled_control("Gem Atk %", _auto_power_spin))
+	_auto_max_skill_check = CheckBox.new()
+	_auto_max_skill_check.text = "Max Skill"
+	_auto_max_skill_check.button_pressed = _selected_enemy.auto_use_max_skill_upgrades if _selected_enemy != null else true
+	auto_box.add_child(_auto_max_skill_check)
+
 	var sequence_box := VBoxContainer.new()
 	sequence_box.add_theme_constant_override("separation", 8)
 	sequence_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1224,6 +1250,65 @@ func _current_action_count() -> int:
 	return EnemyData.ACTION_COUNT_DEFAULT
 
 
+func _populate_auto_character_option() -> void:
+	if _auto_character_option == null:
+		return
+	_auto_character_option.clear()
+	_auto_character_option.add_item("None")
+	_auto_character_option.set_item_metadata(0, "")
+	var paths: Array[String] = _list_character_resource_paths()
+	for path in paths:
+		var character: CharacterData = load(path) as CharacterData
+		if character == null:
+			continue
+		var label: String = character.character_name
+		if label.strip_edges().is_empty():
+			label = path.get_file().get_basename()
+		_auto_character_option.add_item(label)
+		_auto_character_option.set_item_metadata(_auto_character_option.item_count - 1, path)
+	_select_auto_character_option(_selected_enemy.auto_character if _selected_enemy != null else null)
+
+
+func _list_character_resource_paths() -> Array[String]:
+	var result: Array[String] = []
+	var dir := DirAccess.open(CHARACTER_ROOT)
+	if dir == null:
+		return result
+	dir.list_dir_begin()
+	while true:
+		var file_name: String = dir.get_next()
+		if file_name == "":
+			break
+		if dir.current_is_dir():
+			continue
+		if file_name.get_extension().to_lower() != "tres":
+			continue
+		result.append("%s/%s" % [CHARACTER_ROOT, file_name])
+	dir.list_dir_end()
+	result.sort()
+	return result
+
+
+func _select_auto_character_option(character: CharacterData) -> void:
+	if _auto_character_option == null:
+		return
+	var target_path: String = character.resource_path if character != null else ""
+	for i in _auto_character_option.item_count:
+		if str(_auto_character_option.get_item_metadata(i)) == target_path:
+			_auto_character_option.select(i)
+			return
+	_auto_character_option.select(0)
+
+
+func _current_auto_character() -> CharacterData:
+	if _auto_character_option == null or _auto_character_option.selected < 0:
+		return null
+	var path: String = str(_auto_character_option.get_item_metadata(_auto_character_option.selected))
+	if path.strip_edges().is_empty():
+		return null
+	return load(path) as CharacterData
+
+
 func _on_attack_percent_changed(value: float) -> void:
 	var percent: int = EnemyData.clamp_attack_percent(int(round(value)))
 	if _attack_percent_lbl != null:
@@ -1288,6 +1373,9 @@ func _save_selected_enemy() -> void:
 	_selected_enemy.action_pattern = validated_pattern
 	_selected_enemy.action_percents = _validated_action_percents(validated_pattern)
 	_selected_enemy.action_counts = _validated_action_counts(validated_pattern)
+	_selected_enemy.auto_character = _current_auto_character()
+	_selected_enemy.auto_gem_atk_power = maxf(float(_auto_power_spin.value), 0.0) if _auto_power_spin != null else _selected_enemy.auto_gem_atk_power
+	_selected_enemy.auto_use_max_skill_upgrades = _auto_max_skill_check.button_pressed if _auto_max_skill_check != null else _selected_enemy.auto_use_max_skill_upgrades
 	var err: int = ResourceSaver.save(_selected_enemy, _selected_path)
 	if err == OK:
 		_set_status("Saved %s" % _selected_path.get_file())
@@ -1552,6 +1640,8 @@ func _make_section_title(text: String) -> Label:
 
 func _action_label(action_type: int, attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT, action_count: int = EnemyData.ACTION_COUNT_DEFAULT) -> String:
 	match action_type:
+		EnemyData.ActionType.AUTO:
+			return "Auto"
 		EnemyData.ActionType.REST:
 			return "Rest"
 		EnemyData.ActionType.STONE_MAGIC:
@@ -1573,6 +1663,8 @@ func _passive_label(passive_type: int) -> String:
 func _action_style(action_type: int, hover: bool) -> StyleBoxFlat:
 	var color: Color = Color(0.18, 0.20, 0.28, 1.0)
 	match action_type:
+		EnemyData.ActionType.AUTO:
+			color = Color(0.42, 0.12, 0.11, 1.0)
 		EnemyData.ActionType.REST:
 			color = Color(0.20, 0.22, 0.28, 1.0)
 		EnemyData.ActionType.STONE_MAGIC:

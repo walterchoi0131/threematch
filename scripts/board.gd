@@ -130,6 +130,7 @@ var _escape_marker_trails: Array[Node2D] = []
 var _escape_marker_spin: float = 0.0
 var _escape_scroll_running: bool = false
 var _collapse_and_fill_running: bool = false
+var _suppress_escape_marker_progress: bool = false
 var _escape_marker_colors: Array[Color] = [
 	Color(1.0, 0.22, 0.16, 0.95),
 	Color(0.18, 0.55, 1.0, 0.95),
@@ -155,6 +156,7 @@ signal selection_finished(result: Dictionary) # 選擇模式完成或取消時�
 signal selection_preview_changed(positions: Array) # 選擇模式 hover 範圍變更時發出
 signal blast_preview_entered()               # 長按預覽開始時發出
 signal blast_preview_exited()                # 長按預覽結束時發出
+signal enemy_break_pulse()                   # 敵方 AI 實際破壞棋盤格時發出，用於 SFX
 signal gems_refilled(count: int)             # 從天空填充新寶石時發出（count = 本批新生成數量）
 signal meteor_requested(global_pos: Vector2)  # FIREBALL 高階寶石引爆時發出（main 處理 3D 隕石 VFX）
 
@@ -859,6 +861,12 @@ func _shake_block(block: Block) -> void:
 	sh_tw.tween_property(block, "position:x", base_x, 0.05)
 
 
+func play_rejected_cell_animation(pos: Vector2i) -> void:
+	if not _is_valid(pos):
+		return
+	_shake_block(grid[pos.x][pos.y])
+
+
 func set_edit_mode(enabled: bool) -> void:
 	_edit_mode = enabled
 	_edit_input_enabled = enabled
@@ -1450,8 +1458,14 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 
 	# PLANK / ROCK — 不响應點擊，不消耗回合；播放抖動表示無效
 	if _is_static_obstacle(block):
-		_shake_block(block)
+		play_rejected_cell_animation(pos)
 		_next_click_is_drained = false
+		return
+
+	if block != null and block.is_enemy_upper_gem():
+		play_rejected_cell_animation(pos)
+		_next_click_is_drained = false
+		is_busy = false
 		return
 
 	# 高階寶石 — 特殊點擊（消耗一回合，觸發範圍/橫列爆炸並可連鏈）
@@ -1473,7 +1487,7 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 	if matches.is_empty():
 		# 寶石抖動提示無效操作
 		if block:
-			_shake_block(block)
+			play_rejected_cell_animation(pos)
 		_next_click_is_drained = false
 		return
 
@@ -1669,7 +1683,7 @@ func _collapse_and_fill() -> void:
 		_sync_logic_unknowns_from_visual()
 		_update_fuse_hints()
 		_collapse_and_fill_running = false
-		if marker_rows_dropped > 0:
+		if marker_rows_dropped > 0 and not _suppress_escape_marker_progress:
 			escape_marker_moved.emit(marker_rows_dropped)
 		return
 	if total_new_count > 0:
@@ -1678,7 +1692,7 @@ func _collapse_and_fill() -> void:
 	_sync_logic_unknowns_from_visual()
 	_update_fuse_hints()
 	_collapse_and_fill_running = false
-	if marker_rows_dropped > 0:
+	if marker_rows_dropped > 0 and not _suppress_escape_marker_progress:
 		escape_marker_moved.emit(marker_rows_dropped)
 
 
@@ -2375,6 +2389,9 @@ func _destroy_wood_spear_row_group(group: Array, total_blasted_by_type: Dictiona
 		if b == null or b.is_rock():
 			continue
 		if b.is_upper_gem():
+			if b.upper_owner_team == Block.UpperOwnerTeam.ENEMY:
+				_destroy_upper_without_effect(p)
+				continue
 			if not chained_positions.has(p):
 				chained_positions.append(p)
 			continue
@@ -2484,13 +2501,23 @@ func blast_all_rows_sequential(delay: float = 0.12) -> Dictionary:
 
 
 ## 在指定位置放置高階寶石（若該格為空則先建立寶石，顏色由 gem_type 決定）
-func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = Block.Type.RED) -> bool:
+func place_upper_gem(
+	pos: Vector2i,
+	ut: Block.UpperType,
+	gem_type: Block.Type = Block.Type.RED,
+	owner_team: Block.UpperOwnerTeam = Block.UpperOwnerTeam.PLAYER,
+	owner_id: int = 0
+) -> bool:
 	if not _is_valid(pos):
+		return false
+	if _is_hole_pos(pos):
 		return false
 	if is_escape_marker_pos(pos):
 		return false
 	var block: Block = grid[pos.x][pos.y]
 	if block != null and block.is_obstacle():
+		return false
+	if block != null and block.is_upper_gem():
 		return false
 	if block == null:
 		block = _create_block(pos.x, pos.y)
@@ -2498,6 +2525,7 @@ func place_upper_gem(pos: Vector2i, ut: Block.UpperType, gem_type: Block.Type = 
 
 	# 設定高階類型（替換普通寶石外觀為火焰貼圖 + 紅色底色）
 	block.set_upper_type(ut)
+	block.set_upper_owner(owner_team, owner_id)
 	# 統一「融合閃光 + 彈跳」動畫
 	play_fuse_animation(block)
 	return true
@@ -2522,6 +2550,8 @@ func debug_spawn_firebombs(count: int) -> void:
 ## 處理高階寶石被點擊：根據類型決定爆炸範圍，執行連鏈爆炸
 func _handle_upper_click(pos: Vector2i) -> void:
 	var block: Block = grid[pos.x][pos.y]
+	if block == null or block.is_enemy_upper_gem():
+		return
 	var ut: Block.UpperType = block.upper_type
 
 	# 水劍專用連鎖序列：不走一般 upper-gem chain 路徑
@@ -2585,6 +2615,9 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			continue
 		# 如果這個寶石是高階寶石，加入連鏈爆炸佇列（暫不消除）
 		if b.is_upper_gem():
+			if b.upper_owner_team == Block.UpperOwnerTeam.ENEMY:
+				_destroy_upper_without_effect(p)
+				continue
 			chained_uppers.append({"pos": p, "upper_type": b.upper_type})
 			continue
 		# 可破壞障礙 — 靜默移除（不計分、不發信號、不貢獻攻擊）
@@ -2808,6 +2841,9 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 			var is_other_upper: bool = b.is_upper_gem() \
 				and b.upper_type != Block.UpperType.WATER_SLASH
 			if is_other_upper:
+				if b.upper_owner_team == Block.UpperOwnerTeam.ENEMY:
+					_destroy_upper_without_effect(c)
+					continue
 				# 不立即觸發以避免 chain 插入；收集到佇列在水劍序列完成後逐一觸發
 				var key: int = c.x * 1000 + c.y
 				if not deferred_seen.has(key):
@@ -3093,7 +3129,9 @@ func find_upper_gems(ut: Block.UpperType) -> Array[Vector2i]:
 	for x in columns:
 		for y in rows:
 			var block: Block = grid[x][y]
-			if block != null and block.upper_type == ut:
+			if block != null \
+					and block.upper_type == ut \
+					and block.upper_owner_team == Block.UpperOwnerTeam.PLAYER:
 				result.append(Vector2i(x, y))
 	return result
 
@@ -3111,6 +3149,398 @@ func destroy_upper_gem_at(pos: Vector2i) -> void:
 		if is_instance_valid(block):
 			block.queue_free()
 	, CONNECT_ONE_SHOT)
+
+
+func _destroy_upper_without_effect(pos: Vector2i) -> void:
+	if not _is_valid(pos):
+		return
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.is_upper_gem():
+		return
+	grid[pos.x][pos.y] = null
+	_play_gem_break_debris(block, true)
+	_queue_free_blocks_after_debris([block])
+
+
+func find_owned_upper_gems(owner_id: int, ut: Block.UpperType = Block.UpperType.NONE) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null or not block.is_upper_gem():
+				continue
+			if block.upper_owner_team != Block.UpperOwnerTeam.ENEMY:
+				continue
+			if block.upper_owner_id != owner_id:
+				continue
+			if ut != Block.UpperType.NONE and block.upper_type != ut:
+				continue
+			result.append(Vector2i(x, y))
+	return result
+
+
+func _auto_is_normal_gem(block: Block) -> bool:
+	return block != null and not block.is_obstacle() and not block.is_upper_gem()
+
+
+func _auto_connected_group(start: Vector2i, type_filter: int = -1) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if not _cell_accepts_block(start) or is_escape_marker_pos(start):
+		return result
+	var start_block: Block = grid[start.x][start.y]
+	if not _auto_is_normal_gem(start_block):
+		return result
+	var target_type: int = int(start_block.block_type)
+	if type_filter >= 0 and target_type != type_filter:
+		return result
+	var visited: Dictionary = {}
+	var queue: Array[Vector2i] = [start]
+	while not queue.is_empty():
+		var current: Vector2i = queue.pop_front()
+		var key: int = current.x * 1000 + current.y
+		if visited.has(key):
+			continue
+		if not _cell_accepts_block(current) or is_escape_marker_pos(current):
+			continue
+		var block: Block = grid[current.x][current.y]
+		if not _auto_is_normal_gem(block):
+			continue
+		if int(block.block_type) != target_type:
+			continue
+		visited[key] = true
+		result.append(current)
+		queue.append(Vector2i(current.x + 1, current.y))
+		queue.append(Vector2i(current.x - 1, current.y))
+		queue.append(Vector2i(current.x, current.y + 1))
+		queue.append(Vector2i(current.x, current.y - 1))
+	return result
+
+
+func find_best_auto_group(type_filter: int = -1) -> Array[Vector2i]:
+	var best: Array[Vector2i] = []
+	var visited: Dictionary = {}
+	for x in columns:
+		for y in rows:
+			var pos := Vector2i(x, y)
+			var key: int = x * 1000 + y
+			if visited.has(key):
+				continue
+			var group: Array[Vector2i] = _auto_connected_group(pos, type_filter)
+			for p in group:
+				visited[p.x * 1000 + p.y] = true
+			if group.size() > best.size():
+				best = group
+	return best
+
+
+func find_auto_fuse_group(gem_type: Block.Type, threshold: int) -> Array[Vector2i]:
+	var group: Array[Vector2i] = find_best_auto_group(int(gem_type))
+	if group.size() >= threshold:
+		return group
+	var empty: Array[Vector2i] = []
+	return empty
+
+
+func get_best_wood_spear_type_for_pos(pos: Vector2i) -> Block.UpperType:
+	var up_count: int = _auto_count_wood_spear_targets(pos, -1)
+	var down_count: int = _auto_count_wood_spear_targets(pos, 1)
+	if down_count > up_count:
+		return Block.UpperType.WOOD_SPEAR_DOWN
+	if up_count > down_count:
+		return Block.UpperType.WOOD_SPEAR_UP
+	if pos.y <= rows / 2:
+		return Block.UpperType.WOOD_SPEAR_DOWN
+	return Block.UpperType.WOOD_SPEAR_UP
+
+
+func _auto_count_wood_spear_targets(pos: Vector2i, direction_y: int) -> int:
+	var count: int = 0
+	for p in _get_wood_spear_positions(pos, direction_y):
+		if p == pos or not _cell_accepts_block(p) or is_escape_marker_pos(p):
+			continue
+		var block: Block = grid[p.x][p.y]
+		if block == null or block.is_rock():
+			continue
+		count += 1
+	return count
+
+
+func get_enemy_upper_preview_count(pos: Vector2i, owner_id: int) -> int:
+	if not _is_valid(pos):
+		return 0
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.is_upper_gem():
+		return 0
+	if block.upper_owner_team != Block.UpperOwnerTeam.ENEMY or block.upper_owner_id != owner_id:
+		return 0
+	var count: int = 0
+	for p in _get_blast_positions_for_upper(pos, block.upper_type):
+		if p == pos or not _cell_accepts_block(p) or is_escape_marker_pos(p):
+			continue
+		var target: Block = grid[p.x][p.y]
+		if _auto_is_normal_gem(target):
+			count += 1
+	return count
+
+
+func enemy_fuse_upper_from_group(
+	group: Array[Vector2i],
+	target: Vector2i,
+	ut: Block.UpperType,
+	gem_type: Block.Type,
+	owner_id: int,
+	wood_spear_pierce_breakable: bool = false
+) -> bool:
+	if group.is_empty() or not group.has(target):
+		return false
+	var target_block: Block = grid[target.x][target.y]
+	if target_block == null or target_block.is_obstacle() or target_block.is_upper_gem():
+		return false
+	var blocks_to_free: Array = []
+	for p in group:
+		if p == target or not _is_valid(p):
+			continue
+		var block: Block = grid[p.x][p.y]
+		if not _auto_is_normal_gem(block):
+			continue
+		grid[p.x][p.y] = null
+		blocks_to_free.append(block)
+		_play_gem_break_debris(block)
+	target_block.set_block_type(gem_type)
+	target_block.set_upper_type(ut)
+	target_block.set_upper_owner(Block.UpperOwnerTeam.ENEMY, owner_id)
+	if _is_wood_spear_type(ut):
+		target_block.wood_spear_pierce_breakable = wood_spear_pierce_breakable
+	play_fuse_animation(target_block)
+	_queue_free_blocks_after_debris(blocks_to_free)
+	await get_tree().create_timer(0.25).timeout
+	await _collapse_without_escape_progress()
+	return true
+
+
+func enemy_blast_group(group: Array[Vector2i]) -> Dictionary:
+	var count: int = 0
+	var world_positions: Array[Vector2] = []
+	var counts_by_type: Dictionary = {}
+	var positions_by_type: Dictionary = {}
+	var blocks_to_free: Array = []
+	for p in group:
+		if not _cell_accepts_block(p) or is_escape_marker_pos(p):
+			continue
+		var block: Block = grid[p.x][p.y]
+		if not _auto_is_normal_gem(block):
+			continue
+		var bt: Block.Type = block.block_type as Block.Type
+		grid[p.x][p.y] = null
+		count += 1
+		world_positions.append(block.global_position)
+		counts_by_type[bt] = int(counts_by_type.get(bt, 0)) + 1
+		if not positions_by_type.has(bt):
+			positions_by_type[bt] = []
+		(positions_by_type[bt] as Array).append(block.global_position)
+		blocks_to_free.append(block)
+		_play_gem_break_debris(block)
+	if count > 0:
+		enemy_break_pulse.emit()
+	_queue_free_blocks_after_debris(blocks_to_free)
+	await _collapse_without_escape_progress()
+	return {
+		"count": count,
+		"positions": world_positions,
+		"counts_by_type": counts_by_type,
+		"positions_by_type": positions_by_type,
+	}
+
+
+func enemy_trigger_owned_upper(pos: Vector2i, owner_id: int) -> Dictionary:
+	var visited: Dictionary = {}
+	return await _enemy_trigger_owned_upper_recursive(pos, owner_id, visited)
+
+
+func _enemy_trigger_owned_upper_recursive(pos: Vector2i, owner_id: int, visited: Dictionary) -> Dictionary:
+	var result := {"count": 0, "positions": [], "counts_by_type": {}, "positions_by_type": {}}
+	if not _is_valid(pos):
+		return result
+	var key: int = pos.x * 1000 + pos.y
+	if visited.has(key):
+		return result
+	visited[key] = true
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.is_upper_gem():
+		return result
+	if block.upper_owner_team != Block.UpperOwnerTeam.ENEMY or block.upper_owner_id != owner_id:
+		return result
+	var ut: Block.UpperType = block.upper_type
+	var positions: Array[Vector2i] = _get_blast_positions_for_upper(pos, ut)
+	var chain_positions: Array[Vector2i] = []
+	var blocks_to_free: Array = []
+	var normal_count: int = 0
+	var normal_world_positions: Array[Vector2] = []
+	var counts_by_type: Dictionary = {}
+	var positions_by_type: Dictionary = {}
+
+	_play_blast_vfx_for(pos, ut, block.global_position)
+	if _is_wood_spear_type(ut):
+		var direction_y: int = _wood_spear_direction(ut)
+		var destination: Vector2i = _wood_spear_destination(pos, positions, direction_y)
+		var row_groups: Array[Array] = _build_wood_spear_row_groups(pos, positions, direction_y)
+		var thrust_duration: float = maxf(float(maxi(row_groups.size(), 1)) * WOOD_SPEAR_ROW_HIT_INTERVAL, 0.18)
+		_play_wood_spear_thrust(grid_to_world(pos), grid_to_world(destination), direction_y, thrust_duration)
+
+		grid[pos.x][pos.y] = null
+		blocks_to_free.append(block)
+		_play_gem_break_debris(block, true)
+		_queue_free_blocks_after_debris(blocks_to_free)
+
+		for group_index in row_groups.size():
+			await get_tree().create_timer(WOOD_SPEAR_ROW_HIT_INTERVAL).timeout
+			var group: Array = row_groups[group_index]
+			normal_count += _destroy_enemy_wood_spear_row_group(group, owner_id, counts_by_type, positions_by_type, normal_world_positions, chain_positions)
+
+		if row_groups.is_empty():
+			await get_tree().create_timer(thrust_duration).timeout
+	else:
+		grid[pos.x][pos.y] = null
+		blocks_to_free.append(block)
+		_play_gem_break_debris(block, true)
+
+		for p in positions:
+			if p == pos or not _cell_accepts_block(p) or is_escape_marker_pos(p):
+				continue
+			var target: Block = grid[p.x][p.y]
+			if target == null or target.is_rock():
+				continue
+			if target.is_upper_gem():
+				if target.upper_owner_team == Block.UpperOwnerTeam.ENEMY and target.upper_owner_id == owner_id:
+					if not chain_positions.has(p):
+						chain_positions.append(p)
+				else:
+					grid[p.x][p.y] = null
+					blocks_to_free.append(target)
+					_play_gem_break_debris(target, true)
+				continue
+			if target.is_breakable_structure():
+				grid[p.x][p.y] = null
+				logic_grid[p.x][p.y] = LOGIC_UNKNOWN
+				blocks_to_free.append(target)
+				target.play_destroy_animation()
+				_spawn_plank_debris(target.global_position)
+				continue
+			var target_type: Block.Type = target.block_type as Block.Type
+			grid[p.x][p.y] = null
+			normal_count += 1
+			normal_world_positions.append(target.global_position)
+			counts_by_type[target_type] = int(counts_by_type.get(target_type, 0)) + 1
+			if not positions_by_type.has(target_type):
+				positions_by_type[target_type] = []
+			(positions_by_type[target_type] as Array).append(target.global_position)
+			blocks_to_free.append(target)
+			_play_gem_break_debris(target)
+
+		if not blocks_to_free.is_empty():
+			enemy_break_pulse.emit()
+		_queue_free_blocks_after_debris(blocks_to_free)
+
+	for chain_pos in chain_positions:
+		await get_tree().create_timer(chain_blast_interval).timeout
+		var chain_result: Dictionary = await _enemy_trigger_owned_upper_recursive(chain_pos, owner_id, visited)
+		normal_count += int(chain_result.get("count", 0))
+		normal_world_positions.append_array(chain_result.get("positions", []))
+		var chain_counts: Dictionary = chain_result.get("counts_by_type", {})
+		for bt in chain_counts:
+			counts_by_type[bt] = int(counts_by_type.get(bt, 0)) + int(chain_counts[bt])
+		var chain_positions_by_type: Dictionary = chain_result.get("positions_by_type", {})
+		for bt in chain_positions_by_type:
+			if not positions_by_type.has(bt):
+				positions_by_type[bt] = []
+			(positions_by_type[bt] as Array).append_array(chain_positions_by_type[bt])
+
+	await _collapse_without_escape_progress()
+	result["count"] = normal_count
+	result["positions"] = normal_world_positions
+	result["counts_by_type"] = counts_by_type
+	result["positions_by_type"] = positions_by_type
+	return result
+
+
+func _destroy_enemy_wood_spear_row_group(
+		group: Array,
+		owner_id: int,
+		counts_by_type: Dictionary,
+		positions_by_type: Dictionary,
+		normal_world_positions: Array[Vector2],
+		chained_positions: Array[Vector2i]
+) -> int:
+	var blocks_to_free: Array = []
+	var destroyed_count: int = 0
+	for value in group:
+		var p: Vector2i = value as Vector2i
+		if not _is_valid(p) or is_escape_marker_pos(p):
+			continue
+		var target: Block = grid[p.x][p.y]
+		if target == null or target.is_rock():
+			continue
+		if target.is_upper_gem():
+			if target.upper_owner_team == Block.UpperOwnerTeam.ENEMY and target.upper_owner_id == owner_id:
+				if not chained_positions.has(p):
+					chained_positions.append(p)
+			else:
+				grid[p.x][p.y] = null
+				blocks_to_free.append(target)
+				_play_gem_break_debris(target, true)
+			continue
+		if target.is_breakable_structure():
+			grid[p.x][p.y] = null
+			logic_grid[p.x][p.y] = LOGIC_UNKNOWN
+			blocks_to_free.append(target)
+			target.play_destroy_animation()
+			_spawn_plank_debris(target.global_position)
+			continue
+		var target_type: Block.Type = target.block_type as Block.Type
+		grid[p.x][p.y] = null
+		destroyed_count += 1
+		normal_world_positions.append(target.global_position)
+		counts_by_type[target_type] = int(counts_by_type.get(target_type, 0)) + 1
+		if not positions_by_type.has(target_type):
+			positions_by_type[target_type] = []
+		(positions_by_type[target_type] as Array).append(target.global_position)
+		blocks_to_free.append(target)
+		_play_gem_break_debris(target)
+
+	if not blocks_to_free.is_empty():
+		enemy_break_pulse.emit()
+	_queue_free_blocks_after_debris(blocks_to_free)
+	return destroyed_count
+
+
+func destroy_enemy_upper_gems_for_owner(owner_id: int) -> void:
+	var blocks_to_free: Array = []
+	for pos in find_owned_upper_gems(owner_id):
+		var block: Block = grid[pos.x][pos.y]
+		if block == null:
+			continue
+		grid[pos.x][pos.y] = null
+		blocks_to_free.append(block)
+		_play_gem_break_debris(block, true)
+	_queue_free_blocks_after_debris(blocks_to_free)
+
+
+func _queue_free_blocks_after_debris(blocks: Array) -> void:
+	if blocks.is_empty():
+		return
+	var captured_blocks := blocks.duplicate()
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		for block in captured_blocks:
+			if is_instance_valid(block):
+				block.queue_free()
+	, CONNECT_ONE_SHOT)
+
+
+func _collapse_without_escape_progress() -> void:
+	var was_suppressed: bool = _suppress_escape_marker_progress
+	_suppress_escape_marker_progress = true
+	await _collapse_and_fill()
+	_suppress_escape_marker_progress = was_suppressed
 
 
 ## 葉盾破碎動畫：先放大閃爍 → 拋物線跳起再跌落 + 漸層淡出

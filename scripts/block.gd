@@ -1,4 +1,4 @@
-## Block（寶石方塊）— 棋盤上每一格的寶石節點。
+﻿## Block（寶石方塊）— 棋盤上每一格的寶石節點。
 ## 負責外觀更新、消除動畫、掉落彈跳、融合提示等視覺表現。
 class_name Block
 extends Node2D
@@ -9,6 +9,7 @@ extends Node2D
 # WOOD_STRUCTURE：stationary + breakable obstacle.
 enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構
 enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾
+enum UpperOwnerTeam { PLAYER, ENEMY }
 
 # 額外效果（可同時掛載多個於單一寶石上）
 # X5：消除 / 連鎖 / 融合時計為 5 顆同色寶石；融合為高階寶石時清除
@@ -152,6 +153,8 @@ const BOUNCE_DUR := 0.16    # 彈跳持續時間（秒）
 
 var block_type = Type.RED              # 目前的寶石類型
 var upper_type: UpperType = UpperType.NONE  # 高階寶石類型（無 = 普通寶石）
+var upper_owner_team: UpperOwnerTeam = UpperOwnerTeam.PLAYER
+var upper_owner_id: int = 0
 var grid_pos := Vector2i.ZERO          # 在棋盤網格中的座標 (x, y)
 var board_columns: int = 8             # 棋盤欄數（woodStructure 選擇左右貼圖用）
 
@@ -167,6 +170,7 @@ var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 @onready var gem_sprite: Sprite2D = $GemSprite  # 寶石精靈圖
 var _upper_sprite: Sprite2D = null     # 高階寶石覆蓋精靈圖
 var _ray_burst: Node2D = null          # 旋轉放射光芒（高階寶石專用）
+var _enemy_owner_border: Line2D = null
 var _fuse_hint_label: Label = null     # 融合提示標籤
 var _fuse_hint_tween: Tween = null     # 融合提示閃爍動畫
 var _fuse_hint_stale := false           # 標記為待清理（用於差異更新）
@@ -240,6 +244,9 @@ func is_stationary_obstacle() -> bool:
 ## 設定高階寶石類型並更新外觀
 func set_upper_type(ut: UpperType) -> void:
 	upper_type = ut
+	if upper_type == UpperType.NONE:
+		upper_owner_team = UpperOwnerTeam.PLAYER
+		upper_owner_id = 0
 	intrinsic_bonus = 0
 	wood_spear_pierce_breakable = false
 	# 融合為高階寶石時清除所有額外效果（X5 不繼承）
@@ -249,6 +256,16 @@ func set_upper_type(ut: UpperType) -> void:
 		if UPPER_ELEMENT.has(ut):
 			block_type = UPPER_ELEMENT[ut]
 	update_visual()
+
+
+func set_upper_owner(team: UpperOwnerTeam, owner_id: int = 0) -> void:
+	upper_owner_team = team
+	upper_owner_id = maxi(0, owner_id)
+	update_visual()
+
+
+func is_enemy_upper_gem() -> bool:
+	return is_upper_gem() and upper_owner_team == UpperOwnerTeam.ENEMY
 
 
 ## 設定基礎寶石類型並更新外觀
@@ -418,6 +435,8 @@ func _update_upper_overlay() -> void:
 		if _ray_burst != null:
 			_ray_burst.queue_free()
 			_ray_burst = null
+		if _enemy_owner_border != null:
+			_enemy_owner_border.visible = false
 		var base_texture: Texture2D = get_base_texture()
 		var has_gem: bool = base_texture != null
 		if gem_sprite:
@@ -491,6 +510,28 @@ func _update_upper_overlay() -> void:
 		_upper_sprite.rotation = deg_to_rad(90)
 	else:
 		_upper_sprite.rotation = 0.0
+	_update_upper_owner_border()
+
+
+func _update_upper_owner_border() -> void:
+	if not is_enemy_upper_gem():
+		if _enemy_owner_border != null:
+			_enemy_owner_border.visible = false
+		return
+	if _enemy_owner_border == null:
+		_enemy_owner_border = Line2D.new()
+		_enemy_owner_border.width = 4.0
+		_enemy_owner_border.default_color = Color(1.0, 0.12, 0.08, 0.95)
+		_enemy_owner_border.closed = true
+		_enemy_owner_border.z_index = 8
+		_enemy_owner_border.points = PackedVector2Array([
+			Vector2(-30, -30),
+			Vector2(30, -30),
+			Vector2(30, 30),
+			Vector2(-30, 30),
+		])
+		add_child(_enemy_owner_border)
+	_enemy_owner_border.visible = true
 
 
 ## 播放消除動畫（精靈圖表逐幀播放，或縮放＋淡出的備用動畫）

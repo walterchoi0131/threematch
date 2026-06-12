@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Resource" path="res://enemies/slime.tres" id="1_0e11v"]
+[ext_resource type="Resource" path="res://enemies/gory.tres" id="1_0e11v"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="3_t8um1"]
 
@@ -14,7 +14,7 @@ element_weights = Array[int]([1, 1, 1])
 area = "meadow"
 rounds = Array[Array]([[ExtResource("1_0e11v")]])
 rounds_init_cd = Array[Array]([[0]])
-rounds_enemy_levels = Array[Array]([[1]])
+rounds_enemy_levels = Array[Array]([[9]])
 rounds_main_bosses = Array[Array]([[false]])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
