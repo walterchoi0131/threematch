@@ -81,6 +81,23 @@ var _next_click_is_drained: bool = false
 # 由 main.gd 設定：attack worker 仍在處理 queue（影響 upper-gem drain 時機）
 var external_attack_busy: bool = false
 
+
+func _player_is_defeated() -> bool:
+	return battle_manager_ref != null and int(battle_manager_ref.get("player_current_hp")) <= 0
+
+
+func _block_input_after_defeat() -> bool:
+	if not _player_is_defeated():
+		return false
+	deferred_clicks.clear()
+	_next_click_is_drained = false
+	if _longpress_active:
+		_hide_blast_preview()
+	_longpress_active = false
+	_longpress_pos = Vector2i(-1, -1)
+	_longpress_timer = 0.0
+	return true
+
 # ── 選擇模式（主動技能用：懸停預覽十字範圍，點擊確認轉換）──
 var _selection_mode: bool = false           # 是否處於選擇模式
 var _selection_convert_type: Block.Type = Block.Type.RED  # 選擇模式要轉換的目標類型
@@ -1092,6 +1109,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _edit_mode:
 		_handle_edit_input(event)
 		return
+	if _block_input_after_defeat():
+		return
 
 	if _selection_mode:
 		if event is InputEventMouseMotion:
@@ -1410,6 +1429,8 @@ func _try_queue_click(pos: Vector2i) -> void:
 func _drain_deferred_clicks() -> void:
 	if _draining or is_busy:
 		return
+	if _block_input_after_defeat():
+		return
 	if deferred_clicks.is_empty():
 		return
 	if is_fusing or _selection_mode:
@@ -1436,6 +1457,9 @@ func _drain_deferred_clicks() -> void:
 ## 由 main.gd 在 attack worker 結束時呼叫，嘗試 drain 高階寶石點擊
 func notify_external_attack_busy(busy: bool) -> void:
 	external_attack_busy = busy
+	if _player_is_defeated():
+		deferred_clicks.clear()
+		return
 	if not busy and not is_busy:
 		call_deferred("_drain_deferred_clicks")
 
@@ -1445,6 +1469,8 @@ func notify_external_attack_busy(busy: bool) -> void:
 ## 如果連接數 >= min_match → 消除並掉落填充
 ## 否則 → 抖動提示無效
 func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位置
+	if _block_input_after_defeat():
+		return
 	if not _cell_accepts_block(pos):
 		return
 	if _tutorial_filter.size() > 0 and not _tutorial_filter.has(pos):
@@ -3380,6 +3406,14 @@ func _enemy_trigger_owned_upper_recursive(pos: Vector2i, owner_id: int, visited:
 	var positions_by_type: Dictionary = {}
 
 	_play_blast_vfx_for(pos, ut, block.global_position)
+	var upper_element: Block.Type = block.block_type as Block.Type
+	var upper_value: int = block.get_blast_value()
+	normal_count += upper_value
+	normal_world_positions.append(block.global_position)
+	counts_by_type[upper_element] = int(counts_by_type.get(upper_element, 0)) + upper_value
+	if not positions_by_type.has(upper_element):
+		positions_by_type[upper_element] = []
+	(positions_by_type[upper_element] as Array).append(block.global_position)
 	if _is_wood_spear_type(ut):
 		var direction_y: int = _wood_spear_direction(ut)
 		var destination: Vector2i = _wood_spear_destination(pos, positions, direction_y)

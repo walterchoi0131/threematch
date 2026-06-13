@@ -7002,16 +7002,20 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 	var place_count: int = 1 + _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_ACTIVE, 0, "leaf_spear_extra_cells")
 	var candidates: Array[Dictionary] = []
 	for x in board.columns:
-		for y in board.rows:
-			var pos := Vector2i(x, y)
+		var edge_options: Array[Dictionary] = [
+			{"pos": Vector2i(x, 0), "ut": Block.UpperType.WOOD_SPEAR_DOWN},
+			{"pos": Vector2i(x, board.rows - 1), "ut": Block.UpperType.WOOD_SPEAR_UP},
+		]
+		for option in edge_options:
+			var pos: Vector2i = option["pos"] as Vector2i
 			if not _auto_enemy_can_place_spear_at(pos):
 				continue
-			for ut in [Block.UpperType.WOOD_SPEAR_DOWN, Block.UpperType.WOOD_SPEAR_UP]:
-				var score: Dictionary = _auto_score_wood_spear_cell(pos, ut)
-				score["pos"] = pos
-				score["ut"] = ut
-				score["tie"] = randf()
-				candidates.append(score)
+			var ut: Block.UpperType = option["ut"] as Block.UpperType
+			var score: Dictionary = _auto_score_wood_spear_cell(pos, ut)
+			score["pos"] = pos
+			score["ut"] = ut
+			score["tie"] = randf()
+			candidates.append(score)
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var upper_a: int = int(a.get("player_upper_hits", 0))
 		var upper_b: int = int(b.get("player_upper_hits", 0))
@@ -7023,12 +7027,21 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 			return leaf_a > leaf_b
 		return float(a.get("tie", 0.0)) > float(b.get("tie", 0.0))
 	)
-	var placed_count: int = 0
+	var selected_entries: Array[Dictionary] = []
+	var used_columns: Dictionary = {}
 	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
 	var pierces_breakable: bool = _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_RESPONDING, responding_index, "wood_spear_pierce_breakable") > 0
 	for entry in candidates:
-		if placed_count >= place_count:
+		if selected_entries.size() >= place_count:
 			break
+		var pos: Vector2i = entry["pos"] as Vector2i
+		if used_columns.has(pos.x):
+			continue
+		selected_entries.append(entry)
+		used_columns[pos.x] = true
+	var placed_count: int = 0
+	for entry_index in selected_entries.size():
+		var entry: Dictionary = selected_entries[entry_index]
 		var pos: Vector2i = entry["pos"] as Vector2i
 		var ut: Block.UpperType = entry["ut"] as Block.UpperType
 		if board.place_upper_gem(pos, ut, auto_character.gem_type, Block.UpperOwnerTeam.ENEMY, owner_id):
@@ -7036,9 +7049,11 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 			if placed_block != null:
 				placed_block.wood_spear_pierce_breakable = pierces_breakable
 			placed_count += 1
+			_play_sfx(_se_freeze)
+			if entry_index < selected_entries.size() - 1:
+				await get_tree().create_timer(0.5).timeout
 	if placed_count > 0:
 		board.resync_logic_from_visual()
-		_play_sfx(_se_freeze)
 	return placed_count > 0
 
 
@@ -7206,10 +7221,22 @@ func _play_auto_enemy_cursor_tap(target_pos: Vector2i, gem_type: Block.Type) -> 
 	var base_scale: float = 54.0 / maxf(max_side, 1.0)
 	cursor.scale = Vector2(base_scale, base_scale)
 	cursor.modulate = Color(1.0, 1.0, 1.0, 0.0)
-	cursor.position = target_global + Vector2(-74.0, -56.0)
+	var cursor_cell_top_center_offset := Vector2(32.0, 0.0)
+	var hover_pos: Vector2 = target_global + Vector2(-74.0, -56.0) + cursor_cell_top_center_offset
+	var board_center_global: Vector2 = board.to_global(Vector2(
+		float(board.columns) * float(board.CELL_SIZE) * 0.5,
+		float(board.rows) * float(board.CELL_SIZE) * 0.5
+	))
+	cursor.position = board_center_global + Vector2(-20.0, -18.0)
 	fx_layer.add_child(cursor)
 
-	var press_pos: Vector2 = target_global + Vector2(-20.0, -18.0)
+	var intro_tw := create_tween()
+	intro_tw.set_parallel(true)
+	intro_tw.tween_property(cursor, "modulate:a", 1.0, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	intro_tw.tween_property(cursor, "position", hover_pos, 0.42).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
+	await intro_tw.finished
+
+	var press_pos: Vector2 = target_global + Vector2(-20.0, -18.0) + cursor_cell_top_center_offset
 	var color: Color = Block.COLORS.get(gem_type, Color.WHITE)
 	var tw := create_tween()
 	tw.set_parallel(true)

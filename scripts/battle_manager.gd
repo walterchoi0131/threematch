@@ -666,6 +666,8 @@ func _has_logic_enemies_to_attack() -> bool:
 ## 邏輯側：是否仍可接受新的爆破輸入
 ##   false 表示應阻擋輸入：(1) 邏輯敵人全滅 (2) 邏輯預測下回合敵人攻擊
 func logic_can_blast() -> bool:
+	if player_current_hp <= 0:
+		return false
 	if logic_pending_enemy_attack:
 		return false
 	# 無敵人模式：永遠允許輸入

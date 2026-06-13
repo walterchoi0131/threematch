@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="EnemyData" format=3]
 
 [ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="2_ncdk3"]
 [ext_resource type="Texture2D" path="res://assets/gory.png" id="2_portrait"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="3_character"]
 
@@ -9,14 +10,8 @@ script = ExtResource("1_script")
 enemy_name = "Gory"
 enemy_name_zh = "戈爾"
 enemy_name_en = "Gory"
-enemy_level = 5
-max_hp = 500
+max_hp = 4850
 action_pattern = Array[int]([4])
-action_percents = Array[int]([15])
-action_counts = Array[int]([3])
+auto_character = ExtResource("3_character")
 portrait_color = Color(0.3, 0.69, 0.31, 1)
 portrait_texture = ExtResource("2_portrait")
-element = 2
-auto_character = ExtResource("3_character")
-auto_gem_atk_power = 1.0
-auto_use_max_skill_upgrades = true

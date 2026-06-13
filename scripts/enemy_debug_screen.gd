@@ -28,6 +28,17 @@ class _ActionPaletteRow extends HBoxContainer:
 			owner_screen.call("_drop_action_on_palette", data)
 
 
+class _ActionPaletteGrid extends GridContainer:
+	var owner_screen: Control = null
+
+	func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+		return owner_screen != null and owner_screen.has_method("_can_drop_action_on_palette") and bool(owner_screen.call("_can_drop_action_on_palette", data))
+
+	func _drop_data(_at_position: Vector2, data: Variant) -> void:
+		if owner_screen != null and owner_screen.has_method("_drop_action_on_palette"):
+			owner_screen.call("_drop_action_on_palette", data)
+
+
 class _ActionChip extends Button:
 	var action_type: int = EnemyData.ActionType.ATTACK_15
 	var attack_percent: int = EnemyData.ATTACK_PERCENT_DEFAULT
@@ -667,7 +678,7 @@ func _build_fields_column(parent: HBoxContainer) -> void:
 	_hp_slider.step = 25
 	_hp_slider.value = _selected_enemy.get_hp_percent()
 	_hp_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_hp_slider.tooltip_text = "Actual HP = same-level estimated player team ATK × this percent."
+	_hp_slider.tooltip_text = "Actual HP = same-level estimated player team ATK x this percent."
 	_hp_slider.value_changed.connect(_on_hp_percent_changed)
 	hp_box.add_child(_hp_slider)
 	_hp_value_lbl = Label.new()
@@ -896,7 +907,7 @@ func _current_passive_required_count() -> int:
 
 func _build_action_column(parent: VBoxContainer) -> void:
 	var action_panel := PanelContainer.new()
-	action_panel.custom_minimum_size = Vector2(0, 252)
+	action_panel.custom_minimum_size = Vector2(0, 186)
 	action_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.035, 0.04, 0.07, 0.98), Color(0.28, 0.32, 0.45, 1.0), 8))
 	parent.add_child(action_panel)
@@ -904,37 +915,40 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 10)
 	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
 	action_panel.add_child(margin)
 
 	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 12)
+	stack.add_theme_constant_override("separation", 6)
 	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(stack)
 
 	var palette_box := VBoxContainer.new()
 	palette_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	palette_box.add_theme_constant_override("separation", 8)
+	palette_box.add_theme_constant_override("separation", 4)
 	stack.add_child(palette_box)
 
 	palette_box.add_child(_make_section_title("Action List"))
 
-	var palette := _ActionPaletteRow.new()
+	var palette := _ActionPaletteGrid.new()
+	palette.columns = 5
 	palette.owner_screen = self
-	palette.add_theme_constant_override("separation", 8)
+	palette.add_theme_constant_override("h_separation", 6)
+	palette.add_theme_constant_override("v_separation", 4)
+	palette.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	palette_box.add_child(palette)
 	palette.add_child(_make_action_chip(EnemyData.ActionType.REST, -1))
 
 	var attack_box := VBoxContainer.new()
-	attack_box.custom_minimum_size = Vector2(168, 0)
-	attack_box.add_theme_constant_override("separation", 4)
+	attack_box.custom_minimum_size = Vector2(132, 0)
+	attack_box.add_theme_constant_override("separation", 2)
 	palette.add_child(attack_box)
 	_attack_palette_chip = _make_action_chip(EnemyData.ActionType.ATTACK_15, -1, _current_attack_percent())
 	attack_box.add_child(_attack_palette_chip)
 	var attack_slider_row := HBoxContainer.new()
-	attack_slider_row.add_theme_constant_override("separation", 6)
+	attack_slider_row.add_theme_constant_override("separation", 4)
 	attack_box.add_child(attack_slider_row)
 	_attack_percent_slider = HSlider.new()
 	_attack_percent_slider.min_value = EnemyData.ATTACK_PERCENT_MIN
@@ -946,7 +960,7 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_attack_percent_slider.value_changed.connect(_on_attack_percent_changed)
 	attack_slider_row.add_child(_attack_percent_slider)
 	_attack_percent_lbl = Label.new()
-	_attack_percent_lbl.custom_minimum_size = Vector2(44, 0)
+	_attack_percent_lbl.custom_minimum_size = Vector2(34, 0)
 	_attack_percent_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_attack_percent_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_attack_percent_lbl.add_theme_font_size_override("font_size", 11)
@@ -957,8 +971,8 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	palette.add_child(_make_action_chip(EnemyData.ActionType.STONE_MAGIC, -1))
 
 	var lightbreak_box := VBoxContainer.new()
-	lightbreak_box.custom_minimum_size = Vector2(188, 0)
-	lightbreak_box.add_theme_constant_override("separation", 4)
+	lightbreak_box.custom_minimum_size = Vector2(138, 0)
+	lightbreak_box.add_theme_constant_override("separation", 2)
 	palette.add_child(lightbreak_box)
 	_lightbreak_palette_chip = _make_action_chip(
 		EnemyData.ActionType.BREAK_LIGHT_ATTACK,
@@ -971,7 +985,7 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	lightbreak_count_row.add_theme_constant_override("separation", 6)
 	lightbreak_box.add_child(lightbreak_count_row)
 	var lightbreak_count_label := Label.new()
-	lightbreak_count_label.text = "Light"
+	lightbreak_count_label.text = "L"
 	lightbreak_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lightbreak_count_label.add_theme_font_size_override("font_size", 11)
 	lightbreak_count_label.add_theme_color_override("font_color", Color(0.90, 0.94, 1.0))
@@ -981,53 +995,58 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_lightbreak_count_spin.max_value = EnemyData.ACTION_COUNT_MAX
 	_lightbreak_count_spin.step = 1
 	_lightbreak_count_spin.value = EnemyData.ACTION_COUNT_DEFAULT
-	_lightbreak_count_spin.custom_minimum_size = Vector2(72, 0)
+	_lightbreak_count_spin.custom_minimum_size = Vector2(56, 24)
 	_lightbreak_count_spin.tooltip_text = "Light gem count removed by new Lightbreak actions."
 	_lightbreak_count_spin.value_changed.connect(_on_lightbreak_count_changed)
 	lightbreak_count_row.add_child(_lightbreak_count_spin)
 
 	var auto_box := VBoxContainer.new()
-	auto_box.custom_minimum_size = Vector2(190, 0)
-	auto_box.add_theme_constant_override("separation", 4)
+	auto_box.custom_minimum_size = Vector2(126, 0)
+	auto_box.add_theme_constant_override("separation", 2)
 	palette.add_child(auto_box)
 	auto_box.add_child(_make_action_chip(EnemyData.ActionType.AUTO, -1))
 	_auto_character_option = OptionButton.new()
-	_auto_character_option.custom_minimum_size = Vector2(176, 28)
+	_auto_character_option.custom_minimum_size = Vector2(104, 22)
 	_auto_character_option.tooltip_text = "Character skill kit used by Auto enemies."
 	_populate_auto_character_option()
-	auto_box.add_child(_make_labeled_control("Auto Character", _auto_character_option))
+	auto_box.add_child(_auto_character_option)
+	var auto_controls := HBoxContainer.new()
+	auto_controls.add_theme_constant_override("separation", 3)
+	auto_box.add_child(auto_controls)
 	_auto_power_spin = SpinBox.new()
 	_auto_power_spin.min_value = 0.0
 	_auto_power_spin.max_value = 50.0
 	_auto_power_spin.step = 0.1
 	_auto_power_spin.value = _selected_enemy.auto_gem_atk_power if _selected_enemy != null else 1.0
-	_auto_power_spin.custom_minimum_size = Vector2(84, 28)
-	auto_box.add_child(_make_labeled_control("Gem Atk %", _auto_power_spin))
+	_auto_power_spin.custom_minimum_size = Vector2(52, 22)
+	auto_controls.add_child(_auto_power_spin)
 	_auto_max_skill_check = CheckBox.new()
-	_auto_max_skill_check.text = "Max Skill"
+	_auto_max_skill_check.text = "Max"
 	_auto_max_skill_check.button_pressed = _selected_enemy.auto_use_max_skill_upgrades if _selected_enemy != null else true
-	auto_box.add_child(_auto_max_skill_check)
+	auto_controls.add_child(_auto_max_skill_check)
 
 	var sequence_box := VBoxContainer.new()
-	sequence_box.add_theme_constant_override("separation", 8)
+	sequence_box.add_theme_constant_override("separation", 4)
 	sequence_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sequence_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stack.add_child(sequence_box)
 
-	var sequence_title := _make_section_title("行動序列表")
-	sequence_box.add_child(sequence_title)
+	var sequence_row := HBoxContainer.new()
+	sequence_row.add_theme_constant_override("separation", 6)
+	sequence_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sequence_box.add_child(sequence_row)
 
 	var row_panel := PanelContainer.new()
-	row_panel.custom_minimum_size = Vector2(0, 86)
+	row_panel.custom_minimum_size = Vector2(0, 54)
 	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.02, 0.025, 0.045, 1.0), Color(0.28, 0.32, 0.45, 1.0), 8))
-	sequence_box.add_child(row_panel)
+	sequence_row.add_child(row_panel)
 
 	var row_margin := MarginContainer.new()
-	row_margin.add_theme_constant_override("margin_left", 8)
-	row_margin.add_theme_constant_override("margin_right", 8)
-	row_margin.add_theme_constant_override("margin_top", 8)
-	row_margin.add_theme_constant_override("margin_bottom", 8)
+	row_margin.add_theme_constant_override("margin_left", 6)
+	row_margin.add_theme_constant_override("margin_right", 6)
+	row_margin.add_theme_constant_override("margin_top", 6)
+	row_margin.add_theme_constant_override("margin_bottom", 6)
 	row_panel.add_child(row_margin)
 
 	var action_scroll := ScrollContainer.new()
@@ -1044,13 +1063,13 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	_action_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_scroll.add_child(_action_row)
 
-	var row_buttons := HBoxContainer.new()
-	row_buttons.add_theme_constant_override("separation", 8)
-	sequence_box.add_child(row_buttons)
+	var row_buttons := VBoxContainer.new()
+	row_buttons.add_theme_constant_override("separation", 4)
+	sequence_row.add_child(row_buttons)
 
 	var clear_btn := Button.new()
-	clear_btn.text = "Clear Sequence"
-	clear_btn.custom_minimum_size = Vector2(128, 32)
+	clear_btn.text = "Clear"
+	clear_btn.custom_minimum_size = Vector2(74, 24)
 	clear_btn.pressed.connect(func() -> void:
 		_action_sequence.clear()
 		_action_percents.clear()
@@ -1060,8 +1079,8 @@ func _build_action_column(parent: VBoxContainer) -> void:
 	row_buttons.add_child(clear_btn)
 
 	var fallback_btn := Button.new()
-	fallback_btn.text = "Default Attack"
-	fallback_btn.custom_minimum_size = Vector2(128, 32)
+	fallback_btn.text = "Default"
+	fallback_btn.custom_minimum_size = Vector2(74, 24)
 	fallback_btn.pressed.connect(func() -> void:
 		_action_sequence = [EnemyData.ActionType.ATTACK_15]
 		_action_percents = [EnemyData.ATTACK_PERCENT_DEFAULT]
@@ -1085,9 +1104,9 @@ func _make_action_chip(
 	chip.action_count = _action_count_for_type(action_type, action_count)
 	chip.source_index = source_index
 	chip.text = _action_label(action_type, chip.attack_percent, chip.action_count)
-	chip.tooltip_text = "Drag into 行動序列表" if source_index < 0 else "Drag to reorder, or drag back to Action List to remove"
-	chip.custom_minimum_size = Vector2(112, 38)
-	chip.add_theme_font_size_override("font_size", 13)
+	chip.tooltip_text = "Drag into Action Sequence" if source_index < 0 else "Drag to reorder, or drag back to Action List to remove"
+	chip.custom_minimum_size = Vector2(94, 32)
+	chip.add_theme_font_size_override("font_size", 11)
 	chip.add_theme_stylebox_override("normal", _action_style(action_type, false))
 	chip.add_theme_stylebox_override("hover", _action_style(action_type, true))
 	chip.add_theme_stylebox_override("pressed", _action_style(action_type, true))
