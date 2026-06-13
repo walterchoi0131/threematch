@@ -23,10 +23,10 @@ static func make_pre_dialog() -> Array:
 			"嗚哇——！！怎麼會突然掉下這麼多木板！？",
 			"Whoa—!! Why are so many planks suddenly falling!?"),
 		_line("shark", "normal",
-			"該死……這樣下去棋盤要被堵滿了。",
+			"該死……這樣下去盤面要被堵滿了。",
 			"Damn it… at this rate the board's going to be jammed."),
 		_line("dragon", "normal",
-			"……（思考）……\n我必須做點什麼……如果是火焰……或許能燒穿這些木板。",
+			"……（思考）……\n我必須做點什麼……如果是我的火焰……或許能炸穿這些木板!!",
 			"……(thinking)……\nI have to do something… with my flame… maybe I can burn through these planks."),
 	]
 
@@ -35,12 +35,12 @@ static func make_pre_dialog() -> Array:
 static func make_post_dialog() -> Array:
 	return [
 		_line("panda", "normal",
-			"哇——！龍哥好厲害！木板一下就被燒掉了！",
-			"Wow—! Milo, you're amazing! The planks burned right up!"),
+			"哇——！木板一下就被破壞了！",
+			"Wow—! The planks were destroyed in an instant!"),
 		_line("dragon", "normal",
 			"沒、沒什麼啦……",
 			"I-it's nothing…"),
 		_line("shark", "normal",
-			"别停，繼續前進！",
+			"繼續前進！",
 			"Keep moving!"),
 	]

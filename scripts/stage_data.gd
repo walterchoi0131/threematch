@@ -238,6 +238,7 @@ func _default_element_distribution() -> Dictionary:
 @export var puzzle_goal_kind: PuzzleGoalKind = PuzzleGoalKind.BREAK_COUNT
 @export var puzzle_goal_target_type: int = Block.Type.RED
 @export var puzzle_goal_required_count: int = 10
+@export var puzzle_turn_limit: int = 30
 
 const _DialogSequence := preload("res://scripts/dialog_sequence.gd")
 @export var pre_dialog: _DialogSequence = null  # 戰鬥前 AVG 對話（可選）

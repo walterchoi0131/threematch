@@ -59,6 +59,14 @@ var _puzzle_goal_prefix_label: Label = null
 var _puzzle_goal_number_label: Label = null
 var _puzzle_goal_target_label: Label = null
 var _puzzle_goal_tween: Tween = null
+var _puzzle_turn_limit: int = 0
+var _puzzle_turns_left: int = 0
+var _puzzle_turns_displayed: int = 0
+var _puzzle_turn_limit_failed: bool = false
+var _puzzle_turn_prefix_label: Label = null
+var _puzzle_turn_number_label: Label = null
+var _puzzle_turn_tween: Tween = null
+var _puzzle_turn_warning_tween: Tween = null
 
 # ── Stage 1-6 急難奇蹟事件 ─────────────────────────────────
 var _plank_event_pending: bool = false
@@ -301,6 +309,7 @@ var _stage_editor_enemy_area_round_label: Label = null
 var _stage_editor_enemy_area_slots: Control = null
 var _stage_editor_goal_target_option: OptionButton = null
 var _stage_editor_goal_count_spin: SpinBox = null
+var _stage_editor_goal_turn_spin: SpinBox = null
 var _stage_editor_current_round_index: int = 0
 var _stage_editor_rounds_container: VBoxContainer = null
 var _stage_editor_rounds_list: VBoxContainer = null
@@ -2809,7 +2818,7 @@ func _refresh_stage_editor_goal_area() -> void:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.11, 0.12, 0.18, 0.94)))
 	_stage_editor_enemy_area_slots.add_child(panel)
-	_stage_editor_set_control_rect(panel, Rect2(0.0, 0.0, 430.0, 78.0))
+	_stage_editor_set_control_rect(panel, Rect2(0.0, 0.0, 540.0, 78.0))
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 10)
@@ -2874,6 +2883,27 @@ func _refresh_stage_editor_goal_area() -> void:
 	_stage_editor_goal_count_spin.value_changed.connect(_on_stage_editor_goal_count_changed)
 	count_box.add_child(_stage_editor_goal_count_spin)
 
+	var turn_box := VBoxContainer.new()
+	turn_box.add_theme_constant_override("separation", 2)
+	turn_box.custom_minimum_size = Vector2(96, 0)
+	row.add_child(turn_box)
+
+	var turn_label := Label.new()
+	turn_label.text = "Turn Left"
+	turn_label.add_theme_font_size_override("font_size", 11)
+	turn_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
+	turn_box.add_child(turn_label)
+
+	_stage_editor_goal_turn_spin = SpinBox.new()
+	_stage_editor_goal_turn_spin.min_value = 1
+	_stage_editor_goal_turn_spin.max_value = 999
+	_stage_editor_goal_turn_spin.step = 1
+	_stage_editor_goal_turn_spin.value = maxi(1, current_stage.puzzle_turn_limit)
+	_stage_editor_goal_turn_spin.custom_minimum_size = Vector2(92, 28)
+	_stage_editor_goal_turn_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_editor_goal_turn_spin.value_changed.connect(_on_stage_editor_goal_turn_changed)
+	turn_box.add_child(_stage_editor_goal_turn_spin)
+
 	var hint := Label.new()
 	hint.text = "Break Count"
 	hint.add_theme_font_size_override("font_size", 13)
@@ -2889,6 +2919,7 @@ func _refresh_stage_editor_enemy_area() -> void:
 	_stage_editor_sync_enemy_area_mode_controls()
 	_stage_editor_goal_target_option = null
 	_stage_editor_goal_count_spin = null
+	_stage_editor_goal_turn_spin = null
 	for child in _stage_editor_enemy_area_slots.get_children():
 		_stage_editor_enemy_area_slots.remove_child(child)
 		child.queue_free()
@@ -3980,6 +4011,8 @@ func _on_stage_editor_mode_button_pressed(mode_value: int) -> void:
 			current_stage.puzzle_goal_target_type = Block.Type.RED
 		if current_stage.puzzle_goal_required_count < 0:
 			current_stage.puzzle_goal_required_count = 0
+		if current_stage.puzzle_turn_limit <= 0:
+			current_stage.puzzle_turn_limit = 30
 	_refresh_stage_editor_mode_buttons()
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
@@ -4010,6 +4043,13 @@ func _on_stage_editor_goal_count_changed(value: float) -> void:
 	_set_stage_editor_status("Goal count: %d" % current_stage.puzzle_goal_required_count)
 
 
+func _on_stage_editor_goal_turn_changed(value: float) -> void:
+	if current_stage == null:
+		return
+	current_stage.puzzle_turn_limit = maxi(1, int(round(value)))
+	_set_stage_editor_status("Puzzle turns: %d" % current_stage.puzzle_turn_limit)
+
+
 func _on_stage_editor_clear_pressed() -> void:
 	board.clear_fixed_layout()
 	_set_stage_editor_status("Cleared")
@@ -4029,6 +4069,12 @@ func _stage_editor_get_goal_count_from_ui() -> int:
 	return int(current_stage.puzzle_goal_required_count) if current_stage != null else 0
 
 
+func _stage_editor_get_goal_turn_limit_from_ui() -> int:
+	if _stage_editor_goal_turn_spin != null:
+		return maxi(1, int(round(_stage_editor_goal_turn_spin.value)))
+	return int(current_stage.puzzle_turn_limit) if current_stage != null else 30
+
+
 func _stage_editor_apply_puzzle_goal_from_ui() -> void:
 	if current_stage == null:
 		return
@@ -4037,6 +4083,7 @@ func _stage_editor_apply_puzzle_goal_from_ui() -> void:
 	current_stage.puzzle_goal_kind = StageData.PuzzleGoalKind.BREAK_COUNT
 	current_stage.puzzle_goal_target_type = _stage_editor_get_goal_target_from_ui()
 	current_stage.puzzle_goal_required_count = _stage_editor_get_goal_count_from_ui()
+	current_stage.puzzle_turn_limit = _stage_editor_get_goal_turn_limit_from_ui()
 
 
 func _on_stage_editor_save_pressed() -> void:
@@ -4095,6 +4142,8 @@ func _stage_editor_validate_rounds_for_save() -> String:
 			return "Save failed: invalid puzzle goal target"
 		if current_stage.puzzle_goal_required_count <= 0:
 			return "Save failed: puzzle goal count must be > 0"
+		if current_stage.puzzle_turn_limit <= 0:
+			return "Save failed: puzzle turns must be > 0"
 		return ""
 	if _stage_editor_rounds.is_empty():
 		return "Save failed: add at least one round"
@@ -5093,6 +5142,19 @@ func _play_skill_animation_phase(params: Variant) -> void:
 
 # ── 回合管線 ─────────────────────────────────────────────────────
 
+func _consume_puzzle_turn_or_defeat() -> bool:
+	if not _puzzle_mode or _puzzle_goal_completed or _puzzle_turn_limit_failed:
+		return false
+	if current_stage == null or current_stage.mode != StageData.Mode.PUZZLE:
+		return false
+	_puzzle_turns_left = maxi(_puzzle_turns_left - 1, 0)
+	_update_puzzle_turn_panel(true)
+	if _puzzle_turns_left <= 0:
+		await _trigger_puzzle_turn_limit_defeat()
+		return true
+	return false
+
+
 ## 融合管線：放置高階寶石（不消耗回合）
 ## 粒子飛向點擊位置 → 放置高階寶石 → 處理並行融合 → 掉落填充 → 清除消除資料 → 解鎖棋盤
 func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: Array, grid_positions: Array[Vector2i], responses: Array) -> void:
@@ -5208,6 +5270,9 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 ## 結束玩家回合管線：turn++ → 1 秒延遲 → 敵人行動 → 被動技能 → 解鎖棋盤
 func _end_player_turn() -> void:
 	_reset_spell_chain()
+	var puzzle_turn_ended_with_defeat: bool = await _consume_puzzle_turn_or_defeat()
+	if puzzle_turn_ended_with_defeat:
+		return
 	battle_manager.finish_turn()
 
 	# 召喚物每回合行動：豪豬攻擊 / 烏龜回血
@@ -7716,6 +7781,7 @@ func _style_player_hp_bar() -> void:
 ## 玩家戰敗
 func _on_player_defeated() -> void:
 	_escape_failed = true
+	_puzzle_turn_limit_failed = true
 	_plank_event_pending = false
 	_plank_event_deferred_check_running = false
 	board.is_busy = true
@@ -7731,6 +7797,19 @@ func _on_player_defeated() -> void:
 	_show_defeat_overlay()
 
 
+func _trigger_puzzle_turn_limit_defeat() -> void:
+	if _puzzle_turn_limit_failed or _victory_overlay != null or _defeat_overlay != null:
+		return
+	_puzzle_turn_limit_failed = true
+	board.deferred_clicks.clear()
+	board.set_input_queue_locked(true)
+	board.is_busy = true
+	await _wait_for_board_motion_idle()
+	if board.has_method("play_lose_animation"):
+		await board.play_lose_animation()
+	_show_defeat_overlay("PUZZLE_WRONG_DEFEAT")
+
+
 func _play_escape_marker_scatter_after_delay(delay: float) -> void:
 	await get_tree().create_timer(delay).timeout
 	if _escape_mode and board != null and board.has_method("play_escape_marker_scatter"):
@@ -7738,7 +7817,7 @@ func _play_escape_marker_scatter_after_delay(delay: float) -> void:
 
 
 ## 顯示敗戰覆蓋層
-func _show_defeat_overlay() -> void:
+func _show_defeat_overlay(title_key: String = "DEFEATED") -> void:
 	if _defeat_overlay != null:
 		return
 	var font: Font = load("res://assets/fonts/game_ui_font.tres")
@@ -7774,7 +7853,7 @@ func _show_defeat_overlay() -> void:
 
 	# "DEFEATED" 標題
 	var title := Label.new()
-	title.text = Locale.tr_ui("DEFEATED")
+	title.text = Locale.tr_ui(title_key)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", font)
 	title.add_theme_font_size_override("font_size", 48)
@@ -8115,28 +8194,41 @@ func _set_escape_distance_digit_frame(value: int, base_y: float) -> void:
 func _setup_puzzle_goal_hud() -> void:
 	_puzzle_mode = current_stage != null and current_stage.mode == StageData.Mode.PUZZLE
 	_puzzle_goal_completed = false
+	_puzzle_turn_limit_failed = false
 	if _puzzle_goal_tween != null and _puzzle_goal_tween.is_valid():
 		_puzzle_goal_tween.kill()
+	if _puzzle_turn_tween != null and _puzzle_turn_tween.is_valid():
+		_puzzle_turn_tween.kill()
+	_stop_puzzle_turn_warning_pulse()
 	if not _puzzle_mode:
 		_puzzle_goal_required = 0
 		_puzzle_goal_progress = 0
 		_puzzle_goal_remaining = 0
 		_puzzle_goal_displayed = 0
+		_puzzle_turn_limit = 0
+		_puzzle_turns_left = 0
+		_puzzle_turns_displayed = 0
 		if is_instance_valid(_puzzle_goal_panel):
 			_puzzle_goal_panel.queue_free()
 		_puzzle_goal_panel = null
+		_puzzle_turn_prefix_label = null
+		_puzzle_turn_number_label = null
 		return
 
 	_puzzle_goal_required = maxi(current_stage.puzzle_goal_required_count, 0)
 	_puzzle_goal_progress = 0
 	_puzzle_goal_remaining = _puzzle_goal_required
 	_puzzle_goal_displayed = _puzzle_goal_remaining
+	_puzzle_turn_limit = maxi(current_stage.puzzle_turn_limit, 1)
+	_puzzle_turns_left = _puzzle_turn_limit
+	_puzzle_turns_displayed = _puzzle_turns_left
 	for child in enemy_container.get_children():
 		enemy_container.remove_child(child)
 		child.queue_free()
 	enemy_container.visible = true
 	_build_puzzle_goal_panel()
 	_update_puzzle_goal_panel(false, true)
+	_update_puzzle_turn_panel(false, true)
 
 
 func _build_puzzle_goal_panel() -> void:
@@ -8144,7 +8236,7 @@ func _build_puzzle_goal_panel() -> void:
 		return
 	_puzzle_goal_panel = PanelContainer.new()
 	_puzzle_goal_panel.name = "PuzzleGoalPanel"
-	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 66)
+	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 98)
 	_puzzle_goal_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.06, 0.09, 0.86)
@@ -8162,9 +8254,13 @@ func _build_puzzle_goal_panel() -> void:
 	margin.add_theme_constant_override("margin_bottom", 6)
 	_puzzle_goal_panel.add_child(margin)
 
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 2)
+	margin.add_child(root)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	margin.add_child(row)
+	root.add_child(row)
 
 	_puzzle_goal_icon = TextureRect.new()
 	_puzzle_goal_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -8186,6 +8282,22 @@ func _build_puzzle_goal_panel() -> void:
 	_puzzle_goal_target_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_puzzle_goal_target_label.custom_minimum_size = Vector2(80, 42)
 	row.add_child(_puzzle_goal_target_label)
+
+	var turn_row := HBoxContainer.new()
+	turn_row.add_theme_constant_override("separation", 8)
+	turn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_child(turn_row)
+
+	_puzzle_turn_prefix_label = _make_puzzle_goal_part_label(18)
+	_puzzle_turn_prefix_label.text = Locale.tr_ui("PUZZLE_TURNS_LEFT")
+	_puzzle_turn_prefix_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	turn_row.add_child(_puzzle_turn_prefix_label)
+
+	_puzzle_turn_number_label = _make_puzzle_goal_part_label(26)
+	_puzzle_turn_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_puzzle_turn_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_puzzle_turn_number_label.custom_minimum_size = Vector2(48, 30)
+	turn_row.add_child(_puzzle_turn_number_label)
 
 
 func _make_puzzle_goal_part_label(font_size: int) -> Label:
@@ -8235,6 +8347,92 @@ func _update_puzzle_goal_panel(animate_digits: bool = false, immediate: bool = f
 		_puzzle_goal_number_label.text = "%d" % target
 		return
 	_animate_puzzle_goal_digits(_puzzle_goal_displayed, target)
+
+
+func _update_puzzle_turn_panel(animate_digits: bool = false, immediate: bool = false) -> void:
+	if not _puzzle_mode or not is_instance_valid(_puzzle_turn_number_label):
+		return
+	if is_instance_valid(_puzzle_turn_prefix_label):
+		_puzzle_turn_prefix_label.text = Locale.tr_ui("PUZZLE_TURNS_LEFT")
+	var target: int = maxi(_puzzle_turns_left, 0)
+	if immediate or not animate_digits:
+		_puzzle_turns_displayed = target
+		_puzzle_turn_number_label.text = "%d" % target
+		_refresh_puzzle_turn_warning_pulse()
+		return
+	_animate_puzzle_turn_digits(_puzzle_turns_displayed, target)
+	_refresh_puzzle_turn_warning_pulse()
+
+
+func _refresh_puzzle_turn_warning_pulse() -> void:
+	if not is_instance_valid(_puzzle_turn_number_label):
+		return
+	if _puzzle_turns_left == 1 and not _puzzle_goal_completed and not _puzzle_turn_limit_failed:
+		_start_puzzle_turn_warning_pulse()
+	else:
+		_stop_puzzle_turn_warning_pulse()
+
+
+func _start_puzzle_turn_warning_pulse() -> void:
+	if not is_instance_valid(_puzzle_turn_number_label):
+		return
+	if _puzzle_turn_warning_tween != null and _puzzle_turn_warning_tween.is_valid():
+		return
+	_puzzle_turn_warning_tween = create_tween().set_loops()
+	_puzzle_turn_warning_tween.tween_method(_set_puzzle_turn_warning_color, Color(1.0, 0.18, 0.16), Color.WHITE, 0.32) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	_puzzle_turn_warning_tween.tween_method(_set_puzzle_turn_warning_color, Color.WHITE, Color(1.0, 0.18, 0.16), 0.32) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+
+
+func _stop_puzzle_turn_warning_pulse() -> void:
+	if _puzzle_turn_warning_tween != null and _puzzle_turn_warning_tween.is_valid():
+		_puzzle_turn_warning_tween.kill()
+	_puzzle_turn_warning_tween = null
+	_set_puzzle_turn_warning_color(Color.WHITE)
+
+
+func _set_puzzle_turn_warning_color(color: Color) -> void:
+	if not is_instance_valid(_puzzle_turn_number_label):
+		return
+	_puzzle_turn_number_label.add_theme_color_override("font_color", color)
+
+
+func _animate_puzzle_turn_digits(from_value: int, to_value: int) -> void:
+	if not is_instance_valid(_puzzle_turn_number_label):
+		return
+	if _puzzle_turn_tween != null and _puzzle_turn_tween.is_valid():
+		_puzzle_turn_tween.kill()
+	_puzzle_turn_number_label.scale = Vector2.ONE
+	var direction: int = -1 if to_value < from_value else 1
+	var values: Array[int] = []
+	var current: int = from_value
+	while current != to_value and values.size() < 80:
+		var next_value: int = current + direction
+		if direction < 0 and next_value < to_value:
+			next_value = to_value
+		elif direction > 0 and next_value > to_value:
+			next_value = to_value
+		values.append(next_value)
+		current = next_value
+	if values.is_empty():
+		return
+	var base_pos: Vector2 = _puzzle_turn_number_label.position
+	_puzzle_turn_tween = create_tween()
+	for next_value in values:
+		_puzzle_turn_tween.tween_property(_puzzle_turn_number_label, "position:y", base_pos.y + 10.0, 0.04) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		_puzzle_turn_tween.tween_callback(_set_puzzle_turn_digit_frame.bind(next_value, base_pos.y))
+		_puzzle_turn_tween.tween_property(_puzzle_turn_number_label, "position:y", base_pos.y, 0.04) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+
+func _set_puzzle_turn_digit_frame(value: int, base_y: float) -> void:
+	if not is_instance_valid(_puzzle_turn_number_label):
+		return
+	_puzzle_turn_number_label.text = "%d" % value
+	_puzzle_turn_number_label.position.y = base_y - 8.0
+	_puzzle_turns_displayed = value
 
 
 func _animate_puzzle_goal_digits(from_value: int, to_value: int) -> void:
@@ -8302,6 +8500,22 @@ func _finish_puzzle_goal_after_feedback() -> void:
 	if not _puzzle_mode or not _puzzle_goal_completed:
 		return
 	if _victory_overlay != null:
+		return
+	while _puzzle_mode and _puzzle_goal_completed \
+			and not _puzzle_turn_limit_failed \
+			and _victory_overlay == null \
+			and _defeat_overlay == null \
+			and (_is_upper_gem_turn \
+				or _fuse_pipeline_active \
+				or board.is_busy \
+				or board.is_board_motion_running() \
+				or _attack_worker_running \
+				or not _attack_queue.is_empty() \
+				or _enemy_board_effects_pending > 0):
+		await get_tree().create_timer(0.05).timeout
+	if not _puzzle_mode or not _puzzle_goal_completed:
+		return
+	if _puzzle_turn_limit_failed or _victory_overlay != null or _defeat_overlay != null:
 		return
 	battle_manager.battle_won.emit()
 
@@ -8422,41 +8636,64 @@ func _is_dragon_character(character: CharacterData) -> bool:
 	return base_name == "char_dragon"
 
 
-## 木板從天而降：在棋盤中央 cols 3-4, rows 2-5 一次性掉落 8 片 BURNING PLANK
+## 木板從天而降：落成龍焰領域的 fireball shape（3x3 + 上下左右延伸）
 func _drop_plank_pile_animation() -> void:
-	var target_cols: Array[int] = [3, 4]
-	var target_rows: Array[int] = [2, 3, 4, 5]
+	var target_positions: Array[Vector2i] = _get_plank_accident_target_positions()
 	var drop_dur: float = 0.45
 	var stagger: float = 0.05
 	var idx: int = 0
-	for x in target_cols:
-		for y in target_rows:
-			# 先靜默釋放原本位置的 block（不論 plank/gem/upper），不發信號
-			var existing: Block = board.grid[x][y]
-			if existing != null and is_instance_valid(existing):
-				board.grid[x][y] = null
-			# 在天空位置生成新 PLANK，並以墜落動畫落到目標格
-			var sky_pos: Vector2 = board.grid_to_world(Vector2i(x, -2 - idx % 4))
-			var target_pos: Vector2 = board.grid_to_world(Vector2i(x, y))
-			var pb: Block = preload("res://scenes/block.tscn").instantiate() as Block
-			pb.position = sky_pos
-			board.add_child(pb)
-			pb.set_block_type(Block.Type.PLANK)
-			pb.grid_pos = Vector2i(x, y)
-			pb.add_extra(Block.ExtraEffect.BURNING)
-			pb.z_index = 4
-			board.grid[x][y] = pb
-			board.logic_grid[x][y] = -2  # LOGIC_PLANK
-			# 以掉落動畫滑落到位
-			var tw: Tween = pb.create_tween()
-			tw.tween_property(pb, "position", target_pos, drop_dur) \
-				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-			tw.tween_callback(Callable(self, "_play_plank_impact_crush").bind(existing, board.to_global(target_pos)))
-			idx += 1
-			await get_tree().create_timer(stagger).timeout
+	for target_grid_pos: Vector2i in target_positions:
+		var x: int = target_grid_pos.x
+		var y: int = target_grid_pos.y
+		# 先靜默釋放原本位置的 block（不論 plank/gem/upper），不發信號
+		var existing: Block = board.grid[x][y]
+		if existing != null and is_instance_valid(existing):
+			board.grid[x][y] = null
+		# 在天空位置生成新 PLANK，並以墜落動畫落到目標格
+		var sky_pos: Vector2 = board.grid_to_world(Vector2i(x, -2 - idx % 4))
+		var target_pos: Vector2 = board.grid_to_world(target_grid_pos)
+		var pb: Block = preload("res://scenes/block.tscn").instantiate() as Block
+		pb.position = sky_pos
+		board.add_child(pb)
+		pb.set_block_type(Block.Type.PLANK)
+		pb.grid_pos = target_grid_pos
+		pb.add_extra(Block.ExtraEffect.BURNING)
+		pb.z_index = 4
+		board.grid[x][y] = pb
+		board.logic_grid[x][y] = -2  # LOGIC_PLANK
+		# 以掉落動畫滑落到位
+		var tw: Tween = pb.create_tween()
+		tw.tween_property(pb, "position", target_pos, drop_dur) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.tween_callback(Callable(self, "_play_plank_impact_crush").bind(existing, board.to_global(target_pos)))
+		idx += 1
+		await get_tree().create_timer(stagger).timeout
 	await get_tree().create_timer(drop_dur + 0.1).timeout
 	# 同步邏輯網格（plank 狀態），並刷新融合提示
 	board.resync_logic_from_visual()
+
+
+func _get_plank_accident_target_positions() -> Array[Vector2i]:
+	var positions: Array[Vector2i] = []
+	if board == null:
+		return positions
+	var center := Vector2i(
+		clampi(int(floor(float(board.columns) * 0.5)), 0, maxi(board.columns - 1, 0)),
+		clampi(int(floor(float(board.rows) * 0.5)), 0, maxi(board.rows - 1, 0))
+	)
+	var offsets: Array[Vector2i] = [
+		Vector2i(0, -2),
+		Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+		Vector2i(-2, 0), Vector2i(-1, 0), Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0),
+		Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
+		Vector2i(0, 2),
+	]
+	for offset: Vector2i in offsets:
+		var pos: Vector2i = center + offset
+		if board._cell_accepts_block(pos):
+			positions.append(pos)
+	return positions
+
 
 func _play_plank_impact_crush(crushed_block: Block, impact_pos: Vector2) -> void:
 	if board != null:
@@ -8799,11 +9036,11 @@ func _run_stage14_escape_intro() -> void:
 	dialog.visible = true
 	dialog.show_lines([
 		_make_stage14_escape_line("panda", "normal",
-			"這裡在崩塌！地面一直往下陷！",
-			"The place is collapsing! The floor keeps giving way!"),
+			"我們被困住了！\n聖所... 一片火海！",
+			"We're trapped! A sea of fire!"),
 		_make_stage14_escape_line("shark", "normal",
-			"別回頭，往前跑。只要跟著路徑石下降，我們就能逃出去。",
-			"Don't look back. Move. If we keep the path stone dropping, we can get out."),
+			"不要慌！一邊消除寶石一邊前進！",
+			"Don't panic! Keep moving while clearing the gems."),
 	])
 	await dialog.all_lines_finished
 	dialog.visible = false
@@ -8873,18 +9110,20 @@ func _show_stage14_escape_rules_canvas() -> void:
 	left.add_theme_constant_override("separation", 12)
 	top_row.add_child(left)
 
-	var title := _stage14_canvas_label("", 28, Color(1.0, 0.92, 0.30))
+	var title := _stage14_canvas_label("", 36, Color(1.0, 0.92, 0.30))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	left.add_child(title)
 
-	var info := _stage14_canvas_label("", 18, Color(0.90, 0.94, 1.0))
+	var info := _stage14_canvas_label("", 24, Color(0.90, 0.94, 1.0))
 	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(info)
 
+	var image_side: float = maxf(160.0, minf(panel_h - 112.0, panel_w * 0.44))
 	var image_panel := PanelContainer.new()
-	image_panel.custom_minimum_size = Vector2(panel_w * 0.43, panel_h - 94.0)
-	image_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	image_panel.custom_minimum_size = Vector2(image_side, image_side)
+	image_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
+	image_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var image_style := StyleBoxFlat.new()
 	image_style.bg_color = Color(0.03, 0.04, 0.07, 0.92)
 	image_style.border_color = Color(0.25, 0.42, 0.62, 0.82)
@@ -8903,44 +9142,84 @@ func _show_stage14_escape_rules_canvas() -> void:
 	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	image_panel.add_child(image)
 
-	var button_row := HBoxContainer.new()
-	button_row.custom_minimum_size = Vector2(0, 44)
+	var button_row := Control.new()
+	button_row.custom_minimum_size = Vector2(0, 54)
 	button_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	button_row.add_theme_constant_override("separation", 12)
 	content.add_child(button_row)
+
+	var bottom_w: float = panel_w - 36.0
+	var button_y := 14.0
+	var button_w := 118.0
+	var button_h := 38.0
 	var prev_btn := Button.new()
 	prev_btn.text = "Back"
-	prev_btn.custom_minimum_size = Vector2(118, 38)
+	prev_btn.custom_minimum_size = Vector2(button_w, button_h)
+	prev_btn.position = Vector2(bottom_w * 0.5 - button_w - 10.0, button_y)
+	prev_btn.size = Vector2(button_w, button_h)
 	button_row.add_child(prev_btn)
 	var next_btn := Button.new()
 	next_btn.text = "Next"
-	next_btn.custom_minimum_size = Vector2(118, 38)
+	next_btn.custom_minimum_size = Vector2(button_w, button_h)
+	next_btn.position = Vector2(bottom_w * 0.5 + 10.0, button_y)
+	next_btn.size = Vector2(button_w, button_h)
 	button_row.add_child(next_btn)
+	var skip_btn := Button.new()
+	skip_btn.text = "Skip"
+	skip_btn.custom_minimum_size = Vector2(86, button_h)
+	skip_btn.position = Vector2(bottom_w - 86.0, button_y)
+	skip_btn.size = Vector2(86, button_h)
+	button_row.add_child(skip_btn)
+
+	var dot_row := HBoxContainer.new()
+	dot_row.add_theme_constant_override("separation", 8)
+	dot_row.position = Vector2(bottom_w * 0.5 - 28.0, 1.0)
+	dot_row.custom_minimum_size = Vector2(56, 10)
+	button_row.add_child(dot_row)
 
 	var pages: Array[Dictionary] = [
 		{
 			"title": "逃脫模式",
-			"info": "點擊盤面寶石，讓玩家位置石像寶石一樣往下掉。\n\n位置石每下降 1 row，代表前進 5 米。\n當位置石接近盤面底部時，畫面會往下滑動並顯示新的路段。\n右上角會顯示剩餘距離，歸零就成功逃出。",
+			"info": "消除或合成角色下方的寶石, \n向下逃跑吧!!",
+			"image": "res://assets/escape_tutor_1.png",
 		},
 		{
 			"title": "燒著啦!",
-			"info": "部分寶石會被火焰包圍，形成燃燒寶石。\n\n燃燒寶石仍然可以正常點擊爆破，也會跟著盤面掉落。\n每當盤面補充新寶石前，仍在場上的燃燒寶石會造成傷害。\n盡快清掉燃燒寶石，避免逃脫途中被持續消耗生命。",
+			"info": "燃燒寶石每回合結束時會消耗你的生命，\n消除或融合它們！",
+			"image": "res://assets/escape_tutor_2.png",
 		},
 		{
 			"title": "障礙方塊",
-			"info": "木板會阻擋路線，也會卡住寶石掉落。\n\n相鄰爆破或特定技能可以破壞木板。\nStage 1-6 中途會有大量木板落下，使用米洛的龍焰領域燒開道路。",
+			"info": "障礙方塊不能透過普通的點撃消除！\n爆破相鄰的寶石，合成寶石爆風甚至技能也對它有效。",
+			"image": "res://assets/escape_tutor_3.png",
 		},
 	]
+	var dots: Array[Panel] = []
+	for i in pages.size():
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(10, 10)
+		dot.size = Vector2(10, 10)
+		dot_row.add_child(dot)
+		dots.append(dot)
 	var page_state := {"index": 0}
 	var closed := {"done": false}
+	var update_dots := func(active_index: int) -> void:
+		for i in dots.size():
+			var dot_style := StyleBoxFlat.new()
+			dot_style.bg_color = Color(1.0, 0.86, 0.20, 1.0) if i == active_index else Color(0.05, 0.055, 0.075, 1.0)
+			dot_style.border_color = Color(0.0, 0.0, 0.0, 0.78)
+			dot_style.set_border_width_all(1)
+			dot_style.set_corner_radius_all(5)
+			dots[i].add_theme_stylebox_override("panel", dot_style)
 	var render_page := func() -> void:
 		var page_index: int = int(page_state.index)
 		var page: Dictionary = pages[page_index]
 		title.text = str(page.get("title", ""))
 		info.text = str(page.get("info", ""))
+		var image_path: String = str(page.get("image", ""))
+		image.texture = load(image_path) as Texture2D if ResourceLoader.exists(image_path) else CHAR_DRAGON.portrait_texture
 		prev_btn.visible = page_index > 0
 		next_btn.text = "OK" if page_index >= pages.size() - 1 else "Next"
+		update_dots.call(page_index)
 	render_page.call()
 
 	prev_btn.pressed.connect(func() -> void:
@@ -8953,6 +9232,9 @@ func _show_stage14_escape_rules_canvas() -> void:
 			render_page.call()
 		else:
 			closed.done = true
+	)
+	skip_btn.pressed.connect(func() -> void:
+		closed.done = true
 	)
 	while not bool(closed.done):
 		await get_tree().process_frame

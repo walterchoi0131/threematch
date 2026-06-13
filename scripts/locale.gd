@@ -11,6 +11,8 @@ var _translations: Dictionary = {
 	"BATTLE_RESULT": {"zh": "戰鬥結算", "en": "BATTLE RESULT"},
 	"VICTORY": {"zh": "勝利！", "en": "VICTORY!"},
 	"DEFEATED": {"zh": "戰敗", "en": "DEFEATED"},
+	"PUZZLE_WRONG_DEFEAT": {"zh": "再試一次?", "en": "Try again?"},
+	"PUZZLE_TURNS_LEFT": {"zh": "剩餘步數", "en": "Turn Left"},
 	"GOLD": {"zh": "金幣", "en": "Gold"},
 	"EXP": {"zh": "經驗值", "en": "EXP"},
 	"LV_UP": {"zh": "升級！", "en": "Lv UP!"},
