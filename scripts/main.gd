@@ -39,6 +39,7 @@ var _escape_distance_traveled: int = 0
 var _escape_distance_remaining: int = 0
 var _escape_distance_displayed: int = 0
 var _escape_won: bool = false
+var _escape_goal_wood_row: int = -1
 var _escape_distance_number_label: Label = null
 var _escape_distance_unit_label: Label = null
 var _escape_distance_tween: Tween = null
@@ -7926,6 +7927,7 @@ func _setup_escape_hud() -> void:
 	_escape_mode = current_stage != null and current_stage.mode == StageData.Mode.ESCAPE
 	_escape_won = false
 	_escape_failed = false
+	_escape_goal_wood_row = -1
 	if _escape_mode:
 		_escape_distance_target = maxi(current_stage.escape_refill_target, 0)
 		_escape_distance_traveled = 0
@@ -7937,12 +7939,14 @@ func _setup_escape_hud() -> void:
 		var start_pos := Vector2i(board.columns / 2, ESCAPE_SCROLL_RESET_ROW)
 		board.set_escape_marker_colors(_get_party_escape_marker_colors())
 		board.enable_escape_marker(start_pos)
+		_update_escape_goal_wood_row()
 	else:
 		_escape_distance_target = 0
 		_escape_distance_traveled = 0
 		_escape_distance_remaining = 0
 		_escape_distance_displayed = 0
 		_escape_failed = false
+		_escape_goal_wood_row = -1
 		_escape_refill_label.visible = false
 		if is_instance_valid(_escape_distance_number_label):
 			_escape_distance_number_label.visible = false
@@ -7966,6 +7970,33 @@ func _get_party_escape_marker_colors() -> Array[Color]:
 		colors.append(source[idx % source.size()])
 		idx += 1
 	return colors
+
+
+func _update_escape_goal_wood_row() -> void:
+	if not _escape_mode or _escape_won or _escape_failed or board == null:
+		return
+	if _escape_goal_wood_row >= 0:
+		return
+	if not board.has_method("place_escape_goal_wood_row"):
+		return
+	var wood_row: int = _get_escape_goal_wood_row_for_marker_y(board.get_escape_marker_grid_pos().y)
+	if wood_row < 0:
+		return
+	var placed_row: int = int(board.place_escape_goal_wood_row(wood_row))
+	if placed_row >= 0:
+		_escape_goal_wood_row = placed_row
+
+
+func _get_escape_goal_wood_row_for_marker_y(marker_y: int) -> int:
+	if not _escape_mode or board == null:
+		return -1
+	var remaining_rows: int = int(ceil(float(maxi(_escape_distance_remaining, 0)) / float(ESCAPE_METERS_PER_ROW)))
+	if remaining_rows <= 0:
+		return -1
+	var wood_row: int = marker_y + remaining_rows
+	if wood_row < 0 or wood_row >= board.rows:
+		return -1
+	return wood_row
 
 
 func _setup_escape_distance_label_style() -> void:
@@ -8291,6 +8322,7 @@ func _on_escape_marker_moved(rows_dropped: int) -> void:
 		return
 	_escape_distance_traveled = mini(_escape_distance_traveled + gained, _escape_distance_target)
 	_escape_distance_remaining = maxi(_escape_distance_target - _escape_distance_traveled, 0)
+	_update_escape_goal_wood_row()
 	_update_escape_distance_label(true)
 	# Stage 1-6 急難事件：走到 200m 後只觸發一次
 	var triggered_plank_event: bool = false
@@ -8343,10 +8375,17 @@ func _check_escape_scroll_after_marker_move() -> void:
 		return
 	if board == null:
 		return
+	if _escape_goal_wood_row >= 0:
+		return
 	var marker_pos: Vector2i = board.get_escape_marker_grid_pos()
 	var trigger_row: int = maxi(board.rows - 3, 0)
 	if marker_pos.y >= trigger_row:
-		await board.force_escape_scroll_to_row(ESCAPE_SCROLL_RESET_ROW, false)
+		var pending_goal_wood_row: int = _get_escape_goal_wood_row_for_marker_y(ESCAPE_SCROLL_RESET_ROW)
+		await board.force_escape_scroll_to_row(ESCAPE_SCROLL_RESET_ROW, false, pending_goal_wood_row)
+		if pending_goal_wood_row >= 0:
+			_escape_goal_wood_row = pending_goal_wood_row
+		else:
+			_update_escape_goal_wood_row()
 		board.is_busy = false
 
 
@@ -9022,6 +9061,7 @@ func _run_plank_emergency_event() -> void:
 		await board.force_escape_scroll_to_row(ESCAPE_SCROLL_RESET_ROW, true)
 		await _wait_for_board_motion_idle()
 		board.snap_visual_blocks_to_grid()
+		_update_escape_goal_wood_row()
 
 	await _drop_plank_pile_animation()
 

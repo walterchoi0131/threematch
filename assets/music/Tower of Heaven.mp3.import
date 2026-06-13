@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://p73mptt2vuw2"
+path="res://.godot/imported/Tower of Heaven.mp3-abf82aed9d9995fb5abecae01a33e211.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Tower of Heaven.mp3"
+dest_files=["res://.godot/imported/Tower of Heaven.mp3-abf82aed9d9995fb5abecae01a33e211.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

@@ -637,6 +637,48 @@ func get_escape_marker_grid_pos() -> Vector2i:
 	return _escape_marker_pos
 
 
+func place_escape_goal_wood_row(row_index: int) -> int:
+	if stage == null or stage.mode != StageData.Mode.ESCAPE or not _escape_marker_enabled:
+		return -1
+	if row_index < 0 or row_index >= rows:
+		return -1
+	var placed_row: int = row_index
+	var placed_count: int = 0
+	for x in columns:
+		var pos := Vector2i(x, placed_row)
+		if not _cell_accepts_block(pos) or is_escape_marker_pos(pos):
+			continue
+		var block: Block = grid[x][placed_row]
+		if block == null or not is_instance_valid(block):
+			block = _create_block(x, placed_row)
+		if block == null:
+			continue
+		_make_block_escape_goal_wood(block, pos)
+		block.position = grid_to_world(pos)
+		grid[x][placed_row] = block
+		if logic_grid.size() == columns and x < logic_grid.size() and logic_grid[x] is Array and placed_row < (logic_grid[x] as Array).size():
+			logic_grid[x][placed_row] = LOGIC_WOOD_STRUCTURE
+		placed_count += 1
+	if placed_count <= 0:
+		return -1
+	_init_logic_grid_from_visual()
+	_update_fuse_hints()
+	queue_redraw()
+	return placed_row
+
+
+func _make_block_escape_goal_wood(block: Block, pos: Vector2i) -> void:
+	if block == null or not is_instance_valid(block):
+		return
+	block.grid_pos = pos
+	block.set_board_columns(columns)
+	block.set_block_type(Block.Type.WOOD_STRUCTURE)
+	block.set_upper_type(Block.UpperType.NONE)
+	block.clear_extras()
+	block.modulate = Color.WHITE
+	block.visible = true
+
+
 func is_board_motion_running() -> bool:
 	return _collapse_and_fill_running or _escape_scroll_running
 
@@ -660,10 +702,11 @@ func snap_visual_blocks_to_grid() -> void:
 		_position_escape_marker_node(false)
 
 
-func force_escape_scroll_to_row(target_y: int, dramatic: bool = false) -> void:
+func force_escape_scroll_to_row(target_y: int, dramatic: bool = false, goal_wood_row: int = -1) -> void:
 	if not _escape_marker_enabled or _escape_scroll_running:
 		return
 	var clamped_target: int = clampi(target_y, 0, rows - 1)
+	var clamped_goal_wood_row: int = goal_wood_row if goal_wood_row >= 0 and goal_wood_row < rows else -1
 	var shift: int = maxi(_escape_marker_pos.y - clamped_target, 0)
 	var was_busy: bool = is_busy
 	_escape_scroll_running = true
@@ -709,6 +752,8 @@ func force_escape_scroll_to_row(target_y: int, dramatic: bool = false) -> void:
 				tween.tween_property(block, "modulate:a", 0.0, duration * 0.75) \
 					.set_delay(delay)
 				continue
+			if new_y == clamped_goal_wood_row:
+				_make_block_escape_goal_wood(block, Vector2i(x, new_y))
 			new_grid[x][new_y] = block
 			block.grid_pos = Vector2i(x, new_y)
 			tween.tween_property(block, "position", grid_to_world(block.grid_pos), duration) \
@@ -725,6 +770,8 @@ func force_escape_scroll_to_row(target_y: int, dramatic: bool = false) -> void:
 				continue
 			var start_pos: Vector2 = grid_to_world(Vector2i(x, y + shift))
 			var block: Block = _create_block(x, y, start_pos, true)
+			if y == clamped_goal_wood_row:
+				_make_block_escape_goal_wood(block, Vector2i(x, y))
 			block.modulate.a = 0.0
 			new_grid[x][y] = block
 			var delay: float = float(y - new_row_start_y) * row_delay + duration * 0.35
