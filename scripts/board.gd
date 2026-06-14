@@ -12,10 +12,16 @@ const WOOD_SPEAR_THRUST_TEXTURE := preload("res://assets/leafspear.png")
 const GEM_DEBRIS_Z_INDEX := 90
 const OBSTACLE_DEBRIS_Z_INDEX := 100
 const WOOD_SPEAR_THRUST_Z_INDEX := 110
+const FLOATING_UPPER_Z_INDEX := 18
+const FUSE_SOLUTION_1 := 1  # 舊版融合：高階寶石留在棋盤內，掉落時會跟著坍塌移動。
+const FUSE_SOLUTION_2 := 2  # 上一版融合：高階寶石暫時浮起，原格用固定佔位保留。
+const FUSE_SOLUTION_3 := 3  # 目前新版：高階寶石暫時浮起且不阻擋坍塌，坍塌後插回原本融合欄位。
+const ACTIVE_FUSE_SOLUTION := FUSE_SOLUTION_1  # 若日後要切換方案，改成 FUSE_SOLUTION_1 / 2 / 3。
 const NORMAL_GEM_DEBRIS_SHARDS := 5
 const UPPER_GEM_DEBRIS_SHARDS := 7
 const OBSTACLE_DEBRIS_SHARDS := 8
 const WOOD_SPEAR_THRUST_SCALE := 0.18
+const WOOD_SPEAR_THRUST_TIP_FROM_TOP := 48.0
 const WOOD_SPEAR_ROW_HIT_INTERVAL := 0.075
 const SELECTION_ORDER_FONT := preload("res://assets/fonts/game_ui_font.tres")
 
@@ -31,6 +37,7 @@ var grid: Array = []          # 二維網格陣列 grid[x][y] = Block 或 null
 var _is_busy_back: bool = false
 var _escape_refill_input_lock: bool = false
 var _input_queue_locked: bool = false
+var _board_input_paused: bool = false
 # is_busy：是否正在處理動畫/消除中（防止重複點擊）
 # 改為 property — falling edge 自動觸發 deferred clicks drain
 var is_busy: bool:
@@ -51,6 +58,7 @@ var _fuse_skills: Array[Dictionary] = []  # 融合技能清單 { gem_type, thres
 var is_fusing: bool = false       # 融合動畫進行中（允許並行點擊下一次融合）
 var _concurrent_fuse_tapped_pos: Vector2i = Vector2i(-1, -1)  # 並行融合點擊的位置（由 _on_gems_blasted 讀取）
 var _concurrent_fuse_tapped_local_pos: Vector2 = Vector2(-1.0, -1.0)  # 並行融合點擊的 local 座標
+var _floating_fused_upper_gems: Array[Dictionary] = []
 
 # ── 邏輯狀態（State/UI 分離：用於連續爆破預測驗證）──────────
 ## logic_grid[x][y] 儲存 Block.Type（int）或：
@@ -70,6 +78,8 @@ const LOGIC_ESCAPE_MARKER := -5
 const LOGIC_HOLE := -6
 const EDIT_RANDOM := -1
 const VISUAL_HOLE := &"hole"
+const FUSE_SOLUTION1_UPPER_PLACEHOLDER := &"upper_placeholder"
+const FLOATING_UPPER_PLACEHOLDER := &"floating_upper_placeholder"
 var logic_grid: Array = []
 # 待處理的 click queue（玩家在動畫期間預先輸入的爆破點擊）
 var deferred_clicks: Array[Vector2i] = []
@@ -86,11 +96,29 @@ func _player_is_defeated() -> bool:
 	return battle_manager_ref != null and int(battle_manager_ref.get("player_current_hp")) <= 0
 
 
+## 清除尚未執行的預輸入，並重置 deferred drain 狀態。
+func clear_deferred_clicks() -> void:
+	deferred_clicks.clear()
+	_draining = false
+	_next_click_is_drained = false
+
+
+## 暫停棋盤點擊；敵方回合使用，避免 busy 空窗吃到玩家舊輸入。
+func set_board_input_paused(paused: bool) -> void:
+	_board_input_paused = paused
+	if paused:
+		clear_deferred_clicks()
+		if _longpress_active:
+			_hide_blast_preview()
+		_longpress_active = false
+		_longpress_pos = Vector2i(-1, -1)
+		_longpress_timer = 0.0
+
+
 func _block_input_after_defeat() -> bool:
 	if not _player_is_defeated():
 		return false
-	deferred_clicks.clear()
-	_next_click_is_drained = false
+	clear_deferred_clicks()
 	if _longpress_active:
 		_hide_blast_preview()
 	_longpress_active = false
@@ -903,7 +931,7 @@ func set_last_tapped_input(pos: Vector2i, local_pos: Vector2) -> void:
 func set_input_queue_locked(locked: bool) -> void:
 	_input_queue_locked = locked
 	if locked:
-		deferred_clicks.clear()
+		clear_deferred_clicks()
 
 
 func get_concurrent_fuse_tapped_local_pos() -> Vector2:
@@ -937,7 +965,7 @@ func set_edit_mode(enabled: bool) -> void:
 	_edit_dragging = false
 	_edit_last_painted = Vector2i(-1, -1)
 	if enabled:
-		deferred_clicks.clear()
+		clear_deferred_clicks()
 		is_busy = false
 		_selection_mode = false
 		_clear_preview_overlays()
@@ -1158,6 +1186,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _block_input_after_defeat():
 		return
+	if _board_input_paused:
+		return
 
 	if _selection_mode:
 		if event is InputEventMouseMotion:
@@ -1250,7 +1280,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _cell_accepts_block(gp) and grid[gp.x][gp.y] != null:
 			var clicked_block: Block = grid[gp.x][gp.y]
 			set_last_tapped_input(gp, local_pos)
-			if clicked_block.is_upper_gem():
+			if _is_player_upper_gem(clicked_block):
 				# 高階寶石 → 開始長按追蹤（延遲點擊）
 				_longpress_pos = gp
 				_longpress_timer = 0.0
@@ -1505,7 +1535,7 @@ func _drain_deferred_clicks() -> void:
 func notify_external_attack_busy(busy: bool) -> void:
 	external_attack_busy = busy
 	if _player_is_defeated():
-		deferred_clicks.clear()
+		clear_deferred_clicks()
 		return
 	if not busy and not is_busy:
 		call_deferred("_drain_deferred_clicks")
@@ -1695,8 +1725,214 @@ func _destroy_blocks(positions: Array[Vector2i]) -> void:
 
 
 ## 掉落與填充：新寶石只從棋盤頂部進入；ROCK 下方空洞只能靠鄰欄斜向滑入
+func _queue_floating_fused_upper_gem(block: Block, pos: Vector2i) -> void:
+	if not is_instance_valid(block) or not _is_valid(pos):
+		return
+	for i in range(_floating_fused_upper_gems.size() - 1, -1, -1):
+		var entry: Dictionary = _floating_fused_upper_gems[i]
+		var raw_queued_block: Variant = entry.get("block", null)
+		if not is_instance_valid(raw_queued_block):
+			_floating_fused_upper_gems.remove_at(i)
+			continue
+		var queued_block: Block = raw_queued_block as Block
+		if queued_block == null:
+			_floating_fused_upper_gems.remove_at(i)
+			continue
+		if queued_block == block:
+			entry["pos"] = pos
+			_floating_fused_upper_gems[i] = entry
+			return
+	_floating_fused_upper_gems.append({
+		"block": block,
+		"pos": pos,
+	})
+
+
+func _prepare_fuse_collapse_solution() -> Array[Dictionary]:
+	match ACTIVE_FUSE_SOLUTION:
+		FUSE_SOLUTION_1:
+			return _fuse_solution1_prepare_collapse()
+		FUSE_SOLUTION_2:
+			return _fuse_solution2_prepare_collapse()
+		FUSE_SOLUTION_3:
+			return _fuse_solution3_prepare_collapse()
+		_:
+			push_warning("未知的融合坍塌方案，改用 fuseSolution3。")
+			return _fuse_solution3_prepare_collapse()
+
+
+func _finish_fuse_collapse_solution(solution_state: Array[Dictionary]) -> void:
+	match ACTIVE_FUSE_SOLUTION:
+		FUSE_SOLUTION_1:
+			_fuse_solution1_finish_collapse(solution_state)
+		FUSE_SOLUTION_2:
+			_fuse_solution2_finish_collapse(solution_state)
+		FUSE_SOLUTION_3:
+			_fuse_solution3_finish_collapse(solution_state)
+		_:
+			_fuse_solution3_finish_collapse(solution_state)
+
+
+# fuseSolution1：保留舊版融合方式。
+# 高階寶石放在 grid 裡直接參與坍塌，因此下方有空格時會跟著掉落。
+# 目前不呼叫這個方案；若想切回舊版，把 ACTIVE_FUSE_SOLUTION 改成 FUSE_SOLUTION_1。
+func _fuse_solution1_prepare_collapse() -> Array[Dictionary]:
+	_floating_fused_upper_gems.clear()
+	var empty_state: Array[Dictionary] = []
+	return empty_state
+
+
+func _fuse_solution1_finish_collapse(_solution_state: Array[Dictionary]) -> void:
+	pass
+
+
+# fuseSolution2：上一版融合方式。
+# 坍塌前先把融合出的高階寶石從 grid 暫時抽離，原融合格放固定佔位；
+# 這能保證高階寶石回到原格，但固定佔位會像屋頂一樣影響斜向滑落。
+func _fuse_solution2_prepare_collapse() -> Array[Dictionary]:
+	var lifted: Array[Dictionary] = []
+	if _floating_fused_upper_gems.is_empty():
+		return lifted
+	var pending := _floating_fused_upper_gems.duplicate()
+	_floating_fused_upper_gems.clear()
+	for entry in pending:
+		var raw_block: Variant = entry.get("block", null)
+		var pos: Vector2i = entry.get("pos", Vector2i(-1, -1)) as Vector2i
+		if not is_instance_valid(raw_block) or not _is_valid(pos):
+			continue
+		var block: Block = raw_block as Block
+		if block == null:
+			continue
+		if grid[pos.x][pos.y] != block:
+			continue
+		grid[pos.x][pos.y] = FLOATING_UPPER_PLACEHOLDER
+		block.grid_pos = pos
+		block.set_board_columns(columns)
+		block.position = grid_to_world(pos)
+		lifted.append({
+			"block": block,
+			"pos": pos,
+			"z_index": block.z_index,
+		})
+		block.z_index = maxi(block.z_index, FLOATING_UPPER_Z_INDEX)
+	return lifted
+
+
+func _fuse_solution2_finish_collapse(solution_state: Array[Dictionary]) -> void:
+	for entry in solution_state:
+		var raw_block: Variant = entry.get("block", null)
+		var pos: Vector2i = entry.get("pos", Vector2i(-1, -1)) as Vector2i
+		if not is_instance_valid(raw_block) or not _is_valid(pos):
+			if _is_valid(pos) and grid[pos.x][pos.y] == FLOATING_UPPER_PLACEHOLDER:
+				grid[pos.x][pos.y] = null
+			continue
+		var block: Block = raw_block as Block
+		if block == null:
+			if grid[pos.x][pos.y] == FLOATING_UPPER_PLACEHOLDER:
+				grid[pos.x][pos.y] = null
+			continue
+		grid[pos.x][pos.y] = block
+		block.grid_pos = pos
+		block.set_board_columns(columns)
+		block.position = grid_to_world(pos)
+		block.z_index = int(entry.get("z_index", block.z_index))
+
+
+# fuseSolution3：目前新版融合方式。
+# 坍塌前先把融合出的高階寶石從 grid 暫時抽離，不放任何佔位，所以它不會形成「屋頂」
+# 來觸發斜向滑落；坍塌與補寶石結束後，再於同欄把上方連續格往上推一格，將高階寶石插回原本融合格。
+func _fuse_solution3_prepare_collapse() -> Array[Dictionary]:
+	var lifted: Array[Dictionary] = []
+	if _floating_fused_upper_gems.is_empty():
+		return lifted
+	var pending := _floating_fused_upper_gems.duplicate()
+	_floating_fused_upper_gems.clear()
+	for entry in pending:
+		var raw_block: Variant = entry.get("block", null)
+		var pos: Vector2i = entry.get("pos", Vector2i(-1, -1)) as Vector2i
+		if not is_instance_valid(raw_block) or not _is_valid(pos):
+			continue
+		var block: Block = raw_block as Block
+		if block == null:
+			continue
+		if grid[pos.x][pos.y] != block:
+			continue
+		grid[pos.x][pos.y] = null
+		block.grid_pos = pos
+		block.set_board_columns(columns)
+		block.position = grid_to_world(pos)
+		lifted.append({
+			"block": block,
+			"pos": pos,
+			"z_index": block.z_index,
+		})
+		block.z_index = maxi(block.z_index, FLOATING_UPPER_Z_INDEX)
+	return lifted
+
+
+func _fuse_solution3_finish_collapse(solution_state: Array[Dictionary]) -> void:
+	for entry in solution_state:
+		var raw_block: Variant = entry.get("block", null)
+		var pos: Vector2i = entry.get("pos", Vector2i(-1, -1)) as Vector2i
+		if not is_instance_valid(raw_block) or not _is_valid(pos):
+			continue
+		var block: Block = raw_block as Block
+		if block == null:
+			continue
+		_insert_floating_upper_gem_after_collapse(block, pos, int(entry.get("z_index", block.z_index)))
+
+
+func _insert_floating_upper_gem_after_collapse(block: Block, pos: Vector2i, restore_z_index: int) -> void:
+	if not is_instance_valid(block) or not _cell_accepts_block(pos) or is_escape_marker_pos(pos):
+		return
+	var current_raw: Variant = grid[pos.x][pos.y]
+	if current_raw != null and not is_instance_valid(current_raw):
+		grid[pos.x][pos.y] = null
+	elif is_instance_valid(current_raw):
+		var current: Block = current_raw as Block
+		if current != null and current.is_stationary_obstacle():
+			return
+	var top_y: int = pos.y
+	while top_y > 0:
+		var above := Vector2i(pos.x, top_y - 1)
+		if not _cell_accepts_block(above) or is_escape_marker_pos(above):
+			break
+		var above_raw: Variant = grid[above.x][above.y]
+		if above_raw != null and not is_instance_valid(above_raw):
+			grid[above.x][above.y] = null
+		elif is_instance_valid(above_raw):
+			var above_block: Block = above_raw as Block
+			if above_block != null and above_block.is_stationary_obstacle():
+				break
+		top_y -= 1
+	var removed_raw: Variant = grid[pos.x][top_y]
+	if is_instance_valid(removed_raw):
+		var removed_block: Block = removed_raw as Block
+		if removed_block != null and removed_block != block:
+			removed_block.queue_free()
+	for y in range(top_y, pos.y):
+		var moved_raw: Variant = grid[pos.x][y + 1]
+		if moved_raw != null and not is_instance_valid(moved_raw):
+			moved_raw = null
+		grid[pos.x][y] = moved_raw
+		if is_instance_valid(moved_raw):
+			var moved_block: Block = moved_raw as Block
+			if moved_block == null:
+				continue
+			var moved_pos := Vector2i(pos.x, y)
+			moved_block.grid_pos = moved_pos
+			moved_block.set_board_columns(columns)
+			moved_block.position = grid_to_world(moved_pos)
+	grid[pos.x][pos.y] = block
+	block.grid_pos = pos
+	block.set_board_columns(columns)
+	block.position = grid_to_world(pos)
+	block.z_index = restore_z_index
+
+
 func _collapse_and_fill() -> void:
 	_collapse_and_fill_running = true
+	var fuse_solution_state := _prepare_fuse_collapse_solution()
 	var collapse_plan: Dictionary = _build_collapse_plan()
 	var fall_moves: Array = collapse_plan.get("falls", [])
 	var total_new_count: int = int(collapse_plan.get("new_count", 0))
@@ -1708,6 +1944,7 @@ func _collapse_and_fill() -> void:
 	if any_new and pre_refill_hook.is_valid():
 		await pre_refill_hook.call()
 		if battle_manager_ref != null and int(battle_manager_ref.get("player_current_hp")) <= 0:
+			_finish_fuse_collapse_solution(fuse_solution_state)
 			_collapse_and_fill_running = false
 			_sync_logic_unknowns_from_visual()
 			_update_fuse_hints()
@@ -1753,6 +1990,7 @@ func _collapse_and_fill() -> void:
 			fall_data.block.fall_to(target_pos, dur, 0.0, false)
 
 	if longest_dur == 0.0:
+		_finish_fuse_collapse_solution(fuse_solution_state)
 		_sync_logic_unknowns_from_visual()
 		_update_fuse_hints()
 		_collapse_and_fill_running = false
@@ -1762,6 +2000,7 @@ func _collapse_and_fill() -> void:
 	if total_new_count > 0:
 		gems_refilled.emit(total_new_count)
 	await get_tree().create_timer(longest_dur + Block.BOUNCE_DUR + 0.05).timeout
+	_finish_fuse_collapse_solution(fuse_solution_state)
 	_sync_logic_unknowns_from_visual()
 	_update_fuse_hints()
 	_collapse_and_fill_running = false
@@ -1955,6 +2194,8 @@ func _variant_cell_can_move(cell: Variant) -> bool:
 
 
 func _variant_cell_is_stationary_obstacle(cell: Variant) -> bool:
+	if cell is StringName and cell == FLOATING_UPPER_PLACEHOLDER:
+		return true
 	return cell is Block and (cell as Block).is_stationary_obstacle()
 
 
@@ -1965,6 +2206,8 @@ func _variant_cell_is_hole(cell: Variant) -> bool:
 ## 重新開始：清除棋盤並重新初始化
 func restart() -> void:
 	is_busy = true
+	_board_input_paused = false
+	clear_deferred_clicks()
 	score = 0
 	score_changed.emit(score)
 	for x in columns:
@@ -1980,7 +2223,7 @@ func restart() -> void:
 ## 旋轉與位置同時開始（並行）。鎖定 is_busy 並 await 動畫完成。
 func play_lose_animation() -> void:
 	is_busy = true
-	deferred_clicks.clear()
+	clear_deferred_clicks()
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var max_total: float = 0.0
@@ -2109,7 +2352,7 @@ func transmute_cell_to_rock(pos: Vector2i) -> bool:
 	block.set_upper_type(Block.UpperType.NONE)
 	block.set_block_type(Block.Type.ROCK)
 	if not deferred_clicks.is_empty():
-		deferred_clicks.clear()
+		clear_deferred_clicks()
 		_init_logic_grid_from_visual()
 	else:
 		_sync_edit_logic_cell(pos, Block.Type.ROCK)
@@ -2438,9 +2681,10 @@ func _play_wood_spear_thrust(start_local: Vector2, end_local: Vector2, direction
 	sprite.modulate.a = 0.95
 	add_child(sprite)
 
-	var end_position: Vector2 = end_local + Vector2(0.0, float(direction_y) * float(CELL_SIZE) * 0.45)
+	var tip_to_center: float = (float(WOOD_SPEAR_THRUST_TEXTURE.get_height()) * 0.5 - WOOD_SPEAR_THRUST_TIP_FROM_TOP) * WOOD_SPEAR_THRUST_SCALE
+	var end_position: Vector2 = end_local - Vector2(0.0, float(direction_y) * tip_to_center)
 	var tween := sprite.create_tween().set_parallel(true)
-	tween.tween_property(sprite, "position", end_position, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(sprite, "position", end_position, duration).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	tween.tween_property(sprite, "modulate:a", 0.0, duration * 0.28).set_delay(duration * 0.72)
 	tween.finished.connect(func() -> void:
 		if is_instance_valid(sprite):
@@ -2599,6 +2843,8 @@ func place_upper_gem(
 	# 設定高階類型（替換普通寶石外觀為火焰貼圖 + 紅色底色）
 	block.set_upper_type(ut)
 	block.set_upper_owner(owner_team, owner_id)
+	if is_fusing or skip_collapse:
+		_queue_floating_fused_upper_gem(block, pos)
 	# 統一「融合閃光 + 彈跳」動畫
 	play_fuse_animation(block)
 	return true
@@ -3384,6 +3630,7 @@ func enemy_fuse_upper_from_group(
 	target_block.set_upper_owner(Block.UpperOwnerTeam.ENEMY, owner_id)
 	if _is_wood_spear_type(ut):
 		target_block.wood_spear_pierce_breakable = wood_spear_pierce_breakable
+	_queue_floating_fused_upper_gem(target_block, target)
 	play_fuse_animation(target_block)
 	_queue_free_blocks_after_debris(blocks_to_free)
 	await get_tree().create_timer(0.25).timeout
@@ -4220,9 +4467,16 @@ func _simulate_post_collapse_grid() -> Array:
 			var pos := Vector2i(x, y)
 			sim[x][y] = VISUAL_HOLE if _is_hole_pos(pos) else grid[x][y]
 
-	# 融合流程中，上階寶石將被放置在 last_tapped_pos（尚未放置時模擬為佔位）
-	if _cell_accepts_block(last_tapped_pos) and sim[last_tapped_pos.x][last_tapped_pos.y] == null:
-		sim[last_tapped_pos.x][last_tapped_pos.y] = &"upper_placeholder"
+	# 融合流程中，上階寶石將被放置在 last_tapped_pos。
+	# fuseSolution1：保留舊版模擬佔位，讓它像一般可移動內容一樣參與坍塌。
+	# fuseSolution2：使用固定佔位保留原融合格，會像屋頂一樣影響斜向滑落。
+	if (ACTIVE_FUSE_SOLUTION == FUSE_SOLUTION_1 or ACTIVE_FUSE_SOLUTION == FUSE_SOLUTION_2) \
+			and _cell_accepts_block(last_tapped_pos) \
+			and sim[last_tapped_pos.x][last_tapped_pos.y] == null:
+		if ACTIVE_FUSE_SOLUTION == FUSE_SOLUTION_2:
+			sim[last_tapped_pos.x][last_tapped_pos.y] = FLOATING_UPPER_PLACEHOLDER
+		else:
+			sim[last_tapped_pos.x][last_tapped_pos.y] = FUSE_SOLUTION1_UPPER_PLACEHOLDER
 
 	# 模擬掉落：ROCK 固定，新寶石從頂部進入，ROCK 下方空洞可由鄰欄斜向滑入。
 	var spawn_counts: Array = []
@@ -4230,8 +4484,29 @@ func _simulate_post_collapse_grid() -> Array:
 	for column_index in columns:
 		spawn_counts[column_index] = 0
 	_settle_visual_state_with_rocks(sim, spawn_counts, true)
+	if ACTIVE_FUSE_SOLUTION == FUSE_SOLUTION_3:
+		# fuseSolution3：先讓棋盤完全坍塌，之後才模擬高階寶石插回原欄位，避免它在坍塌中形成斜滑屋頂。
+		_simulate_insert_floating_upper_after_collapse(sim, last_tapped_pos)
 
 	return sim
+
+
+func _simulate_insert_floating_upper_after_collapse(sim_grid: Array, pos: Vector2i) -> void:
+	if not _cell_accepts_block(pos) or is_escape_marker_pos(pos):
+		return
+	if _variant_cell_is_stationary_obstacle(sim_grid[pos.x][pos.y]):
+		return
+	var top_y: int = pos.y
+	while top_y > 0:
+		var above := Vector2i(pos.x, top_y - 1)
+		if not _cell_accepts_block(above) or is_escape_marker_pos(above):
+			break
+		if _variant_cell_is_stationary_obstacle(sim_grid[above.x][above.y]):
+			break
+		top_y -= 1
+	for y in range(top_y, pos.y):
+		sim_grid[pos.x][y] = sim_grid[pos.x][y + 1]
+	sim_grid[pos.x][pos.y] = FLOATING_UPPER_PLACEHOLDER
 
 
 ## 在模擬棋盤中尋找指定方塊的位置
@@ -4350,12 +4625,27 @@ const PREVIEW_LOOP_BORDER_ALPHA_MAX := 0.90
 const PREVIEW_LOOP_BORDER_STEP_DUR := 0.018
 const PREVIEW_LOOP_BORDER_HOLD := 0.24
 const PREVIEW_LOOP_BORDER_FADE_OUT := 0.18
+const PREVIEW_FAST_COMBO_BASE_STEPS := 5.0
+const PREVIEW_FAST_COMBO_MIN_SCALE := 0.45
 const PREVIEW_PRESS_SCALE := 0.86
 const PREVIEW_PRESS_BOUNCE_SCALE := 1.08
 const PREVIEW_PRESS_DOWN_OFFSET := 4.0
 const PREVIEW_PRESS_DOWN_DUR := 0.08
 const PREVIEW_PRESS_RELEASE_DUR := 0.13
 const PREVIEW_PRESS_SETTLE_DUR := 0.09
+
+
+func _is_player_upper_gem(block: Block) -> bool:
+	return block != null \
+			and block.is_upper_gem() \
+			and block.upper_owner_team == Block.UpperOwnerTeam.PLAYER
+
+
+func _preview_combo_time_scale(step_count: int) -> float:
+	if step_count <= 0:
+		return 1.0
+	return clampf(PREVIEW_FAST_COMBO_BASE_STEPS / float(maxi(step_count, 1)), PREVIEW_FAST_COMBO_MIN_SCALE, 1.0)
+
 
 ## 計算高階寶石的完整爆炸範圍（含連鏈遞迴）
 ## 回傳 { direct: Array[Vector2i], initial: Array[Vector2i], chain_groups: Array[Dictionary], chain_uppers: Array[Vector2i] }
@@ -4391,7 +4681,7 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 			initial_blast[p] = true
 			if _is_valid(p) and grid[p.x][p.y] != null:
 				var b: Block = grid[p.x][p.y]
-				if b.is_upper_gem() and not processed_uppers.has(p):
+				if _is_player_upper_gem(b) and not processed_uppers.has(p):
 					chain_uppers.append(p)
 					processed_uppers[p] = true
 					next_queue.append({"pos": p, "ut": b.upper_type})
@@ -4424,7 +4714,7 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 			group_positions.append(p)
 			if grid[p.x][p.y] != null:
 				var b: Block = grid[p.x][p.y]
-				if b.is_upper_gem() and not processed_uppers.has(p):
+				if _is_player_upper_gem(b) and not processed_uppers.has(p):
 					chain_uppers.append(p)
 					processed_uppers[p] = true
 					next_queue.append({"pos": p, "ut": b.upper_type})
@@ -4521,7 +4811,7 @@ func _calc_water_slash_chain_preview(
 				continue
 			group_pos.append(c)
 			# 路徑上若有非水劍 upper，加入 BFS 佇列待後續連鎖
-			if b != null and b.is_upper_gem() and not processed_uppers.has(c):
+			if _is_player_upper_gem(b) and not processed_uppers.has(c):
 				processed_uppers[c] = true
 				chain_uppers.append(c)
 				bfs_queue.append({"pos": c, "ut": b.upper_type})
@@ -4537,10 +4827,10 @@ func _calc_water_slash_chain_preview(
 
 ## 顯示長按爆炸預覽：漸變暗化棋盤 + 高亮爆炸範圍
 func _show_blast_preview(pos: Vector2i) -> void:
-	_longpress_active = true
 	var block: Block = grid[pos.x][pos.y]
-	if block == null or not block.is_upper_gem():
+	if not _is_player_upper_gem(block):
 		return
+	_longpress_active = true
 	_play_longpress_press_down(block)
 
 	var result: Dictionary = _calc_blast_preview(pos, block.upper_type)
@@ -4830,22 +5120,30 @@ func _add_initial_blast_overlay(steps: Array[Dictionary]) -> void:
 
 	if step_rects.is_empty():
 		return
+	var time_scale: float = _preview_combo_time_scale(step_rects.size())
+	var fade_in_dur: float = maxf(PREVIEW_INITIAL_FADE_IN * time_scale, 0.06)
+	var hold_dur: float = maxf(PREVIEW_INITIAL_HOLD * time_scale, 0.04)
+	var fade_out_dur: float = maxf(PREVIEW_INITIAL_FADE_OUT * time_scale, 0.05)
+	var step_gap: float = maxf(PREVIEW_CHAIN_STEP_GAP * time_scale, 0.01)
+	var border_step_dur: float = maxf(PREVIEW_LOOP_BORDER_STEP_DUR * time_scale, 0.006)
+	var border_hold_dur: float = maxf(PREVIEW_LOOP_BORDER_HOLD * time_scale, 0.06)
+	var border_fade_out_dur: float = maxf(PREVIEW_LOOP_BORDER_FADE_OUT * time_scale, 0.05)
 	_longpress_initial_tween = create_tween().set_loops()
 	for pulse_rects_value in step_rects:
 		var pulse_rects: Array = pulse_rects_value as Array
 		_longpress_initial_tween.set_parallel(true)
 		for rect_value in pulse_rects:
 			var fade_in_rect: ColorRect = rect_value as ColorRect
-			_longpress_initial_tween.tween_property(fade_in_rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, PREVIEW_INITIAL_FADE_IN) \
+			_longpress_initial_tween.tween_property(fade_in_rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, fade_in_dur) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(PREVIEW_INITIAL_HOLD)
+		_longpress_initial_tween.chain().tween_interval(hold_dur)
 		_longpress_initial_tween.chain()
 		_longpress_initial_tween.set_parallel(true)
 		for rect_value in pulse_rects:
 			var fade_out_rect: ColorRect = rect_value as ColorRect
-			_longpress_initial_tween.tween_property(fade_out_rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, PREVIEW_INITIAL_FADE_OUT) \
+			_longpress_initial_tween.tween_property(fade_out_rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, fade_out_dur) \
 				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(PREVIEW_CHAIN_STEP_GAP)
+		_longpress_initial_tween.chain().tween_interval(step_gap)
 
 	if not loop_border_segments.is_empty():
 		_longpress_initial_tween.chain().tween_callback(_reset_loop_preview_border_segments.bind(loop_border_segments))
@@ -4856,17 +5154,17 @@ func _add_initial_blast_overlay(steps: Array[Dictionary]) -> void:
 			var draw_rect: ColorRect = draw_segment["rect"] as ColorRect
 			var draw_axis: String = draw_segment["axis"] as String
 			var scale_property := "scale:x" if draw_axis == "x" else "scale:y"
-			_longpress_initial_tween.tween_property(draw_rect, scale_property, 1.0, PREVIEW_LOOP_BORDER_STEP_DUR) \
+			_longpress_initial_tween.tween_property(draw_rect, scale_property, 1.0, border_step_dur) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(PREVIEW_LOOP_BORDER_HOLD)
+		_longpress_initial_tween.chain().tween_interval(border_hold_dur)
 		_longpress_initial_tween.chain()
 		_longpress_initial_tween.set_parallel(true)
 		for fade_segment_value in loop_border_segments:
 			var fade_segment: Dictionary = fade_segment_value as Dictionary
 			var fade_rect: ColorRect = fade_segment["rect"] as ColorRect
-			_longpress_initial_tween.tween_property(fade_rect, "color:a", 0.0, PREVIEW_LOOP_BORDER_FADE_OUT) \
+			_longpress_initial_tween.tween_property(fade_rect, "color:a", 0.0, border_fade_out_dur) \
 				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(PREVIEW_CHAIN_STEP_GAP)
+		_longpress_initial_tween.chain().tween_interval(step_gap)
 
 
 ## 漸變邊框覆蓋層透明度（對其下所有 ColorRect 子節點）

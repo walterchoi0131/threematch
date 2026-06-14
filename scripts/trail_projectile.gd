@@ -15,6 +15,7 @@ const PARTICLE_SCALE_MIN := 0.6
 const PARTICLE_SCALE_MAX := 1.2
 
 static var speed_divisor := 3.5  # 速度除數（外部可調）
+static var _spark_particle_texture: Texture2D = null
 
 signal released   ## 飛行結束、可被池回收
 signal deduct_hp  ## 命中時扣血（攻擊模式用）
@@ -40,6 +41,23 @@ var _orbit_speed := 2.6
 
 
 ## 初始化（池模式呼叫一次）
+static func make_attack_spark_texture() -> Texture2D:
+	if _spark_particle_texture != null:
+		return _spark_particle_texture
+	var tex_size := 16
+	var img := Image.create(tex_size, tex_size, false, Image.FORMAT_RGBA8)
+	var center := Vector2(float(tex_size - 1) / 2.0, float(tex_size - 1) / 2.0)
+	var max_dist: float = float(tex_size) / 2.0
+	for y in tex_size:
+		for x in tex_size:
+			var dist: float = Vector2(x, y).distance_to(center)
+			var t: float = clampf(dist / max_dist, 0.0, 1.0)
+			var a: float = pow(1.0 - t, 1.5)
+			img.set_pixel(x, y, Color(1, 1, 1, a))
+	_spark_particle_texture = ImageTexture.create_from_image(img)
+	return _spark_particle_texture
+
+
 func setup() -> void:
 	if _particles == null:
 		_build_particles()

@@ -106,6 +106,8 @@ func _build_ui() -> void:
 	_panel.offset_right = -PANEL_SIDE_MARGIN
 	_panel.offset_top = -(PANEL_HEIGHT + PANEL_BOTTOM_GAP)
 	_panel.offset_bottom = -PANEL_BOTTOM_GAP
+	# 面板本身不攔截點擊，讓下層全螢幕 tap_zone 能推進對話；Skip 按鈕仍保留自己的 STOP。
+	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.06, 0.12, 0.94)
@@ -121,6 +123,7 @@ func _build_ui() -> void:
 
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 12)
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.add_child(hbox)
 
 	# 頭像裁切容器（固定大小，clip_contents）
@@ -130,6 +133,7 @@ func _build_ui() -> void:
 	_portrait_clip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_portrait_clip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_portrait_clip.clip_contents = true
+	_portrait_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(_portrait_clip)
 
 	_portrait = TextureRect.new()
@@ -138,16 +142,19 @@ func _build_ui() -> void:
 	_portrait.custom_minimum_size = Vector2(PORTRAIT_CANVAS_SIZE, PORTRAIT_CANVAS_SIZE)
 	_portrait.size = Vector2(PORTRAIT_CANVAS_SIZE, PORTRAIT_CANVAS_SIZE)
 	_portrait.pivot_offset = Vector2.ZERO
+	_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_portrait_clip.add_child(_portrait)
 
 	# 右側文字區
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 4)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(vbox)
 
 	# 名稱列：左為名稱、右為 Skip 按鈕
 	_name_row = HBoxContainer.new()
+	_name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_name_row)
 
 	# 名稱
@@ -159,6 +166,7 @@ func _build_ui() -> void:
 	_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	_name_label.add_theme_constant_override("outline_size", 2)
 	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_name_row.add_child(_name_label)
 
 	# Skip 按鈕（與名稱同一列、靠右）— 點擊切換自動推進
@@ -185,6 +193,7 @@ func _build_ui() -> void:
 	_text_top_spacer = Control.new()
 	_text_top_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_text_top_spacer.visible = false
+	_text_top_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_text_top_spacer)
 
 	_text_label = RichTextLabel.new()
@@ -193,6 +202,7 @@ func _build_ui() -> void:
 	_text_label.scroll_active = false
 	_text_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if dialog_font != null:
 		_text_label.add_theme_font_override("normal_font", dialog_font)
 		_text_label.add_theme_font_override("bold_font", dialog_font)
@@ -203,6 +213,7 @@ func _build_ui() -> void:
 	_text_bottom_spacer = Control.new()
 	_text_bottom_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_text_bottom_spacer.visible = false
+	_text_bottom_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_text_bottom_spacer)
 
 	# 全區域點擊

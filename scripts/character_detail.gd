@@ -11,7 +11,8 @@ const CARD_BORDER_COLOR := Color(0.45, 0.5, 0.65, 1)
 const CARD_MARGIN := 16.0                            # 卡片到螢幕邊距
 const ENTER_DUR := 0.28
 const EXIT_DUR := 0.22
-const UPGRADE_HOLD_DURATION := 0.9
+const UPGRADE_HOLD_DURATION := 2.4
+const RAY_BURST_SCRIPT := preload("res://scripts/ray_burst.gd")
 const UPGRADE_TEXT_DARK := Color(0.25, 0.26, 0.30, 1.0)
 const UPGRADE_TEXT_LIGHT := Color(0.92, 0.92, 0.96, 1.0)
 const UPGRADE_TEXT_UNLOCKED := Color(0.9, 0.9, 0.95, 1.0)
@@ -741,14 +742,18 @@ func _build_upgrade_dialog_content(vbox: VBoxContainer, dialog_layer: CanvasLaye
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row_panel.clip_contents = true
 		var row_style := StyleBoxFlat.new()
-		row_style.bg_color = Color(0.075, 0.09, 0.14, 0.92) if is_unlocked else Color(0.035, 0.04, 0.05, 0.96)
-		row_style.border_color = Color(0.34, 0.38, 0.48, 0.9) if is_unlocked else Color(0.12, 0.13, 0.16, 1.0)
+		var row_base_bg := Color(0.035, 0.04, 0.05, 0.96)
+		var row_base_border := Color(0.12, 0.13, 0.16, 1.0)
+		var row_fill_bg := Color(0.075, 0.09, 0.14, 0.92)
+		var row_fill_border := Color(0.85, 0.72, 0.35, 0.85)
+		row_style.bg_color = row_fill_bg if is_unlocked else row_base_bg
+		row_style.border_color = row_base_border
 		row_style.set_border_width_all(1)
 		row_style.set_corner_radius_all(6)
-		row_style.content_margin_left = 8
-		row_style.content_margin_right = 8
-		row_style.content_margin_top = 7
-		row_style.content_margin_bottom = 7
+		row_style.content_margin_left = 0
+		row_style.content_margin_right = 0
+		row_style.content_margin_top = 0
+		row_style.content_margin_bottom = 0
 		row_panel.add_theme_stylebox_override("panel", row_style)
 		row_panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_next_upgrade else Control.MOUSE_FILTER_IGNORE
 		vbox.add_child(row_panel)
@@ -759,21 +764,29 @@ func _build_upgrade_dialog_content(vbox: VBoxContainer, dialog_layer: CanvasLaye
 		row_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row_panel.add_child(row_body)
 
-		var row_fill: Control = _make_upgrade_row_fill(elem_color)
-		row_body.add_child(row_fill)
+		var row_border_fill: Control = _make_upgrade_row_border_fill(row_fill_border)
+		row_body.add_child(row_border_fill)
 
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.offset_left = 8.0
+		row.offset_right = -8.0
+		row.offset_top = 0.0
+		row.offset_bottom = 0.0
 		row.z_index = 1
 		row_body.add_child(row)
 
 		var row_info: Dictionary = {
 			"row": row_panel,
 			"row_body": row_body,
-			"row_fill": row_fill,
+			"row_style": row_style,
+			"row_border_fill": row_border_fill,
+			"row_base_bg": row_base_bg,
+			"row_base_border": row_base_border,
+			"row_fill_bg": row_fill_bg,
 			"fill_ratio": 1.0 if is_unlocked else 0.0,
 		}
 		row_body.resized.connect(func() -> void:
@@ -815,25 +828,24 @@ func _rebuild_upgrade_dialog_content(dialog_layer: CanvasLayer, kind: String, sk
 	_build_upgrade_dialog_content(vbox, dialog_layer, kind, skill_index, elem_color)
 
 
-func _make_upgrade_row_fill_style(_elem_color: Color) -> StyleBoxFlat:
+func _make_upgrade_row_border_fill_style(border_color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	var bg: Color = CARD_BG_COLOR
-	bg.a = 0.55
-	style.bg_color = bg
-	style.border_color = Color(0.85, 0.72, 0.35, 0.7)
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.border_color = border_color
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(6)
+	style.draw_center = false
 	return style
 
 
-func _make_upgrade_row_fill(elem_color: Color) -> Control:
+func _make_upgrade_row_border_fill(border_color: Color) -> Control:
 	var fill_clip := Control.new()
 	fill_clip.clip_contents = true
 	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var fill_panel := PanelContainer.new()
 	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_row_fill_style(elem_color))
+	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_row_border_fill_style(border_color))
 	fill_clip.add_child(fill_panel)
 
 	fill_clip.set_meta("_fill_panel", fill_panel)
@@ -841,8 +853,21 @@ func _make_upgrade_row_fill(elem_color: Color) -> Control:
 
 
 func _set_upgrade_row_background_fill(row_info: Dictionary, ratio: float) -> void:
+	var row_style: StyleBoxFlat = row_info.get("row_style", null) as StyleBoxFlat
+	if row_style == null:
+		return
+	var clamped: float = clampf(ratio, 0.0, 1.0)
+	var base_bg: Color = row_info.get("row_base_bg", row_style.bg_color) as Color
+	var base_border: Color = row_info.get("row_base_border", row_style.border_color) as Color
+	var fill_bg: Color = row_info.get("row_fill_bg", base_bg) as Color
+	row_style.bg_color = base_bg.lerp(fill_bg, clamped)
+	row_style.border_color = base_border
+	_set_upgrade_row_border_fill(row_info, clamped)
+
+
+func _set_upgrade_row_border_fill(row_info: Dictionary, ratio: float) -> void:
 	var row_body: Control = row_info.get("row_body", null) as Control
-	var fill_clip: Control = row_info.get("row_fill", null) as Control
+	var fill_clip: Control = row_info.get("row_border_fill", null) as Control
 	if row_body == null or fill_clip == null or not fill_clip.has_meta("_fill_panel"):
 		return
 	var fill_panel: PanelContainer = fill_clip.get_meta("_fill_panel") as PanelContainer
@@ -875,27 +900,49 @@ func _make_upgrade_progress_slot(elem_color: Color, slot_size: float, filled: bo
 
 	var base := PanelContainer.new()
 	base.set_anchors_preset(Control.PRESET_FULL_RECT)
+	base.z_index = 0
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	base.add_theme_stylebox_override("panel", _make_upgrade_slot_style(UPGRADE_SLOT_DARK, slot_size))
 	holder.add_child(base)
 
+	var ray_layer: Node2D = _make_upgrade_slot_ray_layer(elem_color, slot_size)
+	holder.add_child(ray_layer)
+
 	var fill_clip := Control.new()
 	fill_clip.clip_contents = true
+	fill_clip.z_index = 2
 	fill_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(fill_clip)
 
 	var fill_panel := PanelContainer.new()
 	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_slot_style(CARD_BG_COLOR, slot_size))
+	fill_panel.add_theme_stylebox_override("panel", _make_upgrade_slot_style(elem_color, slot_size))
 	fill_clip.add_child(fill_panel)
 
 	holder.set_meta("_fill_clip", fill_clip)
 	holder.set_meta("_fill_panel", fill_panel)
+	holder.set_meta("_ray_layer", ray_layer)
 	holder.resized.connect(func() -> void:
 		_set_upgrade_slot_fill(holder, 1.0 if filled else float(holder.get_meta("_fill_ratio", 0.0)))
 	)
 	_set_upgrade_slot_fill(holder, 1.0 if filled else 0.0)
+	_set_upgrade_slot_rays_loop(holder, filled)
 	return holder
+
+
+func _make_upgrade_slot_ray_layer(elem_color: Color, slot_size: float) -> Node2D:
+	var ray := Node2D.new()
+	ray.set_script(RAY_BURST_SCRIPT)
+	ray.position = Vector2(slot_size, slot_size) * 0.5
+	ray.z_index = 1
+	ray.visible = false
+	ray.modulate.a = 0.0
+	ray.set("outer_radius", maxf(30.0, slot_size))
+	ray.set("ray_count", 6)
+	ray.set("ray_half_angle", 0.18)
+	ray.set("rotation_speed", 0.6)
+	ray.set("ray_color", Color(elem_color.r, elem_color.g, elem_color.b, 0.60))
+	return ray
 
 
 func _set_upgrade_slot_fill(slot: Control, ratio: float) -> void:
@@ -911,11 +958,55 @@ func _set_upgrade_slot_fill(slot: Control, ratio: float) -> void:
 	var slot_size: Vector2 = slot.size
 	if slot_size.x <= 0.0 or slot_size.y <= 0.0:
 		slot_size = slot.custom_minimum_size
-	var fill_w: float = slot_size.x * clampf(ratio, 0.0, 1.0)
-	fill_clip.position = Vector2.ZERO
-	fill_clip.size = Vector2(fill_w, slot_size.y)
-	fill_panel.position = Vector2.ZERO
+	var clamped: float = clampf(ratio, 0.0, 1.0)
+	var fill_h: float = slot_size.y * clamped
+	fill_clip.position = Vector2(0.0, slot_size.y - fill_h)
+	fill_clip.size = Vector2(slot_size.x, fill_h)
+	fill_panel.position = Vector2(0.0, -slot_size.y + fill_h)
 	fill_panel.size = slot_size
+	if slot.has_meta("_ray_layer"):
+		var ray_layer: Node2D = slot.get_meta("_ray_layer") as Node2D
+		if ray_layer != null:
+			ray_layer.position = slot_size * 0.5
+			ray_layer.set("outer_radius", maxf(30.0, maxf(slot_size.x, slot_size.y)))
+			ray_layer.queue_redraw()
+
+
+func _set_upgrade_slot_rays_loop(slot: Control, enabled: bool) -> void:
+	if slot == null or not slot.has_meta("_ray_layer"):
+		return
+	var ray_layer: Node2D = slot.get_meta("_ray_layer") as Node2D
+	if ray_layer == null:
+		return
+	_stop_upgrade_slot_rays(slot, false)
+	ray_layer.visible = enabled
+	ray_layer.scale = Vector2.ONE
+	ray_layer.modulate.a = 1.0 if enabled else 0.0
+
+
+func _stop_upgrade_slot_rays(slot: Control, fade: bool = true) -> void:
+	if slot == null or not slot.has_meta("_ray_layer"):
+		return
+	if slot.has_meta("_ray_fade_tween"):
+		var fade_tween: Tween = slot.get_meta("_ray_fade_tween") as Tween
+		if fade_tween != null and fade_tween.is_valid():
+			fade_tween.kill()
+	var ray_layer: Node2D = slot.get_meta("_ray_layer") as Node2D
+	if ray_layer == null:
+		return
+	if not fade:
+		ray_layer.visible = false
+		ray_layer.modulate.a = 0.0
+		ray_layer.scale = Vector2.ONE
+		return
+	var fade_tween := create_tween()
+	slot.set_meta("_ray_fade_tween", fade_tween)
+	fade_tween.tween_property(ray_layer, "modulate:a", 0.0, 0.12)
+	fade_tween.finished.connect(func() -> void:
+		if is_instance_valid(ray_layer):
+			ray_layer.visible = false
+			ray_layer.scale = Vector2.ONE
+	, CONNECT_ONE_SHOT)
 
 
 func _make_upgrade_fill_label(text: String, filled: bool) -> Control:
@@ -988,6 +1079,15 @@ func _set_upgrade_row_fill_ratio(ratio: float, row_info: Dictionary) -> void:
 	_set_upgrade_text_fill(text_holder, clamped)
 
 
+func _upgrade_hold_curve(raw_ratio: float) -> float:
+	var clamped: float = clampf(raw_ratio, 0.0, 1.0)
+	return 1.0 - pow(1.0 - clamped, 3.0)
+
+
+func _set_upgrade_row_hold_progress(raw_ratio: float, row_info: Dictionary) -> void:
+	_set_upgrade_row_fill_ratio(_upgrade_hold_curve(raw_ratio), row_info)
+
+
 func _on_upgrade_hold_row_gui_input(event: InputEvent, kind: String, skill_index: int, dialog_layer: CanvasLayer, row_info: Dictionary, elem_color: Color) -> void:
 	if _upgrade_hold_completed:
 		return
@@ -1012,8 +1112,8 @@ func _start_upgrade_hold(kind: String, skill_index: int, dialog_layer: CanvasLay
 		_upgrade_hold_tween.kill()
 	_set_upgrade_row_fill_ratio(0.0, row_info)
 	_upgrade_hold_tween = create_tween()
-	_upgrade_hold_tween.tween_method(Callable(self, "_set_upgrade_row_fill_ratio").bind(row_info), 0.0, 1.0, UPGRADE_HOLD_DURATION) \
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	_upgrade_hold_tween.tween_method(Callable(self, "_set_upgrade_row_hold_progress").bind(row_info), 0.0, 1.0, UPGRADE_HOLD_DURATION) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_LINEAR)
 	_run_upgrade_hold_completion(kind, skill_index, dialog_layer, row_info, elem_color, token)
 
 
@@ -1025,6 +1125,7 @@ func _cancel_upgrade_hold(row_info: Dictionary) -> void:
 	_upgrade_hold_token += 1
 	if _upgrade_hold_tween != null and _upgrade_hold_tween.is_valid():
 		_upgrade_hold_tween.kill()
+	_stop_upgrade_slot_rays(row_info.get("slot", null) as Control)
 	var current_ratio: float = float(row_info.get("fill_ratio", 0.0))
 	_upgrade_hold_tween = create_tween()
 	_upgrade_hold_tween.tween_method(Callable(self, "_set_upgrade_row_fill_ratio").bind(row_info), current_ratio, 0.0, 0.14) \
@@ -1049,6 +1150,7 @@ func _run_upgrade_hold_completion(kind: String, skill_index: int, dialog_layer: 
 		_upgrade_hold_completed = false
 	else:
 		_upgrade_hold_completed = false
+		_stop_upgrade_slot_rays(row_info.get("slot", null) as Control)
 		_set_upgrade_row_fill_ratio(0.0, row_info)
 		_show_message_dialog(_upgrade_error_text(str(result.get("reason", ""))))
 
@@ -1061,6 +1163,7 @@ func _play_upgrade_hold_success(row_info: Dictionary, elem_color: Color, dialog_
 	if text_holder != null:
 		text_holder.pivot_offset = text_holder.size * 0.5
 	_spawn_upgrade_confetti(row_info, elem_color, dialog_layer)
+	_set_upgrade_slot_rays_loop(slot, true)
 	var tw := create_tween().set_parallel(true)
 	if slot != null:
 		tw.tween_property(slot, "scale", Vector2(1.26, 1.26), 0.13).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)

@@ -96,6 +96,7 @@ const BREAK_ROWS := 3   # 精靈圖表行數
 const BREAK_FRAMES := 9 # 消除動畫總幀數
 
 const DEFAULT_GEM_SPRITE_SCALE := Vector2(1.15, 1.15)
+const UpperPulseParticlesScript := preload("res://scripts/upper_gem_pulse_particles.gd")
 
 # 高階寶石「內識元素計數」— 被爆破時，除了他抹除的區域以外，本身亦貢獻這么多顆同元素
 # 定義為「融合門檻」— 例如火球炸需 9 顆火寶石融合 → 被爆時內識為 9
@@ -170,6 +171,7 @@ var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 @onready var gem_sprite: Sprite2D = $GemSprite  # 寶石精靈圖
 var _upper_sprite: Sprite2D = null     # 高階寶石覆蓋精靈圖
 var _ray_burst: Node2D = null          # 旋轉放射光芒（高階寶石專用）
+var _upper_pulse_particles: Node2D = null
 var _enemy_owner_border: Line2D = null
 var _fuse_hint_label: Label = null     # 融合提示標籤
 var _fuse_hint_tween: Tween = null     # 融合提示閃爍動畫
@@ -379,6 +381,23 @@ func _refresh_extra_visuals() -> void:
 		_burn_anim.visible = false
 
 
+func _clear_upper_pulse_particles() -> void:
+	if _upper_pulse_particles != null:
+		_upper_pulse_particles.queue_free()
+		_upper_pulse_particles = null
+
+
+func _ensure_upper_pulse_particles(color: Color) -> void:
+	if _upper_pulse_particles == null:
+		_upper_pulse_particles = Node2D.new()
+		_upper_pulse_particles.name = "UpperGemPulseParticles"
+		_upper_pulse_particles.position = Vector2.ZERO
+		_upper_pulse_particles.z_index = 1
+		_upper_pulse_particles.set_script(UpperPulseParticlesScript)
+		add_child(_upper_pulse_particles)
+	_upper_pulse_particles.call("configure", color)
+
+
 ## 更新寶石的視覺外觀（背景色、圖示、貼圖、高階覆蓋層）
 func update_visual() -> void:
 	var base_texture: Texture2D = get_base_texture()
@@ -435,6 +454,7 @@ func _update_upper_overlay() -> void:
 		if _ray_burst != null:
 			_ray_burst.queue_free()
 			_ray_burst = null
+		_clear_upper_pulse_particles()
 		if _enemy_owner_border != null:
 			_enemy_owner_border.visible = false
 		var base_texture: Texture2D = get_base_texture()
@@ -482,7 +502,7 @@ func _update_upper_overlay() -> void:
 		var RayBurstScript := load("res://scripts/ray_burst.gd")
 		_ray_burst = Node2D.new()
 		_ray_burst.set_script(RayBurstScript)
-		_ray_burst.z_index = 1  # 在 Visual(z=0) 之上，在 upper_sprite(z=2) 之下
+		_ray_burst.z_index = 0
 		add_child(_ray_burst)
 
 	# 依高階寶石類型設定光芒顏色
@@ -501,6 +521,7 @@ func _update_upper_overlay() -> void:
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙
 	_ray_burst.set("ray_color", burst_color)
+	_ensure_upper_pulse_particles(burst_color)
 
 	_upper_sprite.visible = true
 	_upper_sprite.texture = UPPER_GEM_TEXTURES.get(upper_type)

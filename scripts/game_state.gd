@@ -4,6 +4,7 @@ extends Node
 
 signal inventory_changed
 signal skill_upgrades_changed
+signal owned_characters_changed
 signal save_cleared
 
 const MAX_PARTY_SIZE := 4  # 隊伍最大人數
@@ -407,11 +408,14 @@ func clear_save() -> void:
 	_ensure_starting_characters_if_empty()
 	inventory_changed.emit()
 	skill_upgrades_changed.emit()
+	owned_characters_changed.emit()
 	save_cleared.emit()
 
 
 func reset_owned_character_progress(auto_save: bool = true) -> void:
 	_reset_characters_progress(owned_characters)
+	skill_upgrade_levels.clear()
+	skill_upgrades_changed.emit()
 	if auto_save:
 		save_game()
 
@@ -426,13 +430,16 @@ func reset_map_progress(auto_save: bool = true) -> void:
 
 func reset_owned_character_list(auto_save: bool = true) -> void:
 	owned_characters.clear()
+	skill_upgrade_levels.clear()
 	selected_party.clear()
 	detail_character = null
 	last_used_party_paths.clear()
 	for path: String in STARTING_CHARACTER_PATHS:
 		var res: Resource = load(path)
 		if res is CharacterData:
-			grant_character(res as CharacterData, true)
+			grant_character(res as CharacterData, true, false)
+	skill_upgrades_changed.emit()
+	owned_characters_changed.emit()
 	if auto_save:
 		save_game()
 
@@ -443,11 +450,12 @@ func _ensure_starting_characters_if_empty() -> void:
 	for path: String in STARTING_CHARACTER_PATHS:
 		var res: Resource = load(path)
 		if res is CharacterData:
-			grant_character(res as CharacterData, true)
+			grant_character(res as CharacterData, true, false)
+	owned_characters_changed.emit()
 	save_game()
 
 
-func grant_character(character: CharacterData, reset_progress: bool = true) -> bool:
+func grant_character(character: CharacterData, reset_progress: bool = true, notify: bool = true) -> bool:
 	if character == null:
 		return false
 	var path: String = character.resource_path
@@ -459,14 +467,18 @@ func grant_character(character: CharacterData, reset_progress: bool = true) -> b
 	if reset_progress:
 		_reset_character_progress(character)
 	owned_characters.append(character)
+	if notify:
+		owned_characters_changed.emit()
 	return true
 
 
 func debug_grant_all_characters(auto_save: bool = true) -> int:
 	var added: int = 0
 	for character: CharacterData in _load_default_characters():
-		if grant_character(character, true):
+		if grant_character(character, true, false):
 			added += 1
+	if added > 0:
+		owned_characters_changed.emit()
 	if auto_save:
 		save_game()
 	return added

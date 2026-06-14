@@ -5213,7 +5213,7 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 	if not battle_manager.is_round_transitioning:
 		# State/UI 分離：融合不消耗回合，但 _handle_click 已預先 logic_apply_blast，
 		# 必須以視覺現況重置邏輯狀態，否則後續普通爆破會被誤封鎖
-		board.deferred_clicks.clear()
+		board.clear_deferred_clicks()
 		battle_manager.clear_logic_pending_attack()
 		battle_manager.resync_logic_state()
 		board.resync_logic_from_visual()
@@ -5269,10 +5269,12 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 
 ## 結束玩家回合管線：turn++ → 1 秒延遲 → 敵人行動 → 被動技能 → 解鎖棋盤
 func _end_player_turn() -> void:
+	board.clear_deferred_clicks()
 	_reset_spell_chain()
 	var puzzle_turn_ended_with_defeat: bool = await _consume_puzzle_turn_or_defeat()
 	if puzzle_turn_ended_with_defeat:
 		return
+	board.set_board_input_paused(true)
 	battle_manager.finish_turn()
 
 	# 召喚物每回合行動：豪豬攻擊 / 烏龜回血
@@ -5309,6 +5311,7 @@ func _end_player_turn() -> void:
 		# if will_attack:
 		# 	board.brighten_all_gems(0.3)
 		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
+		board.set_board_input_paused(false)
 		board.is_busy = false
 		# Stage 1-6 急難事件：在玩家下一個回合開始前該發
 		if _plank_event_pending and not _plank_event_done:
@@ -6685,16 +6688,34 @@ func _handle_active_skill(char_index: int) -> void:
 			var sel_positions: Array = selection.get("positions", [])
 			if sel_positions.is_empty():
 				return
-			var placed_count := 0
+			var spear_targets: Array[Dictionary] = []
 			var last_spear_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
 			for pos in sel_positions:
 				var spear_pos: Vector2i = pos as Vector2i
 				var spear_block: Block = board.grid[spear_pos.x][spear_pos.y]
 				if spear_block != null and spear_block.is_obstacle():
 					continue
+				if spear_block != null and spear_block.is_upper_gem():
+					continue
 				var spear_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
 				if spear_pos.y == board.rows - 1:
 					spear_type = Block.UpperType.WOOD_SPEAR_UP
+				spear_targets.append({"pos": spear_pos, "ut": spear_type})
+				last_spear_type = spear_type
+			if spear_targets.is_empty():
+				return
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			var leaf_spiral_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.3, 0.85, 0.35))
+			var spear_positions: Array[Vector2i] = []
+			for entry: Dictionary in spear_targets:
+				spear_positions.append(entry["pos"] as Vector2i)
+			await _play_transmute_spiral_vfx_for_cells(spear_positions, leaf_spiral_color)
+			var placed_count := 0
+			for entry: Dictionary in spear_targets:
+				var spear_pos: Vector2i = entry["pos"] as Vector2i
+				var spear_type: Block.UpperType = entry["ut"] as Block.UpperType
 				if board.place_upper_gem(spear_pos, spear_type, Block.Type.GREEN):
 					var placed_spear: Block = board.grid[spear_pos.x][spear_pos.y]
 					if placed_spear != null:
@@ -6703,13 +6724,13 @@ func _handle_active_skill(char_index: int) -> void:
 					placed_count += 1
 					last_spear_type = spear_type
 			if placed_count <= 0:
+				board.is_busy = false
 				return
-			battle_manager.use_active_skill(char_index)
-			_update_skill_ui()
 			board.resync_logic_from_visual()
 			_play_sfx(_se_freeze)
 			_add_log_entry("%s：%s ×%d" % [Locale.tr_ui("Leaf Spear Call"), _upper_gem_bbcode(last_spear_type), placed_count], Block.Type.GREEN, c)
 			await get_tree().create_timer(0.25).timeout
+			board.is_busy = false
 		"Resurgence", "Resurgence+":
 			# 生息：選一顆寶石，將其上下左右四鄰轉換為相同元素
 			# 生息.強：再額外將被點擊的寶石加上 X5 額外效果
@@ -6991,6 +7012,7 @@ func _handle_auto_enemy_action(enemy: Enemy) -> void:
 		return
 	var enemy_name: String = data.get_display_name()
 	var owner_id: int = enemy.get_instance_id()
+	board.clear_deferred_clicks()
 	board.is_busy = true
 
 	if _auto_enemy_can_use_active(enemy, auto_character):
@@ -7110,6 +7132,8 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 		var entry: Dictionary = selected_entries[entry_index]
 		var pos: Vector2i = entry["pos"] as Vector2i
 		var ut: Block.UpperType = entry["ut"] as Block.UpperType
+		var spiral_color: Color = Block.COLORS.get(auto_character.gem_type, Block.COLORS.get(Block.Type.GREEN, Color(0.3, 0.85, 0.35)))
+		await _play_transmute_spiral_vfx_for_cells([pos], spiral_color)
 		if board.place_upper_gem(pos, ut, auto_character.gem_type, Block.UpperOwnerTeam.ENEMY, owner_id):
 			var placed_block: Block = board.grid[pos.x][pos.y]
 			if placed_block != null:
@@ -7534,9 +7558,9 @@ func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
 		return
 
 	var target_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
-	var color: Color = enemy.data.portrait_color if enemy.data != null else Block.COLORS.get(Block.Type.DARK, Color.WHITE)
+	var color: Color = Color(0.55, 0.58, 0.64, 1.0)
 	var gather_duration := 0.36
-	_play_stone_magic_gather_vfx(target_global, color, gather_duration)
+	_play_transmute_spiral_vfx(target_global, color, gather_duration)
 	get_tree().create_timer(gather_duration).timeout.connect(func() -> void:
 		if board.transmute_cell_to_rock(target_pos):
 			_play_sfx(_se_impact)
@@ -7544,11 +7568,24 @@ func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
 	_add_log_entry("[b]%s[/b] 石化魔法：1 格 → %s" % [enemy_name, _gem_bbcode(Block.Type.ROCK)], Block.Type.DARK)
 
 
-## 石化前置特效：重用現有攻擊 trail，灰色弧光在目標格周圍出現並旋入中心。
-func _play_stone_magic_gather_vfx(target_global: Vector2, _color: Color, duration: float) -> void:
+func _play_transmute_spiral_vfx_for_cells(positions: Array, color: Color, duration: float = 0.36) -> void:
+	if positions.is_empty():
+		return
+	for value in positions:
+		var pos: Vector2i = value as Vector2i
+		if not board._is_valid(pos):
+			continue
+		var target_global: Vector2 = board.to_global(board.grid_to_world(pos))
+		_play_transmute_spiral_vfx(target_global, color, duration)
+	await get_tree().create_timer(duration).timeout
+
+
+## 轉換前置特效：重用現有攻擊 trail，弧光在目標格周圍出現並旋入中心。
+func _play_transmute_spiral_vfx(target_global: Vector2, color: Color, duration: float) -> void:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.randomize()
-	var trail_color: Color = Color(0.55, 0.58, 0.64, 1.0)
+	var trail_color: Color = color
+	trail_color.a = 1.0
 	var trail_count: int = 8
 	# TrailProjectile 內部會再除以 speed_divisor，這裡先乘回去，讓最後一條軌跡能在 duration 結束時貼齊轉石動畫。
 	var launch_duration: float = duration * 0.72 * TrailProjectileScript.speed_divisor
@@ -7801,7 +7838,7 @@ func _trigger_puzzle_turn_limit_defeat() -> void:
 	if _puzzle_turn_limit_failed or _victory_overlay != null or _defeat_overlay != null:
 		return
 	_puzzle_turn_limit_failed = true
-	board.deferred_clicks.clear()
+	board.clear_deferred_clicks()
 	board.set_input_queue_locked(true)
 	board.is_busy = true
 	await _wait_for_board_motion_idle()
@@ -7908,7 +7945,8 @@ func _on_round_cleared() -> void:
 	if battle_manager.current_round == battle_manager.stage_rounds.size() - 1:
 		await _show_boss_intro()
 	# State/UI 分離：新一波重置邏輯狀態 + 清空殘留 queue
-	board.deferred_clicks.clear()
+	board.clear_deferred_clicks()
+	board.set_board_input_paused(false)
 	battle_manager.clear_logic_pending_attack()
 	battle_manager.resync_logic_state()
 	board.resync_logic_from_visual()

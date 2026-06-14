@@ -14,7 +14,7 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	panel.offset_left = -274
 	panel.offset_top = 4
 	panel.offset_right = -4
-	panel.offset_bottom = 250
+	panel.offset_bottom = 292
 	panel.anchor_left = 1.0
 	panel.anchor_right = 1.0
 
@@ -48,9 +48,14 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	vbox.add_child(reset_map_btn)
 
 	var reset_owned_btn := Button.new()
-	reset_owned_btn.text = "Reset owned character list"
+	reset_owned_btn.text = "Reset characters + skill upgrades"
 	reset_owned_btn.add_theme_color_override("font_color", Color(0.72, 0.95, 1.0))
 	vbox.add_child(reset_owned_btn)
+
+	var grant_all_btn := Button.new()
+	grant_all_btn.text = "GRANT ALL"
+	grant_all_btn.add_theme_color_override("font_color", Color(1.0, 0.88, 0.35))
+	vbox.add_child(grant_all_btn)
 
 	var sapphire_btn := Button.new()
 	sapphire_btn.text = "+1 Sapphire"
@@ -73,7 +78,15 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 
 	reset_owned_btn.pressed.connect(func() -> void:
 		GameState.reset_owned_character_list()
-		status.text = "Owned character list reset."
+		status.text = "Characters and skill upgrades reset."
+		info.text = _make_info_text()
+		if on_cleared.is_valid():
+			on_cleared.call()
+	)
+
+	grant_all_btn.pressed.connect(func() -> void:
+		var added: int = GameState.debug_grant_all_characters(true)
+		status.text = "Grant all complete. Added %d." % added
 		info.text = _make_info_text()
 		if on_cleared.is_valid():
 			on_cleared.call()
@@ -91,9 +104,10 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 
 
 static func _make_info_text() -> String:
-	return "Cleared stages: %d\nOwned characters: %d\nGold: %d\nSapphire: %d" % [
+	return "Cleared stages: %d\nOwned characters: %d\nSkill upgrades: %d\nGold: %d\nSapphire: %d" % [
 		GameState.cleared_stages.size(),
 		GameState.owned_characters.size(),
+		GameState.skill_upgrade_levels.size(),
 		GameState.gold,
 		GameState.get_inventory_count(ItemDefs.Type.SAPPHIRE),
 	]

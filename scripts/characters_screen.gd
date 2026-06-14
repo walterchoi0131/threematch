@@ -19,6 +19,28 @@ var _card_size: float = 100.0  # 1/7 viewport 寬度
 
 
 func _ready() -> void:
+	if not GameState.owned_characters_changed.is_connected(_on_owned_characters_changed):
+		GameState.owned_characters_changed.connect(_on_owned_characters_changed)
+	_build_ui()
+
+
+func _exit_tree() -> void:
+	if GameState.owned_characters_changed.is_connected(_on_owned_characters_changed):
+		GameState.owned_characters_changed.disconnect(_on_owned_characters_changed)
+
+
+func _on_owned_characters_changed() -> void:
+	refresh_owned_characters()
+
+
+func refresh_owned_characters() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_debug_panel = null
+	_roster_host = null
+	_card_panels.clear()
+	_card_lv_labels.clear()
 	_build_ui()
 
 
