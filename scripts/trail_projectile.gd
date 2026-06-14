@@ -115,6 +115,54 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 	_tween.tween_callback(_on_flight_done)
 
 
+func launch_power_attack(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0, power_level: int = 1) -> void:
+	is_available = false
+	_orbiting = false
+	duration = duration / speed_divisor
+	_color = color
+	_trail.clear()
+	_head_pos = from
+	_flying = true
+	_bursting = false
+	visible = true
+	modulate.a = 1.0
+
+	if _particles == null:
+		_build_particles()
+	_apply_particle_size()
+	_apply_particle_color(color)
+	_particles.emitting = true
+
+	if _tween and _tween.is_valid():
+		_tween.kill()
+
+	var dir: Vector2 = to - from
+	var dist: float = dir.length()
+	var dir_n: Vector2 = dir.normalized() if dist > 0.001 else Vector2.RIGHT
+	var perp := Vector2(-dir_n.y, dir_n.x)
+	var level: int = clampi(power_level, 1, 2)
+	var pullback_dist: float = minf(maxf(dist * (0.62 if level == 1 else 0.95), 140.0 if level == 1 else 210.0), 410.0 if level == 1 else 620.0)
+	var arc_height: float = maxf(dist * (0.46 if level == 1 else 0.50), 105.0 if level == 1 else 120.0)
+	var approach_dist: float = minf(maxf(dist * (0.36 if level == 1 else 0.46), 105.0 if level == 1 else 140.0), 260.0 if level == 1 else 340.0)
+	var side: float = spread * (0.45 if level == 1 else 0.75)
+	var pull_control: Vector2 = from - dir_n * pullback_dist + perp * pullback_dist * side + Vector2(0.0, -arc_height * (0.38 if level == 1 else 0.16))
+	var approach_control: Vector2 = to - dir_n * approach_dist
+	var time_power: float = 2.15 if level == 1 else 2.65
+
+	_tween = create_tween()
+	_tween.tween_method(func(t: float) -> void:
+		var curve_t: float = pow(t, time_power)
+		var inv: float = 1.0 - curve_t
+		_set_head_position(
+			inv * inv * inv * from
+			+ 3.0 * inv * inv * curve_t * pull_control
+			+ 3.0 * inv * curve_t * curve_t * approach_control
+			+ curve_t * curve_t * curve_t * to
+		)
+	, 0.0, 1.0, duration).set_trans(Tween.TRANS_LINEAR)
+	_tween.tween_callback(_on_flight_done)
+
+
 func _set_head_position(pos: Vector2) -> void:
 	_head_pos = pos
 	_trail.push_front(_head_pos)
@@ -302,12 +350,41 @@ func force_release() -> void:
 	is_available = true
 
 
+func _is_valid_trail_point(point: Vector2) -> bool:
+	return not is_nan(point.x) and not is_nan(point.y) and not is_inf(point.x) and not is_inf(point.y)
+
+
+func _is_valid_trail_quad(verts: PackedVector2Array) -> bool:
+	if verts.size() != 4:
+		return false
+	var area: float = 0.0
+	for i in verts.size():
+		var current: Vector2 = verts[i]
+		var next: Vector2 = verts[(i + 1) % verts.size()]
+		if not _is_valid_trail_point(current):
+			return false
+		if current.distance_squared_to(next) < 0.01:
+			return false
+		area += current.cross(next)
+	if abs(area) < 0.5:
+		return false
+	return Geometry2D.triangulate_polygon(verts).size() >= 3
+
+
 func _draw() -> void:
 	if _trail.size() < 2:
 		return
+	var trail_points: Array[Vector2] = []
+	for point in _trail:
+		if not _is_valid_trail_point(point):
+			continue
+		if trail_points.is_empty() or trail_points[trail_points.size() - 1].distance_squared_to(point) > 0.25:
+			trail_points.append(point)
+	if trail_points.size() < 2:
+		return
 
 	# ── 寬光帶拖尾（多層漸變 polygon strip）──
-	var count: int = _trail.size()
+	var count: int = trail_points.size()
 	var visual_mult: float = _visual_size_multiplier
 
 	# 計算每個點的法線方向（用於展開寬度）
@@ -315,11 +392,11 @@ func _draw() -> void:
 	for i in count:
 		var tangent: Vector2
 		if i == 0 and count > 1:
-			tangent = (_trail[0] - _trail[1]).normalized()
+			tangent = (trail_points[0] - trail_points[1]).normalized()
 		elif i == count - 1 and count > 1:
-			tangent = (_trail[i - 1] - _trail[i]).normalized()
+			tangent = (trail_points[i - 1] - trail_points[i]).normalized()
 		else:
-			tangent = (_trail[i - 1] - _trail[i + 1]).normalized()
+			tangent = (trail_points[i - 1] - trail_points[i + 1]).normalized()
 		normals.append(Vector2(-tangent.y, tangent.x))
 
 	# 三層拖尾：外部柔光 → 中層元素色 → 內層白芯
@@ -341,8 +418,10 @@ func _draw() -> void:
 			var alpha1: float = pow(1.0 - t1, 2.2) * a_mult
 			var w0: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t0, 0.6)) * w_mult * visual_mult
 			var w1: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t1, 0.6)) * w_mult * visual_mult
-			var p0: Vector2 = _trail[i] - global_position
-			var p1: Vector2 = _trail[i + 1] - global_position
+			var p0: Vector2 = trail_points[i] - global_position
+			var p1: Vector2 = trail_points[i + 1] - global_position
+			if p0.distance_squared_to(p1) < 0.25:
+				continue
 			var n0: Vector2 = normals[i]
 			var n1: Vector2 = normals[i + 1]
 
@@ -361,15 +440,14 @@ func _draw() -> void:
 				p0 + n0 * w0, p0 - n0 * w0,
 				p1 - n1 * w1, p1 + n1 * w1,
 			]
-			# Skip degenerate quads (collinear verts cause triangulation failure)
-			if abs((verts[2] - verts[0]).cross(verts[3] - verts[1])) < 0.5:
+			if not _is_valid_trail_quad(verts):
 				continue
 			var colors: PackedColorArray = [c0, c0, c1, c1]
 			draw_polygon(verts, colors)
 
 	# ── 球頭（多層發光 + 十字光芒）──
-	if _flying and _trail.size() > 0:
-		var head_local: Vector2 = _trail[0] - global_position
+	if _flying and trail_points.size() > 0:
+		var head_local: Vector2 = trail_points[0] - global_position
 
 		# 最外層柔暈
 		draw_circle(head_local, HEAD_GLOW_RADIUS * visual_mult, Color(_color.r, _color.g, _color.b, 0.12))

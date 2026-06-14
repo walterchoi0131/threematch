@@ -72,7 +72,7 @@ var _puzzle_turn_warning_tween: Tween = null
 var _plank_event_pending: bool = false
 var _plank_event_done: bool = false
 var _plank_event_deferred_check_running: bool = false
-const ESCAPE_METERS_PER_ROW := 5
+const ESCAPE_METERS_PER_ROW := 10
 const ESCAPE_SCROLL_RESET_ROW := 1
 const _PLANK_EVENT_DISTANCE := 200
 const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
@@ -147,6 +147,8 @@ var _player_shield_tween: Tween = null
 var _player_shield_badge_tween: Tween = null
 var _enemy_board_effects_pending: int = 0
 var _auto_enemy_active_cds: Dictionary = {}
+var _battle_shake_tween: Tween = null
+var _battle_shake_original_positions: Dictionary = {}
 
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
@@ -5483,6 +5485,7 @@ func _bounce_block_at(pos: Vector2i) -> void:
 func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictionary, chain_bonus: float = 0.0) -> void:
 	var particle_duration := 1.05
 	var all_attacks: Array = []
+	var max_attack_duration: float = 0.5
 
 	# 計算各類型的粒子預算（按比例分配 MAX_VFX_PARTICLES）
 	var total_raw := 0
@@ -5494,6 +5497,7 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 		var count: int = blasted_by_type[gem_type_key]
 		var attacks := battle_manager.get_attack_data(gem_type, count)
 		var color: Color = Block.COLORS[gem_type]
+		var vfx_profile: Dictionary = _attack_vfx_profile_for_count(count)
 		var raw: int = mini(count, 8)
 		var budget: int = maxi(1, roundi(float(MAX_VFX_PARTICLES) * raw / total_raw)) if total_raw > 0 else 1
 		var chain_total: int = mini(raw, budget)
@@ -5502,6 +5506,7 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 		# 無對應角色時跳過 VFX
 		if attacks.is_empty():
 			continue
+		var profile_attack_duration: float = 0.5 * float(vfx_profile.get("duration_scale", 1.0))
 
 		# 多角色共享同類寶石時，每位角色分配自己的粒子
 		var per_char: int = maxi(1, chain_total / attacks.size())
@@ -5515,13 +5520,23 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 				var global_idx: int = per_char * atk_idx + i
 				var spread: float = (float(global_idx) / max(chain_total - 1, 1)) * 2.0 - 1.0 if chain_total > 1 else 0.0
 				var from_pos: Vector2 = blast_pos_list[global_idx % blast_pos_list.size()] if blast_pos_list.size() > 0 else board.global_position + Vector2(board.columns * 32, board.rows * 32)
+				if particle.has_method("set_visual_size_multiplier"):
+					particle.set_visual_size_multiplier(1.0)
 				particle.launch(from_pos, card_center, color, particle_duration, spread)
 
 		# 套用連鏈加成並排入攻擊佇列
 		for attack in attacks:
 			var chain_mult: float = 1.0 + chain_bonus
+			var attack_vfx_duration: float = profile_attack_duration
+			var attack_char_index: int = int(attack.get("char_index", -1))
+			var attack_char: CharacterData = party[attack_char_index] if attack_char_index >= 0 and attack_char_index < party.size() else null
+			if attack_char != null and attack_char.character_name == "Boar":
+				attack_vfx_duration = 0.5
+			max_attack_duration = maxf(max_attack_duration, attack_vfx_duration)
 			attack.damage = int(attack.damage * chain_mult)
 			attack["chain_mult"] = chain_mult
+			attack["vfx_profile"] = vfx_profile
+			attack["attack_vfx_duration"] = attack_vfx_duration
 			all_attacks.append(attack)
 
 	_retarget_attack_queue_by_simulated_hp(all_attacks)
@@ -5541,7 +5556,7 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 		if i < all_attacks.size() - 1:
 			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
 	# 等待最後一位攻擊的投射物落地（最長飛行時間 + 餘裕）
-	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+	await get_tree().create_timer(max_attack_duration / TrailProjectileScript.speed_divisor + 0.15).timeout
 
 	var stage13_final_hit: bool = _stage13_owen_light_hit_pending
 	if stage13_final_hit:
@@ -5634,6 +5649,70 @@ func _get_best_target_for_damage(gem_type: Block.Type, base_damage: int, damage_
 
 # ── 攻擊特效 ───────────────────────────────────────────────────
 
+
+func _attack_vfx_profile_for_count(gem_count: int) -> Dictionary:
+	if gem_count > 45:
+		return {
+			"power_level": 2,
+			"duration_scale": 3.0 / (0.49 * 0.70),
+			"visual_scale": 3.0,
+			"shake": true,
+		}
+	if gem_count >= 25:
+		return {
+			"power_level": 1,
+			"duration_scale": 3.0 / (0.70 * 0.78),
+			"visual_scale": 2.0,
+			"shake": true,
+		}
+	return {
+		"power_level": 0,
+		"duration_scale": 1.0,
+		"visual_scale": 1.0,
+		"shake": false,
+	}
+
+
+func _play_attack_hit_screen_shake(power_level: int = 2) -> void:
+	if _battle_shake_tween != null and _battle_shake_tween.is_valid():
+		_battle_shake_tween.kill()
+		_apply_battle_shake_offset(_battle_shake_original_positions, Vector2.ZERO)
+	var targets: Array = [board, enemy_container, character_panel, gem_meter, _battle_bg_rect]
+	var originals: Dictionary = {}
+	for node in targets:
+		if is_instance_valid(node) and node.get("position") is Vector2:
+			originals[node] = node.position
+	if originals.is_empty():
+		return
+	_battle_shake_original_positions = originals
+	var strength: float = 18.0 if power_level >= 2 else 8.0
+	var duration: float = 0.32 if power_level >= 2 else 0.18
+	var steps: int = 8 if power_level >= 2 else 6
+	_battle_shake_tween = create_tween()
+	for i in steps:
+		var t: float = float(i) / float(maxi(steps - 1, 1))
+		var amp: float = strength * (1.0 - t)
+		var offset := Vector2(randf_range(-amp, amp), randf_range(-amp, amp))
+		_battle_shake_tween.tween_callback(_apply_battle_shake_offset.bind(originals, offset))
+		_battle_shake_tween.tween_interval(duration / float(steps))
+	_battle_shake_tween.tween_callback(_apply_battle_shake_offset.bind(originals, Vector2.ZERO))
+	_battle_shake_tween.tween_callback(func() -> void:
+		_battle_shake_original_positions.clear()
+	)
+
+
+func _apply_battle_shake_offset(originals: Dictionary, offset: Vector2) -> void:
+	for node in originals:
+		if is_instance_valid(node):
+			node.position = originals[node] + offset
+
+
+func _get_enemy_image_center(enemy: Enemy) -> Vector2:
+	if is_instance_valid(enemy) and enemy.portrait != null:
+		return enemy.portrait.get_global_rect().get_center()
+	return enemy.get_global_rect().get_center() if is_instance_valid(enemy) else Vector2.ZERO
+
+
 ## 播放單次攻擊序列：角色卡上彈 → 攻擊特效 → 角色卡回位（全部非阻塞，fire-and-forget）
 func _play_attack_sequence(attack: Dictionary) -> void:
 	var char_index: int = attack.char_index
@@ -5645,6 +5724,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 	var is_super: bool = attack.get("is_super", false)
 	var char_data := party[char_index]
 	var chain_mult: float = attack.get("chain_mult", 1.0)
+	var vfx_profile: Dictionary = attack.get("vfx_profile", _attack_vfx_profile_for_count(gem_count))
 
 	# 若原目標已失效，嘗試重新選擇一個存活敵人；若無存活敵人則過殺原目標
 	if not is_instance_valid(target) or target.current_hp <= 0:
@@ -5674,11 +5754,13 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var slash := Node2D.new()
 				slash.set_script(SlashEffectScript)
 				fx_layer.add_child(slash)
-				var target_pos := target.get_global_rect().get_center()
+				var target_pos := _get_enemy_image_center(target)
 				slash.deduct_hp.connect(func():
 					if is_instance_valid(target):
 						applied_damage = _apply_enemy_damage_with_stage13_floor(target, damage, gem_type)
 						_spawn_damage_number(target.get_global_rect().get_center(), applied_damage, Block.COLORS[gem_type], true, is_super)
+						if bool(vfx_profile.get("shake", false)):
+							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				await slash.play(target_pos)
@@ -5736,7 +5818,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 			var applied_damage: int = damage
 			if is_instance_valid(target):
 				var card_center: Vector2 = character_panel.get_card_screen_center(char_index)
-				var target_pos := target.get_global_rect().get_center()
+				var target_pos := _get_enemy_image_center(target)
 				var color: Color = Block.COLORS[gem_type]
 				var trail := Node2D.new()
 				trail.set_script(TrailProjectileScript)
@@ -5747,10 +5829,19 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
 						applied_damage = _apply_enemy_damage_with_stage13_floor(captured_target, captured_dmg, gem_type)
 						_spawn_damage_number(captured_target.get_global_rect().get_center(), applied_damage, color, true, is_super)
+						if bool(vfx_profile.get("shake", false)):
+							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
-				trail.launch(card_center, target_pos, color, 0.5)
-				await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.05).timeout
+				var attack_duration: float = float(attack.get("attack_vfx_duration", 0.5 * float(vfx_profile.get("duration_scale", 1.0))))
+				var power_level: int = int(vfx_profile.get("power_level", 0))
+				if trail.has_method("set_visual_size_multiplier"):
+					trail.set_visual_size_multiplier(float(vfx_profile.get("visual_scale", 1.0)))
+				if power_level > 0 and trail.has_method("launch_power_attack"):
+					trail.launch_power_attack(card_center, target_pos, color, attack_duration, 0.0, power_level)
+				else:
+					trail.launch(card_center, target_pos, color, attack_duration)
+				await get_tree().create_timer(attack_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), applied_damage, 1, mult, chain_mult), gem_type, char_data)
 
 	# Card moves back (non-blocking)
@@ -7004,7 +7095,7 @@ func _is_active_unlocked_for_battle(char_index: int) -> bool:
 
 
 func _handle_auto_enemy_action(enemy: Enemy) -> void:
-	if not is_instance_valid(enemy) or enemy.data == null:
+	if not _auto_enemy_can_continue(enemy):
 		return
 	var data: EnemyData = enemy.data
 	var auto_character: CharacterData = data.auto_character
@@ -7017,21 +7108,30 @@ func _handle_auto_enemy_action(enemy: Enemy) -> void:
 
 	if _auto_enemy_can_use_active(enemy, auto_character):
 		var used_active: bool = await _run_auto_enemy_active_skill(enemy, auto_character)
+		if not _auto_enemy_can_continue(enemy):
+			board.is_busy = false
+			return
 		if used_active:
 			_auto_enemy_active_cds[owner_id] = _auto_effective_active_cd(data, auto_character)
 			_add_log_entry("[b]%s[/b] AUTO：%s" % [enemy_name, Locale.tr_ui(auto_character.active_skill_name)], auto_character.gem_type)
 			await get_tree().create_timer(0.15).timeout
+			if not _auto_enemy_can_continue(enemy):
+				board.is_busy = false
+				return
 
-	if not is_instance_valid(enemy) or battle_manager.player_current_hp <= 0:
+	if not _auto_enemy_can_continue(enemy):
 		board.is_busy = false
 		return
 
-	var fuse_result: bool = await _try_auto_enemy_fuse(enemy, auto_character)
-	if fuse_result and (not is_instance_valid(enemy) or battle_manager.player_current_hp <= 0):
+	await _try_auto_enemy_fuse(enemy, auto_character)
+	if not _auto_enemy_can_continue(enemy):
 		board.is_busy = false
 		return
 
 	var upper_result: Dictionary = await _try_auto_enemy_upper(enemy, auto_character)
+	if not _auto_enemy_can_continue(enemy):
+		board.is_busy = false
+		return
 	if int(upper_result.get("count", 0)) > 0:
 		board.is_busy = false
 		var upper_damage_count: int = _auto_enemy_damage_count_for_type(upper_result, auto_character.gem_type)
@@ -7048,6 +7148,9 @@ func _handle_auto_enemy_action(enemy: Enemy) -> void:
 		board.is_busy = false
 		return
 	await _play_auto_enemy_cursor_tap(group[0], auto_character.gem_type)
+	if not _auto_enemy_can_continue(enemy):
+		board.is_busy = false
+		return
 	var pre_damage_count: int = _auto_enemy_group_count_for_type(group, auto_character.gem_type)
 	var pre_damage_positions: Array = _auto_enemy_group_positions_for_type(group, auto_character.gem_type)
 	var vfx_wait: float = 0.0
@@ -7056,6 +7159,9 @@ func _handle_auto_enemy_action(enemy: Enemy) -> void:
 		vfx_start_msec = Time.get_ticks_msec()
 		vfx_wait = _launch_auto_enemy_element_vfx_to_enemy(enemy, pre_damage_positions, auto_character.gem_type, pre_damage_count)
 	var blast_result: Dictionary = await board.enemy_blast_group(group)
+	if not _auto_enemy_can_continue(enemy):
+		board.is_busy = false
+		return
 	board.is_busy = false
 	var destroyed_count: int = int(blast_result.get("count", 0))
 	if destroyed_count > 0:
@@ -7067,7 +7173,19 @@ func _handle_auto_enemy_action(enemy: Enemy) -> void:
 				var remaining: float = vfx_wait - elapsed
 				if remaining > 0.0:
 					await get_tree().create_timer(remaining).timeout
+					if not _auto_enemy_can_continue(enemy):
+						return
 			await _apply_auto_enemy_gem_damage(enemy, damage_count, auto_character.gem_type, "Blast", damage_positions, pre_damage_count > 0)
+
+
+func _auto_enemy_can_continue(enemy: Enemy) -> bool:
+	return is_instance_valid(enemy) \
+			and enemy.data != null \
+			and enemy.current_hp > 0 \
+			and battle_manager != null \
+			and battle_manager.player_current_hp > 0 \
+			and battle_manager.active_enemies.has(enemy) \
+			and not battle_manager.is_round_transitioning
 
 
 func _auto_enemy_can_use_active(enemy: Enemy, auto_character: CharacterData) -> bool:
@@ -7080,12 +7198,16 @@ func _auto_enemy_can_use_active(enemy: Enemy, auto_character: CharacterData) -> 
 
 
 func _run_auto_enemy_active_skill(enemy: Enemy, auto_character: CharacterData) -> bool:
+	if not _auto_enemy_can_continue(enemy):
+		return false
 	if auto_character.active_skill_name == "Leaf Spear Call":
 		return await _run_auto_gory_leaf_spear_call(enemy, auto_character)
 	return false
 
 
 func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData) -> bool:
+	if not _auto_enemy_can_continue(enemy):
+		return false
 	var owner_id: int = enemy.get_instance_id()
 	var place_count: int = 1 + _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_ACTIVE, 0, "leaf_spear_extra_cells")
 	var candidates: Array[Dictionary] = []
@@ -7129,11 +7251,15 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 		used_columns[pos.x] = true
 	var placed_count: int = 0
 	for entry_index in selected_entries.size():
+		if not _auto_enemy_can_continue(enemy):
+			break
 		var entry: Dictionary = selected_entries[entry_index]
 		var pos: Vector2i = entry["pos"] as Vector2i
 		var ut: Block.UpperType = entry["ut"] as Block.UpperType
 		var spiral_color: Color = Block.COLORS.get(auto_character.gem_type, Block.COLORS.get(Block.Type.GREEN, Color(0.3, 0.85, 0.35)))
 		await _play_transmute_spiral_vfx_for_cells([pos], spiral_color)
+		if not _auto_enemy_can_continue(enemy):
+			break
 		if board.place_upper_gem(pos, ut, auto_character.gem_type, Block.UpperOwnerTeam.ENEMY, owner_id):
 			var placed_block: Block = board.grid[pos.x][pos.y]
 			if placed_block != null:
@@ -7142,6 +7268,8 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 			_play_sfx(_se_freeze)
 			if entry_index < selected_entries.size() - 1:
 				await get_tree().create_timer(0.5).timeout
+				if not _auto_enemy_can_continue(enemy):
+					break
 	if placed_count > 0:
 		board.resync_logic_from_visual()
 	return placed_count > 0
@@ -7186,6 +7314,8 @@ func _auto_score_wood_spear_cell(pos: Vector2i, ut: Block.UpperType) -> Dictiona
 
 
 func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
+	if not _auto_enemy_can_continue(enemy):
+		return false
 	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
 	if responding_index < 0:
 		return false
@@ -7207,9 +7337,15 @@ func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 			best_pos = p
 			best_ut = ut
 	await _play_auto_enemy_cursor_tap(best_pos, auto_character.gem_type)
+	if not _auto_enemy_can_continue(enemy):
+		return false
 	_play_sfx(_se_freeze)
 	await _play_auto_enemy_fuse_projectiles(group, best_pos, auto_character.gem_type)
+	if not _auto_enemy_can_continue(enemy):
+		return false
 	var ok: bool = await board.enemy_fuse_upper_from_group(group, best_pos, best_ut, auto_character.gem_type, enemy.get_instance_id(), pierces_breakable)
+	if not _auto_enemy_can_continue(enemy):
+		return false
 	if ok:
 		_add_log_entry("[b]%s[/b] AUTO：%s%d → %s" % [
 			enemy.data.get_display_name(),
@@ -7221,6 +7357,8 @@ func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 
 
 func _try_auto_enemy_upper(enemy: Enemy, auto_character: CharacterData) -> Dictionary:
+	if not _auto_enemy_can_continue(enemy):
+		return {"acted": false, "count": 0}
 	var owner_id: int = enemy.get_instance_id()
 	var uppers: Array[Vector2i] = board.find_owned_upper_gems(owner_id)
 	if uppers.is_empty():
@@ -7238,7 +7376,11 @@ func _try_auto_enemy_upper(enemy: Enemy, auto_character: CharacterData) -> Dicti
 		if best_block != null:
 			best_upper_type = best_block.upper_type
 	await _play_auto_enemy_cursor_tap(best_pos, auto_character.gem_type)
+	if not _auto_enemy_can_continue(enemy):
+		return {"acted": false, "count": 0}
 	var result: Dictionary = await board.enemy_trigger_owned_upper(best_pos, owner_id)
+	if not _auto_enemy_can_continue(enemy):
+		return {"acted": false, "count": 0}
 	result["acted"] = true
 	if int(result.get("count", 0)) > 0:
 		_add_log_entry("[b]%s[/b] AUTO：%s ×%d" % [
@@ -7432,7 +7574,7 @@ func _launch_auto_enemy_element_vfx_to_enemy(enemy: Enemy, source_positions: Arr
 
 
 func _apply_auto_enemy_gem_damage(enemy: Enemy, destroyed_count: int, gem_type: Block.Type, source_label: String, source_positions: Array = [], element_vfx_already_played: bool = false) -> void:
-	if not is_instance_valid(enemy) or enemy.data == null or destroyed_count <= 0:
+	if not _auto_enemy_can_continue(enemy) or destroyed_count <= 0:
 		return
 	var percent: float = float(destroyed_count) * maxf(enemy.data.auto_gem_atk_power, 0.0)
 	if percent <= 0.0:
@@ -7449,6 +7591,8 @@ func _apply_auto_enemy_gem_damage(enemy: Enemy, destroyed_count: int, gem_type: 
 	], gem_type)
 	if not element_vfx_already_played:
 		await _play_auto_enemy_element_vfx_to_enemy(enemy, source_positions, gem_type, destroyed_count)
+		if not _auto_enemy_can_continue(enemy):
+			return
 	_on_enemy_attacked(enemy, damage)
 	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.08).timeout
 

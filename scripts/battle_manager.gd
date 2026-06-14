@@ -489,6 +489,8 @@ func do_enemy_phase() -> bool:
 		return false
 	for i in attacking.size():
 		var enemy: Enemy = attacking[i]
+		if not is_instance_valid(enemy) or not active_enemies.has(enemy) or enemy.current_hp <= 0:
+			continue
 		var action_type: int = enemy.get_current_action()
 		var action_percent: int = enemy.get_current_attack_percent()
 		var action_count: int = enemy.get_current_action_count()
@@ -497,6 +499,8 @@ func do_enemy_phase() -> bool:
 		enemy.turns_until_attack = next_cd
 		logic_enemy_cd[enemy] = next_cd
 		enemy.flash_action(action_type, action_percent, action_count)
+		if not is_instance_valid(enemy) or not active_enemies.has(enemy) or enemy.current_hp <= 0:
+			continue
 		await _enemy_act(enemy, action_type, action_percent, action_count)
 		if i < attacking.size() - 1:
 			await get_tree().create_timer(0.2).timeout
