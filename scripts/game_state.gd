@@ -9,13 +9,28 @@ signal save_cleared
 
 const MAX_PARTY_SIZE := 4  # 隊伍最大人數
 const SAVE_PATH := "user://save.json"
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const _STAGE_ID_MIGRATION_V1_TO_V2 := {
 	"1-2": "1-4",
 	"1-3": "1-5",
 	"1-4": "1-6",
 	"1-5": "1-7",
 	"1-6": "1-8",
+}
+const _STAGE_ID_MIGRATION_V2_TO_V3 := {
+	"1-4": "",
+	"1-5": "1-4",
+	"1-6": "1-5",
+	"1-7": "1-6",
+	"1-8": "1-7",
+}
+const _MAIN_STAGE_PREREQUISITES := {
+	"1-2": "1-1",
+	"1-3": "1-2",
+	"1-4": "1-3",
+	"1-5": "1-4",
+	"1-6": "1-5",
+	"1-7": "1-6",
 }
 const DEFAULT_CHARACTER_LEVEL := 5
 const DEFAULT_CHARACTER_EXP := 0
@@ -576,11 +591,16 @@ func _deserialize(d: Dictionary, save_version: int = SAVE_VERSION) -> void:
 
 	cleared_stages.clear()
 	for sid in d.get("cleared_stages", []):
-		cleared_stages[_migrate_stage_id(str(sid), save_version)] = true
+		var migrated_stage_id: String = _migrate_stage_id(str(sid), save_version)
+		if migrated_stage_id != "":
+			cleared_stages[migrated_stage_id] = true
 
 	claimed_stage_rewards.clear()
 	for sid in d.get("claimed_stage_rewards", []):
-		claimed_stage_rewards[_migrate_stage_id(str(sid), save_version)] = true
+		var migrated_reward_stage_id: String = _migrate_stage_id(str(sid), save_version)
+		if migrated_reward_stage_id != "":
+			claimed_stage_rewards[migrated_reward_stage_id] = true
+	_repair_main_stage_progression()
 
 	last_used_party_paths.clear()
 	for p in d.get("last_used_party", []):
@@ -591,8 +611,24 @@ func _deserialize(d: Dictionary, save_version: int = SAVE_VERSION) -> void:
 
 func _migrate_stage_id(stage_id: String, save_version: int) -> String:
 	if save_version <= 1 and _STAGE_ID_MIGRATION_V1_TO_V2.has(stage_id):
-		return String(_STAGE_ID_MIGRATION_V1_TO_V2[stage_id])
+		stage_id = String(_STAGE_ID_MIGRATION_V1_TO_V2[stage_id])
+	if save_version <= 2 and _STAGE_ID_MIGRATION_V2_TO_V3.has(stage_id):
+		stage_id = String(_STAGE_ID_MIGRATION_V2_TO_V3[stage_id])
 	return stage_id
+
+
+func _repair_main_stage_progression() -> void:
+	var changed := true
+	while changed:
+		changed = false
+		for stage_id in cleared_stages.keys():
+			var current_id := str(stage_id)
+			if not _MAIN_STAGE_PREREQUISITES.has(current_id):
+				continue
+			var prereq_id: String = String(_MAIN_STAGE_PREREQUISITES[current_id])
+			if prereq_id != "" and not cleared_stages.has(prereq_id):
+				cleared_stages[prereq_id] = true
+				changed = true
 
 
 ## 建構第一關固定棋盤佈局（8×8）

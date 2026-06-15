@@ -533,7 +533,7 @@ func _blast_pattern_for(upper_type: int) -> Array:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
-		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE, Block.UpperType.LIGHT_SHIELD:
+		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
 			# 只爆自身（中心格）
 			return [Vector2i(2, 2)]
 		Block.UpperType.BAMBOO_SUPPLY:
@@ -543,6 +543,10 @@ func _blast_pattern_for(upper_type: int) -> Array:
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 		Block.UpperType.WOOD_SPEAR_UP:
 			return [Vector2i(2, 2), Vector2i(2, 1), Vector2i(2, 0), Vector2i(1, 0), Vector2i(3, 0)]
+		Block.UpperType.LIGHT_SHIELD:
+			var cells_light: Array = []
+			for x in 5: cells_light.append(Vector2i(x, 2))
+			return cells_light
 		Block.UpperType.WOOD_SPEAR_DOWN:
 			return [Vector2i(2, 2), Vector2i(2, 3), Vector2i(2, 4), Vector2i(1, 4), Vector2i(3, 4)]
 	return []

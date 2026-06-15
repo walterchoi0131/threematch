@@ -160,21 +160,21 @@ func get_element_weights_for_allowed_types() -> Array[int]:
 
 func _default_element_distribution() -> Dictionary:
 	match stage_id:
-		"1-5":
+		"1-4":
 			return {
 				Block.Type.RED: 32,
 				Block.Type.BLUE: 32,
 				Block.Type.GREEN: 31,
 				Block.Type.LIGHT: 5,
 			}
-		"1-6":
+		"1-5":
 			return {
 				Block.Type.RED: 60,
 				Block.Type.BLUE: 10,
 				Block.Type.GREEN: 10,
 				Block.Type.LIGHT: 20,
 			}
-		"1-7":
+		"1-6":
 			return {
 				Block.Type.RED: 25,
 				Block.Type.BLUE: 25,

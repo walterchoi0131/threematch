@@ -1,20 +1,21 @@
-[gd_resource type="Resource" script_class="StageData" format=3]
+[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://e8mn658yxmts"]
 
-[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="2_dgnba"]
+[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="2_dgnba"]
 
 [resource]
 script = ExtResource("1_stage")
 stage_id = "PZ-R4"
 connects_to = Array[String](["PZ-R5"])
 stage_name = "Puzzle Research 4"
-element_weights = Array[int]([1, 1, 1])
+element_weights = Array[int]([1])
+allowed_types = Array[int]([6])
 area = "iceberg"
 battle_music_override_path = "res://assets/music/Puzzles.mp3"
 stretch_battle_background = true
 mode = 2
-puzzle_goal_target_type = 8
+puzzle_goal_target_type = 11
 puzzle_goal_required_count = 1
 puzzle_turn_limit = 1
-fixed_layout = [[-1, -1, -11, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -11, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -11, -1, -1, -10, -10], [-1, -1, -1, -1, -11, -1, -10, 8], [-1, -1, -11, -1, -1, -1, -10, -10]]
+fixed_layout = [[-1, -1, -11, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -11, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -11, -1, -1, -10, -10], [-1, -1, -1, -1, -11, -1, -10, 11], [-1, -1, -11, -1, -1, -1, -10, -10]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

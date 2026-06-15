@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://dk7dkiuhci2xs"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/dragon.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://b2d3f5dn6b3om" path="res://assets/dragon.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -24,7 +24,7 @@ rectangular_offset = Vector2(-20, 151)
 active_skill_name = "Dragon Flame Domain"
 active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
 active_skill_cd = 3
-active_unlock_stage_id = "1-6"
+active_unlock_stage_id = "1-5"
 has_break_essence = true
 responding_skills = Array[Dictionary]([{
 "desc": "create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",

@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3]
+[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://7kwe3q1qbp3y"]
 
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/shark.png" id="2_portrait"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://cch2mevaonj6u" path="res://assets/shark.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -25,7 +25,7 @@ rectangular_offset = Vector2(-82, 227)
 active_skill_name = "居合。水"
 active_skill_desc = "Blast all water gems on the board. The destroyed count is stored and added to the next water attack. CD: 5 turns."
 active_skill_cd = 5
-active_unlock_stage_id = "1-7"
+active_unlock_stage_id = "1-6"
 responding_skills = Array[Dictionary]([{
 "desc": "create a Water Slash gem at tapped cell. Click to chain across all Water Slashes on the board (lines between swords + final vertical column).",
 "fuse_label": "4",

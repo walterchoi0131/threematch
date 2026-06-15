@@ -76,6 +76,7 @@ const LOGIC_ROCK := -3
 const LOGIC_WOOD_STRUCTURE := -4
 const LOGIC_ESCAPE_MARKER := -5
 const LOGIC_HOLE := -6
+const LOGIC_PUZZLE_KEY := -7
 const EDIT_RANDOM := -1
 const VISUAL_HOLE := &"hole"
 const FUSE_SOLUTION1_UPPER_PLACEHOLDER := &"upper_placeholder"
@@ -332,8 +333,8 @@ func initialize_board() -> void:
 					if t < 0 or not Block.is_valid_type_value(t):
 						continue
 					grid[x][y].set_block_type(t)
-	# 關卡 1-6：所有 PLANK 自動掛載 BURNING 效果
-	if stage != null and stage.stage_id == "1-6":
+	# 關卡 1-5：所有 PLANK 自動掛載 BURNING 效果
+	if stage != null and stage.stage_id == "1-5":
 		for x in columns:
 			for y in rows:
 				var b: Block = grid[x][y]
@@ -370,6 +371,8 @@ func _init_logic_grid_from_visual() -> void:
 				logic_grid[x][y] = LOGIC_ROCK
 			elif b.is_wood_structure():
 				logic_grid[x][y] = LOGIC_WOOD_STRUCTURE
+			elif b.is_puzzle_key():
+				logic_grid[x][y] = LOGIC_PUZZLE_KEY
 			else:
 				logic_grid[x][y] = b.block_type
 
@@ -399,6 +402,8 @@ func _sync_logic_unknowns_from_visual() -> void:
 						logic_grid[x][y] = LOGIC_ROCK
 					elif b.is_wood_structure():
 						logic_grid[x][y] = LOGIC_WOOD_STRUCTURE
+					elif b.is_puzzle_key():
+						logic_grid[x][y] = LOGIC_PUZZLE_KEY
 					else:
 						logic_grid[x][y] = int(b.block_type)
 
@@ -513,8 +518,8 @@ func _create_block(x: int, y: int, start_pos: Vector2 = Vector2.ZERO, use_start_
 	block.position = start_pos if use_start_pos else grid_to_world(Vector2i(x, y))
 	add_child(block)
 	grid[x][y] = block
-	# 關卡 1-6：火屬性寶石自動掛載 BURNING 額外效果（含初始填充與天空補充）
-	if stage != null and stage.stage_id == "1-6" and block.block_type == Block.Type.RED:
+	# 關卡 1-5：火屬性寶石自動掛載 BURNING 額外效果（含初始填充與天空補充）
+	if stage != null and stage.stage_id == "1-5" and block.block_type == Block.Type.RED:
 		block.add_extra(Block.ExtraEffect.BURNING)
 	return block
 
@@ -610,9 +615,13 @@ func _emit_goal_cells_for_blocks(blocks: Array) -> void:
 		if block == null or not is_instance_valid(block) or block.is_upper_gem():
 			continue
 		var type_value: int = int(block.block_type)
-		if type_value != int(Block.Type.PLANK) and not Block.is_random_gem_type_value(type_value):
+		if type_value != int(Block.Type.PLANK) \
+				and type_value != int(Block.Type.PUZZLE_KEY) \
+				and not Block.is_random_gem_type_value(type_value):
 			continue
-		if type_value == int(Block.Type.PLANK) or not block.is_obstacle():
+		if type_value == int(Block.Type.PLANK) \
+				or type_value == int(Block.Type.PUZZLE_KEY) \
+				or not block.is_obstacle():
 			count_by_type[type_value] = int(count_by_type.get(type_value, 0)) + 1
 			if not positions_by_type.has(type_value):
 				positions_by_type[type_value] = []
@@ -624,6 +633,21 @@ func _emit_goal_cells_for_blocks(blocks: Array) -> void:
 
 func is_escape_marker_pos(pos: Vector2i) -> bool:
 	return _escape_marker_enabled and pos == _escape_marker_pos
+
+
+func _unlock_puzzle_key_at(pos: Vector2i) -> bool:
+	if not _is_valid(pos):
+		return false
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.is_locked_puzzle_key():
+		return false
+	if not block.unlock_puzzle_key():
+		return false
+	if logic_grid.size() == columns and pos.x < logic_grid.size() and logic_grid[pos.x] is Array and pos.y < (logic_grid[pos.x] as Array).size():
+		logic_grid[pos.x][pos.y] = LOGIC_PUZZLE_KEY
+	block.play_puzzle_key_unlock_pop()
+	goal_cells_broken.emit(int(Block.Type.PUZZLE_KEY), 1, [block.global_position])
+	return true
 
 
 func enable_escape_marker(start_pos: Vector2i) -> void:
@@ -1163,6 +1187,8 @@ func _sync_edit_logic_cell(pos: Vector2i, value: int) -> void:
 		logic_grid[pos.x][pos.y] = LOGIC_ROCK
 	elif normalized == Block.Type.WOOD_STRUCTURE:
 		logic_grid[pos.x][pos.y] = LOGIC_WOOD_STRUCTURE
+	elif normalized == Block.Type.PUZZLE_KEY:
+		logic_grid[pos.x][pos.y] = LOGIC_PUZZLE_KEY
 	else:
 		logic_grid[pos.x][pos.y] = normalized
 
@@ -1441,7 +1467,7 @@ func _logic_cell_can_move(value: int) -> bool:
 
 
 func _logic_value_is_stationary_obstacle(value: int) -> bool:
-	return value == LOGIC_ROCK or value == LOGIC_WOOD_STRUCTURE
+	return value == LOGIC_ROCK or value == LOGIC_WOOD_STRUCTURE or value == LOGIC_PUZZLE_KEY
 
 
 func _logic_value_is_breakable_structure(value: int) -> bool:
@@ -1455,7 +1481,8 @@ func _logic_value_blocks_matching(value: int) -> bool:
 		or value == LOGIC_ROCK \
 		or value == LOGIC_WOOD_STRUCTURE \
 		or value == LOGIC_ESCAPE_MARKER \
-		or value == LOGIC_HOLE
+		or value == LOGIC_HOLE \
+		or value == LOGIC_PUZZLE_KEY
 
 
 ## 預測：此次爆破是否會觸發任何融合（回應）技能
@@ -2705,6 +2732,9 @@ func _destroy_wood_spear_row_group(group: Array, total_blasted_by_type: Dictiona
 		var b: Block = grid[p.x][p.y]
 		if b == null or b.is_rock():
 			continue
+		if b.is_puzzle_key():
+			_unlock_puzzle_key_at(p)
+			continue
 		if b.is_upper_gem():
 			if b.upper_owner_team == Block.UpperOwnerTeam.ENEMY:
 				_destroy_upper_without_effect(p)
@@ -2929,6 +2959,9 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			continue
 		var b: Block = grid[p.x][p.y]
 		if b == null:
+			continue
+		if b.is_puzzle_key():
+			_unlock_puzzle_key_at(p)
 			continue
 		if b.is_rock():
 			continue
@@ -3155,6 +3188,9 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 			var b: Block = grid[c.x][c.y]
 			if b == null:
 				continue
+			if b.is_puzzle_key():
+				_unlock_puzzle_key_at(c)
+				continue
 			if b.is_rock():
 				continue
 			var is_other_upper: bool = b.is_upper_gem() \
@@ -3362,7 +3398,7 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 		Block.UpperType.ICEBALL:
 			return _get_surrounding_positions(pos)
 		Block.UpperType.LIGHT_SHIELD:
-			return [pos]
+			return _get_row_positions(pos.y)
 		Block.UpperType.BAMBOO_SUPPLY:
 			return _get_surrounding_positions(pos)
 		Block.UpperType.WATER_SLASH:
@@ -3738,6 +3774,9 @@ func _enemy_trigger_owned_upper_recursive(pos: Vector2i, owner_id: int, visited:
 			var target: Block = grid[p.x][p.y]
 			if target == null or target.is_rock():
 				continue
+			if target.is_puzzle_key():
+				_unlock_puzzle_key_at(p)
+				continue
 			if target.is_upper_gem():
 				if target.upper_owner_team == Block.UpperOwnerTeam.ENEMY and target.upper_owner_id == owner_id:
 					if not chain_positions.has(p):
@@ -3807,6 +3846,9 @@ func _destroy_enemy_wood_spear_row_group(
 			continue
 		var target: Block = grid[p.x][p.y]
 		if target == null or target.is_rock():
+			continue
+		if target.is_puzzle_key():
+			_unlock_puzzle_key_at(p)
 			continue
 		if target.is_upper_gem():
 			if target.upper_owner_team == Block.UpperOwnerTeam.ENEMY and target.upper_owner_id == owner_id:

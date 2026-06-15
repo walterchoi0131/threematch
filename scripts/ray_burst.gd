@@ -5,7 +5,7 @@ extends Node2D
 var ray_count := 6      # 射線條數
 var outer_radius := 30.0   # 射線最遠端半徑
 ## 每道射線半角：0.28 rad ≈ 16°，8 條 × 32° = 256°，約 71% 填充率（粗錐形）
-var ray_half_angle := 0.18
+var ray_half_angle := 0.234
 var rotation_speed := 0.6  # 旋轉速度（弧度/秒）
 var ray_color := Color(1.0, 0.90, 0.35, 0.82)
 

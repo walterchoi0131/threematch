@@ -7,12 +7,16 @@ const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
 const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.gd")
+const PuzzleGoalPulseParticlesScript := preload("res://scripts/upper_gem_pulse_particles.gd")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 const _DialogLine := preload("res://scripts/dialog_line.gd")
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
+const PUZZLE_KEY_HUD_BASE_TEXTURE := preload("res://assets/blocks/puzzle_key_unlocked.png")
+const PUZZLE_KEY_HUD_GEM_TEXTURE := preload("res://assets/blocks/puzzle_key_gem.png")
+const PUZZLE_KEY_HUD_AURA_COLOR := Color(0.18, 0.95, 0.86, 0.62)
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board = $Board
@@ -54,7 +58,10 @@ var _puzzle_goal_remaining: int = 0
 var _puzzle_goal_displayed: int = 0
 var _puzzle_goal_completed: bool = false
 var _puzzle_goal_panel: PanelContainer = null
+var _puzzle_goal_icon_slot: Control = null
 var _puzzle_goal_icon: TextureRect = null
+var _puzzle_goal_icon_gem: TextureRect = null
+var _puzzle_goal_icon_fx: Node2D = null
 var _puzzle_goal_prefix_label: Label = null
 var _puzzle_goal_number_label: Label = null
 var _puzzle_goal_target_label: Label = null
@@ -65,10 +72,11 @@ var _puzzle_turns_displayed: int = 0
 var _puzzle_turn_limit_failed: bool = false
 var _puzzle_turn_prefix_label: Label = null
 var _puzzle_turn_number_label: Label = null
+var _puzzle_turn_suffix_label: Label = null
 var _puzzle_turn_tween: Tween = null
 var _puzzle_turn_warning_tween: Tween = null
 
-# ── Stage 1-6 急難奇蹟事件 ─────────────────────────────────
+# ── Stage 1-5 急難奇蹟事件 ─────────────────────────────────
 var _plank_event_pending: bool = false
 var _plank_event_done: bool = false
 var _plank_event_deferred_check_running: bool = false
@@ -77,8 +85,8 @@ const ESCAPE_SCROLL_RESET_ROW := 1
 const _PLANK_EVENT_DISTANCE := 200
 const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
 const _Stage1_3Owen := preload("res://dialogs/stage1_3_owen.gd")
-const OWEN_STORY_STAGE_ID := "1-5"
-const ESCAPE_PLANK_STAGE_ID := "1-6"
+const OWEN_STORY_STAGE_ID := "1-4"
+const ESCAPE_PLANK_STAGE_ID := "1-5"
 
 ## 主動技能完整執行完成信號（供外部事件 await 完成狀態使用）
 signal active_skill_finished(char_index: int)
@@ -206,6 +214,8 @@ var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
 var _se_join_team: AudioStream = null
 var _se_thor_active: AudioStream = null
+var _se_goal_achieve: AudioStream = null
+var _se_stone_impacts: Array[AudioStream] = []
 
 # ── BGM 預覽模式狀態 ──
 var _bgm_player: AudioStreamPlayer = null   # 背景音樂播放器引用
@@ -229,6 +239,7 @@ const STAGE_EDITOR_GEM_TYPES: Array[int] = [
 	Block.Type.PLANK,
 	Block.Type.ROCK,
 	Block.Type.WOOD_STRUCTURE,
+	Block.Type.PUZZLE_KEY,
 	StageData.CELL_WATER_SWORD,
 	StageData.CELL_HOLE,
 ]
@@ -246,6 +257,7 @@ const STAGE_EDITOR_GOAL_TARGET_TYPES: Array[int] = [
 	Block.Type.LIGHT,
 	Block.Type.DARK,
 	Block.Type.PLANK,
+	Block.Type.PUZZLE_KEY,
 ]
 const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
 const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
@@ -408,11 +420,16 @@ func _ready() -> void:
 	_setup_escape_hud()
 	_setup_puzzle_goal_hud()
 
-	_se_blast = load("res://assets/se/111.wav")
-	_se_freeze = load("res://assets/se/skef_freeze.mp3")
-	_se_impact = load("res://assets/se/skef_atk1_B.mp3")
-	_se_join_team = load("res://assets/se/join_team2.mp3")
-	_se_thor_active = load("res://assets/se/magical_star_transmu.mp3")
+	_se_blast = _load_audio_stream("res://assets/se/111.wav")
+	_se_freeze = _load_audio_stream("res://assets/se/skef_freeze.mp3")
+	_se_impact = _load_audio_stream("res://assets/se/skef_atk1_B.mp3")
+	_se_join_team = _load_audio_stream("res://assets/se/join_team2.mp3")
+	_se_thor_active = _load_audio_stream("res://assets/se/magical_star_transmu.mp3")
+	_se_goal_achieve = _load_audio_stream("res://assets/se/goal_achieve.mp3")
+	_se_stone_impacts = [
+		_load_audio_stream("res://assets/se/stone1.mp3"),
+		_load_audio_stream("res://assets/se/stone2.mp3"),
+	]
 
 	#_setup_dev_log()  # 開發日誌已隱藏
 	_update_skill_ui()
@@ -3756,6 +3773,8 @@ func _stage_editor_type_name(value: int) -> String:
 			return "Rock"
 		Block.Type.WOOD_STRUCTURE:
 			return "woodStructure"
+		Block.Type.PUZZLE_KEY:
+			return "Puzzle Key"
 		StageData.CELL_WATER_SWORD:
 			return "Water Sword"
 		StageData.CELL_HOLE:
@@ -4602,6 +4621,18 @@ func _on_tutorial_finished() -> void:
 
 # ── BGM ───────────────────────────────────────────────────────
 
+func _load_audio_stream(path: String) -> AudioStream:
+	if ResourceLoader.exists(path):
+		var stream: AudioStream = load(path)
+		if stream != null:
+			return stream
+	if path.get_extension().to_lower() == "mp3" and FileAccess.file_exists(path):
+		var mp3 := AudioStreamMP3.new()
+		mp3.data = FileAccess.get_file_as_bytes(path)
+		return mp3
+	return null
+
+
 ## 播放一次性音效（volume_scale 為線性倍率，1.0 = 原音量）
 func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> void:
 	if stream == null:
@@ -4613,6 +4644,16 @@ func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> void:
 	player.finished.connect(player.queue_free)
 	add_child(player)
 	player.play()
+
+
+func _play_random_stone_impact_sfx() -> void:
+	var choices: Array[AudioStream] = []
+	for stream in _se_stone_impacts:
+		if stream != null:
+			choices.append(stream)
+	if choices.is_empty():
+		return
+	_play_sfx(choices[randi() % choices.size()])
 
 
 ## 依連鎖數播放對應音階：chain 2 → match_xylophone_2，... chain 10+ → match_xylophone_10_MAX
@@ -5315,7 +5356,7 @@ func _end_player_turn() -> void:
 		# 一律解鎖棋盤（upper-gem 路徑全程 is_busy=true，必須在此釋放）
 		board.set_board_input_paused(false)
 		board.is_busy = false
-		# Stage 1-6 急難事件：在玩家下一個回合開始前該發
+		# Stage 1-5 急難事件：在玩家下一個回合開始前該發
 		if _plank_event_pending and not _plank_event_done:
 			_plank_event_pending = false
 			_plank_event_done = true
@@ -7317,6 +7358,19 @@ func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 	if not _auto_enemy_can_continue(enemy):
 		return false
 	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
+	var skill_name: String = "Wood Spear" if responding_index >= 0 else ""
+	var upper_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_UP if responding_index >= 0 else Block.UpperType.NONE
+	if responding_index < 0:
+		for i in auto_character.responding_skills.size():
+			var candidate: Dictionary = auto_character.responding_skills[i] as Dictionary
+			var candidate_name: String = str(candidate.get("name", ""))
+			var candidate_upper: Block.UpperType = _upper_type_for_response_skill(candidate_name)
+			if candidate_upper == Block.UpperType.NONE or Block.upper_type_has_instant(candidate_upper):
+				continue
+			responding_index = i
+			skill_name = candidate_name
+			upper_type = candidate_upper
+			break
 	if responding_index < 0:
 		return false
 	var skill: Dictionary = auto_character.responding_skills[responding_index] as Dictionary
@@ -7324,6 +7378,32 @@ func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 	var group: Array[Vector2i] = board.find_auto_fuse_group(auto_character.gem_type, threshold)
 	if group.is_empty():
 		return false
+	if skill_name != "Wood Spear":
+		var target_pos: Vector2i = group[0]
+		var target_score: int = -1
+		for p in group:
+			var score: int = _auto_score_upper_fuse_cell(p, upper_type, auto_character.gem_type)
+			if score > target_score:
+				target_score = score
+				target_pos = p
+		await _play_auto_enemy_cursor_tap(target_pos, auto_character.gem_type)
+		if not _auto_enemy_can_continue(enemy):
+			return false
+		_play_sfx(_se_freeze)
+		await _play_auto_enemy_fuse_projectiles(group, target_pos, auto_character.gem_type)
+		if not _auto_enemy_can_continue(enemy):
+			return false
+		var generic_ok: bool = await board.enemy_fuse_upper_from_group(group, target_pos, upper_type, auto_character.gem_type, enemy.get_instance_id())
+		if not _auto_enemy_can_continue(enemy):
+			return false
+		if generic_ok:
+			_add_log_entry("[b]%s[/b] AUTO：%s%d → %s" % [
+				enemy.data.get_display_name(),
+				_gem_bbcode(auto_character.gem_type),
+				group.size(),
+				_upper_gem_bbcode(upper_type)
+			], auto_character.gem_type)
+		return generic_ok
 	var best_pos: Vector2i = group[0]
 	var best_score: int = -1
 	var best_ut: Block.UpperType = Block.UpperType.WOOD_SPEAR_DOWN
@@ -7354,6 +7434,23 @@ func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 			_upper_gem_bbcode(best_ut)
 		], auto_character.gem_type)
 	return ok
+
+
+func _auto_score_upper_fuse_cell(pos: Vector2i, upper_type: Block.UpperType, gem_type: Block.Type) -> int:
+	var score: int = 0
+	for target_pos in board._get_blast_positions_for_upper(pos, upper_type):
+		if not board._cell_accepts_block(target_pos) or board.is_escape_marker_pos(target_pos):
+			continue
+		var block: Block = board.grid[target_pos.x][target_pos.y]
+		if block == null or block.is_rock():
+			continue
+		if block.is_upper_gem():
+			score += 6 if block.upper_owner_team == Block.UpperOwnerTeam.PLAYER else 2
+		elif not block.is_obstacle():
+			score += 3 if block.block_type == gem_type else 1
+		elif block.is_breakable_structure():
+			score += 1
+	return score
 
 
 func _try_auto_enemy_upper(enemy: Enemy, auto_character: CharacterData) -> Dictionary:
@@ -7549,7 +7646,7 @@ func _play_auto_enemy_element_vfx_to_enemy(enemy: Enemy, source_positions: Array
 func _launch_auto_enemy_element_vfx_to_enemy(enemy: Enemy, source_positions: Array, gem_type: Block.Type, destroyed_count: int) -> float:
 	if not is_instance_valid(enemy):
 		return 0.0
-	var target_pos: Vector2 = enemy.get_global_rect().get_center()
+	var target_pos: Vector2 = _get_enemy_image_center(enemy)
 	var color: Color = Block.COLORS.get(gem_type, Color.WHITE)
 	var starts: Array[Vector2] = []
 	for value in source_positions:
@@ -8395,6 +8492,7 @@ func _setup_puzzle_goal_hud() -> void:
 		_puzzle_goal_panel = null
 		_puzzle_turn_prefix_label = null
 		_puzzle_turn_number_label = null
+		_puzzle_turn_suffix_label = null
 		return
 
 	_puzzle_goal_required = maxi(current_stage.puzzle_goal_required_count, 0)
@@ -8418,7 +8516,7 @@ func _build_puzzle_goal_panel() -> void:
 		return
 	_puzzle_goal_panel = PanelContainer.new()
 	_puzzle_goal_panel.name = "PuzzleGoalPanel"
-	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 98)
+	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 112)
 	_puzzle_goal_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.06, 0.09, 0.86)
@@ -8436,50 +8534,90 @@ func _build_puzzle_goal_panel() -> void:
 	margin.add_theme_constant_override("margin_bottom", 6)
 	_puzzle_goal_panel.add_child(margin)
 
-	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 2)
-	margin.add_child(root)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 8)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	margin.add_child(grid)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	root.add_child(row)
-
-	_puzzle_goal_icon = TextureRect.new()
-	_puzzle_goal_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_puzzle_goal_icon.custom_minimum_size = Vector2(44, 44)
-	row.add_child(_puzzle_goal_icon)
-
-	_puzzle_goal_prefix_label = _make_puzzle_goal_part_label(20)
+	_puzzle_goal_prefix_label = _make_puzzle_goal_part_label(24)
 	_puzzle_goal_prefix_label.text = "剩餘"
+	_puzzle_goal_prefix_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_puzzle_goal_prefix_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(_puzzle_goal_prefix_label)
+	_puzzle_goal_prefix_label.custom_minimum_size = Vector2(62, 36)
+	grid.add_child(_puzzle_goal_prefix_label)
 
-	_puzzle_goal_number_label = _make_puzzle_goal_part_label(30)
-	_puzzle_goal_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_puzzle_goal_number_label = _make_puzzle_goal_part_label(24)
+	_puzzle_goal_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_puzzle_goal_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_puzzle_goal_number_label.custom_minimum_size = Vector2(58, 42)
-	row.add_child(_puzzle_goal_number_label)
+	_puzzle_goal_number_label.custom_minimum_size = Vector2(36, 34)
+	grid.add_child(_puzzle_goal_number_label)
 
-	_puzzle_goal_target_label = _make_puzzle_goal_part_label(18)
-	_puzzle_goal_target_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_puzzle_goal_target_label.custom_minimum_size = Vector2(80, 42)
-	row.add_child(_puzzle_goal_target_label)
+	_puzzle_goal_icon_slot = _make_puzzle_goal_icon_slot()
+	grid.add_child(_puzzle_goal_icon_slot)
+	_puzzle_goal_target_label = null
 
-	var turn_row := HBoxContainer.new()
-	turn_row.add_theme_constant_override("separation", 8)
-	turn_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_child(turn_row)
-
-	_puzzle_turn_prefix_label = _make_puzzle_goal_part_label(18)
-	_puzzle_turn_prefix_label.text = Locale.tr_ui("PUZZLE_TURNS_LEFT")
+	_puzzle_turn_prefix_label = _make_puzzle_goal_part_label(24)
+	_puzzle_turn_prefix_label.text = "剩餘"
+	_puzzle_turn_prefix_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_puzzle_turn_prefix_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	turn_row.add_child(_puzzle_turn_prefix_label)
+	_puzzle_turn_prefix_label.custom_minimum_size = Vector2(62, 36)
+	grid.add_child(_puzzle_turn_prefix_label)
 
-	_puzzle_turn_number_label = _make_puzzle_goal_part_label(26)
-	_puzzle_turn_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_puzzle_turn_number_label = _make_puzzle_goal_part_label(24)
+	_puzzle_turn_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_puzzle_turn_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_puzzle_turn_number_label.custom_minimum_size = Vector2(48, 30)
-	turn_row.add_child(_puzzle_turn_number_label)
+	_puzzle_turn_number_label.custom_minimum_size = Vector2(36, 34)
+	grid.add_child(_puzzle_turn_number_label)
+
+	_puzzle_turn_suffix_label = _make_puzzle_goal_part_label(24)
+	_puzzle_turn_suffix_label.text = "步數"
+	_puzzle_turn_suffix_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_puzzle_turn_suffix_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_puzzle_turn_suffix_label.custom_minimum_size = Vector2(62, 36)
+	grid.add_child(_puzzle_turn_suffix_label)
+
+
+func _make_puzzle_goal_icon_slot() -> Control:
+	var slot := Control.new()
+	slot.custom_minimum_size = Vector2(42, 42)
+	slot.clip_contents = true
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_puzzle_goal_icon = TextureRect.new()
+	_puzzle_goal_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_puzzle_goal_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_puzzle_goal_icon.custom_minimum_size = Vector2(42, 42)
+	_puzzle_goal_icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_puzzle_goal_icon.offset_left = 0.0
+	_puzzle_goal_icon.offset_top = 0.0
+	_puzzle_goal_icon.offset_right = 0.0
+	_puzzle_goal_icon.offset_bottom = 0.0
+	_puzzle_goal_icon.z_index = 0
+	slot.add_child(_puzzle_goal_icon)
+
+	_puzzle_goal_icon_fx = Node2D.new()
+	_puzzle_goal_icon_fx.name = "PuzzleGoalIconParticles"
+	_puzzle_goal_icon_fx.position = Vector2(21, 21)
+	_puzzle_goal_icon_fx.scale = Vector2(0.46, 0.46)
+	_puzzle_goal_icon_fx.z_index = 1
+	_puzzle_goal_icon_fx.set_script(PuzzleGoalPulseParticlesScript)
+	slot.add_child(_puzzle_goal_icon_fx)
+	_puzzle_goal_icon_fx.call_deferred("configure", PUZZLE_KEY_HUD_AURA_COLOR)
+
+	_puzzle_goal_icon_gem = TextureRect.new()
+	_puzzle_goal_icon_gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_puzzle_goal_icon_gem.texture = PUZZLE_KEY_HUD_GEM_TEXTURE
+	_puzzle_goal_icon_gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_puzzle_goal_icon_gem.custom_minimum_size = Vector2(42, 42)
+	_puzzle_goal_icon_gem.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_puzzle_goal_icon_gem.offset_left = 0.0
+	_puzzle_goal_icon_gem.offset_top = 0.0
+	_puzzle_goal_icon_gem.offset_right = 0.0
+	_puzzle_goal_icon_gem.offset_bottom = 0.0
+	_puzzle_goal_icon_gem.z_index = 2
+	slot.add_child(_puzzle_goal_icon_gem)
+	return slot
 
 
 func _make_puzzle_goal_part_label(font_size: int) -> Label:
@@ -8507,6 +8645,8 @@ func _puzzle_goal_target_name(type_value: int) -> String:
 			return "暗寶石"
 		Block.Type.PLANK:
 			return "木板"
+		Block.Type.PUZZLE_KEY:
+			return "解謎鑰匙"
 		_:
 			return "目標"
 
@@ -8516,7 +8656,13 @@ func _update_puzzle_goal_panel(animate_digits: bool = false, immediate: bool = f
 		return
 	var target_type: int = int(current_stage.puzzle_goal_target_type) if current_stage != null else int(Block.Type.RED)
 	if is_instance_valid(_puzzle_goal_icon):
-		_puzzle_goal_icon.texture = Block.GEM_TEXTURES.get(target_type, null)
+		_puzzle_goal_icon.texture = PUZZLE_KEY_HUD_BASE_TEXTURE if target_type == int(Block.Type.PUZZLE_KEY) else Block.GEM_TEXTURES.get(target_type, null)
+	if is_instance_valid(_puzzle_goal_icon_fx):
+		_puzzle_goal_icon_fx.visible = target_type == int(Block.Type.PUZZLE_KEY)
+		if _puzzle_goal_icon_fx.visible:
+			_puzzle_goal_icon_fx.call("configure", PUZZLE_KEY_HUD_AURA_COLOR)
+	if is_instance_valid(_puzzle_goal_icon_gem):
+		_puzzle_goal_icon_gem.visible = target_type == int(Block.Type.PUZZLE_KEY)
 	if is_instance_valid(_puzzle_goal_prefix_label):
 		_puzzle_goal_prefix_label.text = "達成" if _puzzle_goal_completed else "剩餘"
 	if is_instance_valid(_puzzle_goal_target_label):
@@ -8535,7 +8681,9 @@ func _update_puzzle_turn_panel(animate_digits: bool = false, immediate: bool = f
 	if not _puzzle_mode or not is_instance_valid(_puzzle_turn_number_label):
 		return
 	if is_instance_valid(_puzzle_turn_prefix_label):
-		_puzzle_turn_prefix_label.text = Locale.tr_ui("PUZZLE_TURNS_LEFT")
+		_puzzle_turn_prefix_label.text = "剩餘"
+	if is_instance_valid(_puzzle_turn_suffix_label):
+		_puzzle_turn_suffix_label.text = "步數"
 	var target: int = maxi(_puzzle_turns_left, 0)
 	if immediate or not animate_digits:
 		_puzzle_turns_displayed = target
@@ -8668,6 +8816,7 @@ func _on_goal_cells_broken(block_type: int, count: int, _global_positions: Array
 	var gained: int = maxi(count, 0)
 	if gained <= 0:
 		return
+	_play_sfx(_se_goal_achieve)
 	_puzzle_goal_progress = mini(_puzzle_goal_progress + gained, _puzzle_goal_required)
 	_puzzle_goal_remaining = maxi(_puzzle_goal_required - _puzzle_goal_progress, 0)
 	if _puzzle_goal_remaining <= 0:
@@ -8720,7 +8869,7 @@ func _on_escape_marker_moved(rows_dropped: int) -> void:
 	_escape_distance_remaining = maxi(_escape_distance_target - _escape_distance_traveled, 0)
 	_update_escape_goal_wood_row()
 	_update_escape_distance_label(true)
-	# Stage 1-6 急難事件：走到 200m 後只觸發一次
+	# Stage 1-5 急難事件：走到 200m 後只觸發一次
 	var triggered_plank_event: bool = false
 	if current_stage != null and current_stage.stage_id == ESCAPE_PLANK_STAGE_ID \
 			and not _plank_event_done and not _plank_event_pending \
@@ -8785,7 +8934,7 @@ func _check_escape_scroll_after_marker_move() -> void:
 		board.is_busy = false
 
 
-# ── Stage 1-6 急難奇蹟事件：龍焰登場 ─────────────────────────
+# ── Stage 1-5 急難奇蹟事件：龍焰登場 ─────────────────────────
 
 ## 找出隊伍中第一位指定名稱的角色 index（找不到回傳 -1）
 func _find_party_index_by_name(name: String) -> int:
@@ -8878,6 +9027,7 @@ func _get_plank_accident_target_positions() -> Array[Vector2i]:
 
 
 func _play_plank_impact_crush(crushed_block: Block, impact_pos: Vector2) -> void:
+	_play_random_stone_impact_sfx()
 	if board != null:
 		board._spawn_plank_debris(impact_pos)
 	if crushed_block == null or not is_instance_valid(crushed_block):

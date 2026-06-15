@@ -7,7 +7,8 @@ extends Node2D
 # PLANK：無屬性方塊（block）— 不參與 BFS / 連鎖 / 融合；被相鄰一般爆破或高階爆破波及時會無聲被消除（無攻擊力）
 # ROCK：無屬性障礙 — 不參與 BFS / 連鎖 / 融合；不可移除且不會掉落。
 # WOOD_STRUCTURE：stationary + breakable obstacle.
-enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構
+# PUZZLE_KEY：解謎鑰匙 — 固定障礙物；只會被上級寶石爆發解鎖。
+enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10, PUZZLE_KEY = 11 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構、解謎鑰匙
 enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾
 enum UpperOwnerTeam { PLAYER, ENEMY }
 
@@ -17,7 +18,7 @@ enum UpperOwnerTeam { PLAYER, ENEMY }
 # BURNING：每次消除後新寶石生成前扣玩家 1% 最大 HP；寶石不再為火屬性時自動移除
 enum ExtraEffect { X5, BURNING, X3 }
 
-const TYPE_COUNT := 11  # 保留既有最高 id + 1，避免舊 .tres 中的 6/7/8/9 位移
+const TYPE_COUNT := 12  # 保留既有最高 id + 1，避免舊 .tres 中的 6/7/8/9 位移
 
 # 每種類型對應的顏色
 const COLORS = {
@@ -29,6 +30,7 @@ const COLORS = {
 	Type.PLANK: Color(0.55, 0.36, 0.18),  # 木色（備用；有貼圖時不顯示）
 	Type.ROCK: Color(0.34, 0.36, 0.38),
 	Type.WOOD_STRUCTURE: Color(0.50, 0.30, 0.13),
+	Type.PUZZLE_KEY: Color(0.10, 0.80, 0.72),
 }
 
 # 每種類型對應的圖示符號（無貼圖時的備用顯示）
@@ -41,6 +43,7 @@ const ICONS = {
 	Type.PLANK: "■",
 	Type.ROCK: "R",
 	Type.WOOD_STRUCTURE: "W",
+	Type.PUZZLE_KEY: "K",
 }
 
 # 有美術貼圖的寶石類型；未列出的類型會退回使用圖示符號
@@ -53,11 +56,16 @@ const GEM_TEXTURES: Dictionary = {
 	Type.PLANK: preload("res://assets/blocks/wood.png"),
 	Type.ROCK: preload("res://assets/blocks/rock.png"),
 	Type.WOOD_STRUCTURE: preload("res://assets/blocks/middle_platform.png"),
+	Type.PUZZLE_KEY: preload("res://assets/blocks/puzzle_key_locked.png"),
 }
 
 const WOOD_STRUCTURE_LEFT_TEXTURE: Texture2D = preload("res://assets/blocks/left_platform.png")
 const WOOD_STRUCTURE_MID_TEXTURE: Texture2D = preload("res://assets/blocks/middle_platform.png")
 const WOOD_STRUCTURE_RIGHT_TEXTURE: Texture2D = preload("res://assets/blocks/right_platform.png")
+const PUZZLE_KEY_LOCKED_TEXTURE: Texture2D = preload("res://assets/blocks/puzzle_key_locked.png")
+const PUZZLE_KEY_UNLOCKED_TEXTURE: Texture2D = preload("res://assets/blocks/puzzle_key_unlocked.png")
+const PUZZLE_KEY_GEM_TEXTURE: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
+const PUZZLE_KEY_AURA_COLOR := Color(0.18, 0.95, 0.86, 0.62)
 
 # 高階寶石貼圖（火球炸彈 / 火旋風 / 葉盾 / 雪球）
 const UPPER_GEM_TEXTURES: Dictionary = {
@@ -163,6 +171,7 @@ var board_columns: int = 8             # 棋盤欄數（woodStructure 選擇左�
 var extra_effects: Array[int] = []
 var intrinsic_bonus: int = 0
 var wood_spear_pierce_breakable: bool = false
+var puzzle_key_unlocked: bool = false
 var _x5_badge: Label = null            # X5 標記（右上角紅色 "x5"）
 var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 
@@ -172,6 +181,7 @@ var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 var _upper_sprite: Sprite2D = null     # 高階寶石覆蓋精靈圖
 var _ray_burst: Node2D = null          # 旋轉放射光芒（高階寶石專用）
 var _upper_pulse_particles: Node2D = null
+var _puzzle_key_gem_sprite: Sprite2D = null
 var _enemy_owner_border: Line2D = null
 var _fuse_hint_label: Label = null     # 融合提示標籤
 var _fuse_hint_tween: Tween = null     # 融合提示閃爍動畫
@@ -187,7 +197,7 @@ static func is_valid_type_value(value: int) -> bool:
 
 
 static func is_obstacle_type_value(value: int) -> bool:
-	return value == Type.PLANK or value == Type.ROCK or value == Type.WOOD_STRUCTURE
+	return value == Type.PLANK or value == Type.ROCK or value == Type.WOOD_STRUCTURE or value == Type.PUZZLE_KEY
 
 
 static func is_random_gem_type_value(value: int) -> bool:
@@ -228,9 +238,28 @@ func is_wood_structure() -> bool:
 	return upper_type == UpperType.NONE and block_type == Type.WOOD_STRUCTURE
 
 
+## 是否為解謎鑰匙
+func is_puzzle_key() -> bool:
+	return upper_type == UpperType.NONE and block_type == Type.PUZZLE_KEY
+
+
+## 是否為尚未解鎖的解謎鑰匙
+func is_locked_puzzle_key() -> bool:
+	return is_puzzle_key() and not puzzle_key_unlocked
+
+
+## 上級寶石爆發觸發解鎖。回傳 true 代表本次由鎖定變為解鎖。
+func unlock_puzzle_key() -> bool:
+	if not is_puzzle_key() or puzzle_key_unlocked:
+		return false
+	puzzle_key_unlocked = true
+	update_visual()
+	return true
+
+
 ## 是否為會阻擋配對/轉色/點擊的障礙物
 func is_obstacle() -> bool:
-	return is_block() or is_rock() or is_wood_structure()
+	return is_block() or is_rock() or is_wood_structure() or is_puzzle_key()
 
 
 ## 是否為可被爆破靜默拆除的障礙物
@@ -240,7 +269,7 @@ func is_breakable_structure() -> bool:
 
 ## 是否為不會被重力移動的障礙物
 func is_stationary_obstacle() -> bool:
-	return upper_type == UpperType.NONE and (block_type == Type.ROCK or block_type == Type.WOOD_STRUCTURE)
+	return upper_type == UpperType.NONE and (block_type == Type.ROCK or block_type == Type.WOOD_STRUCTURE or block_type == Type.PUZZLE_KEY)
 
 
 ## 設定高階寶石類型並更新外觀
@@ -277,6 +306,7 @@ func set_block_type(type) -> void:
 	if not is_valid_type_value(next_type):
 		next_type = Type.RED
 	block_type = next_type
+	puzzle_key_unlocked = false
 	# 不再為火屬性 → 自動移除 BURNING
 	if prev == Type.RED and next_type != Type.RED and has_extra(ExtraEffect.BURNING):
 		remove_extra(ExtraEffect.BURNING)
@@ -392,7 +422,7 @@ func _ensure_upper_pulse_particles(color: Color) -> void:
 		_upper_pulse_particles = Node2D.new()
 		_upper_pulse_particles.name = "UpperGemPulseParticles"
 		_upper_pulse_particles.position = Vector2.ZERO
-		_upper_pulse_particles.z_index = 1
+		_upper_pulse_particles.z_index = 2
 		_upper_pulse_particles.set_script(UpperPulseParticlesScript)
 		add_child(_upper_pulse_particles)
 	_upper_pulse_particles.call("configure", color)
@@ -425,6 +455,8 @@ func update_visual() -> void:
 
 
 func get_base_texture() -> Texture2D:
+	if block_type == Type.PUZZLE_KEY:
+		return PUZZLE_KEY_UNLOCKED_TEXTURE if puzzle_key_unlocked else PUZZLE_KEY_LOCKED_TEXTURE
 	if block_type == Type.WOOD_STRUCTURE:
 		if grid_pos.x <= 0:
 			return WOOD_STRUCTURE_LEFT_TEXTURE
@@ -439,10 +471,51 @@ func _apply_base_texture_to_sprite(texture: Texture2D) -> void:
 	if gem_sprite == null or texture == null:
 		return
 	gem_sprite.texture = texture
+	gem_sprite.z_index = 0 if is_puzzle_key() else 2
 	if block_type == Type.WOOD_STRUCTURE:
 		gem_sprite.scale = Vector2.ONE
 	else:
 		gem_sprite.scale = DEFAULT_GEM_SPRITE_SCALE
+	gem_sprite.material = null
+
+
+func _ensure_ray_burst(color: Color) -> void:
+	if _ray_burst == null:
+		var RayBurstScript := load("res://scripts/ray_burst.gd")
+		_ray_burst = Node2D.new()
+		_ray_burst.set_script(RayBurstScript)
+		_ray_burst.z_index = 1
+		add_child(_ray_burst)
+	_ray_burst.set("ray_color", color)
+	_ensure_upper_pulse_particles(color)
+
+
+func _ensure_puzzle_key_gem_layer() -> Sprite2D:
+	if _puzzle_key_gem_sprite == null:
+		_puzzle_key_gem_sprite = Sprite2D.new()
+		_puzzle_key_gem_sprite.name = "PuzzleKeyGemLayer"
+		_puzzle_key_gem_sprite.texture = PUZZLE_KEY_GEM_TEXTURE
+		_puzzle_key_gem_sprite.scale = DEFAULT_GEM_SPRITE_SCALE
+		_puzzle_key_gem_sprite.z_index = 6
+		add_child(_puzzle_key_gem_sprite)
+	_puzzle_key_gem_sprite.visible = true
+	_puzzle_key_gem_sprite.texture = PUZZLE_KEY_GEM_TEXTURE
+	return _puzzle_key_gem_sprite
+
+
+func _update_puzzle_key_gem_layer() -> void:
+	if is_puzzle_key() and puzzle_key_unlocked:
+		_ensure_puzzle_key_gem_layer()
+	elif _puzzle_key_gem_sprite != null:
+		_puzzle_key_gem_sprite.visible = false
+
+
+func play_puzzle_key_unlock_pop() -> void:
+	var layer := _ensure_puzzle_key_gem_layer()
+	layer.scale = DEFAULT_GEM_SPRITE_SCALE
+	var tween := create_tween()
+	tween.tween_property(layer, "scale", DEFAULT_GEM_SPRITE_SCALE * 1.4, 0.2).set_ease(Tween.EASE_OUT)
+	tween.tween_property(layer, "scale", DEFAULT_GEM_SPRITE_SCALE, 0.2).set_trans(Tween.TRANS_BACK)
 
 
 ## 更新高階寶石的覆蓋層顯示
@@ -451,10 +524,13 @@ func _update_upper_overlay() -> void:
 		# 非高階寶石 — 隱藏覆蓋層，恢復正常顯示
 		if _upper_sprite != null:
 			_upper_sprite.visible = false
-		if _ray_burst != null:
-			_ray_burst.queue_free()
-			_ray_burst = null
-		_clear_upper_pulse_particles()
+		if is_puzzle_key() and puzzle_key_unlocked:
+			_ensure_ray_burst(PUZZLE_KEY_AURA_COLOR)
+		else:
+			if _ray_burst != null:
+				_ray_burst.queue_free()
+				_ray_burst = null
+			_clear_upper_pulse_particles()
 		if _enemy_owner_border != null:
 			_enemy_owner_border.visible = false
 		var base_texture: Texture2D = get_base_texture()
@@ -469,6 +545,7 @@ func _update_upper_overlay() -> void:
 			icon_label.visible = not has_gem
 			if not has_gem:
 				icon_label.text = str(ICONS.get(block_type, "?"))
+		_update_puzzle_key_gem_layer()
 		return
 
 	# 高階寶石 — 顯示對應元素底色
@@ -490,20 +567,13 @@ func _update_upper_overlay() -> void:
 		icon_label.visible = false
 	if gem_sprite:
 		gem_sprite.visible = false
+	_update_puzzle_key_gem_layer()
 
 	# 建立或更新高階精靈圖
 	if _upper_sprite == null:
 		_upper_sprite = Sprite2D.new()
-		_upper_sprite.z_index = 2
+		_upper_sprite.z_index = 3
 		add_child(_upper_sprite)
-
-	# 建立旋轉光芒（如果尚未建立）
-	if _ray_burst == null:
-		var RayBurstScript := load("res://scripts/ray_burst.gd")
-		_ray_burst = Node2D.new()
-		_ray_burst.set_script(RayBurstScript)
-		_ray_burst.z_index = 0
-		add_child(_ray_burst)
 
 	# 依高階寶石類型設定光芒顏色
 	var burst_color: Color
@@ -520,8 +590,7 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙
-	_ray_burst.set("ray_color", burst_color)
-	_ensure_upper_pulse_particles(burst_color)
+	_ensure_ray_burst(burst_color)
 
 	_upper_sprite.visible = true
 	_upper_sprite.texture = UPPER_GEM_TEXTURES.get(upper_type)

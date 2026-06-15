@@ -1,8 +1,8 @@
-[gd_resource type="Resource" script_class="EnemyData" format=3]
+[gd_resource type="Resource" script_class="EnemyData" format=3 uid="uid://c0bs3a327q3fe"]
 
-[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_archer.png" id="2_texture"]
-[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
+[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://cx4f82omj3lyi" path="res://assets/enemy/dark_minion_archer.png" id="2_texture"]
+[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="3_loot_script"]
 
 [sub_resource type="Resource" id="gold_drop"]
 script = ExtResource("3_loot_script")

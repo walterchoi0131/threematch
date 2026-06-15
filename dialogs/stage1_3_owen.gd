@@ -1,4 +1,4 @@
-## Stage 1-5 Owen sanctuary story battle dialogue.
+## Stage 1-4 Owen sanctuary story battle dialogue.
 extends RefCounted
 
 const _DialogLine := preload("res://scripts/dialog_line.gd")

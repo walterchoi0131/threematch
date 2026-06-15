@@ -1,4 +1,4 @@
-## Stage1-6 木板掉落緊急事件對話。
+## Stage1-5 木板掉落緊急事件對話。
 extends RefCounted
 
 const _DialogLine := preload("res://scripts/dialog_line.gd")

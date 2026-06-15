@@ -477,6 +477,10 @@ static func _blast_pattern_for(upper_type: int) -> Array:
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
 			return [Vector2i(2, 2)]
+		Block.UpperType.LIGHT_SHIELD:
+			var cells_light: Array = []
+			for x in 5: cells_light.append(Vector2i(x, 2))
+			return cells_light
 		Block.UpperType.BAMBOO_SUPPLY:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),

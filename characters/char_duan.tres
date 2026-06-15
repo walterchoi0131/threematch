@@ -30,7 +30,7 @@ active_skill_name = "希望之光"
 active_skill_desc = "Randomly turn 5 normal board cells into light gems. Avoid upper gem cells. CD: 3 turns."
 active_skill_cd = 3
 responding_skills = Array[Dictionary]([{
-"desc": "6+ light gems create a Light Shield upper gem. Triggering it grants a player HP shield equal to 65% of Duan's max HP.",
+"desc": "6+ light gems create a Light Shield upper gem. Triggering it blasts one horizontal row and grants a player HP shield equal to 65% of Duan's max HP.",
 "fuse_label": "6",
 "name": "光之盾",
 "priority": 1,
