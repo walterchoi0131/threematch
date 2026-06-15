@@ -8,6 +8,7 @@ const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
 const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.gd")
 const PuzzleGoalPulseParticlesScript := preload("res://scripts/upper_gem_pulse_particles.gd")
+const PuzzleGoalRayBurstScript := preload("res://scripts/ray_burst.gd")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -61,6 +62,7 @@ var _puzzle_goal_panel: PanelContainer = null
 var _puzzle_goal_icon_slot: Control = null
 var _puzzle_goal_icon: TextureRect = null
 var _puzzle_goal_icon_gem: TextureRect = null
+var _puzzle_goal_icon_ray: Node2D = null
 var _puzzle_goal_icon_fx: Node2D = null
 var _puzzle_goal_prefix_label: Label = null
 var _puzzle_goal_number_label: Label = null
@@ -8516,7 +8518,7 @@ func _build_puzzle_goal_panel() -> void:
 		return
 	_puzzle_goal_panel = PanelContainer.new()
 	_puzzle_goal_panel.name = "PuzzleGoalPanel"
-	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 112)
+	_puzzle_goal_panel.custom_minimum_size = Vector2(270, 124)
 	_puzzle_goal_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.06, 0.09, 0.86)
@@ -8573,34 +8575,42 @@ func _build_puzzle_goal_panel() -> void:
 
 	_puzzle_turn_suffix_label = _make_puzzle_goal_part_label(24)
 	_puzzle_turn_suffix_label.text = "步數"
-	_puzzle_turn_suffix_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_puzzle_turn_suffix_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_puzzle_turn_suffix_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_puzzle_turn_suffix_label.custom_minimum_size = Vector2(62, 36)
+	_puzzle_turn_suffix_label.custom_minimum_size = Vector2(70, 36)
 	grid.add_child(_puzzle_turn_suffix_label)
 
 
 func _make_puzzle_goal_icon_slot() -> Control:
 	var slot := Control.new()
-	slot.custom_minimum_size = Vector2(42, 42)
-	slot.clip_contents = true
+	slot.custom_minimum_size = Vector2(70, 58)
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_puzzle_goal_icon = TextureRect.new()
 	_puzzle_goal_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_puzzle_goal_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_puzzle_goal_icon.custom_minimum_size = Vector2(42, 42)
+	_puzzle_goal_icon.custom_minimum_size = Vector2(58, 58)
 	_puzzle_goal_icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_puzzle_goal_icon.offset_left = 0.0
+	_puzzle_goal_icon.offset_left = 6.0
 	_puzzle_goal_icon.offset_top = 0.0
-	_puzzle_goal_icon.offset_right = 0.0
+	_puzzle_goal_icon.offset_right = -6.0
 	_puzzle_goal_icon.offset_bottom = 0.0
 	_puzzle_goal_icon.z_index = 0
 	slot.add_child(_puzzle_goal_icon)
 
+	_puzzle_goal_icon_ray = Node2D.new()
+	_puzzle_goal_icon_ray.name = "PuzzleGoalIconRayBurst"
+	_puzzle_goal_icon_ray.position = Vector2(35, 29)
+	_puzzle_goal_icon_ray.scale = Vector2(0.72, 0.72)
+	_puzzle_goal_icon_ray.z_index = 1
+	_puzzle_goal_icon_ray.set_script(PuzzleGoalRayBurstScript)
+	_puzzle_goal_icon_ray.set("ray_color", PUZZLE_KEY_HUD_AURA_COLOR)
+	slot.add_child(_puzzle_goal_icon_ray)
+
 	_puzzle_goal_icon_fx = Node2D.new()
 	_puzzle_goal_icon_fx.name = "PuzzleGoalIconParticles"
-	_puzzle_goal_icon_fx.position = Vector2(21, 21)
-	_puzzle_goal_icon_fx.scale = Vector2(0.46, 0.46)
-	_puzzle_goal_icon_fx.z_index = 1
+	_puzzle_goal_icon_fx.position = Vector2(35, 29)
+	_puzzle_goal_icon_fx.scale = Vector2(0.58, 0.58)
+	_puzzle_goal_icon_fx.z_index = 2
 	_puzzle_goal_icon_fx.set_script(PuzzleGoalPulseParticlesScript)
 	slot.add_child(_puzzle_goal_icon_fx)
 	_puzzle_goal_icon_fx.call_deferred("configure", PUZZLE_KEY_HUD_AURA_COLOR)
@@ -8609,13 +8619,13 @@ func _make_puzzle_goal_icon_slot() -> Control:
 	_puzzle_goal_icon_gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_puzzle_goal_icon_gem.texture = PUZZLE_KEY_HUD_GEM_TEXTURE
 	_puzzle_goal_icon_gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_puzzle_goal_icon_gem.custom_minimum_size = Vector2(42, 42)
+	_puzzle_goal_icon_gem.custom_minimum_size = Vector2(58, 58)
 	_puzzle_goal_icon_gem.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_puzzle_goal_icon_gem.offset_left = 0.0
+	_puzzle_goal_icon_gem.offset_left = 6.0
 	_puzzle_goal_icon_gem.offset_top = 0.0
-	_puzzle_goal_icon_gem.offset_right = 0.0
+	_puzzle_goal_icon_gem.offset_right = -6.0
 	_puzzle_goal_icon_gem.offset_bottom = 0.0
-	_puzzle_goal_icon_gem.z_index = 2
+	_puzzle_goal_icon_gem.z_index = 3
 	slot.add_child(_puzzle_goal_icon_gem)
 	return slot
 
@@ -8657,6 +8667,10 @@ func _update_puzzle_goal_panel(animate_digits: bool = false, immediate: bool = f
 	var target_type: int = int(current_stage.puzzle_goal_target_type) if current_stage != null else int(Block.Type.RED)
 	if is_instance_valid(_puzzle_goal_icon):
 		_puzzle_goal_icon.texture = PUZZLE_KEY_HUD_BASE_TEXTURE if target_type == int(Block.Type.PUZZLE_KEY) else Block.GEM_TEXTURES.get(target_type, null)
+	if is_instance_valid(_puzzle_goal_icon_ray):
+		_puzzle_goal_icon_ray.visible = target_type == int(Block.Type.PUZZLE_KEY)
+		if _puzzle_goal_icon_ray.visible:
+			_puzzle_goal_icon_ray.set("ray_color", PUZZLE_KEY_HUD_AURA_COLOR)
 	if is_instance_valid(_puzzle_goal_icon_fx):
 		_puzzle_goal_icon_fx.visible = target_type == int(Block.Type.PUZZLE_KEY)
 		if _puzzle_goal_icon_fx.visible:
