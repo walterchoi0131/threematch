@@ -10,6 +10,7 @@ signal hp_changed(current: int, maximum: int)  # 血量變動時發出（含初�
 signal hp_floor_triggered(enemy: Enemy)
 
 const MAIN_BOSS_DISPLAY_SCALE := 2.0
+const NON_BOSS_PORTRAIT_DISPLAY_SCALE := 1.5
 const CLICK_RECT_PADDING := 4.0
 const LONG_PRESS_SECONDS := 0.45
 
@@ -205,11 +206,12 @@ func set_main_boss_mode(active: bool) -> void:
 
 func _apply_main_boss_display_scale(active: bool) -> void:
 	_cache_base_display_sizes()
-	var display_scale: float = MAIN_BOSS_DISPLAY_SCALE if active else 1.0
-	custom_minimum_size = _base_minimum_size * display_scale
+	var control_scale: float = MAIN_BOSS_DISPLAY_SCALE if active else 1.0
+	var portrait_scale: float = MAIN_BOSS_DISPLAY_SCALE if active else (1.0 if is_main_boss_spawn else NON_BOSS_PORTRAIT_DISPLAY_SCALE)
+	custom_minimum_size = _base_minimum_size * control_scale
 	size = custom_minimum_size
 	if portrait != null:
-		portrait.custom_minimum_size = _base_portrait_minimum_size * display_scale
+		portrait.custom_minimum_size = _base_portrait_minimum_size * portrait_scale
 	if target_indicator != null and target_indicator.visible:
 		_position_target_marker()
 	if _passive_badge != null and _passive_badge.visible:
@@ -228,6 +230,7 @@ func refresh_ui() -> void:
 	if not is_node_ready():
 		await ready
 	portrait.texture = data.portrait_texture
+	_apply_main_boss_display_scale(false)
 	hp_bar_label.text = "%d" % current_hp
 	_refresh_passive_badge()
 	if target_indicator:

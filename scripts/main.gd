@@ -5431,7 +5431,7 @@ func _resolve_persistent_upper_gems() -> void:
 				await get_tree().create_timer(0.18).timeout
 
 				var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
-				var target_pos: Vector2 = target.get_global_rect().get_center()
+				var target_pos: Vector2 = _get_enemy_image_center(target)
 				var trail := Node2D.new()
 				trail.set_script(TrailProjectileScript)
 				fx_layer.add_child(trail)
@@ -5440,7 +5440,7 @@ func _resolve_persistent_upper_gems() -> void:
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
 						var applied_dmg: int = captured_target.take_damage(captured_dmg)
-						_spawn_damage_number(captured_target.get_global_rect().get_center(), applied_dmg, green_color, true, false)
+						_spawn_damage_number(_get_enemy_image_center(captured_target), applied_dmg, green_color, true, false)
 					_play_sfx(_se_impact)
 				, CONNECT_ONE_SHOT)
 				trail.launch(from_pos, target_pos, green_color, 0.5)
@@ -5801,7 +5801,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				slash.deduct_hp.connect(func():
 					if is_instance_valid(target):
 						applied_damage = _apply_enemy_damage_with_stage13_floor(target, damage, gem_type)
-						_spawn_damage_number(target.get_global_rect().get_center(), applied_damage, Block.COLORS[gem_type], true, is_super)
+						_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[gem_type], true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
 					_play_sfx(_se_impact)
@@ -5871,7 +5871,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
 						applied_damage = _apply_enemy_damage_with_stage13_floor(captured_target, captured_dmg, gem_type)
-						_spawn_damage_number(captured_target.get_global_rect().get_center(), applied_damage, color, true, is_super)
+						_spawn_damage_number(_get_enemy_image_center(captured_target), applied_damage, color, true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
 					_play_sfx(_se_impact)
@@ -6189,7 +6189,7 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	float_tw.tween_property(block, "global_position:y", start_global.y - 32.0, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 	await float_tw.finished
 
-	var target_pos: Vector2 = target.get_global_rect().get_center() if is_instance_valid(target) else start_global
+	var target_pos: Vector2 = _get_enemy_image_center(target) if is_instance_valid(target) else start_global
 	var fly_tw := create_tween().set_parallel(true)
 	fly_tw.tween_property(block, "global_position", target_pos, 0.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	fly_tw.tween_property(block, "scale", Vector2(1.62, 1.62), 0.4)
@@ -6199,7 +6199,7 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 
 	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
 		var applied_damage: int = target.take_damage(final_damage)
-		_spawn_damage_number(target.get_global_rect().get_center(), applied_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
+		_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
 	_play_sfx(_se_impact)
 	var ice_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
 	DebrisVfx.play(fx_layer, ice_texture, target_pos, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
@@ -6321,7 +6321,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 				enemy.defer_death = true
 		var light_color: Color = Block.COLORS[Block.Type.LIGHT]
 		if saint_target != null:
-			var target_pos: Vector2 = saint_target.get_global_rect().get_center()
+			var target_pos: Vector2 = _get_enemy_image_center(saint_target)
 			# ── 敵人受擊動畫：SwordOfJustice_spritesheet.png 1 row × 13 cols ──
 			const SWORD_OF_JUSTICE_FRAMES := 13
 			const SWORD_OF_JUSTICE_DURATION := 0.6
@@ -6345,7 +6345,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 			get_tree().create_timer(SWORD_OF_JUSTICE_DURATION * 0.45).timeout.connect(func() -> void:
 				if is_instance_valid(captured_enemy):
 					var applied_dmg: int = _apply_enemy_damage_with_stage13_floor(captured_enemy, captured_dmg, Block.Type.LIGHT)
-					_spawn_damage_number(captured_enemy.get_global_rect().get_center(), applied_dmg, light_color, true)
+					_spawn_damage_number(_get_enemy_image_center(captured_enemy), applied_dmg, light_color, true)
 				_play_sfx(_se_impact)
 			, CONNECT_ONE_SHOT)
 			var sword_tw := create_tween()
@@ -7074,7 +7074,7 @@ func _handle_active_skill(char_index: int) -> void:
 				var hit_target: Enemy = sb_targets[i]
 				var hit_dmg: int = sb_damages[i]
 				var hit_super: bool = sb_supers[i]
-				var target_pos: Vector2 = hit_target.get_global_rect().get_center() if is_instance_valid(hit_target) else board.global_position
+				var target_pos: Vector2 = _get_enemy_image_center(hit_target) if is_instance_valid(hit_target) else board.global_position
 				# 飛行動畫（fire-and-forget）
 				var fly_tw := create_tween()
 				fly_tw.set_parallel(true)
@@ -7085,7 +7085,7 @@ func _handle_active_skill(char_index: int) -> void:
 				fly_tw.finished.connect(func() -> void:
 					if is_instance_valid(hit_target) and (hit_target.current_hp > 0 or hit_target.defer_death):
 						var applied_dmg: int = hit_target.take_damage(hit_dmg)
-						_spawn_damage_number(hit_target.get_global_rect().get_center(), applied_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
+						_spawn_damage_number(_get_enemy_image_center(hit_target), applied_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
 						_play_sfx(_se_impact)
 					if is_instance_valid(block):
 						block.queue_free()
@@ -7728,7 +7728,7 @@ func _on_enemy_attacked(enemy: Enemy, damage: int) -> void:
 	if not is_instance_valid(enemy):
 		_apply_player_damage_with_stage13_guard(damage)
 		return
-	var from_pos: Vector2 = enemy.get_global_rect().get_center()
+	var from_pos: Vector2 = _get_enemy_image_center(enemy)
 	var color: Color = enemy.data.portrait_color
 
 	# ── 葉盾被動防禦：消耗一個葉盾，傷害減半 ──
