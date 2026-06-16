@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://bc6ifewpuad80"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://cm4ef4ymhn42k" path="res://assets/polar.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/polar.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
@@ -15,18 +15,27 @@ portrait_scale = 0.85
 portrait_offset = Vector2(-70, -38)
 dialog_square_scale = 0.9
 dialog_square_offset = Vector2(0, -1)
-dialog_phase_scale = 1.0
-dialog_phase_offset = Vector2(0, 0)
 square_scale = 0.9
 square_offset = Vector2(-71, -11)
 active_skill_name = "Snowball Fight"
 active_skill_desc = "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."
 active_skill_cd = 5
 responding_skills = Array[Dictionary]([{
-"desc": "create a Snowball gem at tapped cell. Click to blast 8 surrounding gems.",
-"fuse_label": "4",
-"name": "Snowball",
+"desc": "create a Bamboo Supply gem at tapped cell.",
+"fuse_label": "6",
+"gem_type": 2,
+"name": "Bamboo Supply",
 "priority": 1,
-"threshold": 4,
-"trigger_type": "count"
+"threshold": 6,
+"trigger_type": "count",
+"upper_type": 10
+}, {
+"desc": "create an Iceball gem at tapped cell.",
+"fuse_label": "8",
+"gem_type": 1,
+"name": "Iceball",
+"priority": 1,
+"threshold": 8,
+"trigger_type": "count",
+"upper_type": 13
 }])

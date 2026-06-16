@@ -552,16 +552,17 @@ func _show_char_popup(index: int) -> void:
 	_add_popup_skill(skills_vbox, Locale.tr_ui("PASSIVE"), Locale.tr_or(c.passive_skill_name, c.passive_skill_name), Locale.tr_or(c.passive_skill_name + " DESC", c.passive_skill_desc), null)
 	_add_popup_skill(skills_vbox, Locale.tr_ui("ACTIVE"), Locale.tr_or(c.active_skill_name, c.active_skill_name), SkillUpgradeUtils.get_active_description(c), null, SkillUpgradeUtils.effective_active_cd(c), c, SkillUpgradeUtils.KIND_ACTIVE, 0)
 
-	var elem_color: Color = Block.COLORS.get(c.gem_type, Color(0.4, 0.6, 1.0))
-	var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(c.gem_type, null)
 	for skill_index in range(c.responding_skills.size()):
 		var sk: Dictionary = c.responding_skills[skill_index]
 		var sk_name: String = sk.get("name", "")
 		var fuse_label: String = SkillUpgradeUtils.responding_fuse_label(c, skill_index, sk)
 		if sk_name == "":
 			continue
-		var upper_type: int = FuseTutorialCanvas.NAME_TO_UPPER.get(sk_name, -1)
-		var upper_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
+		var fuse_gem_type: Block.Type = SkillUpgradeUtils.responding_gem_type(c, sk)
+		var elem_color: Color = Block.COLORS.get(fuse_gem_type, Color(0.4, 0.6, 1.0))
+		var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(fuse_gem_type, null)
+		var upper_type: int = int(SkillUpgradeUtils.responding_upper_type(sk))
+		var upper_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type != Block.UpperType.NONE else null
 		var pattern: Array = FuseTutorialCanvas._blast_pattern_for(upper_type)
 		var chain: Control = FuseTutorialCanvas._make_skill_chain(fuse_label, base_gem_tex, upper_tex, upper_type, pattern, elem_color)
 		_add_popup_skill(skills_vbox, Locale.tr_ui("RESPONDING"), Locale.tr_or(sk_name, sk_name), SkillUpgradeUtils.get_responding_description(c, skill_index, sk), chain, 0, c, SkillUpgradeUtils.KIND_RESPONDING, skill_index)

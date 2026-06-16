@@ -51,7 +51,7 @@ var current_exp: int = 0              # 當前累積經驗值（不存入 .tres�
 ##     "priority": 優先級, "trigger_type": 觸發方式 }
 ## trigger_type = "count"（N+ 同類寶石）或 "line"（N+ 連續排列）。
 ## 優先級數字越小，同時觸發時越優先執行。
-## 可選 upgrade_effects = Array[Dictionary]，用於合成技能寶石強化定義。
+## 合成寶石技能的升級效果綁定在 UpperGemDefs，玩家升級等級存在 GameState。
 @export var responding_skills: Array[Dictionary] = []
 
 

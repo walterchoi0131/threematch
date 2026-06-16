@@ -106,8 +106,8 @@ const BREAK_FRAMES := 9 # 消除動畫總幀數
 const DEFAULT_GEM_SPRITE_SCALE := Vector2(1.15, 1.15)
 const UpperPulseParticlesScript := preload("res://scripts/upper_gem_pulse_particles.gd")
 
-# 高階寶石「內識元素計數」— 被爆破時，除了他抹除的區域以外，本身亦貢獻這么多顆同元素
-# 定義為「融合門檻」— 例如火球炸需 9 顆火寶石融合 → 被爆時內識為 9
+# 高階寶石「內識元素計數」— 被爆破時，除了它抹除的區域以外，本身亦貢獻這么多顆同元素。
+# 注意：這不是融合門檻；融合需要粒數由 UpperGemDefs.DEFAULT_FUSE_THRESHOLD 管理。
 const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.FIREBALL: 9,
 	UpperType.FIRE_PILLAR_X: 4,

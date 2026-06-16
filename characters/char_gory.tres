@@ -48,16 +48,5 @@ responding_skills = Array[Dictionary]([{
 "name": "Wood Spear",
 "priority": 1,
 "threshold": 7,
-"trigger_type": "count",
-"upgrade_effects": Array[Dictionary]([{
-"desc_key": "UPGRADE_GORY_WOOD_SPEAR_PIERCE_BREAKABLE",
-"effects": {
-"wood_spear_pierce_breakable": 1
-}
-}, {
-"desc_key": "UPGRADE_GORY_WOOD_SPEAR_THRESHOLD_1",
-"effects": {
-"threshold_delta": -1
-}
-}])
+"trigger_type": "count"
 }])

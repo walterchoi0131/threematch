@@ -471,31 +471,16 @@ func _build_skills_section(parent: VBoxContainer, _card_w: float) -> void:
 		var display_name: String = Locale.tr_ui(sname)
 		if display_name == sname or display_name == "":
 			display_name = sname
-		var upper_type: int = _resolve_responding_upper(sname)
-		var gem_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type >= 0 else null
+		var upper_type: int = _resolve_responding_upper(skill)
+		var gem_tex: Texture2D = Block.UPPER_GEM_TEXTURES.get(upper_type, null) if upper_type != Block.UpperType.NONE else null
 		var fuse_label: String = SkillUpgradeUtils.responding_fuse_label(_char, skill_index, skill)
 		var pattern: Array = _blast_pattern_for(upper_type)
 		_add_skill_entry(parent, Locale.tr_ui("RESPONDING"), display_name, SkillUpgradeUtils.get_responding_description(_char, skill_index, skill), 0, gem_tex, fuse_label, pattern, SkillUpgradeUtils.KIND_RESPONDING, skill_index)
 
 
-## 由回應技能名稱對應到 UpperType（無對應時回傳 -1）。
-func _resolve_responding_upper(skill_name: String) -> int:
-	const NAME_TO_UPPER: Dictionary = {
-		"Fireball": Block.UpperType.FIREBALL,
-		"Fire Pillar": Block.UpperType.FIRE_PILLAR_X,
-		"Water Slash": Block.UpperType.WATER_SLASH,
-		"Justice Slash": Block.UpperType.SAINT_CROSS,
-		"Saint Cross": Block.UpperType.SAINT_CROSS,
-		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
-		"Snowball": Block.UpperType.SNOWBALL,
-		"Iceball": Block.UpperType.ICEBALL,
-		"Porcupine": Block.UpperType.PORCUPINE,
-		"Turtle": Block.UpperType.TURTLE,
-		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
-		"Wood Spear": Block.UpperType.WOOD_SPEAR_UP,
-		"光之盾": Block.UpperType.LIGHT_SHIELD,
-	}
-	return NAME_TO_UPPER.get(skill_name, -1)
+## 由回應技能資料對應到 UpperType；優先使用 upper_type，舊資料 fallback 到 name。
+func _resolve_responding_upper(skill: Dictionary) -> int:
+	return int(SkillUpgradeUtils.responding_upper_type(skill))
 
 
 ## 回傳 5x5 預覽格中要點亮的格子座標（中心為 (2,2)）。
@@ -576,7 +561,10 @@ func _add_skill_entry(parent: VBoxContainer, type_tag: String, skill_name: Strin
 	if gem_override != null:
 		# 合成提示徽章（基本元素寶石 + "4+" 傷害字樣）
 		if fuse_label != "":
-			var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(_char.gem_type, null)
+			var fuse_gem_type: Block.Type = _char.gem_type
+			if upgrade_kind == SkillUpgradeUtils.KIND_RESPONDING and upgrade_index >= 0 and upgrade_index < _char.responding_skills.size():
+				fuse_gem_type = SkillUpgradeUtils.responding_gem_type(_char, _char.responding_skills[upgrade_index])
+			var base_gem_tex: Texture2D = Block.GEM_TEXTURES.get(fuse_gem_type, null)
 			hbox.add_child(_make_fuse_hint_box(fuse_label, base_gem_tex))
 			hbox.add_child(_make_arrow_label())
 

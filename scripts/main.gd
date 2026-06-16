@@ -4386,8 +4386,9 @@ func _setup_fuse_hints() -> void:
 			var fuse_label: String = SkillUpgradeUtils.responding_fuse_label(c, skill_index, skill)
 			if fuse_label.is_empty():
 				continue
+			var fuse_gem_type: Block.Type = SkillUpgradeUtils.responding_gem_type(c, skill)
 			fuse_skills.append({
-				"gem_type": c.gem_type,
+				"gem_type": fuse_gem_type,
 				"threshold": SkillUpgradeUtils.responding_threshold(c, skill_index, skill),
 				"label": fuse_label,
 				"trigger_type": skill.get("trigger_type", "count"),
@@ -4841,41 +4842,29 @@ func _format_fuse_bbcode(gem_type: Block.Type, gem_count: int, upper_type: Block
 
 
 func _is_upper_gem_skill(skill_name: String) -> bool:
-	return UPPER_GEM_SKILLS.has(skill_name)
+	return _upper_type_for_response_skill(skill_name) != Block.UpperType.NONE
 
 
 func _upper_type_for_response_skill(skill_name: String) -> Block.UpperType:
-	match skill_name:
-		"Fireball":
-			return Block.UpperType.FIREBALL
-		"Fire Pillar":
-			return Block.UpperType.FIRE_PILLAR_X
-		"Justice Slash":
-			return Block.UpperType.SAINT_CROSS
-		"Leaf Shield":
-			return Block.UpperType.LEAF_SHIELD
-		"Snowball":
-			return Block.UpperType.SNOWBALL
-		"Iceball":
-			return Block.UpperType.ICEBALL
-		"光之盾":
-			return Block.UpperType.LIGHT_SHIELD
-		"Water Slash":
-			return Block.UpperType.WATER_SLASH
-		"Porcupine":
-			return Block.UpperType.PORCUPINE
-		"Turtle":
-			return Block.UpperType.TURTLE
-		"Bamboo Supply":
-			return Block.UpperType.BAMBOO_SUPPLY
-		"Wood Spear":
-			return Block.UpperType.WOOD_SPEAR_UP
-	return Block.UpperType.NONE
+	return SkillUpgradeUtils.responding_upper_type_from_name(skill_name)
+
+
+func _upper_type_for_response(resp: Dictionary) -> Block.UpperType:
+	if resp.has("upper_type"):
+		var raw_upper: int = int(resp.get("upper_type", Block.UpperType.NONE))
+		return raw_upper
+	var skill: Dictionary = resp.get("skill_dict", {}) as Dictionary
+	if not skill.is_empty():
+		return SkillUpgradeUtils.responding_upper_type(skill)
+	return _upper_type_for_response_skill(str(resp.get("skill_name", "")))
+
+
+func _is_upper_gem_response(resp: Dictionary) -> bool:
+	return _upper_type_for_response(resp) != Block.UpperType.NONE
 
 
 func _is_instant_response(resp: Dictionary) -> bool:
-	var skill_name: String = str(resp.get("skill_name", ""))
-	return Block.upper_type_has_instant(_upper_type_for_response_skill(skill_name))
+	return Block.upper_type_has_instant(_upper_type_for_response(resp))
 
 
 ## 新增一筆日誌條目（三層結構：元素漸層 + 角色眼部肖像 + 文字）
@@ -5006,7 +4995,7 @@ func _on_gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)
 	var first_response: Dictionary = {}
 	if responses.size() > 0:
 		first_response = responses[0] as Dictionary
-		is_fuse = _is_upper_gem_skill(str(first_response.get("skill_name", "")))
+		is_fuse = _is_upper_gem_response(first_response)
 
 	if is_fuse:
 		if not _is_instant_response(first_response):
@@ -5281,7 +5270,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	var is_fuse: bool = false
 	if responses.size() > 0:
 		var first_response: Dictionary = responses[0] as Dictionary
-		is_fuse = _is_upper_gem_skill(str(first_response.get("skill_name", "")))
+		is_fuse = _is_upper_gem_response(first_response)
 	if not is_fuse:
 		return
 
@@ -5903,9 +5892,12 @@ func _get_current_enemy_hp_sim() -> Dictionary:
 
 func _execute_responding_skill(resp: Dictionary) -> void:
 	var skill_name: String = resp.skill_name
-	if _is_upper_gem_skill(skill_name) and not _is_instant_response(resp):
+	var upper_type: Block.UpperType = _upper_type_for_response(resp)
+	var fuse_gem_type: Block.Type = int(resp.get("gem_type", party[int(resp.char_index)].gem_type))
+	if upper_type != Block.UpperType.NONE and not _is_instant_response(resp):
 		_reset_spell_chain()
-	match skill_name:
+	var response_key: Variant = skill_name if upper_type == Block.UpperType.NONE else upper_type
+	match response_key:
 		"Leaf Storm":
 			# Convert 3 gems → leaf, priority RED > BLUE
 			var priority: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE]
@@ -5913,16 +5905,16 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _rc: CharacterData = party[resp.char_index]
 			_add_log_entry("[b]%s[/b] %s ×3" % [Locale.tr_ui("LOG_LEAF_STORM"), _gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, _rc)
 			await get_tree().create_timer(0.4).timeout
-		"Fireball":
+		Block.UpperType.FIREBALL:
 			# Place a Fireball upper gem at the tapped position
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.FIREBALL)
 			_play_sfx(_se_freeze)
 			var _fc: CharacterData = party[resp.char_index]
-			var _fc_count: int = int(battle_manager.turn_gem_blasts.get(_fc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_fc.gem_type, _fc_count, Block.UpperType.FIREBALL), _fc.gem_type, _fc)
+			var _fc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _fc_count, Block.UpperType.FIREBALL), fuse_gem_type, _fc)
 			await get_tree().create_timer(0.15).timeout
-		"Fire Pillar":
+		Block.UpperType.FIRE_PILLAR_X, Block.UpperType.FIRE_PILLAR_Y:
 			# Place a Fire Pillar upper gem based on blast direction
 			var pos: Vector2i = board.last_tapped_pos
 			var blast_dir: String = board.get_line_direction(battle_manager.last_blast_positions)
@@ -5934,94 +5926,94 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			board.place_upper_gem(pos, pillar_type)
 			_play_sfx(_se_freeze)
 			var _pc: CharacterData = party[resp.char_index]
-			var _pc_count: int = int(battle_manager.turn_gem_blasts.get(_pc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_pc.gem_type, _pc_count, pillar_type), _pc.gem_type, _pc)
+			var _pc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _pc_count, pillar_type), fuse_gem_type, _pc)
 			await get_tree().create_timer(0.15).timeout
-		"Justice Slash":
+		Block.UpperType.SAINT_CROSS:
 			# Place a Saint Cross upper gem at the tapped position
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.SAINT_CROSS)
 			_play_sfx(_se_freeze)
 			var _hc: CharacterData = party[resp.char_index]
-			var _hc_count: int = int(battle_manager.turn_gem_blasts.get(_hc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_hc.gem_type, _hc_count, Block.UpperType.SAINT_CROSS), _hc.gem_type, _hc)
+			var _hc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _hc_count, Block.UpperType.SAINT_CROSS), fuse_gem_type, _hc)
 			await get_tree().create_timer(0.15).timeout
-		"Leaf Shield":
+		Block.UpperType.LEAF_SHIELD:
 			# Place a Leaf Shield upper gem at the tapped position
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.LEAF_SHIELD, Block.Type.GREEN)
 			_play_sfx(_se_freeze)
 			var _lc: CharacterData = party[resp.char_index]
-			var _lc_count: int = int(battle_manager.turn_gem_blasts.get(_lc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_lc.gem_type, _lc_count, Block.UpperType.LEAF_SHIELD), _lc.gem_type, _lc)
+			var _lc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _lc_count, Block.UpperType.LEAF_SHIELD), fuse_gem_type, _lc)
 			await get_tree().create_timer(0.15).timeout
-		"Snowball":
+		Block.UpperType.SNOWBALL:
 			# Place a Snowball upper gem at the tapped position
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.SNOWBALL, Block.Type.BLUE)
 			_play_sfx(_se_freeze)
 			var _sc: CharacterData = party[resp.char_index]
-			var _sc_count: int = int(battle_manager.turn_gem_blasts.get(_sc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_sc.gem_type, _sc_count, Block.UpperType.SNOWBALL), _sc.gem_type, _sc)
+			var _sc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _sc_count, Block.UpperType.SNOWBALL), fuse_gem_type, _sc)
 			await get_tree().create_timer(0.15).timeout
-		"Iceball":
+		Block.UpperType.ICEBALL:
 			var pos: Vector2i = board.last_tapped_pos
 			if not board.place_upper_gem(pos, Block.UpperType.ICEBALL, Block.Type.BLUE):
 				return
 			_play_sfx(_se_freeze)
 			var _ic: CharacterData = party[resp.char_index]
-			var _ic_count: int = int(battle_manager.turn_gem_blasts.get(_ic.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_ic.gem_type, _ic_count, Block.UpperType.ICEBALL), _ic.gem_type, _ic)
+			var _ic_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _ic_count, Block.UpperType.ICEBALL), fuse_gem_type, _ic)
 			await get_tree().create_timer(0.12).timeout
 			var spell_mult: float = _register_spell_chain()
 			await _resolve_iceball_instant(pos, resp, spell_mult)
-		"光之盾":
+		Block.UpperType.LIGHT_SHIELD:
 			var pos: Vector2i = board.last_tapped_pos
 			if not board.place_upper_gem(pos, Block.UpperType.LIGHT_SHIELD, Block.Type.LIGHT):
 				return
 			_play_sfx(_se_freeze)
 			var _dc: CharacterData = party[resp.char_index]
-			var _dc_count: int = int(battle_manager.turn_gem_blasts.get(_dc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_dc.gem_type, _dc_count, Block.UpperType.LIGHT_SHIELD), _dc.gem_type, _dc)
+			var _dc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _dc_count, Block.UpperType.LIGHT_SHIELD), fuse_gem_type, _dc)
 			await get_tree().create_timer(0.15).timeout
-		"Water Slash":
+		Block.UpperType.WATER_SLASH:
 			# Place a Water Slash upper gem (always vertical type — chain logic ignores X/Y orientation)
 			var pos: Vector2i = board.last_tapped_pos
 			var slash_type: Block.UpperType = Block.UpperType.WATER_SLASH
 			board.place_upper_gem(pos, slash_type)
 			_play_sfx(_se_freeze)
 			var _wc: CharacterData = party[resp.char_index]
-			var _wc_count: int = int(battle_manager.turn_gem_blasts.get(_wc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_wc.gem_type, _wc_count, slash_type), _wc.gem_type, _wc)
+			var _wc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _wc_count, slash_type), fuse_gem_type, _wc)
 			await get_tree().create_timer(0.15).timeout
-		"Porcupine":
+		Block.UpperType.PORCUPINE:
 			# 召喚豪豬：每回合攻擊敵人
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.PORCUPINE, Block.Type.GREEN)
 			_play_sfx(_se_freeze)
 			var _pc2: CharacterData = party[resp.char_index]
-			var _pc2_count: int = int(battle_manager.turn_gem_blasts.get(_pc2.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_pc2.gem_type, _pc2_count, Block.UpperType.PORCUPINE), _pc2.gem_type, _pc2)
+			var _pc2_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _pc2_count, Block.UpperType.PORCUPINE), fuse_gem_type, _pc2)
 			await get_tree().create_timer(0.15).timeout
-		"Turtle":
+		Block.UpperType.TURTLE:
 			# 召喚烏龜：每回合回復玩家 HP
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.TURTLE, Block.Type.GREEN)
 			_play_sfx(_se_freeze)
 			var _tc: CharacterData = party[resp.char_index]
-			var _tc_count: int = int(battle_manager.turn_gem_blasts.get(_tc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_tc.gem_type, _tc_count, Block.UpperType.TURTLE), _tc.gem_type, _tc)
+			var _tc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _tc_count, Block.UpperType.TURTLE), fuse_gem_type, _tc)
 			await get_tree().create_timer(0.15).timeout
-		"Bamboo Supply":
+		Block.UpperType.BAMBOO_SUPPLY:
 			# 竹葉補給：在點擊處生成竹葉補給寶石；爆破時消除周圍 8 格並回復觸發者 HP
 			var pos: Vector2i = board.last_tapped_pos
 			board.place_upper_gem(pos, Block.UpperType.BAMBOO_SUPPLY, Block.Type.GREEN)
 			_play_sfx(_se_freeze)
 			var _bc: CharacterData = party[resp.char_index]
-			var _bc_count: int = int(battle_manager.turn_gem_blasts.get(_bc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_bc.gem_type, _bc_count, Block.UpperType.BAMBOO_SUPPLY), _bc.gem_type, _bc)
+			var _bc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _bc_count, Block.UpperType.BAMBOO_SUPPLY), fuse_gem_type, _bc)
 			await get_tree().create_timer(0.15).timeout
-		"Wood Spear":
+		Block.UpperType.WOOD_SPEAR_UP, Block.UpperType.WOOD_SPEAR_DOWN:
 			var pos: Vector2i = board.last_tapped_pos
 			var spear_type: Block.UpperType = board.get_wood_spear_type_for_last_tap()
 			board.place_upper_gem(pos, spear_type, Block.Type.GREEN)
@@ -6032,8 +6024,8 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 				spear_block.intrinsic_bonus = SkillUpgradeUtils.wood_spear_intrinsic_bonus(_gc, skill_order)
 				spear_block.wood_spear_pierce_breakable = SkillUpgradeUtils.wood_spear_pierces_breakable(_gc, skill_order)
 			_play_sfx(_se_freeze)
-			var _gc_count: int = int(battle_manager.turn_gem_blasts.get(_gc.gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(_gc.gem_type, _gc_count, spear_type), _gc.gem_type, _gc)
+			var _gc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _gc_count, spear_type), fuse_gem_type, _gc)
 			await get_tree().create_timer(0.15).timeout
 
 
@@ -6853,7 +6845,7 @@ func _handle_active_skill(char_index: int) -> void:
 				if board.place_upper_gem(spear_pos, spear_type, Block.Type.GREEN):
 					var placed_spear: Block = board.grid[spear_pos.x][spear_pos.y]
 					if placed_spear != null:
-						var spear_skill_index: int = SkillUpgradeUtils.find_responding_skill_index(c, "Wood Spear")
+						var spear_skill_index: int = SkillUpgradeUtils.find_responding_upper_type_index(c, Block.UpperType.WOOD_SPEAR_UP)
 						placed_spear.wood_spear_pierce_breakable = SkillUpgradeUtils.wood_spear_pierces_breakable(c, spear_skill_index)
 					placed_count += 1
 					last_spear_type = spear_type
@@ -7282,7 +7274,7 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 	)
 	var selected_entries: Array[Dictionary] = []
 	var used_columns: Dictionary = {}
-	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
+	var responding_index: int = SkillUpgradeUtils.find_responding_upper_type_index(auto_character, Block.UpperType.WOOD_SPEAR_UP)
 	var pierces_breakable: bool = _auto_effect_max(enemy.data, auto_character, SkillUpgradeUtils.KIND_RESPONDING, responding_index, "wood_spear_pierce_breakable") > 0
 	for entry in candidates:
 		if selected_entries.size() >= place_count:
@@ -7359,52 +7351,50 @@ func _auto_score_wood_spear_cell(pos: Vector2i, ut: Block.UpperType) -> Dictiona
 func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 	if not _auto_enemy_can_continue(enemy):
 		return false
-	var responding_index: int = SkillUpgradeUtils.find_responding_skill_index(auto_character, "Wood Spear")
-	var skill_name: String = "Wood Spear" if responding_index >= 0 else ""
+	var responding_index: int = SkillUpgradeUtils.find_responding_upper_type_index(auto_character, Block.UpperType.WOOD_SPEAR_UP)
 	var upper_type: Block.UpperType = Block.UpperType.WOOD_SPEAR_UP if responding_index >= 0 else Block.UpperType.NONE
 	if responding_index < 0:
 		for i in auto_character.responding_skills.size():
 			var candidate: Dictionary = auto_character.responding_skills[i] as Dictionary
-			var candidate_name: String = str(candidate.get("name", ""))
-			var candidate_upper: Block.UpperType = _upper_type_for_response_skill(candidate_name)
+			var candidate_upper: Block.UpperType = SkillUpgradeUtils.responding_upper_type(candidate)
 			if candidate_upper == Block.UpperType.NONE or Block.upper_type_has_instant(candidate_upper):
 				continue
 			responding_index = i
-			skill_name = candidate_name
 			upper_type = candidate_upper
 			break
 	if responding_index < 0:
 		return false
 	var skill: Dictionary = auto_character.responding_skills[responding_index] as Dictionary
+	var fuse_gem_type: Block.Type = SkillUpgradeUtils.responding_gem_type(auto_character, skill)
 	var threshold: int = maxi(1, int(skill.get("threshold", 1)) + _auto_effect_sum(enemy.data, auto_character, SkillUpgradeUtils.KIND_RESPONDING, responding_index, "threshold_delta"))
-	var group: Array[Vector2i] = board.find_auto_fuse_group(auto_character.gem_type, threshold)
+	var group: Array[Vector2i] = board.find_auto_fuse_group(fuse_gem_type, threshold)
 	if group.is_empty():
 		return false
-	if skill_name != "Wood Spear":
+	if upper_type != Block.UpperType.WOOD_SPEAR_UP and upper_type != Block.UpperType.WOOD_SPEAR_DOWN:
 		var target_pos: Vector2i = group[0]
 		var target_score: int = -1
 		for p in group:
-			var score: int = _auto_score_upper_fuse_cell(p, upper_type, auto_character.gem_type)
+			var score: int = _auto_score_upper_fuse_cell(p, upper_type, fuse_gem_type)
 			if score > target_score:
 				target_score = score
 				target_pos = p
-		await _play_auto_enemy_cursor_tap(target_pos, auto_character.gem_type)
+		await _play_auto_enemy_cursor_tap(target_pos, fuse_gem_type)
 		if not _auto_enemy_can_continue(enemy):
 			return false
 		_play_sfx(_se_freeze)
-		await _play_auto_enemy_fuse_projectiles(group, target_pos, auto_character.gem_type)
+		await _play_auto_enemy_fuse_projectiles(group, target_pos, fuse_gem_type)
 		if not _auto_enemy_can_continue(enemy):
 			return false
-		var generic_ok: bool = await board.enemy_fuse_upper_from_group(group, target_pos, upper_type, auto_character.gem_type, enemy.get_instance_id())
+		var generic_ok: bool = await board.enemy_fuse_upper_from_group(group, target_pos, upper_type, fuse_gem_type, enemy.get_instance_id())
 		if not _auto_enemy_can_continue(enemy):
 			return false
 		if generic_ok:
 			_add_log_entry("[b]%s[/b] AUTO：%s%d → %s" % [
 				enemy.data.get_display_name(),
-				_gem_bbcode(auto_character.gem_type),
+				_gem_bbcode(fuse_gem_type),
 				group.size(),
 				_upper_gem_bbcode(upper_type)
-			], auto_character.gem_type)
+			], fuse_gem_type)
 		return generic_ok
 	var best_pos: Vector2i = group[0]
 	var best_score: int = -1
@@ -7418,23 +7408,23 @@ func _try_auto_enemy_fuse(enemy: Enemy, auto_character: CharacterData) -> bool:
 			best_score = score
 			best_pos = p
 			best_ut = ut
-	await _play_auto_enemy_cursor_tap(best_pos, auto_character.gem_type)
+	await _play_auto_enemy_cursor_tap(best_pos, fuse_gem_type)
 	if not _auto_enemy_can_continue(enemy):
 		return false
 	_play_sfx(_se_freeze)
-	await _play_auto_enemy_fuse_projectiles(group, best_pos, auto_character.gem_type)
+	await _play_auto_enemy_fuse_projectiles(group, best_pos, fuse_gem_type)
 	if not _auto_enemy_can_continue(enemy):
 		return false
-	var ok: bool = await board.enemy_fuse_upper_from_group(group, best_pos, best_ut, auto_character.gem_type, enemy.get_instance_id(), pierces_breakable)
+	var ok: bool = await board.enemy_fuse_upper_from_group(group, best_pos, best_ut, fuse_gem_type, enemy.get_instance_id(), pierces_breakable)
 	if not _auto_enemy_can_continue(enemy):
 		return false
 	if ok:
 		_add_log_entry("[b]%s[/b] AUTO：%s%d → %s" % [
 			enemy.data.get_display_name(),
-			_gem_bbcode(auto_character.gem_type),
+			_gem_bbcode(fuse_gem_type),
 			group.size(),
 			_upper_gem_bbcode(best_ut)
-		], auto_character.gem_type)
+		], fuse_gem_type)
 	return ok
 
 
@@ -10545,14 +10535,16 @@ func _on_combo_test_pressed(source_btn: Button) -> void:
 
 	# 收集當前隊伍所有高階寶石技能（去重）
 	var upper_entries: Array = []
-	var seen_names: Dictionary = {}
+	var seen_upper_types: Dictionary = {}
 	for c: CharacterData in party:
 		for skill: Dictionary in c.responding_skills:
 			var sname: String = skill.get("name", "")
-			if sname.is_empty() or seen_names.has(sname):
+			var upper_type: Block.UpperType = SkillUpgradeUtils.responding_upper_type(skill)
+			if upper_type == Block.UpperType.NONE or seen_upper_types.has(upper_type):
 				continue
-			seen_names[sname] = true
-			upper_entries.append({"name": sname, "gem_type": c.gem_type})
+			var fuse_gem_type: Block.Type = SkillUpgradeUtils.responding_gem_type(c, skill)
+			seen_upper_types[upper_type] = true
+			upper_entries.append({"name": sname, "gem_type": fuse_gem_type, "upper_type": upper_type})
 
 	if upper_entries.is_empty():
 		return
@@ -10574,6 +10566,7 @@ func _on_combo_test_pressed(source_btn: Button) -> void:
 	for entry in upper_entries:
 		var ename: String = entry["name"]
 		var egem: int = entry["gem_type"]
+		var upper_type: Block.UpperType = int(entry["upper_type"])
 		var row_btn := Button.new()
 		row_btn.text = ename
 		row_btn.flat = false
@@ -10582,7 +10575,7 @@ func _on_combo_test_pressed(source_btn: Button) -> void:
 		row_btn.custom_minimum_size = Vector2(130, 28)
 		row_btn.pressed.connect(func() -> void:
 			popup.queue_free()
-			_debug_spawn_upper(ename)
+			_debug_spawn_upper_type(upper_type)
 		)
 		vbox.add_child(row_btn)
 
@@ -10601,29 +10594,17 @@ func _on_combo_test_pressed(source_btn: Button) -> void:
 
 ## 偵錯：根據技能名稱在棋盤隨機生成 15 個對應高階寶石
 func _debug_spawn_upper(skill_name: String) -> void:
+	_debug_spawn_upper_type(_upper_type_for_response_skill(skill_name))
+
+
+func _debug_spawn_upper_type(ut: Block.UpperType) -> void:
 	if board == null:
 		return
-	# 找對應 UpperType
-	var ut_map: Dictionary = {
-		"Fireball": Block.UpperType.FIREBALL,
-		"Fire Pillar": Block.UpperType.FIRE_PILLAR_Y,
-		"Justice Slash": Block.UpperType.SAINT_CROSS,
-		"Leaf Shield": Block.UpperType.LEAF_SHIELD,
-		"Snowball": Block.UpperType.SNOWBALL,
-		"Iceball": Block.UpperType.ICEBALL,
-		"Water Slash": Block.UpperType.WATER_SLASH,
-		"Porcupine": Block.UpperType.PORCUPINE,
-		"Turtle": Block.UpperType.TURTLE,
-		"Bamboo Supply": Block.UpperType.BAMBOO_SUPPLY,
-		"Wood Spear": Block.UpperType.WOOD_SPEAR_UP,
-		"光之盾": Block.UpperType.LIGHT_SHIELD,
-	}
-	if not ut_map.has(skill_name):
+	if ut == Block.UpperType.NONE:
 		# 倒回旧行為
 		if board.has_method("debug_spawn_firebombs"):
 			board.debug_spawn_firebombs(15)
 		return
-	var ut: Block.UpperType = ut_map[skill_name] as Block.UpperType
 	var candidates: Array = []
 	for x in board.columns:
 		for y in board.rows:

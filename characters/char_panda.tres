@@ -1,22 +1,25 @@
-[gd_resource type="Resource" script_class="CharacterData" format=3 uid="uid://b0oiymmnufjwt"]
+[gd_resource type="Resource" script_class="CharacterData" format=3]
 
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://b2ldvi14lqlks" path="res://assets/panda.png" id="2_portrait"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/panda.png" id="2_portrait"]
 
 [resource]
 script = ExtResource("1_script")
 character_name = "Pan"
 job_id = "tactictian"
 gem_type = 2
-level = 8
+level = 7
 base_hp = 48
 hp_growth = 7.0
+magic_growth = 7.0
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.3, 0.69, 0.31, 1)
 portrait_scale = 0.95
 portrait_offset = Vector2(-28, -40)
 dialog_square_scale = 1.25
 dialog_square_offset = Vector2(-107.23076, 3.3083496)
+dialog_phase_scale = 0.9
+dialog_phase_offset = Vector2(4, -4)
 square_scale = 0.9
 square_offset = Vector2(-76, -3)
 rectangular_scale = 0.3

@@ -48,6 +48,54 @@ class Def:
 ## 所有高階寶石定義（不含 NONE）
 const _DATA: Dictionary = {}
 
+const DEFAULT_FUSE_THRESHOLD: Dictionary = {
+	Block.UpperType.FIREBALL: 9,
+	Block.UpperType.FIRE_PILLAR_X: 4,
+	Block.UpperType.FIRE_PILLAR_Y: 4,
+	Block.UpperType.SAINT_CROSS: 9,
+	Block.UpperType.LEAF_SHIELD: 4,
+	Block.UpperType.SNOWBALL: 4,
+	Block.UpperType.ICEBALL: 8,
+	Block.UpperType.WATER_SLASH: 4,
+	Block.UpperType.PORCUPINE: 9,
+	Block.UpperType.TURTLE: 5,
+	Block.UpperType.BAMBOO_SUPPLY: 6,
+	Block.UpperType.WOOD_SPEAR_UP: 7,
+	Block.UpperType.WOOD_SPEAR_DOWN: 7,
+	Block.UpperType.LIGHT_SHIELD: 6,
+}
+
+const UPGRADE_EFFECTS: Dictionary = {
+	Block.UpperType.WOOD_SPEAR_UP: [
+		{
+			"desc_key": "UPGRADE_GORY_WOOD_SPEAR_PIERCE_BREAKABLE",
+			"effects": {
+				"wood_spear_pierce_breakable": 1,
+			},
+		},
+		{
+			"desc_key": "UPGRADE_GORY_WOOD_SPEAR_THRESHOLD_1",
+			"effects": {
+				"threshold_delta": -1,
+			},
+		},
+	],
+	Block.UpperType.WOOD_SPEAR_DOWN: [
+		{
+			"desc_key": "UPGRADE_GORY_WOOD_SPEAR_PIERCE_BREAKABLE",
+			"effects": {
+				"wood_spear_pierce_breakable": 1,
+			},
+		},
+		{
+			"desc_key": "UPGRADE_GORY_WOOD_SPEAR_THRESHOLD_1",
+			"effects": {
+				"threshold_delta": -1,
+			},
+		},
+	],
+}
+
 ## 靜態查詢表（在腳本載入時初始化）
 static var _defs: Dictionary = {}
 static var _initialized := false
@@ -157,3 +205,16 @@ static func get_element(ut: Block.UpperType, fallback: Block.Type = Block.Type.R
 	if d != null:
 		return d.element
 	return fallback
+
+
+static func get_default_fuse_threshold(ut: Block.UpperType, fallback: int = 1) -> int:
+	return int(DEFAULT_FUSE_THRESHOLD.get(ut, fallback))
+
+
+static func get_upgrade_effects(ut: Block.UpperType) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var source: Array = UPGRADE_EFFECTS.get(ut, [])
+	for entry in source:
+		if entry is Dictionary:
+			result.append((entry as Dictionary).duplicate(true))
+	return result

@@ -17,6 +17,7 @@ var _stage_buttons: Array[StageButton] = []
 var _path_layer: Control = null
 var _debug_panel: Control = null
 var _portrait_debug_layer: CanvasLayer = null
+var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
 
 @onready var _pages_root: Control = $UILayer/Pages
 @onready var _map_page: Control = $UILayer/Pages/MapPage
@@ -317,6 +318,12 @@ func _build_portrait_debug_btn() -> void:
 	enemy_btn.pressed.connect(_open_enemy_debug)
 	_portrait_debug_layer.add_child(enemy_btn)
 
+	var fuse_btn: Button = _make_debug_launcher_button("", "融合寶石技能 DEV", 16, -70.0, -16.0)
+	fuse_btn.icon = _fuse_skill_debug_icon
+	fuse_btn.expand_icon = true
+	fuse_btn.pressed.connect(_open_fuse_skill_debug)
+	_portrait_debug_layer.add_child(fuse_btn)
+
 
 func _make_debug_launcher_button(label_text: String, tooltip: String, font_size: int, top_offset: float, bottom_offset: float) -> Button:
 	var btn := Button.new()
@@ -384,5 +391,17 @@ func _open_enemy_debug() -> void:
 				child.get_script().resource_path == "res://scripts/enemy_debug_screen.gd":
 			return
 	var screen: Control = load("res://scripts/enemy_debug_screen.gd").new() as Control
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_portrait_debug_layer.add_child(screen)
+
+
+func _open_fuse_skill_debug() -> void:
+	if _portrait_debug_layer == null:
+		return
+	for child in _portrait_debug_layer.get_children():
+		if child.get_script() != null and \
+				child.get_script().resource_path == "res://scripts/fuse_skill_debug_screen.gd":
+			return
+	var screen: Control = load("res://scripts/fuse_skill_debug_screen.gd").new() as Control
 	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_portrait_debug_layer.add_child(screen)

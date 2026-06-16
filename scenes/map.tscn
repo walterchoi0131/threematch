@@ -4,22 +4,22 @@
 [ext_resource type="Texture2D" uid="uid://b565j307xwlbt" path="res://assets/background/worldmap.png" id="2_worldmap"]
 [ext_resource type="PackedScene" uid="uid://b8t3xq4mn5lvr" path="res://scenes/stage_button.tscn" id="3_stagebtn"]
 [ext_resource type="Resource" uid="uid://cqjqomp1x1x8l" path="res://stages/stage_dev.tres" id="4_stage_1_1"]
-[ext_resource type="Resource" path="res://stages/stage_1_2.tres" id="5_stage_1_2"]
-[ext_resource type="Resource" path="res://stages/stage_1_3.tres" id="6_stage_1_3"]
-[ext_resource type="Resource" path="res://stages/stage_1_4.tres" id="7_stage_1_4"]
+[ext_resource type="Resource" uid="uid://ftunj1picxh6" path="res://stages/stage_1_2.tres" id="5_stage_1_2"]
+[ext_resource type="Resource" uid="uid://sbd0verpyhfx" path="res://stages/stage_1_3.tres" id="6_stage_1_3"]
+[ext_resource type="Resource" uid="uid://bmag36vc3l31k" path="res://stages/stage_1_4.tres" id="7_stage_1_4"]
 [ext_resource type="Resource" path="res://stages/stage_1_5.tres" id="8_stage_1_5"]
 [ext_resource type="Resource" uid="uid://deymcgf4txtoq" path="res://stages/stage_board_5x5_3c.tres" id="9_board_5x5_3c"]
 [ext_resource type="Resource" uid="uid://br26x6fourclr" path="res://stages/stage_board_6x6_4c.tres" id="10_board_6x6_4c"]
 [ext_resource type="Resource" uid="uid://br27x7fourclr" path="res://stages/stage_board_7x7_4c.tres" id="11_board_7x7_4c"]
 [ext_resource type="Resource" uid="uid://br28x8fiveclr" path="res://stages/stage_board_8x8_5c.tres" id="12_board_8x8_5c"]
 [ext_resource type="Resource" uid="uid://br3ayafiveclr" path="res://stages/stage_board_9x9_5c.tres" id="13_board_9x9_5c"]
-[ext_resource type="Resource" path="res://stages/stage_1_6.tres" id="14_stage_1_6"]
-[ext_resource type="Resource" path="res://stages/stage_1_7.tres" id="15_stage_1_7"]
-[ext_resource type="Resource" path="res://stages/stage_puzzle_research_1.tres" id="17_puzzle_research_1"]
-[ext_resource type="Resource" uid="uid://beqrynf506pnc" path="res://stages/stage_puzzle_research_2.tres" id="18_puzzle_research_2"]
+[ext_resource type="Resource" uid="uid://fnhooknp54a1" path="res://stages/stage_1_6.tres" id="14_stage_1_6"]
+[ext_resource type="Resource" uid="uid://bed1urxvuibxn" path="res://stages/stage_1_7.tres" id="15_stage_1_7"]
+[ext_resource type="Resource" uid="uid://vxnros835evi" path="res://stages/stage_puzzle_research_1.tres" id="17_puzzle_research_1"]
+[ext_resource type="Resource" path="res://stages/stage_puzzle_research_2.tres" id="18_puzzle_research_2"]
 [ext_resource type="Resource" uid="uid://c8u22qore7mf5" path="res://stages/stage_puzzle_research_3.tres" id="19_puzzle_research_3"]
 [ext_resource type="Resource" uid="uid://e8mn658yxmts" path="res://stages/stage_puzzle_research_4.tres" id="20_puzzle_research_4"]
-[ext_resource type="Resource" uid="uid://brf1nqwbye7vi" path="res://stages/stage_puzzle_research_5.tres" id="21_puzzle_research_5"]
+[ext_resource type="Resource" path="res://stages/stage_puzzle_research_5.tres" id="21_puzzle_research_5"]
 
 [sub_resource type="StyleBoxFlat" id="SBF_nav"]
 bg_color = Color(0.08, 0.1, 0.14, 0.92)
@@ -120,82 +120,82 @@ stage = ExtResource("15_stage_1_7")
 
 [node name="StageBoard5x5_3C" parent="UILayer/Pages/MapPage" unique_id=990013204 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 31.0
-offset_top = 102.0
-offset_right = 171.0
-offset_bottom = 212.0
+offset_left = 810.0
+offset_top = 158.0
+offset_right = 950.0
+offset_bottom = 268.0
 stage = ExtResource("9_board_5x5_3c")
 
 [node name="StageBoard6x6_4C" parent="UILayer/Pages/MapPage" unique_id=380891657 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 31.0
-offset_top = 254.0
-offset_right = 171.0
-offset_bottom = 364.0
+offset_left = 810.0
+offset_top = 310.0
+offset_right = 950.0
+offset_bottom = 420.0
 stage = ExtResource("10_board_6x6_4c")
 
 [node name="StageBoard7x7_4C" parent="UILayer/Pages/MapPage" unique_id=659775529 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 31.0
-offset_top = 406.0
-offset_right = 171.0
-offset_bottom = 516.0
+offset_left = 810.0
+offset_top = 462.0
+offset_right = 950.0
+offset_bottom = 572.0
 stage = ExtResource("11_board_7x7_4c")
 
 [node name="StageBoard8x8_5C" parent="UILayer/Pages/MapPage" unique_id=520081242 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 31.0
-offset_top = 558.0
-offset_right = 171.0
-offset_bottom = 668.0
+offset_left = 810.0
+offset_top = 614.0
+offset_right = 950.0
+offset_bottom = 724.0
 stage = ExtResource("12_board_8x8_5c")
 
 [node name="StageBoard9x9_5C" parent="UILayer/Pages/MapPage" unique_id=717453912 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 31.0
-offset_top = 710.0
-offset_right = 171.0
-offset_bottom = 820.0
+offset_left = 810.0
+offset_top = 766.0
+offset_right = 950.0
+offset_bottom = 876.0
 stage = ExtResource("13_board_9x9_5c")
 
 [node name="StagePuzzleResearch1" parent="UILayer/Pages/MapPage" unique_id=1432775016 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 183.0
-offset_top = 102.0
-offset_right = 323.0
-offset_bottom = 212.0
+offset_left = 962.0
+offset_top = 158.0
+offset_right = 1102.0
+offset_bottom = 268.0
 stage = ExtResource("17_puzzle_research_1")
 
 [node name="StagePuzzleResearch2" parent="UILayer/Pages/MapPage" unique_id=1012954933 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 183.0
-offset_top = 254.0
-offset_right = 323.0
-offset_bottom = 364.0
+offset_left = 962.0
+offset_top = 310.0
+offset_right = 1102.0
+offset_bottom = 420.0
 stage = ExtResource("18_puzzle_research_2")
 
 [node name="StagePuzzleResearch3" parent="UILayer/Pages/MapPage" unique_id=856133064 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 183.0
-offset_top = 406.0
-offset_right = 323.0
-offset_bottom = 516.0
+offset_left = 962.0
+offset_top = 462.0
+offset_right = 1102.0
+offset_bottom = 572.0
 stage = ExtResource("19_puzzle_research_3")
 
 [node name="StagePuzzleResearch4" parent="UILayer/Pages/MapPage" unique_id=807499892 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 183.0
-offset_top = 558.0
-offset_right = 323.0
-offset_bottom = 668.0
+offset_left = 962.0
+offset_top = 614.0
+offset_right = 1102.0
+offset_bottom = 724.0
 stage = ExtResource("20_puzzle_research_4")
 
 [node name="StagePuzzleResearch5" parent="UILayer/Pages/MapPage" unique_id=353994047 instance=ExtResource("3_stagebtn")]
 layout_mode = 0
-offset_left = 183.0
-offset_top = 710.0
-offset_right = 323.0
-offset_bottom = 820.0
+offset_left = 962.0
+offset_top = 766.0
+offset_right = 1102.0
+offset_bottom = 876.0
 stage = ExtResource("21_puzzle_research_5")
 
 [node name="CharactersPage" type="Control" parent="UILayer/Pages" unique_id=1542128791]

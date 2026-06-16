@@ -319,7 +319,14 @@ func get_skill_upgrade_level(character: CharacterData, kind: String, skill_index
 	var key: String = SkillUpgradeUtils.get_skill_key(character, kind, skill_index)
 	if key == "":
 		return 0
-	return int(skill_upgrade_levels.get(key, 0))
+	var level := int(skill_upgrade_levels.get(key, 0))
+	if level > 0 or kind != SkillUpgradeUtils.KIND_RESPONDING:
+		return level
+	var legacy_key := SkillUpgradeUtils.get_legacy_skill_key(character, kind, skill_index)
+	var legacy_level := int(skill_upgrade_levels.get(legacy_key, 0))
+	if legacy_level > 0:
+		skill_upgrade_levels[key] = legacy_level
+	return legacy_level
 
 
 func try_upgrade_skill(character: CharacterData, kind: String, skill_index: int = 0) -> Dictionary:
@@ -588,6 +595,7 @@ func _deserialize(d: Dictionary, save_version: int = SAVE_VERSION) -> void:
 		var level: int = int(upgrades[k])
 		if level > 0:
 			skill_upgrade_levels[str(k)] = level
+	_migrate_global_responding_upgrade_keys()
 
 	cleared_stages.clear()
 	for sid in d.get("cleared_stages", []):
@@ -615,6 +623,21 @@ func _migrate_stage_id(stage_id: String, save_version: int) -> String:
 	if save_version <= 2 and _STAGE_ID_MIGRATION_V2_TO_V3.has(stage_id):
 		stage_id = String(_STAGE_ID_MIGRATION_V2_TO_V3[stage_id])
 	return stage_id
+
+
+func _migrate_global_responding_upgrade_keys() -> void:
+	var migrated: Dictionary = {}
+	for raw_key in skill_upgrade_levels.keys():
+		var key := str(raw_key)
+		var global_key := SkillUpgradeUtils.responding_upgrade_key_from_legacy_key(key)
+		if global_key == "":
+			continue
+		var level := int(skill_upgrade_levels.get(key, 0))
+		var existing := int(skill_upgrade_levels.get(global_key, 0))
+		var pending := int(migrated.get(global_key, 0))
+		migrated[global_key] = maxi(maxi(existing, pending), level)
+	for key in migrated.keys():
+		skill_upgrade_levels[key] = int(migrated[key])
 
 
 func _repair_main_stage_progression() -> void:

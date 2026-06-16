@@ -362,11 +362,13 @@ func check_responding_skills(board_ref: Node2D = null) -> Array:
 		for skill_index in c.responding_skills.size():
 			var skill: Dictionary = c.responding_skills[skill_index]
 			var skill_name: String = skill.get("name", "")
+			var upper_type: Block.UpperType = SkillUpgradeUtils.responding_upper_type(skill)
+			var required_gem_type: Block.Type = SkillUpgradeUtils.responding_gem_type(c, skill)
 			var threshold: int = SkillUpgradeUtils.responding_threshold(c, skill_index, skill)
 			var priority: int = skill.get("priority", 99)
 			var trigger_type: String = skill.get("trigger_type", "count")
 
-			var blasted: int = turn_gem_blasts.get(c.gem_type, 0)
+			var blasted: int = turn_gem_blasts.get(required_gem_type, 0)
 
 			var triggered := false
 			match trigger_type:
@@ -381,6 +383,8 @@ func check_responding_skills(board_ref: Node2D = null) -> Array:
 				candidates.append({
 					"char_index": i,
 					"skill_name": skill_name,
+					"upper_type": upper_type,
+					"gem_type": required_gem_type,
 					"priority": priority,
 					"threshold": threshold,
 					"skill_order": skill_index,
