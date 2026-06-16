@@ -33,30 +33,50 @@ const CELL_HOLE: int = -10
 const CELL_WATER_SWORD: int = -11
 const FALLBACK_BATTLE_BG_PATH: String = "res://assets/battle_background/battle_bg_forest.png"
 const AREA_KEYS: Array[String] = [
+	"arena",
 	"aurora",
+	"bamboo",
 	"church",
+	"crystal_mine",
 	"dessert",
 	"dungeon",
+	"fire_mine",
 	"forest",
 	"heaven",
 	"iceberg",
+	"mage",
 	"meadow",
 	"ruin",
 	"school",
 	"swamp",
+	"temple",
 	"underwater",
 	"volcano",
+	"waterfall",
+	"yama",
 ]
 
 ## 關卡地區資訊。key 需對應 assets/stage_spot/spot_<area>.png。
 const AREA_INFO: Dictionary = {
+	"arena": {
+		"spot_path": "res://assets/stage_spot/spot_arena.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_arena.png",
+	},
 	"aurora": {
 		"spot_path": "res://assets/stage_spot/spot_aurora.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_aurora.png",
 	},
+	"bamboo": {
+		"spot_path": "res://assets/stage_spot/spot_bamboo.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_bamboo.png",
+	},
 	"church": {
 		"spot_path": "res://assets/stage_spot/spot_church.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_church.png",
+	},
+	"crystal_mine": {
+		"spot_path": "res://assets/stage_spot/spot_crystal_mine.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_crystal_mine.png",
 	},
 	"dessert": {
 		"spot_path": "res://assets/stage_spot/spot_dessert.png",
@@ -65,6 +85,10 @@ const AREA_INFO: Dictionary = {
 	"dungeon": {
 		"spot_path": "res://assets/stage_spot/spot_dungeon.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_dungeon.png",
+	},
+	"fire_mine": {
+		"spot_path": "res://assets/stage_spot/spot_fire_mine.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_fire_mine.png",
 	},
 	"forest": {
 		"spot_path": "res://assets/stage_spot/spot_forest.png",
@@ -77,6 +101,10 @@ const AREA_INFO: Dictionary = {
 	"iceberg": {
 		"spot_path": "res://assets/stage_spot/spot_iceberg.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_iceberg.png",
+	},
+	"mage": {
+		"spot_path": "res://assets/stage_spot/spot_mage.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_mage.png",
 	},
 	"meadow": {
 		"spot_path": "res://assets/stage_spot/spot_meadow.png",
@@ -94,6 +122,10 @@ const AREA_INFO: Dictionary = {
 		"spot_path": "res://assets/stage_spot/spot_swamp.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_swamp.png",
 	},
+	"temple": {
+		"spot_path": "res://assets/stage_spot/spot_temple.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_temple.png",
+	},
 	"underwater": {
 		"spot_path": "res://assets/stage_spot/spot_underwater.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_underwater.png",
@@ -101,6 +133,14 @@ const AREA_INFO: Dictionary = {
 	"volcano": {
 		"spot_path": "res://assets/stage_spot/spot_volcano.png",
 		"battle_bg_path": "res://assets/battle_background/battle_bg_volcano.png",
+	},
+	"waterfall": {
+		"spot_path": "res://assets/stage_spot/spot_waterfall.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_waterfall.png",
+	},
+	"yama": {
+		"spot_path": "res://assets/stage_spot/spot_yama.png",
+		"battle_bg_path": "res://assets/battle_background/battle_bg_yama.png",
 	},
 }
 
