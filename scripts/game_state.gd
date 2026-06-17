@@ -58,6 +58,7 @@ var selected_stage: StageData = null           # 當前選擇的關卡
 var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
 var detail_character: CharacterData = null      # 要查看詳細資訊的角色
 var stage_edit_mode: bool = false               # 以棋盤編輯模式進入 main.tscn（不持久化）
+var dev_mode: bool = false
 
 var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 

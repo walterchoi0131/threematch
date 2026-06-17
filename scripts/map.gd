@@ -7,15 +7,20 @@ extends Node2D
 const PrepareScene: PackedScene = preload("res://scenes/prepare.tscn")
 const CharactersScene: PackedScene = preload("res://scenes/characters.tscn")
 const InventoryScene: PackedScene = preload("res://scenes/inventory.tscn")
+const StageButtonScene: PackedScene = preload("res://scenes/stage_button.tscn")
 
 const OVERLAY_HEIGHT_RATIO: float = 0.8
+const STAGE_DIR: String = "res://stages"
+const NEW_STAGE_OFFSET: Vector2 = Vector2(160.0, 0.0)
 
 enum Page { CHARACTERS, MAP, INVENTORY }
 
 var _overlay_layer: CanvasLayer = null
 var _stage_buttons: Array[StageButton] = []
+var _scene_stage_paths: Dictionary = {}
 var _path_layer: Control = null
 var _debug_panel: Control = null
+var _dev_mode_label: Label = null
 var _portrait_debug_layer: CanvasLayer = null
 var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
 
@@ -37,10 +42,14 @@ func _ready() -> void:
 
 	# 收集 MapPage 上所有 StageButton（編輯器擺放）
 	_stage_buttons.clear()
+	_scene_stage_paths.clear()
 	_collect_stage_buttons(_map_page)
 	for sb in _stage_buttons:
-		sb.stage_pressed.connect(_on_stage_button_pressed)
-		sb.stage_edit_pressed.connect(_on_stage_button_edit_pressed)
+		_connect_stage_button(sb)
+		if sb.stage != null and sb.stage.resource_path != "":
+			_scene_stage_paths[sb.stage.resource_path] = true
+	_ensure_stage_buttons_for_stage_resources()
+	_apply_stage_positions_from_data()
 	_setup_path_layer()
 
 	# 懶載入 Characters / Inventory 子畫面到對應分頁
@@ -53,6 +62,8 @@ func _ready() -> void:
 	GameState.play_bgm(load("res://assets/music/mhr_quest.mp3"), true, "map")
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_build_portrait_debug_btn()
+	_build_dev_mode_label()
+	_refresh_dev_mode_ui()
 
 
 func _collect_stage_buttons(node: Node) -> void:
@@ -60,6 +71,130 @@ func _collect_stage_buttons(node: Node) -> void:
 		if child is StageButton:
 			_stage_buttons.append(child as StageButton)
 		_collect_stage_buttons(child)
+
+
+func _connect_stage_button(sb: StageButton) -> void:
+	if sb == null:
+		return
+	if not sb.stage_pressed.is_connected(_on_stage_button_pressed):
+		sb.stage_pressed.connect(_on_stage_button_pressed)
+	if not sb.stage_add_pressed.is_connected(_on_stage_button_add_pressed):
+		sb.stage_add_pressed.connect(_on_stage_button_add_pressed)
+	if not sb.stage_remove_pressed.is_connected(_on_stage_button_remove_pressed):
+		sb.stage_remove_pressed.connect(_on_stage_button_remove_pressed)
+	if not sb.stage_dragged.is_connected(_on_stage_button_dragged):
+		sb.stage_dragged.connect(_on_stage_button_dragged)
+	if not sb.stage_drag_finished.is_connected(_on_stage_button_drag_finished):
+		sb.stage_drag_finished.connect(_on_stage_button_drag_finished)
+
+
+func _ensure_stage_buttons_for_stage_resources() -> void:
+	var existing: Dictionary = {}
+	for sb in _stage_buttons:
+		if sb != null and sb.stage != null and sb.stage.stage_id != "":
+			existing[sb.stage.stage_id] = true
+
+	for stage in _load_all_stage_resources():
+		if stage == null or stage.stage_id == "" or stage.map_hidden:
+			continue
+		if existing.has(stage.stage_id):
+			continue
+		var sb: StageButton = StageButtonScene.instantiate() as StageButton
+		sb.name = "Stage_%s" % _stage_node_suffix(stage.stage_id)
+		sb.stage = stage
+		_map_page.add_child(sb)
+		_stage_buttons.append(sb)
+		_connect_stage_button(sb)
+		existing[stage.stage_id] = true
+
+
+func _apply_stage_positions_from_data() -> void:
+	for sb in _stage_buttons:
+		if sb == null or sb.stage == null:
+			continue
+		if _has_saved_map_position(sb.stage):
+			_set_stage_button_position(sb, sb.stage.map_position)
+		else:
+			sb.stage.map_position = sb.position
+
+
+func _has_saved_map_position(stage: StageData) -> bool:
+	return stage != null and stage.map_position.x >= 0.0 and stage.map_position.y >= 0.0
+
+
+func _set_stage_button_position(sb: StageButton, target_position: Vector2) -> void:
+	if sb == null:
+		return
+	var max_pos: Vector2 = Vector2(
+		maxf(0.0, _map_page.size.x - sb.button_size.x),
+		maxf(0.0, _map_page.size.y - sb.button_size.y)
+	)
+	sb.position = Vector2(
+		clampf(target_position.x, 0.0, max_pos.x),
+		clampf(target_position.y, 0.0, max_pos.y)
+	)
+	sb.size = sb.button_size
+	if sb.stage != null:
+		sb.stage.map_position = sb.position
+
+
+func _load_all_stage_resources() -> Array[StageData]:
+	var result: Array[StageData] = []
+	var dir := DirAccess.open(STAGE_DIR)
+	if dir == null:
+		push_warning("Map: cannot open stage dir %s" % STAGE_DIR)
+		return result
+	dir.list_dir_begin()
+	while true:
+		var file_name: String = dir.get_next()
+		if file_name == "":
+			break
+		if dir.current_is_dir() or not file_name.ends_with(".tres"):
+			continue
+		var path: String = "%s/%s" % [STAGE_DIR, file_name]
+		var res: Resource = load(path)
+		if res is StageData:
+			result.append(res as StageData)
+	dir.list_dir_end()
+	return result
+
+
+func _stage_node_suffix(stage_id: String) -> String:
+	var suffix: String = stage_id.strip_edges()
+	for ch in [" ", "-", ".", "/", "\\", ":"]:
+		suffix = suffix.replace(ch, "_")
+	return suffix
+
+
+func _make_unique_child_stage_id(parent_stage: StageData, all_stages: Array[StageData]) -> String:
+	var base: String = "%s-new" % parent_stage.stage_id
+	var taken: Dictionary = {}
+	for stage in all_stages:
+		if stage != null:
+			taken[stage.stage_id] = true
+	var index: int = 1
+	var candidate: String = base
+	while taken.has(candidate) or ResourceLoader.exists(_stage_resource_path_for_id(candidate)):
+		index += 1
+		candidate = "%s-%d" % [base, index]
+	return candidate
+
+
+func _stage_resource_path_for_id(stage_id: String) -> String:
+	var file_id: String = stage_id.strip_edges().to_lower()
+	for ch in [" ", "-", ".", "/", "\\", ":"]:
+		file_id = file_id.replace(ch, "_")
+	return "%s/stage_%s.tres" % [STAGE_DIR, file_id]
+
+
+func _save_stage(stage: StageData) -> bool:
+	if stage == null or stage.resource_path == "":
+		return false
+	var err: int = ResourceSaver.save(stage, stage.resource_path)
+	if err != OK:
+		push_warning("Map: failed to save stage %s (%d)" % [stage.resource_path, err])
+		return false
+	return true
 
 
 func _ensure_subpage(page: Control, scene: PackedScene) -> void:
@@ -120,7 +255,7 @@ func _refresh_stage_buttons() -> void:
 		sb.refresh_state()
 	var latest: StageButton = null
 	for sb in sorted:
-		if sb.stage != null and sb.is_unlocked_for_play() and not GameState.is_stage_cleared(sb.stage.stage_id):
+		if sb.stage != null and not sb.stage.map_hidden and sb.is_unlocked_for_play() and not GameState.is_stage_cleared(sb.stage.stage_id):
 			latest = sb
 			break
 	for sb in _stage_buttons:
@@ -148,6 +283,9 @@ func _setup_path_layer() -> void:
 func _on_stage_button_pressed(stage: StageData) -> void:
 	if stage == null:
 		return
+	if GameState.dev_mode:
+		_open_stage_editor(stage)
+		return
 	GameState.selected_stage = stage
 	GameState.stage_edit_mode = false
 	_open_overlay(PrepareScene)
@@ -156,10 +294,126 @@ func _on_stage_button_pressed(stage: StageData) -> void:
 func _on_stage_button_edit_pressed(stage: StageData) -> void:
 	if stage == null:
 		return
+	_open_stage_editor(stage)
+
+
+func _open_stage_editor(stage: StageData) -> void:
+	if stage == null:
+		return
 	_close_overlay()
 	GameState.selected_stage = stage
 	GameState.stage_edit_mode = true
 	GameState.fade_to_scene("res://scenes/main.tscn", 0.25)
+
+
+func _on_stage_button_add_pressed(parent_stage: StageData) -> void:
+	if parent_stage == null or not GameState.dev_mode:
+		return
+	var all_stages: Array[StageData] = _load_all_stage_resources()
+	var child_id: String = _make_unique_child_stage_id(parent_stage, all_stages)
+	var child_path: String = _stage_resource_path_for_id(child_id)
+	var child_stage: StageData = parent_stage.duplicate(true) as StageData
+	child_stage.stage_id = child_id
+	child_stage.stage_name = "Stage %s" % child_id
+	child_stage.prerequisite_stage_id = parent_stage.stage_id
+	child_stage.connects_to = []
+	child_stage.map_hidden = false
+	child_stage.map_position = parent_stage.map_position + NEW_STAGE_OFFSET
+	var err: int = ResourceSaver.save(child_stage, child_path)
+	if err != OK:
+		push_warning("Map: failed to create stage %s (%d)" % [child_path, err])
+		return
+	child_stage = load(child_path) as StageData
+	if child_stage == null:
+		push_warning("Map: created stage could not be loaded: %s" % child_path)
+		return
+	if not parent_stage.connects_to.has(child_id):
+		parent_stage.connects_to.append(child_id)
+		_save_stage(parent_stage)
+	var sb: StageButton = StageButtonScene.instantiate() as StageButton
+	sb.name = "Stage_%s" % _stage_node_suffix(child_id)
+	sb.stage = child_stage
+	_map_page.add_child(sb)
+	_stage_buttons.append(sb)
+	_connect_stage_button(sb)
+	_set_stage_button_position(sb, child_stage.map_position)
+	if _path_layer != null:
+		_path_layer.set("stage_buttons", _stage_buttons)
+	_refresh_stage_buttons()
+
+
+func _on_stage_button_remove_pressed(stage: StageData) -> void:
+	if stage == null or not GameState.dev_mode:
+		return
+	var removed_id: String = stage.stage_id
+	var fallback_prereq: String = stage.prerequisite_stage_id
+	var stage_path: String = stage.resource_path
+	var all_stages: Array[StageData] = _load_all_stage_resources()
+	var reparented_child_ids: Array[String] = []
+	for other_stage in all_stages:
+		if other_stage == null or other_stage.stage_id == removed_id:
+			continue
+		var changed: bool = false
+		if other_stage.connects_to.has(removed_id):
+			other_stage.connects_to.erase(removed_id)
+			changed = true
+		if other_stage.prerequisite_stage_id == removed_id:
+			other_stage.prerequisite_stage_id = fallback_prereq
+			reparented_child_ids.append(other_stage.stage_id)
+			changed = true
+		if changed:
+			_save_stage(other_stage)
+	if fallback_prereq != "" and not reparented_child_ids.is_empty():
+		for other_stage in all_stages:
+			if other_stage == null or other_stage.stage_id != fallback_prereq:
+				continue
+			var changed: bool = false
+			for child_id in reparented_child_ids:
+				if not other_stage.connects_to.has(child_id):
+					other_stage.connects_to.append(child_id)
+					changed = true
+			if changed:
+				_save_stage(other_stage)
+			break
+
+	var physically_removed: bool = false
+	if stage_path != "" and not _scene_stage_paths.has(stage_path):
+		var absolute_path: String = ProjectSettings.globalize_path(stage_path)
+		var remove_err: int = DirAccess.remove_absolute(absolute_path)
+		physically_removed = remove_err == OK
+		if remove_err != OK:
+			push_warning("Map: failed to remove stage file %s (%d)" % [stage_path, remove_err])
+	if not physically_removed:
+		stage.map_hidden = true
+		_save_stage(stage)
+
+	var removed_buttons: Array[StageButton] = []
+	for sb in _stage_buttons:
+		if sb != null and sb.stage == stage:
+			removed_buttons.append(sb)
+	for sb in removed_buttons:
+		_stage_buttons.erase(sb)
+		sb.queue_free()
+	if _path_layer != null:
+		_path_layer.set("stage_buttons", _stage_buttons)
+	_refresh_stage_buttons()
+
+
+func _on_stage_button_dragged(sb: StageButton, target_position: Vector2) -> void:
+	if sb == null or sb.stage == null or not GameState.dev_mode:
+		return
+	var map_position: Vector2 = _map_page.get_global_transform_with_canvas().affine_inverse() * target_position
+	_set_stage_button_position(sb, map_position)
+	if _path_layer != null:
+		_path_layer.queue_redraw()
+
+
+func _on_stage_button_drag_finished(sb: StageButton) -> void:
+	if sb == null or sb.stage == null or not GameState.dev_mode:
+		return
+	_save_stage(sb.stage)
+	if _path_layer != null:
+		_path_layer.queue_redraw()
 
 
 # ── 覆蓋層管理（戰前準備）──────────────────────────────────
@@ -274,11 +528,46 @@ func _play_overlay_close(layer: CanvasLayer, frame: Control, backdrop: Control) 
 	tw.chain().tween_callback(layer.queue_free)
 
 
-# ── F9 Debug Panel ──────────────────────────────────────────
+# ── F4/F9 Dev and Debug Panel ───────────────────────────────
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F9:
-		_toggle_debug_panel()
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_F4:
+			_toggle_dev_mode()
+		elif event.keycode == KEY_F9:
+			_toggle_debug_panel()
+
+
+func _toggle_dev_mode() -> void:
+	GameState.dev_mode = not GameState.dev_mode
+	_refresh_dev_mode_ui()
+	_refresh_stage_buttons()
+
+
+func _build_dev_mode_label() -> void:
+	if _portrait_debug_layer == null:
+		return
+	_dev_mode_label = Label.new()
+	_dev_mode_label.name = "DevModeLabel"
+	_dev_mode_label.anchor_left = 0.0
+	_dev_mode_label.anchor_top = 0.0
+	_dev_mode_label.offset_left = 16.0
+	_dev_mode_label.offset_top = 16.0
+	_dev_mode_label.offset_right = 240.0
+	_dev_mode_label.offset_bottom = 46.0
+	_dev_mode_label.add_theme_font_size_override("font_size", 16)
+	_dev_mode_label.add_theme_color_override("font_color", Color(1, 0.92, 0.35, 1))
+	_dev_mode_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+	_dev_mode_label.add_theme_constant_override("outline_size", 4)
+	_dev_mode_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_portrait_debug_layer.add_child(_dev_mode_label)
+
+
+func _refresh_dev_mode_ui() -> void:
+	if _dev_mode_label == null:
+		return
+	_dev_mode_label.visible = GameState.dev_mode
+	_dev_mode_label.text = "DEV MODE  F4"
 
 
 func _toggle_debug_panel() -> void:

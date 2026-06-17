@@ -8,6 +8,10 @@ extends Control
 
 signal stage_pressed(stage: StageData)
 signal stage_edit_pressed(stage: StageData)
+signal stage_add_pressed(stage: StageData)
+signal stage_remove_pressed(stage: StageData)
+signal stage_dragged(button: StageButton, target_position: Vector2)
+signal stage_drag_finished(button: StageButton)
 
 const RAY_BURST_SCRIPT := preload("res://scripts/ray_burst.gd")
 ## Spot 圖佔總高度的比例（其餘空間留給下方關卡名稱）
@@ -19,7 +23,8 @@ const SPOT_LOCKED_TINT: Color = Color(0.42, 0.42, 0.46, 0.68)
 const SPOT_GLOW_TINT: Color = Color(1.0, 0.92, 0.25, 0.0)
 const LATEST_RAY_COLOR: Color = Color(1.0, 0.93, 0.22, 0.76)
 const CAPTION_BG_HEIGHT_RATIO: float = 0.4
-const EDIT_BUTTON_SIZE: Vector2 = Vector2(42, 28)
+const DEV_BUTTON_SIZE: Vector2 = Vector2(54, 28)
+const DEV_DRAG_THRESHOLD: float = 6.0
 
 ## 綁定的關卡資料（必填）
 @export var stage: StageData = null:
@@ -43,7 +48,8 @@ const EDIT_BUTTON_SIZE: Vector2 = Vector2(42, 28)
 @export var available_tint: Color = Color(1, 1, 1, 1)
 
 var _btn: Button = null
-var _edit_btn: Button = null
+var _add_btn: Button = null
+var _remove_btn: Button = null
 var _label: Label = null
 var _label_bg: TextureRect = null
 var _is_latest: bool = false
@@ -52,6 +58,10 @@ var _spot_rect: TextureRect = null
 var _spot_glow: TextureRect = null
 var _glow_tween: Tween = null
 var _rays: Node2D = null
+var _dev_pointer_down: bool = false
+var _dev_drag_active: bool = false
+var _dev_press_global: Vector2 = Vector2.ZERO
+var _dev_press_offset: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -115,19 +125,31 @@ func _build() -> void:
 	add_child(_btn)
 	if not Engine.is_editor_hint():
 		_btn.pressed.connect(_on_pressed)
+		_btn.gui_input.connect(_on_button_gui_input)
 		_btn.mouse_entered.connect(_on_hover_enter)
 		_btn.mouse_exited.connect(_on_hover_exit)
 
-	_edit_btn = Button.new()
-	_edit_btn.name = "EditBtn"
-	_edit_btn.text = "Edit"
-	_edit_btn.focus_mode = Control.FOCUS_NONE
-	_edit_btn.tooltip_text = "Edit stage layout"
-	_edit_btn.custom_minimum_size = EDIT_BUTTON_SIZE
-	_edit_btn.add_theme_font_size_override("font_size", 11)
-	add_child(_edit_btn)
+	_add_btn = Button.new()
+	_add_btn.name = "AddStageBtn"
+	_add_btn.text = "+"
+	_add_btn.focus_mode = Control.FOCUS_NONE
+	_add_btn.tooltip_text = "Create a child stage"
+	_add_btn.custom_minimum_size = DEV_BUTTON_SIZE
+	_add_btn.add_theme_font_size_override("font_size", 16)
+	add_child(_add_btn)
 	if not Engine.is_editor_hint():
-		_edit_btn.pressed.connect(_on_edit_pressed)
+		_add_btn.pressed.connect(_on_dev_add_pressed)
+
+	_remove_btn = Button.new()
+	_remove_btn.name = "RemoveStageBtn"
+	_remove_btn.text = "Remove"
+	_remove_btn.focus_mode = Control.FOCUS_NONE
+	_remove_btn.tooltip_text = "Remove this stage from the map"
+	_remove_btn.custom_minimum_size = DEV_BUTTON_SIZE
+	_remove_btn.add_theme_font_size_override("font_size", 10)
+	add_child(_remove_btn)
+	if not Engine.is_editor_hint():
+		_remove_btn.pressed.connect(_on_dev_remove_pressed)
 
 	# 關卡名稱標籤背景（仿戰鬥場景敵人意圖：黑色漸層 0→0.5→0）
 	_label_bg = TextureRect.new()
@@ -207,10 +229,12 @@ func _layout() -> void:
 	if _btn != null:
 		_btn.position = spot_display_pos
 		_btn.size = spot_display_size
-	if _edit_btn != null:
-		var edit_y: float = max(0.0, (spot_h - EDIT_BUTTON_SIZE.y) * 0.5)
-		_edit_btn.position = Vector2(0.0, edit_y)
-		_edit_btn.size = EDIT_BUTTON_SIZE
+	if _add_btn != null:
+		_add_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, 0.0)
+		_add_btn.size = DEV_BUTTON_SIZE
+	if _remove_btn != null:
+		_remove_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, DEV_BUTTON_SIZE.y + 4.0)
+		_remove_btn.size = DEV_BUTTON_SIZE
 	if _label_bg != null:
 		var caption_h: float = button_size.y - spot_h
 		var bg_h: float = caption_h * CAPTION_BG_HEIGHT_RATIO
@@ -242,6 +266,8 @@ func is_unlocked_for_play() -> bool:
 		return false
 	if Engine.is_editor_hint():
 		return true
+	if GameState.dev_mode:
+		return true
 	var prereq: String = stage.prerequisite_stage_id
 	return prereq == "" or GameState.is_stage_cleared(prereq)
 
@@ -259,8 +285,7 @@ func _refresh() -> void:
 		if _spot_glow != null:
 			_spot_glow.texture = null
 			_spot_glow.modulate = SPOT_GLOW_TINT
-		if _edit_btn != null:
-			_edit_btn.visible = false
+		_set_dev_buttons_visible(false)
 		visible = true
 		if _label != null:
 			_label.text = ""
@@ -270,11 +295,19 @@ func _refresh() -> void:
 
 	var sid: String = stage.stage_id
 	var in_editor: bool = Engine.is_editor_hint()
+	if not in_editor and stage.map_hidden:
+		visible = false
+		_btn.disabled = true
+		_set_dev_buttons_visible(false)
+		if _rays != null:
+			_rays.visible = false
+		return
 	var unlocked: bool = is_unlocked_for_play()
 	var cleared: bool = not in_editor and GameState.is_stage_cleared(sid)
 	if not in_editor and not unlocked:
 		visible = false
 		_btn.disabled = true
+		_set_dev_buttons_visible(false)
 		if _spot_backdrop != null:
 			_spot_backdrop.visible = false
 		if _rays != null:
@@ -297,9 +330,7 @@ func _refresh() -> void:
 		_spot_glow.texture = spot_texture
 		var glow_alpha: float = _spot_glow.modulate.a
 		_spot_glow.modulate = Color(SPOT_GLOW_TINT.r, SPOT_GLOW_TINT.g, SPOT_GLOW_TINT.b, glow_alpha)
-	if _edit_btn != null:
-		_edit_btn.visible = not in_editor
-		_edit_btn.disabled = false
+	_set_dev_buttons_visible(not in_editor and GameState.dev_mode)
 	if _label != null:
 		_label.text = sid
 	# 未通關時由 set_latest 控制光錐。
@@ -328,6 +359,8 @@ func set_latest(latest: bool) -> void:
 func _on_pressed() -> void:
 	if stage == null:
 		return
+	if GameState.dev_mode:
+		return
 	if not is_unlocked_for_play():
 		return
 	stage_pressed.emit(stage)
@@ -337,6 +370,57 @@ func _on_edit_pressed() -> void:
 	if stage == null:
 		return
 	stage_edit_pressed.emit(stage)
+
+
+func _set_dev_buttons_visible(show: bool) -> void:
+	if _add_btn != null:
+		_add_btn.visible = show
+		_add_btn.disabled = not show
+	if _remove_btn != null:
+		_remove_btn.visible = show
+		_remove_btn.disabled = not show
+
+
+func _on_dev_add_pressed() -> void:
+	if stage == null:
+		return
+	stage_add_pressed.emit(stage)
+
+
+func _on_dev_remove_pressed() -> void:
+	if stage == null:
+		return
+	stage_remove_pressed.emit(stage)
+
+
+func _on_button_gui_input(event: InputEvent) -> void:
+	if Engine.is_editor_hint() or not GameState.dev_mode or stage == null:
+		return
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mb.pressed:
+			_dev_pointer_down = true
+			_dev_drag_active = false
+			_dev_press_global = get_global_mouse_position()
+			_dev_press_offset = _dev_press_global - global_position
+			accept_event()
+		elif _dev_pointer_down:
+			if _dev_drag_active:
+				stage_drag_finished.emit(self)
+			else:
+				stage_pressed.emit(stage)
+			_dev_pointer_down = false
+			_dev_drag_active = false
+			accept_event()
+	elif event is InputEventMouseMotion and _dev_pointer_down:
+		var current_global: Vector2 = get_global_mouse_position()
+		if not _dev_drag_active and current_global.distance_to(_dev_press_global) >= DEV_DRAG_THRESHOLD:
+			_dev_drag_active = true
+		if _dev_drag_active:
+			stage_dragged.emit(self, current_global - _dev_press_offset)
+			accept_event()
 
 
 func _on_hover_enter() -> void:

@@ -235,6 +235,8 @@ func _default_element_distribution() -> Dictionary:
 @export var prerequisite_stage_id: String = ""
 ## 世界地圖連線：本關卡通往下一關的 stage_id 列表（可一對多）。
 @export var connects_to: Array[String] = []
+@export var map_position: Vector2 = Vector2(-1.0, -1.0)
+@export var map_hidden: bool = false
 @export var stage_name: String = "Stage 1"  # 關卡名稱
 @export var element_weights: Array[int] = []
 @export var allowed_types: Array[Block.Type] = [Block.Type.RED, Block.Type.BLUE, Block.Type.GREEN]  # 允許的寶石類型
