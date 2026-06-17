@@ -9933,7 +9933,8 @@ func _on_battle_won() -> void:
 func _complete_battle_won() -> void:
 	board.is_busy = true
 	# ── 最後一隻敵人死亡 → 立刻交叉淡入勝利音樂 ──
-	GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")
+	if current_stage == null or current_stage.mode != StageData.Mode.PUZZLE:
+		GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")
 	_bgm_player = GameState.bgm_player
 	# ── 教學：Boss 擊敗後收尾對話（勝利橫幅前）──
 	if current_stage.is_tutorial and _battle_dialog != null:
@@ -10010,7 +10011,8 @@ func _show_victory_overlay() -> void:
 
 	# "VICTORY!" 標題（bounce 動畫）
 	var title := Label.new()
-	title.text = Locale.tr_ui("VICTORY")
+	var victory_text_key: String = "COMPLETE" if current_stage != null and current_stage.mode == StageData.Mode.PUZZLE else "VICTORY"
+	title.text = Locale.tr_ui(victory_text_key)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_CENTER)

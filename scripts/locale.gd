@@ -10,6 +10,7 @@ var current_locale: String = "zh"
 var _translations: Dictionary = {
 	"BATTLE_RESULT": {"zh": "戰鬥結算", "en": "BATTLE RESULT"},
 	"VICTORY": {"zh": "勝利！", "en": "VICTORY!"},
+	"COMPLETE": {"zh": "完成", "en": "COMPLETE"},
 	"DEFEATED": {"zh": "戰敗", "en": "DEFEATED"},
 	"PUZZLE_WRONG_DEFEAT": {"zh": "再試一次?", "en": "Try again?"},
 	"PUZZLE_TURNS_LEFT": {"zh": "剩餘步數", "en": "Turn Left"},

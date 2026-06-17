@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dlekct0ceqft2"
+path="res://.godot/imported/Lantern Puzzle.mp3-170212bcb11b0ceeb6706bf45ac8b38a.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Lantern Puzzle.mp3"
+dest_files=["res://.godot/imported/Lantern Puzzle.mp3-170212bcb11b0ceeb6706bf45ac8b38a.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
