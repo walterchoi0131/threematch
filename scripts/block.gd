@@ -514,7 +514,7 @@ func play_puzzle_key_unlock_pop() -> void:
 	var layer := _ensure_puzzle_key_gem_layer()
 	layer.scale = DEFAULT_GEM_SPRITE_SCALE
 	var tween := create_tween()
-	tween.tween_property(layer, "scale", DEFAULT_GEM_SPRITE_SCALE * 1.4, 0.2).set_ease(Tween.EASE_OUT)
+	tween.tween_property(layer, "scale", DEFAULT_GEM_SPRITE_SCALE * 1.4, 0.75).set_ease(Tween.EASE_OUT)
 	tween.tween_property(layer, "scale", DEFAULT_GEM_SPRITE_SCALE, 0.2).set_trans(Tween.TRANS_BACK)
 
 

@@ -9670,6 +9670,11 @@ func _finish_puzzle_goal_after_feedback() -> void:
 		return
 	if _puzzle_turn_limit_failed or _victory_overlay != null or _defeat_overlay != null:
 		return
+	await get_tree().create_timer(1.0).timeout
+	if not _puzzle_mode or not _puzzle_goal_completed:
+		return
+	if _puzzle_turn_limit_failed or _victory_overlay != null or _defeat_overlay != null:
+		return
 	battle_manager.battle_won.emit()
 
 
