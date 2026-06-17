@@ -18,6 +18,12 @@ const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
 const PUZZLE_KEY_HUD_BASE_TEXTURE := preload("res://assets/blocks/puzzle_key_unlocked.png")
 const PUZZLE_KEY_HUD_GEM_TEXTURE := preload("res://assets/blocks/puzzle_key_gem.png")
 const PUZZLE_KEY_HUD_AURA_COLOR := Color(0.18, 0.95, 0.86, 0.62)
+const GOLD_COIN_VIEWPORT_SIZE := 72
+const GOLD_COIN_FLOOR_DROP := Vector2(0.0, 46.0)
+const GOLD_COIN_DROP_DURATION := 0.34
+const GOLD_COIN_SPIN_HOLD_DURATION := 1.0
+const GOLD_COIN_FLY_DURATION := 1.04
+const GOLD_COIN_FADE_DURATION := 0.18
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board = $Board
@@ -227,6 +233,9 @@ var _bgm_preview_tween: Tween = null         # 音量/速度 tween
 # ── 戰利品 ───────────────────────────────────────────────────
 var _battle_loot: Dictionary = {}  # 本場戰鬥積累的戰利品; key=ItemDefs.Type, value=int
 var _battle_exp: int = 0           # 本場戰鬥積累的經驗值
+var _gold_counter_panel: PanelContainer = null
+var _gold_counter_label: Label = null
+var _gold_counter_displayed: int = 0
 var _defeat_overlay: Control = null  # 敗戰覆蓋層
 var _victory_overlay: Control = null  # 勝利覆蓋層
 const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
@@ -421,6 +430,7 @@ func _ready() -> void:
 	return_button.text = Locale.tr_ui("EXIT")
 	return_button.visible = true
 	_setup_kill_all_button()
+	_setup_gold_counter_ui()
 	_setup_escape_hud()
 	_setup_puzzle_goal_hud()
 
@@ -555,6 +565,9 @@ func _apply_safe_area() -> void:
 	if ret_btn:
 		ret_btn.offset_top = -96.0 - bottom_inset
 		ret_btn.offset_bottom = -56.0 - bottom_inset
+	if is_instance_valid(_gold_counter_panel):
+		_gold_counter_panel.offset_top = top_inset + 48.0
+		_gold_counter_panel.offset_bottom = top_inset + 86.0
 
 
 func _setup_stage_edit_mode() -> void:
@@ -8371,17 +8384,170 @@ func _show_boss_intro() -> void:
 	await _fade_in_spawned_enemies(0.45, true)
 
 
+func _setup_gold_counter_ui() -> void:
+	if _gold_counter_panel != null:
+		return
+	_gold_counter_panel = PanelContainer.new()
+	_gold_counter_panel.name = "StageGoldCounter"
+	_gold_counter_panel.anchor_left = 1.0
+	_gold_counter_panel.anchor_right = 1.0
+	_gold_counter_panel.offset_left = -160.0
+	_gold_counter_panel.offset_top = 48.0
+	_gold_counter_panel.offset_right = -16.0
+	_gold_counter_panel.offset_bottom = 86.0
+	_gold_counter_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.07, 0.04, 0.72)
+	style.border_color = Color(1.0, 0.78, 0.16, 0.86)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(4)
+	_gold_counter_panel.add_theme_stylebox_override("panel", style)
+	$UILayer.add_child(_gold_counter_panel)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	_gold_counter_panel.add_child(row)
+
+	var icon := _make_gold_coin_viewport(32, false)
+	row.add_child(icon)
+
+	_gold_counter_label = Label.new()
+	_gold_counter_label.add_theme_font_size_override("font_size", 20)
+	_gold_counter_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.26, 1.0))
+	_gold_counter_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+	_gold_counter_label.add_theme_constant_override("outline_size", 4)
+	_gold_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_gold_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_gold_counter_label.custom_minimum_size = Vector2(86, 30)
+	row.add_child(_gold_counter_label)
+	_set_gold_counter_value(0, false)
+
+
+func _set_gold_counter_value(value: int, pulse: bool = true) -> void:
+	_gold_counter_displayed = maxi(0, value)
+	if _gold_counter_label != null:
+		_gold_counter_label.text = "%d" % _gold_counter_displayed
+	if pulse and _gold_counter_panel != null:
+		var tw := create_tween()
+		tw.tween_property(_gold_counter_panel, "scale", Vector2(1.12, 1.12), 0.08)
+		tw.tween_property(_gold_counter_panel, "scale", Vector2.ONE, 0.14).set_ease(Tween.EASE_OUT)
+
+
+func _make_gold_coin_viewport(pixel_size: int, animate_spin: bool = true) -> SubViewportContainer:
+	var container := SubViewportContainer.new()
+	container.name = "GoldCoin3D"
+	container.custom_minimum_size = Vector2(pixel_size, pixel_size)
+	container.size = Vector2(pixel_size, pixel_size)
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	container.stretch = true
+
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(pixel_size, pixel_size)
+	viewport.transparent_bg = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	container.add_child(viewport)
+
+	var root := Node3D.new()
+	root.name = "CoinRoot"
+	viewport.add_child(root)
+
+	var coin_mat := StandardMaterial3D.new()
+	coin_mat.albedo_color = Color(1.0, 0.72, 0.08, 1.0)
+	coin_mat.metallic = 0.75
+	coin_mat.roughness = 0.24
+
+	var coin_mesh := CylinderMesh.new()
+	coin_mesh.top_radius = 0.82
+	coin_mesh.bottom_radius = 0.82
+	coin_mesh.height = 0.16
+	coin_mesh.radial_segments = 64
+	var coin := MeshInstance3D.new()
+	coin.name = "CoinMesh"
+	coin.mesh = coin_mesh
+	coin.material_override = coin_mat
+	coin.rotation_degrees.x = 90.0
+	root.add_child(coin)
+
+	var label := Label3D.new()
+	label.name = "CoinMark"
+	label.text = "$"
+	label.font_size = 72
+	label.modulate = Color(1.0, 0.94, 0.42, 1.0)
+	label.outline_modulate = Color(0.38, 0.20, 0.02, 1.0)
+	label.outline_size = 8
+	label.position = Vector3(0.0, 0.0, 0.11)
+	root.add_child(label)
+
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-38.0, -28.0, 0.0)
+	light.light_energy = 2.2
+	viewport.add_child(light)
+
+	var camera := Camera3D.new()
+	camera.position = Vector3(0.0, 0.0, 3.0)
+	camera.look_at(Vector3.ZERO)
+	camera.current = true
+	viewport.add_child(camera)
+
+	if animate_spin:
+		var spin := create_tween().set_loops()
+		spin.tween_property(root, "rotation_degrees:y", 360.0, 0.72).from(0.0)
+	container.set_meta("coin_root", root)
+	return container
+
+
+func _play_gold_coin_drop(start_position: Vector2, amount: int, target_total: int) -> void:
+	if fx_layer == null:
+		_set_gold_counter_value(target_total)
+		return
+	var coin := _make_gold_coin_viewport(GOLD_COIN_VIEWPORT_SIZE, true)
+	coin.position = start_position - Vector2(GOLD_COIN_VIEWPORT_SIZE, GOLD_COIN_VIEWPORT_SIZE) * 0.5
+	coin.scale = Vector2(0.8, 0.8)
+	fx_layer.add_child(coin)
+
+	var amount_label := Label.new()
+	amount_label.text = "+%d" % amount
+	amount_label.add_theme_font_size_override("font_size", 18)
+	amount_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.28, 1.0))
+	amount_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+	amount_label.add_theme_constant_override("outline_size", 4)
+	amount_label.position = Vector2(GOLD_COIN_VIEWPORT_SIZE * 0.62, GOLD_COIN_VIEWPORT_SIZE * 0.52)
+	coin.add_child(amount_label)
+
+	var floor_position: Vector2 = start_position + GOLD_COIN_FLOOR_DROP
+	var target_position: Vector2 = floor_position
+	if is_instance_valid(_gold_counter_panel):
+		target_position = _gold_counter_panel.get_global_rect().get_center()
+	var target_control_position: Vector2 = target_position - Vector2(GOLD_COIN_VIEWPORT_SIZE, GOLD_COIN_VIEWPORT_SIZE) * 0.5
+	var floor_control_position: Vector2 = floor_position - Vector2(GOLD_COIN_VIEWPORT_SIZE, GOLD_COIN_VIEWPORT_SIZE) * 0.5
+
+	var tw := create_tween()
+	tw.tween_property(coin, "position", floor_control_position, GOLD_COIN_DROP_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BOUNCE)
+	tw.tween_interval(GOLD_COIN_SPIN_HOLD_DURATION)
+	tw.tween_property(coin, "position", target_control_position, GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	tw.parallel().tween_property(coin, "scale", Vector2(0.42, 0.42), GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func() -> void:
+		_set_gold_counter_value(maxi(_gold_counter_displayed, target_total))
+		if is_instance_valid(coin):
+			coin.queue_free()
+	)
+
+	var fade_tw := create_tween()
+	fade_tw.tween_interval(GOLD_COIN_DROP_DURATION + GOLD_COIN_SPIN_HOLD_DURATION + GOLD_COIN_FLY_DURATION - GOLD_COIN_FADE_DURATION)
+	fade_tw.tween_property(coin, "modulate:a", 0.35, GOLD_COIN_FADE_DURATION).set_ease(Tween.EASE_IN)
+
+
 ## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
-func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int) -> void:
+func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int, drop_position: Vector2) -> void:
 	# 累計本場經驗值
 	_battle_exp += enemy_data.get_exp_drop_for_level(enemy_level)
 
 	# 找出死亡的敵人節點以取得浮動文字位置（若找不到就用螢幕中央）
-	var popup_pos := Vector2(get_viewport().get_visible_rect().size / 2)
-	for enemy in battle_manager.active_enemies:
-		if is_instance_valid(enemy) and enemy.data == enemy_data:
-			popup_pos = enemy.get_global_rect().get_center()
-			break
+	var popup_pos: Vector2 = drop_position
+	if popup_pos == Vector2.ZERO:
+		popup_pos = Vector2(get_viewport().get_visible_rect().size / 2)
 
 	for result: Dictionary in results:
 		var type: ItemDefs.Type = result.type
@@ -8389,6 +8555,8 @@ func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int) -
 		# 積累到本場計數
 		var current: int = _battle_loot.get(type, 0)
 		_battle_loot[type] = current + amount
+		if type == ItemDefs.Type.GOLD:
+			_play_gold_coin_drop(popup_pos, amount, int(_battle_loot[type]))
 		# 浮動文字
 		var label_text := "+%d %s" % [amount, ItemDefs.get_display_name(type)]
 		var color: Color = ItemDefs.get_color(type)

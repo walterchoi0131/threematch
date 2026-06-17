@@ -18,7 +18,7 @@ signal enemy_stone_magic_cast(enemy: Enemy)
 signal enemy_long_pressed(enemy: Enemy)
 signal round_transitioning()  ## 波次轉換中（鎖定棋盤用）
 signal round_spawned(round_idx: int)  ## 一波敵人已生成完畢
-signal loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int)  ## 敵人死亡時擁骨的戰利品 (results = Array[Dictionary])
+signal loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int, drop_position: Vector2)  ## 敵人死亡時擁有的戰利品 (results = Array[Dictionary])
 signal turn_gem_blasts_changed()  ## 本回合寶石計數（含 pending_skill_blasts）變動
 # ── references set by Main ────────────────────────────────────────────
 var enemy_container: HBoxContainer
@@ -723,7 +723,7 @@ func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
 		if not result.is_empty():
 			loot_results.append(result)
 	if not loot_results.is_empty():
-		loot_dropped.emit(dead_enemy.data, loot_results, dead_enemy.spawn_level)
+		loot_dropped.emit(dead_enemy.data, loot_results, dead_enemy.spawn_level, dead_enemy.get_global_rect().get_center())
 	active_enemies.erase(dead_enemy)
 	logic_enemy_hp.erase(dead_enemy)
 	if targeted_enemy == dead_enemy:
