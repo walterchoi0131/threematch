@@ -119,10 +119,19 @@ func _make_item_card(type: ItemDefs.Type, amount: int) -> PanelContainer:
 
 	var color: Color = ItemDefs.get_color(type)
 
-	var dot := ColorRect.new()
-	dot.custom_minimum_size = Vector2(20, 20)
-	dot.color = color
-	hbox.add_child(dot)
+	var image: Texture2D = ItemDefs.get_image(type)
+	if image != null:
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(28, 28)
+		icon.texture = image
+		icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hbox.add_child(icon)
+	else:
+		var dot := ColorRect.new()
+		dot.custom_minimum_size = Vector2(20, 20)
+		dot.color = color
+		hbox.add_child(dot)
 
 	var lbl := _make_label("%s  ×%d" % [ItemDefs.get_display_name(type), amount], 18, color)
 	hbox.add_child(lbl)

@@ -34,6 +34,7 @@ const _MAIN_STAGE_PREREQUISITES := {
 }
 const DEFAULT_CHARACTER_LEVEL := 5
 const DEFAULT_CHARACTER_EXP := 0
+const GOLD_ECONOMIC_MULTIPLIER := 50
 const DEFAULT_CHARACTER_PATHS := [
 	"res://characters/char_boar.tres",
 	"res://characters/char_raccoon.tres",

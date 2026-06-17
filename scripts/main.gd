@@ -21,9 +21,20 @@ const PUZZLE_KEY_HUD_AURA_COLOR := Color(0.18, 0.95, 0.86, 0.62)
 const GOLD_COIN_VIEWPORT_SIZE := 72
 const GOLD_COIN_FLOOR_DROP := Vector2(0.0, 46.0)
 const GOLD_COIN_DROP_DURATION := 0.34
-const GOLD_COIN_SPIN_HOLD_DURATION := 1.0
+const GOLD_COIN_SPIN_HOLD_DURATION := 0.5
 const GOLD_COIN_FLY_DURATION := 1.04
 const GOLD_COIN_FADE_DURATION := 0.18
+const LOOT_FLY_ICON_SIZE := 52
+const LOOT_TOAST_SIZE := Vector2(184.0, 64.0)
+const LOOT_TOAST_GAP := 8.0
+const LOOT_TOAST_ICON_SIZE := 56
+const LOOT_TOAST_RIGHT_MARGIN := 16.0
+const LOOT_TOAST_TOP_OFFSET := 48.0
+const LOOT_TOAST_SLIDE_IN_DURATION := 0.18
+const LOOT_TOAST_HOLD_DURATION := 1.15
+const LOOT_TOAST_SLIDE_OUT_DURATION := 0.28
+
+signal loot_animations_finished()
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board = $Board
@@ -233,9 +244,11 @@ var _bgm_preview_tween: Tween = null         # 音量/速度 tween
 # ── 戰利品 ───────────────────────────────────────────────────
 var _battle_loot: Dictionary = {}  # 本場戰鬥積累的戰利品; key=ItemDefs.Type, value=int
 var _battle_exp: int = 0           # 本場戰鬥積累的經驗值
-var _gold_counter_panel: PanelContainer = null
-var _gold_counter_label: Label = null
-var _gold_counter_displayed: int = 0
+var _loot_toast_totals: Dictionary = {}
+var _active_loot_animation_count: int = 0
+var _active_loot_toasts: Array[Dictionary] = []
+var _loot_toast_queue: Array[Dictionary] = []
+var _loot_toast_starting: bool = false
 var _defeat_overlay: Control = null  # 敗戰覆蓋層
 var _victory_overlay: Control = null  # 勝利覆蓋層
 const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
@@ -282,7 +295,6 @@ const STAGE_EDITOR_TAB_AFTER := "after"
 var _stage_editor_panel: PanelContainer = null
 var _stage_editor_root_box: VBoxContainer = null
 var _stage_editor_area_panel: PanelContainer = null
-var _stage_editor_action_panel: PanelContainer = null
 var _stage_editor_tab_panel: PanelContainer = null
 var _stage_editor_dialog_panel: PanelContainer = null
 var _stage_editor_palette_scroll: ScrollContainer = null
@@ -430,7 +442,6 @@ func _ready() -> void:
 	return_button.text = Locale.tr_ui("EXIT")
 	return_button.visible = true
 	_setup_kill_all_button()
-	_setup_gold_counter_ui()
 	_setup_escape_hud()
 	_setup_puzzle_goal_hud()
 
@@ -565,9 +576,6 @@ func _apply_safe_area() -> void:
 	if ret_btn:
 		ret_btn.offset_top = -96.0 - bottom_inset
 		ret_btn.offset_bottom = -56.0 - bottom_inset
-	if is_instance_valid(_gold_counter_panel):
-		_gold_counter_panel.offset_top = top_inset + 48.0
-		_gold_counter_panel.offset_bottom = top_inset + 86.0
 
 
 func _setup_stage_edit_mode() -> void:
@@ -608,7 +616,6 @@ func _build_stage_editor_ui() -> void:
 	_stage_editor_load_dialog_background_catalog()
 	_stage_editor_load_dialog_music_catalog()
 	_build_stage_editor_area_panel()
-	_build_stage_editor_action_panel()
 	_build_stage_editor_tab_panel()
 	_build_stage_editor_dialog_panel()
 	if _stage_editor_panel != null:
@@ -694,7 +701,7 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_panel = PanelContainer.new()
 	_stage_editor_area_panel.name = "StageEditorAreaPanel"
 	_stage_editor_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_stage_editor_area_panel.custom_minimum_size = Vector2(420, 82)
+	_stage_editor_area_panel.custom_minimum_size = Vector2(420, 108)
 	_stage_editor_area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
 	$UILayer.add_child(_stage_editor_area_panel)
 
@@ -810,6 +817,17 @@ func _build_stage_editor_area_panel() -> void:
 	distribution_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(distribution_box)
 
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 4)
+	distribution_box.add_child(action_row)
+
+	action_row.add_child(_make_stage_editor_mode_button("Normal", StageData.Mode.NORMAL))
+	action_row.add_child(_make_stage_editor_mode_button("Escape", StageData.Mode.ESCAPE))
+	action_row.add_child(_make_stage_editor_mode_button("Puzzle", StageData.Mode.PUZZLE))
+	action_row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
+	action_row.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
+	action_row.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
+
 	var dist_title := Label.new()
 	dist_title.text = Locale.tr_ui("ELEMENT_DISTRIBUTION")
 	dist_title.add_theme_font_size_override("font_size", 11)
@@ -822,6 +840,7 @@ func _build_stage_editor_area_panel() -> void:
 
 	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
 		dist_row.add_child(_make_stage_editor_distribution_spin(type_value))
+	_refresh_stage_editor_mode_buttons()
 
 
 func _make_stage_editor_distribution_spin(type_value: int) -> Control:
@@ -908,8 +927,8 @@ func _make_stage_editor_reward_row() -> Control:
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var reward_label := Label.new()
-	reward_label.text = "Reward"
-	reward_label.custom_minimum_size = Vector2(50, 22)
+	reward_label.text = "Clear Reward"
+	reward_label.custom_minimum_size = Vector2(82, 22)
 	reward_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	reward_label.add_theme_font_size_override("font_size", 10)
 	reward_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
@@ -919,6 +938,7 @@ func _make_stage_editor_reward_row() -> Control:
 	_stage_editor_reward_item_option.focus_mode = Control.FOCUS_NONE
 	_stage_editor_reward_item_option.custom_minimum_size = Vector2(92, 24)
 	_stage_editor_reward_item_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_reward_item_option.tooltip_text = "Stage clear reward item. Enemy loot is edited on each enemy card."
 	_stage_editor_make_compact_option_button(_stage_editor_reward_item_option)
 	_stage_editor_reward_item_option.item_selected.connect(_on_stage_editor_reward_changed)
 	row.add_child(_stage_editor_reward_item_option)
@@ -927,7 +947,7 @@ func _make_stage_editor_reward_row() -> Control:
 	_stage_editor_reward_amount_edit.custom_minimum_size = Vector2(48, 24)
 	_stage_editor_reward_amount_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stage_editor_reward_amount_edit.add_theme_font_size_override("font_size", 11)
-	_stage_editor_reward_amount_edit.tooltip_text = "One-time reward item amount."
+	_stage_editor_reward_amount_edit.tooltip_text = "Stage clear reward item amount."
 	_stage_editor_reward_amount_edit.text_submitted.connect(func(_text: String) -> void: _on_stage_editor_reward_changed(0))
 	_stage_editor_reward_amount_edit.focus_exited.connect(func() -> void: _on_stage_editor_reward_changed(0))
 	row.add_child(_stage_editor_reward_amount_edit)
@@ -937,42 +957,13 @@ func _make_stage_editor_reward_row() -> Control:
 	_stage_editor_reward_character_option.custom_minimum_size = Vector2(150, 24)
 	_stage_editor_reward_character_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_reward_character_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_reward_character_option.tooltip_text = "Stage clear reward character. Enemy loot is edited on each enemy card."
 	_stage_editor_make_compact_option_button(_stage_editor_reward_character_option)
 	_stage_editor_reward_character_option.item_selected.connect(_on_stage_editor_reward_changed)
 	row.add_child(_stage_editor_reward_character_option)
 
 	_refresh_stage_editor_reward_controls()
 	return row
-
-
-func _build_stage_editor_action_panel() -> void:
-	if _stage_editor_action_panel != null:
-		return
-	_stage_editor_action_panel = PanelContainer.new()
-	_stage_editor_action_panel.name = "StageEditorActions"
-	_stage_editor_action_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_stage_editor_action_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
-	$UILayer.add_child(_stage_editor_action_panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 5)
-	margin.add_theme_constant_override("margin_top", 1)
-	margin.add_theme_constant_override("margin_right", 5)
-	margin.add_theme_constant_override("margin_bottom", 1)
-	_stage_editor_action_panel.add_child(margin)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	margin.add_child(row)
-
-	row.add_child(_make_stage_editor_mode_button("Normal", StageData.Mode.NORMAL))
-	row.add_child(_make_stage_editor_mode_button("Escape", StageData.Mode.ESCAPE))
-	row.add_child(_make_stage_editor_mode_button("Puzzle", StageData.Mode.PUZZLE))
-	row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
-	row.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
-	row.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
-	_refresh_stage_editor_mode_buttons()
-
 
 func _build_stage_editor_tab_panel() -> void:
 	if _stage_editor_tab_panel != null:
@@ -1211,8 +1202,6 @@ func _stage_editor_select_tab(tab_id: String) -> void:
 		_stage_editor_enemy_picker_panel.visible = false
 	if _stage_editor_dialog_panel != null:
 		_stage_editor_dialog_panel.visible = not board_tab
-	if _stage_editor_action_panel != null:
-		_stage_editor_action_panel.visible = true
 	_update_stage_editor_tab_buttons()
 	_layout_stage_editor_ui()
 
@@ -2585,8 +2574,8 @@ func _make_stage_editor_command_button(label_text: String, callback: Callable) -
 	var button := Button.new()
 	button.text = label_text
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(74, 26)
-	button.add_theme_font_size_override("font_size", 12)
+	button.custom_minimum_size = Vector2(60, 24)
+	button.add_theme_font_size_override("font_size", 11)
 	button.pressed.connect(callback)
 	return button
 
@@ -2596,8 +2585,8 @@ func _make_stage_editor_mode_button(label_text: String, mode_value: int) -> Butt
 	button.text = label_text
 	button.toggle_mode = true
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(68, 26)
-	button.add_theme_font_size_override("font_size", 12)
+	button.custom_minimum_size = Vector2(62, 24)
+	button.add_theme_font_size_override("font_size", 11)
 	button.tooltip_text = "Stage mode: %s" % label_text
 	button.pressed.connect(_on_stage_editor_mode_button_pressed.bind(mode_value))
 	_stage_editor_mode_buttons[mode_value] = button
@@ -2661,7 +2650,7 @@ func _stage_editor_load_round_state() -> void:
 		var round_copy: Array = []
 		for enemy_variant in source_round:
 			if enemy_variant is EnemyData:
-				round_copy.append(enemy_variant)
+				round_copy.append(_stage_editor_make_editable_enemy_copy(enemy_variant as EnemyData))
 		_stage_editor_rounds.append(round_copy)
 
 		var cd_copy: Array = []
@@ -2704,6 +2693,28 @@ func _stage_editor_load_round_state() -> void:
 		_stage_editor_rounds_main_bosses.append(boss_copy)
 	_stage_editor_normalize_cd_lists()
 	_stage_editor_clamp_current_round_index()
+
+
+func _stage_editor_make_editable_enemy_copy(source: EnemyData) -> EnemyData:
+	if source == null:
+		return null
+	var copy: EnemyData = source.duplicate(true) as EnemyData
+	if copy == null:
+		return source
+	var source_path: String = String(source.get_meta("stage_editor_source_path", source.resource_path)).strip_edges()
+	copy.resource_path = ""
+	copy.set_meta("stage_editor_source_path", source_path)
+	if source.resource_path.is_empty() and copy.stage_extra_loot_table.is_empty():
+		for loot: LootItem in copy.loot_table:
+			if loot == null:
+				continue
+			if loot.item_type != ItemDefs.Type.GOLD:
+				copy.stage_extra_loot_table.append(loot)
+	copy.loot_table = []
+	for loot: LootItem in copy.stage_extra_loot_table:
+		if loot != null:
+			loot.resource_path = ""
+	return copy
 
 
 func _stage_editor_normalize_cd_lists() -> void:
@@ -2794,7 +2805,7 @@ func _layout_stage_editor_enemy_area() -> void:
 		return
 	var viewport_size: Vector2 = ViewportUtils.get_size()
 	var insets: Vector4 = ViewportUtils.get_safe_insets()
-	var panel_height := 130.0
+	var panel_height := 184.0
 	var panel_top: float = maxf(44.0 + insets.x, board.position.y - panel_height - 6.0)
 	var panel_width: float = maxf(120.0, viewport_size.x - 24.0)
 	_stage_editor_set_control_rect(_stage_editor_enemy_area_panel, Rect2(12.0, panel_top, panel_width, panel_height))
@@ -2803,7 +2814,7 @@ func _layout_stage_editor_enemy_area() -> void:
 	_stage_editor_set_control_rect(_stage_editor_add_round_button, Rect2(panel_width - 76.0, 8.0, 32.0, 28.0))
 	_stage_editor_set_control_rect(_stage_editor_next_round_button, Rect2(panel_width - 120.0, 8.0, 38.0, 28.0))
 	_stage_editor_set_control_rect(_stage_editor_enemy_area_round_label, Rect2(50.0, 8.0, maxf(80.0, panel_width - 176.0), 28.0))
-	_stage_editor_set_control_rect(_stage_editor_enemy_area_slots, Rect2(8.0, 42.0, panel_width - 16.0, 82.0))
+	_stage_editor_set_control_rect(_stage_editor_enemy_area_slots, Rect2(8.0, 42.0, panel_width - 16.0, 136.0))
 
 
 func _stage_editor_is_normal_mode() -> bool:
@@ -2997,8 +3008,8 @@ func _refresh_stage_editor_enemy_area() -> void:
 	var round_list: Array = _stage_editor_rounds[round_index]
 	if _stage_editor_enemy_area_round_label != null:
 		_stage_editor_enemy_area_round_label.text = "Round %d / %d  (%d enemies)" % [round_index + 1, _stage_editor_rounds.size(), round_list.size()]
-	var card_width := 116.0
-	var card_height := 78.0
+	var card_width := 180.0
+	var card_height := 132.0
 	var gap := 8.0
 	var x := 0.0
 	for enemy_index in round_list.size():
@@ -3008,7 +3019,7 @@ func _refresh_stage_editor_enemy_area() -> void:
 		x += card_width + gap
 	var add_enemy_slot: Control = _make_stage_editor_add_enemy_slot(round_index)
 	_stage_editor_enemy_area_slots.add_child(add_enemy_slot)
-	_stage_editor_set_control_rect(add_enemy_slot, Rect2(x, 0.0, 78.0, 78.0))
+	_stage_editor_set_control_rect(add_enemy_slot, Rect2(x, 27.0, 78.0, 78.0))
 
 
 func _make_stage_editor_add_round_slot() -> Control:
@@ -3069,29 +3080,30 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 
 	var name_label := Label.new()
 	name_label.text = enemy_data.get_display_name()
-	name_label.tooltip_text = enemy_data.resource_path if not enemy_data.resource_path.is_empty() else enemy_data.get_display_name()
+	var source_path: String = String(enemy_data.get_meta("stage_editor_source_path", enemy_data.resource_path))
+	name_label.tooltip_text = source_path if not source_path.is_empty() else enemy_data.get_display_name()
 	name_label.add_theme_font_size_override("font_size", 10)
 	name_label.add_theme_color_override("font_color", Color.WHITE)
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	card.add_child(name_label)
-	_stage_editor_set_control_rect(name_label, Rect2(50.0, 4.0, 38.0, 24.0))
+	_stage_editor_set_control_rect(name_label, Rect2(50.0, 4.0, 98.0, 24.0))
 
 	var remove_button: Button = _make_stage_editor_small_button("X", _on_stage_editor_remove_enemy_pressed.bind(round_index, enemy_index), Vector2(22, 22))
 	card.add_child(remove_button)
-	_stage_editor_set_control_rect(remove_button, Rect2(90.0, 4.0, 22.0, 22.0))
+	_stage_editor_set_control_rect(remove_button, Rect2(154.0, 4.0, 22.0, 22.0))
 
 	var level_label := Label.new()
 	level_label.text = "Lv%d" % level_value
 	level_label.add_theme_font_size_override("font_size", 10)
 	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add_child(level_label)
-	_stage_editor_set_control_rect(level_label, Rect2(50.0, 28.0, 38.0, 20.0))
+	_stage_editor_set_control_rect(level_label, Rect2(50.0, 28.0, 46.0, 20.0))
 
 	var boss_button: Button = _make_stage_editor_small_button("B", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(22, 22))
 	boss_button.tooltip_text = "Main boss spawn"
 	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
 	card.add_child(boss_button)
-	_stage_editor_set_control_rect(boss_button, Rect2(90.0, 28.0, 22.0, 22.0))
+	_stage_editor_set_control_rect(boss_button, Rect2(154.0, 28.0, 22.0, 22.0))
 
 	var minus_button: Button = _make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(22, 22))
 	card.add_child(minus_button)
@@ -3101,13 +3113,63 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	cd_label.add_theme_font_size_override("font_size", 10)
 	cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add_child(cd_label)
-	_stage_editor_set_control_rect(cd_label, Rect2(28.0, 52.0, 34.0, 22.0))
+	_stage_editor_set_control_rect(cd_label, Rect2(28.0, 52.0, 46.0, 22.0))
 	var plus_button: Button = _make_stage_editor_small_button("+", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, 1), Vector2(22, 22))
 	card.add_child(plus_button)
-	_stage_editor_set_control_rect(plus_button, Rect2(64.0, 52.0, 22.0, 22.0))
+	_stage_editor_set_control_rect(plus_button, Rect2(76.0, 52.0, 22.0, 22.0))
 	var auto_button: Button = _make_stage_editor_small_button("A", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(22, 22))
 	card.add_child(auto_button)
-	_stage_editor_set_control_rect(auto_button, Rect2(88.0, 52.0, 22.0, 22.0))
+	_stage_editor_set_control_rect(auto_button, Rect2(100.0, 52.0, 22.0, 22.0))
+
+	var loot_entry: LootItem = _stage_editor_get_primary_loot(enemy_data)
+	var loot_caption := Label.new()
+	loot_caption.text = "Loot"
+	loot_caption.add_theme_font_size_override("font_size", 9)
+	loot_caption.add_theme_color_override("font_color", Color(0.78, 0.86, 0.95, 1.0))
+	card.add_child(loot_caption)
+	_stage_editor_set_control_rect(loot_caption, Rect2(4.0, 78.0, 36.0, 16.0))
+
+	var loot_option := OptionButton.new()
+	loot_option.focus_mode = Control.FOCUS_NONE
+	loot_option.add_theme_font_size_override("font_size", 9)
+	_stage_editor_make_compact_option_button(loot_option)
+	var selected_loot_type: Variant = null
+	if loot_entry != null:
+		selected_loot_type = loot_entry.item_type
+	_stage_editor_populate_item_option(loot_option, selected_loot_type, true, false)
+	loot_option.item_selected.connect(_on_stage_editor_enemy_loot_item_selected.bind(round_index, enemy_index, loot_option))
+	card.add_child(loot_option)
+	_stage_editor_set_control_rect(loot_option, Rect2(38.0, 76.0, 76.0, 24.0))
+
+	var chance_spin := SpinBox.new()
+	chance_spin.min_value = 0
+	chance_spin.max_value = 100
+	chance_spin.step = 5
+	chance_spin.value = roundf((loot_entry.drop_chance if loot_entry != null else 0.0) * 100.0)
+	chance_spin.suffix = "%"
+	chance_spin.add_theme_font_size_override("font_size", 9)
+	chance_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chance_spin.value_changed.connect(_on_stage_editor_enemy_loot_chance_changed.bind(round_index, enemy_index))
+	card.add_child(chance_spin)
+	_stage_editor_set_control_rect(chance_spin, Rect2(116.0, 76.0, 60.0, 24.0))
+
+	var count_spin := SpinBox.new()
+	count_spin.min_value = 1
+	count_spin.max_value = 999
+	count_spin.step = 1
+	count_spin.value = _stage_editor_get_loot_count(loot_entry)
+	count_spin.add_theme_font_size_override("font_size", 9)
+	count_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count_spin.value_changed.connect(_on_stage_editor_enemy_loot_count_changed.bind(round_index, enemy_index))
+	card.add_child(count_spin)
+	_stage_editor_set_control_rect(count_spin, Rect2(116.0, 102.0, 60.0, 24.0))
+
+	var count_caption := Label.new()
+	count_caption.text = "Count"
+	count_caption.add_theme_font_size_override("font_size", 9)
+	count_caption.add_theme_color_override("font_color", Color(0.78, 0.86, 0.95, 1.0))
+	card.add_child(count_caption)
+	_stage_editor_set_control_rect(count_caption, Rect2(76.0, 104.0, 38.0, 18.0))
 	return card
 
 
@@ -3246,7 +3308,7 @@ func _make_stage_editor_round_section(round_index: int) -> Control:
 	var section := PanelContainer.new()
 	section.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.12, 0.13, 0.18, 0.92)))
 	var row_count: int = maxi(1, round_list.size())
-	section.custom_minimum_size = Vector2(0, 72 + row_count * 92)
+	section.custom_minimum_size = Vector2(0, 72 + row_count * 128)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var margin := MarginContainer.new()
@@ -3298,7 +3360,7 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	var level_value: int = int(level_list[enemy_index])
 	var is_boss_spawn: bool = bool(boss_list[enemy_index])
 	var row_panel := PanelContainer.new()
-	row_panel.custom_minimum_size = Vector2(0, 86)
+	row_panel.custom_minimum_size = Vector2(0, 122)
 	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.06, 0.07, 0.11, 0.98)))
 
@@ -3333,7 +3395,8 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	portrait_box.add_child(portrait)
 
 	var name_label := Label.new()
-	var source_name: String = enemy_data.resource_path.get_file() if not enemy_data.resource_path.is_empty() else "inline"
+	var source_path: String = String(enemy_data.get_meta("stage_editor_source_path", enemy_data.resource_path))
+	var source_name: String = source_path.get_file() if not source_path.is_empty() else "inline"
 	name_label.text = enemy_data.get_display_name()
 	name_label.tooltip_text = source_name
 	name_label.add_theme_font_size_override("font_size", 11)
@@ -3371,7 +3434,164 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	boss_button.tooltip_text = "Use this spawn as the main boss"
 	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
 	control_row.add_child(boss_button)
+
+	var loot_row := HBoxContainer.new()
+	loot_row.add_theme_constant_override("separation", 6)
+	loot_row.custom_minimum_size = Vector2(0, 30)
+	loot_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_box.add_child(loot_row)
+
+	var loot_label := Label.new()
+	loot_label.text = "Loot"
+	loot_label.custom_minimum_size = Vector2(42, 0)
+	loot_label.add_theme_font_size_override("font_size", 11)
+	loot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loot_row.add_child(loot_label)
+
+	var loot_entry: LootItem = _stage_editor_get_primary_loot(enemy_data)
+	var loot_option := OptionButton.new()
+	loot_option.focus_mode = Control.FOCUS_NONE
+	loot_option.custom_minimum_size = Vector2(92, 28)
+	loot_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_make_compact_option_button(loot_option)
+	var selected_loot_type: Variant = null
+	if loot_entry != null:
+		selected_loot_type = loot_entry.item_type
+	_stage_editor_populate_item_option(loot_option, selected_loot_type, true, false)
+	loot_option.item_selected.connect(_on_stage_editor_enemy_loot_item_selected.bind(round_index, enemy_index, loot_option))
+	loot_row.add_child(loot_option)
+
+	var chance_spin := SpinBox.new()
+	chance_spin.min_value = 0
+	chance_spin.max_value = 100
+	chance_spin.step = 5
+	chance_spin.value = roundf((loot_entry.drop_chance if loot_entry != null else 0.0) * 100.0)
+	chance_spin.suffix = "%"
+	chance_spin.custom_minimum_size = Vector2(76, 28)
+	chance_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chance_spin.value_changed.connect(_on_stage_editor_enemy_loot_chance_changed.bind(round_index, enemy_index))
+	loot_row.add_child(chance_spin)
+
+	var count_label := Label.new()
+	count_label.text = "Count"
+	count_label.add_theme_font_size_override("font_size", 11)
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loot_row.add_child(count_label)
+
+	var count_spin := SpinBox.new()
+	count_spin.min_value = 1
+	count_spin.max_value = 999
+	count_spin.step = 1
+	count_spin.value = _stage_editor_get_loot_count(loot_entry)
+	count_spin.custom_minimum_size = Vector2(70, 28)
+	count_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count_spin.value_changed.connect(_on_stage_editor_enemy_loot_count_changed.bind(round_index, enemy_index))
+	loot_row.add_child(count_spin)
 	return row_panel
+
+
+func _stage_editor_populate_item_option(option: OptionButton, selected_type: Variant, include_none: bool = false, include_gold: bool = true) -> void:
+	if option == null:
+		return
+	option.clear()
+	if include_none:
+		_stage_editor_add_option_item(option, "None", "")
+	if include_gold:
+		_stage_editor_add_option_item(option, ItemDefs.get_display_name(ItemDefs.Type.GOLD), str(int(ItemDefs.Type.GOLD)))
+	_stage_editor_add_option_item(option, ItemDefs.get_display_name(ItemDefs.Type.SAPPHIRE), str(int(ItemDefs.Type.SAPPHIRE)))
+	var selected_value: String = ""
+	if selected_type != null:
+		selected_value = str(int(selected_type))
+	_stage_editor_select_option_value(option, selected_value)
+
+
+func _stage_editor_get_primary_loot(enemy_data: EnemyData) -> LootItem:
+	if enemy_data == null:
+		return null
+	for loot: LootItem in enemy_data.stage_extra_loot_table:
+		if loot != null:
+			return loot
+	return null
+
+
+func _stage_editor_get_loot_count(loot: LootItem) -> int:
+	if loot == null:
+		return 1
+	return maxi(1, maxi(int(loot.amount_min), int(loot.amount_max)))
+
+
+func _stage_editor_set_enemy_primary_loot(enemy_data: EnemyData, loot: LootItem) -> void:
+	if enemy_data == null:
+		return
+	var loot_table: Array[LootItem] = []
+	if loot != null:
+		loot.resource_path = ""
+		loot_table.append(loot)
+	enemy_data.stage_extra_loot_table = loot_table
+
+
+func _stage_editor_ensure_primary_loot(enemy_data: EnemyData, fallback_type: ItemDefs.Type = ItemDefs.Type.SAPPHIRE) -> LootItem:
+	var loot: LootItem = _stage_editor_get_primary_loot(enemy_data)
+	if loot != null:
+		return loot
+	loot = LootItem.new()
+	loot.item_type = fallback_type
+	loot.amount_min = 1
+	loot.amount_max = 1
+	loot.drop_chance = 1.0
+	_stage_editor_set_enemy_primary_loot(enemy_data, loot)
+	return loot
+
+
+func _on_stage_editor_enemy_loot_item_selected(_item_index: int, round_index: int, enemy_index: int, option: OptionButton) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var enemy_data: EnemyData = enemy_list[enemy_index]
+	var value: String = _stage_editor_get_option_value(option)
+	if value.is_empty():
+		_stage_editor_set_enemy_primary_loot(enemy_data, null)
+	else:
+		var loot: LootItem = _stage_editor_ensure_primary_loot(enemy_data, int(value) as ItemDefs.Type)
+		loot.item_type = int(value) as ItemDefs.Type
+		loot.amount_min = _stage_editor_get_loot_count(loot)
+		loot.amount_max = loot.amount_min
+	_stage_editor_rounds[round_index] = enemy_list
+	_refresh_stage_editor_rounds_panel()
+	_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Enemy loot updated")
+
+
+func _on_stage_editor_enemy_loot_chance_changed(value: float, round_index: int, enemy_index: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var enemy_data: EnemyData = enemy_list[enemy_index]
+	var had_loot := _stage_editor_get_primary_loot(enemy_data) != null
+	var loot: LootItem = _stage_editor_ensure_primary_loot(enemy_data)
+	loot.drop_chance = clampf(value / 100.0, 0.0, 1.0)
+	_stage_editor_rounds[round_index] = enemy_list
+	if not had_loot:
+		_refresh_stage_editor_rounds_panel()
+		_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Enemy loot chance: %d%%" % int(round(value)))
+
+
+func _on_stage_editor_enemy_loot_count_changed(value: float, round_index: int, enemy_index: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var enemy_list: Array = _stage_editor_rounds[round_index]
+	var enemy_data: EnemyData = enemy_list[enemy_index]
+	var had_loot := _stage_editor_get_primary_loot(enemy_data) != null
+	var loot: LootItem = _stage_editor_ensure_primary_loot(enemy_data)
+	var count: int = maxi(1, int(round(value)))
+	loot.amount_min = count
+	loot.amount_max = count
+	_stage_editor_rounds[round_index] = enemy_list
+	if not had_loot:
+		_refresh_stage_editor_rounds_panel()
+		_refresh_stage_editor_enemy_area()
+	_set_stage_editor_status("Enemy loot count: %d" % count)
 
 
 func _layout_stage_editor_enemy_picker_panel() -> void:
@@ -3628,13 +3848,16 @@ func _on_stage_editor_enemy_picked(enemy_data: EnemyData, spawn_level: int = -1)
 	var round_index: int = _stage_editor_enemy_picker_round_index
 	if round_index < 0 or round_index >= _stage_editor_rounds.size():
 		return
+	var editable_enemy: EnemyData = _stage_editor_make_editable_enemy_copy(enemy_data)
+	if editable_enemy == null:
+		return
 	var enemy_list: Array = _stage_editor_rounds[round_index]
 	var cd_list: Array = _stage_editor_rounds_init_cd[round_index]
 	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
 	var boss_list: Array = _stage_editor_rounds_main_bosses[round_index]
-	enemy_list.append(enemy_data)
+	enemy_list.append(editable_enemy)
 	cd_list.append(0)
-	var level_value: int = spawn_level if spawn_level > 0 else enemy_data.enemy_level
+	var level_value: int = spawn_level if spawn_level > 0 else editable_enemy.enemy_level
 	level_list.append(clampi(level_value, 1, 99))
 	boss_list.append(false)
 	_stage_editor_rounds[round_index] = enemy_list
@@ -3904,7 +4127,7 @@ func _refresh_stage_editor_reward_controls() -> void:
 
 	if _stage_editor_reward_character_option != null:
 		_stage_editor_reward_character_option.clear()
-		_stage_editor_add_option_item(_stage_editor_reward_character_option, "No Character", "")
+		_stage_editor_add_option_item(_stage_editor_reward_character_option, "No Clear Character", "")
 		for entry: Dictionary in _stage_editor_character_catalog:
 			_stage_editor_add_option_item(
 				_stage_editor_reward_character_option,
@@ -4237,8 +4460,23 @@ func _stage_editor_get_rounds_snapshot() -> Array[Array]:
 		var round_copy: Array = []
 		for enemy_variant in round_list:
 			if enemy_variant is EnemyData:
-				round_copy.append(enemy_variant)
+				round_copy.append(_stage_editor_make_stage_enemy_snapshot(enemy_variant as EnemyData))
 		snapshot.append(round_copy)
+	return snapshot
+
+
+func _stage_editor_make_stage_enemy_snapshot(enemy_data: EnemyData) -> EnemyData:
+	var snapshot: EnemyData = enemy_data.duplicate(true) as EnemyData
+	if snapshot == null:
+		return enemy_data
+	var source_path: String = String(enemy_data.get_meta("stage_editor_source_path", enemy_data.resource_path)).strip_edges()
+	snapshot.resource_path = ""
+	if not source_path.is_empty():
+		snapshot.set_meta("stage_editor_source_path", source_path)
+	snapshot.loot_table = []
+	for loot: LootItem in snapshot.stage_extra_loot_table:
+		if loot != null:
+			loot.resource_path = ""
 	return snapshot
 
 
@@ -4354,7 +4592,6 @@ func _layout_stage_editor_ui() -> void:
 	var left_margin: float = 12.0 + insets.w
 	var right_margin: float = 12.0 + insets.y
 	var vertical_gap: float = 6.0
-	var action_height: float = 0.0
 	var area_height: float = 0.0
 	var bottom_margin: float = 8.0 + insets.z
 	var tab_height: float = 58.0
@@ -4372,15 +4609,8 @@ func _layout_stage_editor_ui() -> void:
 		area_height = maxf(area_min_size.y, 54.0)
 		_stage_editor_set_control_rect(_stage_editor_area_panel, Rect2(left_margin, top_margin, area_width, area_height))
 
-	if _stage_editor_action_panel != null:
-		var action_min_size: Vector2 = _stage_editor_action_panel.get_combined_minimum_size()
-		var action_width: float = minf(maxf(action_min_size.x, 244.0), maxf(120.0, viewport_size.x - left_margin - right_margin))
-		action_height = maxf(action_min_size.y, 30.0)
-		var action_top: float = top_margin + area_height + vertical_gap
-		_stage_editor_set_control_rect(_stage_editor_action_panel, Rect2(left_margin, action_top, action_width, action_height))
-
 	if _stage_editor_dialog_panel != null:
-		var dialog_top: float = top_margin + area_height + action_height + vertical_gap * 2.0
+		var dialog_top: float = top_margin + area_height + vertical_gap
 		var dialog_bottom: float = tab_top - 8.0
 		var dialog_height: float = maxf(160.0, dialog_bottom - dialog_top)
 		var dialog_width: float = maxf(260.0, viewport_size.x - left_margin - right_margin)
@@ -8249,13 +8479,13 @@ func _play_round_switch_transition(round_idx: int, total_rounds: int) -> void:
 
 	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 	var title := Label.new()
-	title.text = "Round %d/%d" % [round_idx + 1, total_rounds]
+	title.text = Locale.tr_ui("ROUND_SWITCH_TITLE") % [round_idx + 1, total_rounds]
 	title.set_anchors_preset(Control.PRESET_FULL_RECT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", font)
 	title.add_theme_font_size_override("font_size", 58)
-	title.add_theme_color_override("font_color", Color(1.0, 0.92, 0.35, 1.0))
+	title.add_theme_color_override("font_color", Color.WHITE)
 	title.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.04, 1.0))
 	title.add_theme_constant_override("outline_size", 8)
 	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.65))
@@ -8384,55 +8614,344 @@ func _show_boss_intro() -> void:
 	await _fade_in_spawned_enemies(0.45, true)
 
 
-func _setup_gold_counter_ui() -> void:
-	if _gold_counter_panel != null:
+func _get_loot_toast_rect(stack_index: int = 0) -> Rect2:
+	var viewport_size: Vector2 = ViewportUtils.get_size()
+	var top_inset: float = ViewportUtils.get_safe_insets().x
+	var pos := Vector2(
+		viewport_size.x - LOOT_TOAST_RIGHT_MARGIN - LOOT_TOAST_SIZE.x,
+		top_inset + LOOT_TOAST_TOP_OFFSET + float(stack_index) * (LOOT_TOAST_SIZE.y + LOOT_TOAST_GAP)
+	)
+	return Rect2(pos, LOOT_TOAST_SIZE)
+
+
+func _get_loot_toast_target_center() -> Vector2:
+	return _get_loot_toast_rect().get_center()
+
+
+func _make_loot_toast_icon(item_type: ItemDefs.Type, icon_factory: Callable) -> Control:
+	var icon: Control = null
+	if icon_factory.is_valid():
+		var node: Variant = icon_factory.call()
+		if node is Control:
+			icon = node as Control
+	if icon == null:
+		icon = _make_loot_visual_control(item_type, LOOT_TOAST_ICON_SIZE, true)
+	return _wrap_loot_icon_with_shining(item_type, icon, LOOT_TOAST_ICON_SIZE, minf(ItemDefs.get_size_multiplier(item_type), 1.35))
+
+
+func _make_loot_visual_control(item_type: ItemDefs.Type, pixel_size: int, animate: bool = false) -> Control:
+	if item_type == ItemDefs.Type.GOLD:
+		return _make_gold_coin_viewport(pixel_size, animate)
+	var image: Texture2D = ItemDefs.get_image(item_type)
+	if image != null:
+		var icon := TextureRect.new()
+		icon.custom_minimum_size = Vector2(pixel_size, pixel_size)
+		icon.size = Vector2(pixel_size, pixel_size)
+		icon.texture = image
+		icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		return icon
+	var label := Label.new()
+	label.text = ItemDefs.get_display_name(item_type).substr(0, 1)
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_color", ItemDefs.get_color(item_type))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.custom_minimum_size = Vector2(pixel_size, pixel_size)
+	label.size = Vector2(pixel_size, pixel_size)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func _wrap_loot_icon_with_shining(item_type: ItemDefs.Type, icon: Control, pixel_size: int, effect_size_multiplier: float = 1.0) -> Control:
+	var shining_color: Variant = ItemDefs.get_shining_color(item_type)
+	if not (shining_color is Color):
+		return icon
+	var wrapper := Control.new()
+	wrapper.custom_minimum_size = Vector2(pixel_size, pixel_size)
+	wrapper.size = Vector2(pixel_size, pixel_size)
+	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var effect_scale: float = maxf(0.1, effect_size_multiplier)
+
+	var ray := Node2D.new()
+	ray.name = "LootToastShiningRayBurst"
+	ray.position = Vector2(pixel_size, pixel_size) * 0.5
+	ray.z_index = -1
+	ray.scale = Vector2(0.62, 0.62) * effect_scale
+	ray.set_script(PuzzleGoalRayBurstScript)
+	ray.set("ray_color", shining_color)
+	ray.set("outer_radius", float(pixel_size) * 0.42)
+	wrapper.add_child(ray)
+
+	var pulse_ring := Node2D.new()
+	pulse_ring.name = "LootToastShiningPulseRing"
+	pulse_ring.position = Vector2(pixel_size, pixel_size) * 0.5
+	pulse_ring.z_index = 0
+	pulse_ring.scale = Vector2(0.54, 0.54) * effect_scale
+	pulse_ring.set_script(PuzzleGoalPulseParticlesScript)
+	pulse_ring.set("draw_particles", false)
+	wrapper.add_child(pulse_ring)
+	pulse_ring.call("configure", shining_color)
+
+	icon.position = (Vector2(pixel_size, pixel_size) - icon.size) * 0.5
+	wrapper.add_child(icon)
+
+	var dust := Node2D.new()
+	dust.name = "LootToastShiningDust"
+	dust.position = Vector2(pixel_size, pixel_size) * 0.5
+	dust.z_index = 2
+	dust.scale = Vector2(0.58, 0.58) * effect_scale
+	dust.set_script(PuzzleGoalPulseParticlesScript)
+	dust.set("draw_rings", false)
+	wrapper.add_child(dust)
+	dust.call("configure", shining_color)
+	return wrapper
+
+
+func _make_loot_drop_control(item_type: ItemDefs.Type, pixel_size: int, effect_size_multiplier: float = 1.0) -> Control:
+	var wrapper := Control.new()
+	wrapper.custom_minimum_size = Vector2(pixel_size, pixel_size)
+	wrapper.size = Vector2(pixel_size, pixel_size)
+	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var shadow := PanelContainer.new()
+	shadow.name = "LootContactShadow"
+	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shadow.z_index = -2
+	shadow.size = Vector2(float(pixel_size) * 0.48, maxf(5.0, float(pixel_size) * 0.11))
+	shadow.custom_minimum_size = shadow.size
+	shadow.position = Vector2((float(pixel_size) - shadow.size.x) * 0.5, float(pixel_size) * 0.76)
+	shadow.modulate.a = 0.46
+	var shadow_style := StyleBoxFlat.new()
+	shadow_style.bg_color = Color(0.0, 0.0, 0.0, 0.34)
+	shadow_style.set_border_width_all(0)
+	shadow_style.set_corner_radius_all(int(shadow.size.y * 0.5))
+	shadow.add_theme_stylebox_override("panel", shadow_style)
+	wrapper.add_child(shadow)
+
+	var shining_color: Variant = ItemDefs.get_shining_color(item_type)
+	var loot_effect_scale: float = maxf(0.1, effect_size_multiplier)
+	if shining_color is Color:
+		var ray := Node2D.new()
+		ray.name = "LootShiningRayBurst"
+		ray.position = Vector2(pixel_size, pixel_size) * 0.5
+		ray.z_index = -1
+		ray.scale = Vector2(0.92, 0.92) * loot_effect_scale
+		ray.set_script(PuzzleGoalRayBurstScript)
+		ray.set("ray_color", shining_color)
+		ray.set("outer_radius", float(pixel_size) * 0.42)
+		wrapper.add_child(ray)
+
+		var pulse_ring := Node2D.new()
+		pulse_ring.name = "LootShiningPulseRing"
+		pulse_ring.position = Vector2(pixel_size, pixel_size) * 0.5
+		pulse_ring.z_index = 0
+		pulse_ring.scale = Vector2(0.78, 0.78) * loot_effect_scale
+		pulse_ring.set_script(PuzzleGoalPulseParticlesScript)
+		pulse_ring.set("draw_particles", false)
+		wrapper.add_child(pulse_ring)
+		pulse_ring.call("configure", shining_color)
+	var visual := _make_loot_visual_control(item_type, pixel_size, true)
+	visual.position = Vector2.ZERO
+	wrapper.add_child(visual)
+	if shining_color is Color:
+		var dust := Node2D.new()
+		dust.name = "LootShiningDust"
+		dust.position = Vector2(pixel_size, pixel_size) * 0.5
+		dust.z_index = 2
+		dust.scale = Vector2(0.95, 0.95) * loot_effect_scale
+		dust.set_script(PuzzleGoalPulseParticlesScript)
+		dust.set("draw_rings", false)
+		wrapper.add_child(dust)
+		dust.call("configure", shining_color)
+	return wrapper
+
+
+func _begin_loot_animation() -> void:
+	_active_loot_animation_count += 1
+
+
+func _finish_loot_animation() -> void:
+	_active_loot_animation_count = maxi(0, _active_loot_animation_count - 1)
+	if _active_loot_animation_count == 0:
+		loot_animations_finished.emit()
+
+
+func _wait_for_loot_animations_finished() -> void:
+	while _active_loot_animation_count > 0:
+		await loot_animations_finished
+
+
+func _animate_loot_toast_label(label: Label, from_total: int, to_total: int) -> void:
+	if not is_instance_valid(label):
 		return
-	_gold_counter_panel = PanelContainer.new()
-	_gold_counter_panel.name = "StageGoldCounter"
-	_gold_counter_panel.anchor_left = 1.0
-	_gold_counter_panel.anchor_right = 1.0
-	_gold_counter_panel.offset_left = -160.0
-	_gold_counter_panel.offset_top = 48.0
-	_gold_counter_panel.offset_right = -16.0
-	_gold_counter_panel.offset_bottom = 86.0
-	_gold_counter_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.set_meta("loot_toast_value", to_total)
+	var count_tw := create_tween()
+	count_tw.tween_method(func(value: float) -> void:
+		if is_instance_valid(label):
+			label.text = "%d" % int(round(value))
+	, float(maxi(0, from_total)), float(maxi(0, to_total)), 0.45).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+
+
+func _enqueue_loot_toast(item_type: ItemDefs.Type, from_total: int, to_total: int, icon_factory: Callable = Callable(), finished_callback: Callable = Callable()) -> void:
+	for active_index in _active_loot_toasts.size():
+		var active: Dictionary = _active_loot_toasts[active_index]
+		if int(active.get("type", -1)) != int(item_type) or bool(active.get("closing", false)):
+			continue
+		var label: Label = active.get("label", null) as Label
+		var current_total: int = int(active.get("to_total", from_total))
+		active["to_total"] = maxi(current_total, to_total)
+		var callbacks: Array = active.get("callbacks", [])
+		if finished_callback.is_valid():
+			callbacks.append(finished_callback)
+		active["callbacks"] = callbacks
+		_active_loot_toasts[active_index] = active
+		_animate_loot_toast_label(label, current_total, int(active["to_total"]))
+		return
+	for entry_index in _loot_toast_queue.size():
+		var queued: Dictionary = _loot_toast_queue[entry_index]
+		if int(queued.get("type", -1)) != int(item_type):
+			continue
+		queued["to_total"] = maxi(int(queued.get("to_total", from_total)), to_total)
+		var callbacks: Array = queued.get("callbacks", [])
+		if finished_callback.is_valid():
+			callbacks.append(finished_callback)
+		queued["callbacks"] = callbacks
+		_loot_toast_queue[entry_index] = queued
+		return
+	var callbacks: Array = []
+	if finished_callback.is_valid():
+		callbacks.append(finished_callback)
+	_loot_toast_queue.append({
+		"type": item_type,
+		"from_total": from_total,
+		"to_total": to_total,
+		"icon_factory": icon_factory,
+		"callbacks": callbacks,
+	})
+	_start_next_loot_toast()
+
+
+func _layout_active_loot_toasts(animated: bool = true) -> void:
+	var visible_index := 0
+	for entry_index in _active_loot_toasts.size():
+		var entry: Dictionary = _active_loot_toasts[entry_index]
+		if bool(entry.get("closing", false)):
+			continue
+		var panel: Control = entry.get("panel", null) as Control
+		if not is_instance_valid(panel):
+			continue
+		var target_rect := _get_loot_toast_rect(visible_index)
+		entry["stack_index"] = visible_index
+		_active_loot_toasts[entry_index] = entry
+		if animated:
+			var tw := create_tween()
+			tw.tween_property(panel, "position", target_rect.position, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		else:
+			panel.position = target_rect.position
+		visible_index += 1
+
+
+func _start_next_loot_toast() -> void:
+	if _loot_toast_starting or _loot_toast_queue.is_empty():
+		return
+	_loot_toast_starting = true
+	var entry: Dictionary = _loot_toast_queue.pop_front()
+	var item_type: ItemDefs.Type = int(entry.get("type", ItemDefs.Type.GOLD)) as ItemDefs.Type
+	var from_total: int = int(entry.get("from_total", 0))
+	var to_total: int = int(entry.get("to_total", from_total))
+	var icon_factory: Callable = entry.get("icon_factory", Callable()) as Callable
+	var stack_index: int = 0
+	for active: Dictionary in _active_loot_toasts:
+		if not bool(active.get("closing", false)):
+			stack_index += 1
+	var toast_rect := _get_loot_toast_rect(stack_index)
+	var viewport_size: Vector2 = ViewportUtils.get_size()
+	var panel := PanelContainer.new()
+	panel.name = "LootToast"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.anchor_left = 0.0
+	panel.anchor_top = 0.0
+	panel.anchor_right = 0.0
+	panel.anchor_bottom = 0.0
+	panel.position = Vector2(viewport_size.x + 6.0, toast_rect.position.y)
+	panel.size = toast_rect.size
+	panel.custom_minimum_size = toast_rect.size
+	panel.modulate.a = 0.0
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.07, 0.04, 0.72)
-	style.border_color = Color(1.0, 0.78, 0.16, 0.86)
-	style.set_border_width_all(2)
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.5)
+	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.set_border_width_all(0)
 	style.set_corner_radius_all(8)
 	style.set_content_margin_all(4)
-	_gold_counter_panel.add_theme_stylebox_override("panel", style)
-	$UILayer.add_child(_gold_counter_panel)
+	panel.add_theme_stylebox_override("panel", style)
+	$UILayer.add_child(panel)
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 6)
-	_gold_counter_panel.add_child(row)
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
 
-	var icon := _make_gold_coin_viewport(32, false)
-	row.add_child(icon)
+	var icon_slot := CenterContainer.new()
+	icon_slot.custom_minimum_size = Vector2(64, 56)
+	icon_slot.clip_contents = true
+	row.add_child(icon_slot)
 
-	_gold_counter_label = Label.new()
-	_gold_counter_label.add_theme_font_size_override("font_size", 20)
-	_gold_counter_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.26, 1.0))
-	_gold_counter_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
-	_gold_counter_label.add_theme_constant_override("outline_size", 4)
-	_gold_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_gold_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_gold_counter_label.custom_minimum_size = Vector2(86, 30)
-	row.add_child(_gold_counter_label)
-	_set_gold_counter_value(0, false)
+	var icon := _make_loot_toast_icon(item_type, icon_factory)
+	icon_slot.add_child(icon)
 
+	var label := Label.new()
+	label.text = "%d" % maxi(0, from_total)
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", ItemDefs.get_color(item_type).lerp(Color.WHITE, 0.12))
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+	label.add_theme_constant_override("outline_size", 4)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.custom_minimum_size = Vector2(86, 54)
+	row.add_child(label)
+	entry["panel"] = panel
+	entry["label"] = label
+	entry["closing"] = false
+	entry["stack_index"] = stack_index
+	_active_loot_toasts.append(entry)
+	_animate_loot_toast_label(label, from_total, to_total)
 
-func _set_gold_counter_value(value: int, pulse: bool = true) -> void:
-	_gold_counter_displayed = maxi(0, value)
-	if _gold_counter_label != null:
-		_gold_counter_label.text = "%d" % _gold_counter_displayed
-	if pulse and _gold_counter_panel != null:
-		var tw := create_tween()
-		tw.tween_property(_gold_counter_panel, "scale", Vector2(1.12, 1.12), 0.08)
-		tw.tween_property(_gold_counter_panel, "scale", Vector2.ONE, 0.14).set_ease(Tween.EASE_OUT)
+	var tw := create_tween()
+	tw.tween_property(panel, "position", toast_rect.position, LOOT_TOAST_SLIDE_IN_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.parallel().tween_property(panel, "modulate:a", 1.0, LOOT_TOAST_SLIDE_IN_DURATION)
+	tw.tween_callback(func() -> void:
+		_loot_toast_starting = false
+		_start_next_loot_toast()
+	)
+	tw.tween_interval(LOOT_TOAST_HOLD_DURATION)
+	tw.tween_callback(func() -> void:
+		for active_index in _active_loot_toasts.size():
+			var active: Dictionary = _active_loot_toasts[active_index]
+			if active.get("panel", null) == panel:
+				active["closing"] = true
+				_active_loot_toasts[active_index] = active
+				break
+	)
+	tw.tween_property(panel, "position:y", toast_rect.position.y - 28.0, LOOT_TOAST_SLIDE_OUT_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	tw.parallel().tween_property(panel, "modulate:a", 0.0, LOOT_TOAST_SLIDE_OUT_DURATION)
+	tw.tween_callback(func() -> void:
+		var callbacks: Array = []
+		for active_index in range(_active_loot_toasts.size() - 1, -1, -1):
+			var active: Dictionary = _active_loot_toasts[active_index]
+			if active.get("panel", null) == panel:
+				callbacks = active.get("callbacks", [])
+				_active_loot_toasts.remove_at(active_index)
+				break
+		for callback: Callable in callbacks:
+			if callback.is_valid():
+				callback.call()
+		if is_instance_valid(panel):
+			panel.queue_free()
+		_layout_active_loot_toasts(true)
+		_start_next_loot_toast()
+	)
 
 
 func _make_gold_coin_viewport(pixel_size: int, animate_spin: bool = true) -> SubViewportContainer:
@@ -8498,53 +9017,66 @@ func _make_gold_coin_viewport(pixel_size: int, animate_spin: bool = true) -> Sub
 	return container
 
 
-func _play_gold_coin_drop(start_position: Vector2, amount: int, target_total: int) -> void:
+func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount: int, target_total: int) -> void:
+	_begin_loot_animation()
+	var previous_total: int = int(_loot_toast_totals.get(item_type, 0))
+	_loot_toast_totals[item_type] = target_total
+	var icon_factory := func():
+		return _make_loot_visual_control(item_type, LOOT_TOAST_ICON_SIZE, true)
+	var finished_callback := func() -> void:
+		_finish_loot_animation()
 	if fx_layer == null:
-		_set_gold_counter_value(target_total)
+		_enqueue_loot_toast(item_type, previous_total, target_total, icon_factory, finished_callback)
 		return
-	var coin := _make_gold_coin_viewport(GOLD_COIN_VIEWPORT_SIZE, true)
-	coin.position = start_position - Vector2(GOLD_COIN_VIEWPORT_SIZE, GOLD_COIN_VIEWPORT_SIZE) * 0.5
-	coin.scale = Vector2(0.8, 0.8)
-	fx_layer.add_child(coin)
-
-	var amount_label := Label.new()
-	amount_label.text = "+%d" % amount
-	amount_label.add_theme_font_size_override("font_size", 18)
-	amount_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.28, 1.0))
-	amount_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
-	amount_label.add_theme_constant_override("outline_size", 4)
-	amount_label.position = Vector2(GOLD_COIN_VIEWPORT_SIZE * 0.62, GOLD_COIN_VIEWPORT_SIZE * 0.52)
-	coin.add_child(amount_label)
+	var base_fly_size: int = GOLD_COIN_VIEWPORT_SIZE if item_type == ItemDefs.Type.GOLD else LOOT_FLY_ICON_SIZE
+	var item_size_multiplier: float = ItemDefs.get_size_multiplier(item_type)
+	var fly_size: int = maxi(1, int(round(float(base_fly_size) * item_size_multiplier)))
+	var loot_view := _make_loot_drop_control(item_type, fly_size, item_size_multiplier)
+	loot_view.position = start_position - Vector2(fly_size, fly_size) * 0.5
+	loot_view.scale = Vector2(0.8, 0.8)
+	fx_layer.add_child(loot_view)
 
 	var floor_position: Vector2 = start_position + GOLD_COIN_FLOOR_DROP
-	var target_position: Vector2 = floor_position
-	if is_instance_valid(_gold_counter_panel):
-		target_position = _gold_counter_panel.get_global_rect().get_center()
-	var target_control_position: Vector2 = target_position - Vector2(GOLD_COIN_VIEWPORT_SIZE, GOLD_COIN_VIEWPORT_SIZE) * 0.5
-	var floor_control_position: Vector2 = floor_position - Vector2(GOLD_COIN_VIEWPORT_SIZE, GOLD_COIN_VIEWPORT_SIZE) * 0.5
+	var target_position: Vector2 = _get_loot_toast_target_center()
+	var target_control_position: Vector2 = target_position - Vector2(fly_size, fly_size) * 0.5
+	var floor_control_position: Vector2 = floor_position - Vector2(fly_size, fly_size) * 0.5
+	var fly_distance: float = floor_control_position.distance_to(target_control_position)
+	var fly_arc_height: float = maxf(92.0, fly_distance * 0.28)
+	var fly_arc_control_position: Vector2 = (floor_control_position + target_control_position) * 0.5 + Vector2(0.0, -fly_arc_height)
 
 	var tw := create_tween()
-	tw.tween_property(coin, "position", floor_control_position, GOLD_COIN_DROP_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BOUNCE)
+	tw.tween_property(loot_view, "position", floor_control_position, GOLD_COIN_DROP_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BOUNCE)
 	tw.tween_interval(GOLD_COIN_SPIN_HOLD_DURATION)
-	tw.tween_property(coin, "position", target_control_position, GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-	tw.parallel().tween_property(coin, "scale", Vector2(0.42, 0.42), GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN)
+	tw.tween_method(func(t: float) -> void:
+		if not is_instance_valid(loot_view):
+			return
+		var inv_t: float = 1.0 - t
+		loot_view.position = inv_t * inv_t * floor_control_position \
+			+ 2.0 * inv_t * t * fly_arc_control_position \
+			+ t * t * target_control_position
+	, 0.0, 1.0, GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	tw.parallel().tween_property(loot_view, "scale", Vector2(0.42, 0.42), GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
-		_set_gold_counter_value(maxi(_gold_counter_displayed, target_total))
-		if is_instance_valid(coin):
-			coin.queue_free()
+		_enqueue_loot_toast(item_type, previous_total, target_total, icon_factory, finished_callback)
+		if is_instance_valid(loot_view):
+			loot_view.queue_free()
 	)
 
 	var fade_tw := create_tween()
 	fade_tw.tween_interval(GOLD_COIN_DROP_DURATION + GOLD_COIN_SPIN_HOLD_DURATION + GOLD_COIN_FLY_DURATION - GOLD_COIN_FADE_DURATION)
-	fade_tw.tween_property(coin, "modulate:a", 0.35, GOLD_COIN_FADE_DURATION).set_ease(Tween.EASE_IN)
+	fade_tw.tween_property(loot_view, "modulate:a", 0.35, GOLD_COIN_FADE_DURATION).set_ease(Tween.EASE_IN)
 
 
-## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字
+func _play_gold_coin_drop(start_position: Vector2, amount: int, target_total: int) -> void:
+	_play_loot_drop(start_position, ItemDefs.Type.GOLD, amount, target_total)
+
+
+## 敵人死亡掉落戰利品：存入本場積累，播放通用 loot drop/fly/toast 流程。
 func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int, drop_position: Vector2) -> void:
 	# 累計本場經驗值
 	_battle_exp += enemy_data.get_exp_drop_for_level(enemy_level)
 
-	# 找出死亡的敵人節點以取得浮動文字位置（若找不到就用螢幕中央）
+	# 找出死亡的敵人節點以取得掉落起點（若找不到就用螢幕中央）
 	var popup_pos: Vector2 = drop_position
 	if popup_pos == Vector2.ZERO:
 		popup_pos = Vector2(get_viewport().get_visible_rect().size / 2)
@@ -8555,15 +9087,7 @@ func _on_loot_dropped(enemy_data: EnemyData, results: Array, enemy_level: int, d
 		# 積累到本場計數
 		var current: int = _battle_loot.get(type, 0)
 		_battle_loot[type] = current + amount
-		if type == ItemDefs.Type.GOLD:
-			_play_gold_coin_drop(popup_pos, amount, int(_battle_loot[type]))
-		# 浮動文字
-		var label_text := "+%d %s" % [amount, ItemDefs.get_display_name(type)]
-		var color: Color = ItemDefs.get_color(type)
-		var dn := Node2D.new()
-		dn.set_script(DamageNumberScript)
-		fx_layer.add_child(dn)
-		dn.show_text(popup_pos, label_text, color)
+		_play_loot_drop(popup_pos, type, amount, int(_battle_loot[type]))
 
 
 ## 設定逃脫模式 HUD：依關卡 mode 顯示/隱藏剩餘距離
@@ -10100,7 +10624,8 @@ func _on_battle_won() -> void:
 
 func _complete_battle_won() -> void:
 	board.is_busy = true
-	# ── 最後一隻敵人死亡 → 立刻交叉淡入勝利音樂 ──
+	await _wait_for_loot_animations_finished()
+	# ── 戰利品 UI 播完後 → 交叉淡入勝利音樂 ──
 	if current_stage == null or current_stage.mode != StageData.Mode.PUZZLE:
 		GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")
 	_bgm_player = GameState.bgm_player

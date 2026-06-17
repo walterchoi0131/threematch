@@ -69,6 +69,7 @@ stage_name = "Stage 1-6 (Dark Test)"
 element_weights = Array[int]([1])
 allowed_types = Array[int]([6])
 area = "temple"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_temple.png"
 battle_music_override_path = "res://assets/music/Lantern Puzzle.mp3"
 stretch_battle_background = true
 rounds = Array[Array]([[ExtResource("2_rxw68"), ExtResource("2_rxw68"), ExtResource("2_rxw68")], [SubResource("slime_b1"), SubResource("slime_b2"), SubResource("slime_b3")], [SubResource("slime_boss")]])

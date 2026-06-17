@@ -41,8 +41,10 @@ const PASSIVE_REDUCED_DAMAGE_DEFAULT: int = 1
 @export var passive_required_gem_count: int = PASSIVE_REQUIRED_GEM_COUNT_DEFAULT
 @export var passive_name: String = ""
 @export_multiline var passive_desc: String = ""
+@export var monster_gold_multiplier: float = 1.0
 @export var loot_table: Array[LootItem] = []
 ## ?銵剁??萎犖甇颱滿??摨撉唳?????@export var loot_table: Array[LootItem] = []
+@export var stage_extra_loot_table: Array[LootItem] = []
 
 
 func get_hp_percent() -> int:

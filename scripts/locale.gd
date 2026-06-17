@@ -48,6 +48,7 @@ var _translations: Dictionary = {
 	"EMBARK": {"zh": "出發", "en": "Embark"},
 	"CANCEL": {"zh": "取消", "en": "Cancel"},
 	"ROUNDS": {"zh": "波數", "en": "Rounds"},
+	"ROUND_SWITCH_TITLE": {"zh": "回合 %d/%d", "en": "Round %d/%d"},
 	"GEM_DISTRIBUTION": {"zh": "寶石分佈", "en": "Gem Distribution"},
 	"ELEMENT_DISTRIBUTION": {"zh": "元素分佈", "en": "Element Distribution"},
 	"BOSS": {"zh": "頭目", "en": "BOSS"},

@@ -120,10 +120,19 @@ func _build_loot_section() -> void:
 		var color: Color = ItemDefs.get_color(type)
 		var name_text: String = ItemDefs.get_display_name(type)
 
-		var dot := ColorRect.new()
-		dot.custom_minimum_size = Vector2(16, 16)
-		dot.color = color
-		item_row.add_child(dot)
+		var image: Texture2D = ItemDefs.get_image(type)
+		if image != null:
+			var icon := TextureRect.new()
+			icon.custom_minimum_size = Vector2(28, 28)
+			icon.texture = image
+			icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			item_row.add_child(icon)
+		else:
+			var dot := ColorRect.new()
+			dot.custom_minimum_size = Vector2(16, 16)
+			dot.color = color
+			item_row.add_child(dot)
 
 		var lbl := _make_styled_label("%s  ×%d" % [name_text, amount], 24, color)
 		item_row.add_child(lbl)

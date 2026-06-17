@@ -168,6 +168,11 @@ var _lightbreak_palette_chip: _ActionChip = null
 var _auto_character_option: OptionButton = null
 var _auto_power_spin: SpinBox = null
 var _auto_max_skill_check: CheckBox = null
+var _gold_multiplier_spin: SpinBox = null
+var _gold_preview_lbl: Label = null
+var _loot_item_option: OptionButton = null
+var _loot_chance_spin: SpinBox = null
+var _loot_count_spin: SpinBox = null
 var _action_row: _ActionDropRow = null
 var _estimate_info_lbl: Label = null
 var _estimate_level_value: int = STAT_LEVEL_MIN
@@ -594,6 +599,11 @@ func _refresh_detail() -> void:
 	_lightbreak_count_spin = null
 	_lightbreak_palette_chip = null
 	_action_row = null
+	_gold_multiplier_spin = null
+	_gold_preview_lbl = null
+	_loot_item_option = null
+	_loot_chance_spin = null
+	_loot_count_spin = null
 
 	if _selected_enemy == null:
 		var empty_lbl := Label.new()
@@ -616,6 +626,7 @@ func _refresh_detail() -> void:
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(top_spacer)
 
+	_build_loot_panel(_detail_body as VBoxContainer)
 	_build_passive_column(_detail_body as VBoxContainer)
 	_build_action_column(_detail_body as VBoxContainer)
 
@@ -699,6 +710,159 @@ func _build_fields_column(parent: HBoxContainer) -> void:
 	_add_element_option(Block.Type.DARK)
 	_select_element_option(int(_selected_enemy.element))
 	col.add_child(_make_labeled_control("Element", _element_option))
+
+
+func _build_loot_panel(parent: VBoxContainer) -> void:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(0, 118)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.035, 0.04, 0.07, 0.98), Color(0.28, 0.32, 0.45, 1.0), 8))
+	parent.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	panel.add_child(margin)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(col)
+
+	col.add_child(_make_section_title("Economy / Loot"))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(row)
+
+	_gold_multiplier_spin = SpinBox.new()
+	_gold_multiplier_spin.min_value = 0.0
+	_gold_multiplier_spin.max_value = 20.0
+	_gold_multiplier_spin.step = 0.1
+	_gold_multiplier_spin.value = maxf(0.0, _selected_enemy.monster_gold_multiplier)
+	_gold_multiplier_spin.custom_minimum_size = Vector2(110, 28)
+	_gold_multiplier_spin.tooltip_text = "Fallback gold = enemy level x global gold multiplier x monster gold multiplier."
+	_gold_multiplier_spin.value_changed.connect(func(_value: float) -> void:
+		_refresh_gold_preview()
+	)
+	row.add_child(_make_labeled_control("Monster Gold Multiplier", _gold_multiplier_spin))
+
+	_gold_preview_lbl = Label.new()
+	_gold_preview_lbl.custom_minimum_size = Vector2(170, 0)
+	_gold_preview_lbl.add_theme_font_size_override("font_size", 12)
+	_gold_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.28, 1.0))
+	_gold_preview_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(_gold_preview_lbl)
+
+	var loot_entry: LootItem = _enemy_editor_get_primary_loot(_selected_enemy)
+	_loot_item_option = OptionButton.new()
+	_loot_item_option.custom_minimum_size = Vector2(128, 28)
+	var selected_loot_type: Variant = null
+	if loot_entry != null:
+		selected_loot_type = loot_entry.item_type
+	_enemy_editor_populate_loot_item_option(selected_loot_type)
+	row.add_child(_make_labeled_control("Loot Item", _loot_item_option))
+
+	_loot_chance_spin = SpinBox.new()
+	_loot_chance_spin.min_value = 0
+	_loot_chance_spin.max_value = 100
+	_loot_chance_spin.step = 5
+	_loot_chance_spin.value = roundf((loot_entry.drop_chance if loot_entry != null else 1.0) * 100.0)
+	_loot_chance_spin.suffix = "%"
+	_loot_chance_spin.custom_minimum_size = Vector2(86, 28)
+	_loot_chance_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(_make_labeled_control("Chance", _loot_chance_spin))
+
+	_loot_count_spin = SpinBox.new()
+	_loot_count_spin.min_value = 1
+	_loot_count_spin.max_value = 999
+	_loot_count_spin.step = 1
+	_loot_count_spin.value = _enemy_editor_get_loot_count(loot_entry)
+	_loot_count_spin.custom_minimum_size = Vector2(86, 28)
+	_loot_count_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(_make_labeled_control("Count", _loot_count_spin))
+
+	_refresh_gold_preview()
+
+
+func _enemy_editor_populate_loot_item_option(selected_type: Variant) -> void:
+	if _loot_item_option == null:
+		return
+	_loot_item_option.clear()
+	_loot_item_option.add_item("None")
+	_loot_item_option.set_item_metadata(0, "")
+	var sapphire_index: int = _loot_item_option.item_count
+	_loot_item_option.add_item(ItemDefs.get_display_name(ItemDefs.Type.SAPPHIRE))
+	_loot_item_option.set_item_metadata(sapphire_index, str(int(ItemDefs.Type.SAPPHIRE)))
+	var selected_value := ""
+	if selected_type != null:
+		selected_value = str(int(selected_type))
+	for i in _loot_item_option.item_count:
+		if str(_loot_item_option.get_item_metadata(i)) == selected_value:
+			_loot_item_option.select(i)
+			return
+	_loot_item_option.select(0)
+
+
+func _enemy_editor_get_primary_loot(enemy_data: EnemyData) -> LootItem:
+	if enemy_data == null:
+		return null
+	for loot: LootItem in enemy_data.loot_table:
+		if loot != null and loot.item_type != ItemDefs.Type.GOLD:
+			return loot
+	return null
+
+
+func _enemy_editor_get_loot_count(loot: LootItem) -> int:
+	if loot == null:
+		return 1
+	return maxi(1, maxi(int(loot.amount_min), int(loot.amount_max)))
+
+
+func _enemy_editor_get_loot_from_ui() -> LootItem:
+	if _loot_item_option == null or _loot_item_option.selected < 0:
+		return null
+	var value: String = str(_loot_item_option.get_item_metadata(_loot_item_option.selected))
+	if value.is_empty():
+		return null
+	var loot := LootItem.new()
+	loot.item_type = int(value) as ItemDefs.Type
+	var chance_value := 0.0
+	if _loot_chance_spin != null:
+		chance_value = _loot_chance_spin.value
+	loot.drop_chance = clampf(chance_value / 100.0, 0.0, 1.0)
+	var count_value := 1.0
+	if _loot_count_spin != null:
+		count_value = _loot_count_spin.value
+	var count: int = maxi(1, int(round(count_value)))
+	loot.amount_min = count
+	loot.amount_max = count
+	return loot
+
+
+func _current_monster_gold_multiplier() -> float:
+	if _gold_multiplier_spin != null:
+		return maxf(0.0, float(_gold_multiplier_spin.value))
+	if _selected_enemy != null:
+		return maxf(0.0, _selected_enemy.monster_gold_multiplier)
+	return 1.0
+
+
+func _fallback_gold_for_level(level_value: int) -> int:
+	return int(round(float(maxi(1, level_value)) * float(GameState.GOLD_ECONOMIC_MULTIPLIER) * _current_monster_gold_multiplier()))
+
+
+func _refresh_gold_preview() -> void:
+	if _gold_preview_lbl == null:
+		return
+	_gold_preview_lbl.text = "Fallback gold Lv%d: %d  (global %d)" % [
+		_estimate_level_value,
+		_fallback_gold_for_level(_estimate_level_value),
+		GameState.GOLD_ECONOMIC_MULTIPLIER,
+	]
 
 
 func _build_passive_column(parent: VBoxContainer) -> void:
@@ -1395,6 +1559,12 @@ func _save_selected_enemy() -> void:
 	_selected_enemy.auto_character = _current_auto_character()
 	_selected_enemy.auto_gem_atk_power = maxf(float(_auto_power_spin.value), 0.0) if _auto_power_spin != null else _selected_enemy.auto_gem_atk_power
 	_selected_enemy.auto_use_max_skill_upgrades = _auto_max_skill_check.button_pressed if _auto_max_skill_check != null else _selected_enemy.auto_use_max_skill_upgrades
+	_selected_enemy.monster_gold_multiplier = _current_monster_gold_multiplier()
+	var enemy_loot: LootItem = _enemy_editor_get_loot_from_ui()
+	var loot_table: Array[LootItem] = []
+	if enemy_loot != null:
+		loot_table.append(enemy_loot)
+	_selected_enemy.loot_table = loot_table
 	var err: int = ResourceSaver.save(_selected_enemy, _selected_path)
 	if err == OK:
 		_set_status("Saved %s" % _selected_path.get_file())
@@ -1560,6 +1730,7 @@ func _current_hp_percent() -> int:
 func _refresh_estimate_info() -> void:
 	if _estimate_info_lbl != null:
 		_estimate_info_lbl.text = _estimate_text(_estimate_level_value)
+	_refresh_gold_preview()
 
 
 func _estimate_team_hp(level_value: int) -> int:

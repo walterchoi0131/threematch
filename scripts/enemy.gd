@@ -11,6 +11,7 @@ signal hp_floor_triggered(enemy: Enemy)
 
 const MAIN_BOSS_DISPLAY_SCALE := 2.0
 const NON_BOSS_PORTRAIT_DISPLAY_SCALE := 1.5
+const LOOT_DROP_FLOOR_OFFSET_Y := 46.0
 const CLICK_RECT_PADDING := 4.0
 const LONG_PRESS_SECONDS := 0.45
 
@@ -86,6 +87,14 @@ func _control_rect_in_enemy_space(control: Control) -> Rect2:
 	var rect_pos: Vector2 = Vector2(minf(top_left.x, bottom_right.x), minf(top_left.y, bottom_right.y))
 	var rect_size: Vector2 = Vector2(absf(bottom_right.x - top_left.x), absf(bottom_right.y - top_left.y))
 	return Rect2(rect_pos, rect_size)
+
+
+func get_loot_drop_position() -> Vector2:
+	if portrait != null:
+		var portrait_rect := portrait.get_global_rect()
+		var foot_position := Vector2(portrait_rect.get_center().x, portrait_rect.position.y + portrait_rect.size.y)
+		return foot_position - Vector2(0.0, LOOT_DROP_FLOOR_OFFSET_Y)
+	return get_global_rect().get_center()
 
 
 ## 初始化敎人資料

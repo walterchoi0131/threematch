@@ -715,15 +715,48 @@ func _on_enemy_pressed(enemy: Enemy) -> void:
 		_set_target(enemy)
 
 
+func _get_enemy_base_loot_entries(enemy_data: EnemyData) -> Array[LootItem]:
+	if enemy_data == null:
+		return []
+	var source_path: String = String(enemy_data.get_meta("stage_editor_source_path", "")).strip_edges()
+	if source_path.is_empty():
+		source_path = enemy_data.resource_path
+	if not source_path.is_empty() and source_path.find("::") < 0:
+		var source_resource: Resource = load(source_path)
+		if source_resource is EnemyData:
+			return (source_resource as EnemyData).loot_table
+	if not enemy_data.resource_path.is_empty() and enemy_data.resource_path.find("::") < 0:
+		return enemy_data.loot_table
+	return []
+
+
 ## 敎人死亡時：移除、重新指定目標、檢查是否進入下一波
 func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
 	var loot_results: Array = []
-	for entry: LootItem in dead_enemy.data.loot_table:
+	var loot_entries: Array[LootItem] = []
+	loot_entries.append_array(_get_enemy_base_loot_entries(dead_enemy.data))
+	loot_entries.append_array(dead_enemy.data.stage_extra_loot_table)
+	for entry: LootItem in loot_entries:
+		if entry == null:
+			continue
+		if entry.item_type == ItemDefs.Type.GOLD:
+			continue
 		var result: Dictionary = entry.roll()
 		if not result.is_empty():
 			loot_results.append(result)
+	if loot_results.is_empty():
+		var gold_amount: int = int(round(
+			float(maxi(1, dead_enemy.spawn_level))
+			* float(GameState.GOLD_ECONOMIC_MULTIPLIER)
+			* maxf(0.0, dead_enemy.data.monster_gold_multiplier)
+		))
+		if gold_amount > 0:
+			loot_results.append({
+				"type": ItemDefs.Type.GOLD,
+				"amount": gold_amount,
+			})
 	if not loot_results.is_empty():
-		loot_dropped.emit(dead_enemy.data, loot_results, dead_enemy.spawn_level, dead_enemy.get_global_rect().get_center())
+		loot_dropped.emit(dead_enemy.data, loot_results, dead_enemy.spawn_level, dead_enemy.get_loot_drop_position())
 	active_enemies.erase(dead_enemy)
 	logic_enemy_hp.erase(dead_enemy)
 	if targeted_enemy == dead_enemy:

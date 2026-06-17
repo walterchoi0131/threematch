@@ -20,6 +20,8 @@ const RING_POINT_COUNT := 96
 	set(value):
 		preview_color = value
 		configure(value)
+@export var draw_particles := true
+@export var draw_rings := true
 
 var _texture: Texture2D = null
 var _color: Color = Color.WHITE
@@ -28,18 +30,21 @@ var _rings: Array[Dictionary] = []
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _next_spawn_delay: float = 0.0
 var _next_ring_delay: float = 0.0
+var _has_configured_color := false
 
 
 func _ready() -> void:
 	_rng.randomize()
 	_texture = TrailProjectileScript.make_attack_spark_texture()
-	_color = preview_color
+	if not _has_configured_color:
+		_color = preview_color
 	_next_spawn_delay = _rng.randf_range(0.02, 0.08)
 	_next_ring_delay = 0.0
 	set_process(true)
 
 
 func configure(color: Color) -> void:
+	_has_configured_color = true
 	_color = color
 	if _texture == null:
 		_texture = TrailProjectileScript.make_attack_spark_texture()
@@ -99,8 +104,11 @@ func _spawn_ring() -> void:
 
 
 func _draw() -> void:
-	_draw_pulse_rings()
+	if draw_rings:
+		_draw_pulse_rings()
 	if _texture == null:
+		return
+	if not draw_particles:
 		return
 	for p in _particles:
 		var age: float = float(p.get("age", 0.0))
