@@ -158,6 +158,7 @@ var _player_shield_badge_tween: Tween = null
 var _enemy_board_effects_pending: int = 0
 var _auto_enemy_active_cds: Dictionary = {}
 var _battle_shake_tween: Tween = null
+var _round_walk_tween: Tween = null
 var _battle_shake_original_positions: Dictionary = {}
 
 # ── 並行融合狀態 ──
@@ -286,6 +287,7 @@ var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_bg_override_option: OptionButton = null
 var _stage_editor_music_override_option: OptionButton = null
+var _stage_editor_boss_bgm_option: OptionButton = null
 var _stage_editor_stretch_bg_check: CheckButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
 var _stage_editor_distribution_spins: Dictionary = {}
@@ -679,7 +681,7 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_panel = PanelContainer.new()
 	_stage_editor_area_panel.name = "StageEditorAreaPanel"
 	_stage_editor_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_stage_editor_area_panel.custom_minimum_size = Vector2(348, 54)
+	_stage_editor_area_panel.custom_minimum_size = Vector2(420, 82)
 	_stage_editor_area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
 	$UILayer.add_child(_stage_editor_area_panel)
 
@@ -759,7 +761,7 @@ func _build_stage_editor_area_panel() -> void:
 
 	var music_box := VBoxContainer.new()
 	music_box.add_theme_constant_override("separation", 1)
-	music_box.custom_minimum_size = Vector2(96, 0)
+	music_box.custom_minimum_size = Vector2(104, 0)
 	spot_box.add_child(music_box)
 
 	var music_override_label := Label.new()
@@ -770,11 +772,25 @@ func _build_stage_editor_area_panel() -> void:
 
 	_stage_editor_music_override_option = OptionButton.new()
 	_stage_editor_music_override_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_music_override_option.custom_minimum_size = Vector2(96, 22)
+	_stage_editor_music_override_option.custom_minimum_size = Vector2(104, 22)
 	_stage_editor_music_override_option.add_theme_font_size_override("font_size", 10)
 	_stage_editor_make_compact_option_button(_stage_editor_music_override_option)
 	_stage_editor_music_override_option.item_selected.connect(_on_stage_editor_music_override_selected)
 	music_box.add_child(_stage_editor_music_override_option)
+
+	var boss_bgm_label := Label.new()
+	boss_bgm_label.text = "Boss BGM"
+	boss_bgm_label.add_theme_font_size_override("font_size", 8)
+	boss_bgm_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	music_box.add_child(boss_bgm_label)
+
+	_stage_editor_boss_bgm_option = OptionButton.new()
+	_stage_editor_boss_bgm_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_boss_bgm_option.custom_minimum_size = Vector2(104, 22)
+	_stage_editor_boss_bgm_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_make_compact_option_button(_stage_editor_boss_bgm_option)
+	_stage_editor_boss_bgm_option.item_selected.connect(_on_stage_editor_boss_bgm_selected)
+	music_box.add_child(_stage_editor_boss_bgm_option)
 
 	var distribution_box := VBoxContainer.new()
 	distribution_box.add_theme_constant_override("separation", 2)
@@ -3835,6 +3851,9 @@ func _refresh_stage_editor_area_panel() -> void:
 	if _stage_editor_music_override_option != null:
 		var selected_music_override: String = current_stage.battle_music_override_path if current_stage != null else ""
 		_stage_editor_populate_dialog_music_selector(_stage_editor_music_override_option, selected_music_override, "NULL", false)
+	if _stage_editor_boss_bgm_option != null:
+		var selected_boss_bgm: String = _stage_editor_dialog_audio_path(current_stage.boss_bgm) if current_stage != null else ""
+		_stage_editor_populate_dialog_music_selector(_stage_editor_boss_bgm_option, selected_boss_bgm, "NULL", false)
 	if _stage_editor_stretch_bg_check != null:
 		_stage_editor_stretch_bg_check.set_pressed_no_signal(current_stage != null and current_stage.stretch_battle_background)
 	if current_stage != null:
@@ -4013,6 +4032,18 @@ func _on_stage_editor_music_override_selected(_item_index: int) -> void:
 	_set_stage_editor_status("Music Override: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
 
 
+func _on_stage_editor_boss_bgm_selected(_item_index: int) -> void:
+	if _stage_editor_boss_bgm_option == null:
+		return
+	var selected_path: String = _stage_editor_get_option_value(_stage_editor_boss_bgm_option)
+	if current_stage != null:
+		if selected_path.is_empty():
+			current_stage.boss_bgm = null
+		else:
+			current_stage.boss_bgm = load(selected_path) as AudioStream
+	_set_stage_editor_status("Boss BGM: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
+
+
 func _on_stage_editor_stretch_bg_toggled(button_pressed: bool) -> void:
 	if current_stage != null:
 		current_stage.stretch_battle_background = button_pressed
@@ -4124,6 +4155,12 @@ func _on_stage_editor_save_pressed() -> void:
 		current_stage.battle_background_override_path = _stage_editor_get_option_value(_stage_editor_bg_override_option)
 	if _stage_editor_music_override_option != null:
 		current_stage.battle_music_override_path = _stage_editor_get_option_value(_stage_editor_music_override_option)
+	if _stage_editor_boss_bgm_option != null:
+		var boss_bgm_path: String = _stage_editor_get_option_value(_stage_editor_boss_bgm_option)
+		if boss_bgm_path.is_empty():
+			current_stage.boss_bgm = null
+		else:
+			current_stage.boss_bgm = load(boss_bgm_path) as AudioStream
 	if _stage_editor_stretch_bg_check != null:
 		current_stage.stretch_battle_background = _stage_editor_stretch_bg_check.button_pressed
 	current_stage.one_time_reward_item_type = _stage_editor_get_reward_item_type_from_ui()
@@ -4439,6 +4476,8 @@ func _play_stage_intro() -> void:
 			await get_tree().process_frame
 		if _should_show_initial_boss_intro():
 			await _show_boss_intro()
+		else:
+			await _fade_in_spawned_enemies()
 		board.set_input_queue_locked(false)
 		await get_tree().create_timer(1.0).timeout
 		_start_battle_tutorial()
@@ -4452,6 +4491,8 @@ func _play_stage_intro() -> void:
 		await get_tree().process_frame
 	if _should_show_initial_boss_intro():
 		await _show_boss_intro()
+	else:
+		await _fade_in_spawned_enemies()
 	if _is_stage13_story_battle():
 		await _run_stage13_turn1_dialog()
 	if _should_run_stage14_escape_intro():
@@ -4693,6 +4734,8 @@ func _play_bgm() -> void:
 
 func _should_skip_default_battle_bgm_for_initial_boss() -> bool:
 	if current_stage == null or battle_manager == null:
+		return false
+	if current_stage.boss_bgm == null:
 		return false
 	if current_stage.rounds.size() != 1:
 		return false
@@ -8160,6 +8203,85 @@ func _on_defeat_restart() -> void:
 	GameState.fade_to_scene("res://scenes/main.tscn", 0.4)
 
 
+func _fade_in_spawned_enemies(duration: float = 0.45, exclude_boss: bool = false) -> void:
+	if battle_manager == null:
+		return
+	var tw := create_tween().set_parallel(true)
+	var has_tween: bool = false
+	for enemy: Enemy in battle_manager.active_enemies:
+		if not is_instance_valid(enemy):
+			continue
+		if exclude_boss and enemy == _boss_bar_enemy:
+			continue
+		if enemy.modulate.a >= 0.99:
+			continue
+		tw.tween_property(enemy, "modulate:a", 1.0, duration) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		has_tween = true
+	if has_tween:
+		await tw.finished
+	else:
+		tw.kill()
+
+
+func _play_round_switch_transition(round_idx: int, total_rounds: int) -> void:
+	if total_rounds <= 0:
+		return
+	var ui_layer: CanvasLayer = $UILayer
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.z_index = 52
+	ui_layer.add_child(overlay)
+
+	var font: Font = load("res://assets/fonts/game_ui_font.tres")
+	var title := Label.new()
+	title.text = "Round %d/%d" % [round_idx + 1, total_rounds]
+	title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", font)
+	title.add_theme_font_size_override("font_size", 58)
+	title.add_theme_color_override("font_color", Color(1.0, 0.92, 0.35, 1.0))
+	title.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.04, 1.0))
+	title.add_theme_constant_override("outline_size", 8)
+	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.65))
+	title.add_theme_constant_override("shadow_offset_x", 3)
+	title.add_theme_constant_override("shadow_offset_y", 4)
+	title.modulate.a = 0.0
+	overlay.add_child(title)
+
+	var label_tw := create_tween()
+	label_tw.tween_property(title, "modulate:a", 1.0, 0.24).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	label_tw.tween_interval(1.62)
+	label_tw.tween_property(title, "modulate:a", 0.0, 0.32).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+
+	_play_round_walk_background_motion()
+	await label_tw.finished
+	if is_instance_valid(overlay):
+		overlay.queue_free()
+
+
+func _play_round_walk_background_motion() -> void:
+	if not is_instance_valid(_battle_bg_rect):
+		return
+	if _round_walk_tween != null and _round_walk_tween.is_valid():
+		_round_walk_tween.kill()
+	var base_pos: Vector2 = _battle_bg_rect.position
+	_round_walk_tween = create_tween()
+	for _step in 3:
+		_round_walk_tween.tween_property(_battle_bg_rect, "position:y", base_pos.y + 5.0, 0.28) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		_round_walk_tween.tween_property(_battle_bg_rect, "position:y", base_pos.y - 5.0, 0.28) \
+			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	_round_walk_tween.tween_property(_battle_bg_rect, "position:y", base_pos.y, 0.22) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	_round_walk_tween.tween_callback(func() -> void:
+		if is_instance_valid(_battle_bg_rect):
+			_battle_bg_rect.position = base_pos
+	)
+
+
 ## 波次轉換中：鎖定棋盤避免玩家在過場期間操作
 func _on_round_transitioning() -> void:
 	board.is_busy = true
@@ -8170,6 +8292,7 @@ func _on_round_transitioning() -> void:
 ## 波次清除
 func _on_round_cleared() -> void:
 	round_label.text = "Round: %d" % (battle_manager.current_round + 1)
+	await _play_round_switch_transition(battle_manager.current_round, battle_manager.stage_rounds.size())
 	# Round 3（0-indexed = 2）教學：敵人意圖 + 切換目標
 	if current_stage.is_tutorial and battle_manager.current_round == 2 and _battle_dialog != null:
 		_battle_dialog.show_lines(_Stage1Tutorial.make_round3_dialog())
@@ -8177,6 +8300,8 @@ func _on_round_cleared() -> void:
 	# 最後一波（Boss 波）：切換 BGM + 顯示 Boss 出場演出
 	if battle_manager.current_round == battle_manager.stage_rounds.size() - 1:
 		await _show_boss_intro()
+	else:
+		await _fade_in_spawned_enemies()
 	# State/UI 分離：新一波重置邏輯狀態 + 清空殘留 queue
 	board.clear_deferred_clicks()
 	board.set_board_input_paused(false)
@@ -8188,61 +8313,62 @@ func _on_round_cleared() -> void:
 	board.is_busy = false
 
 
-## Boss 出場演出：切換 BGM 為 fez_boss 循環、顯示 Boss 名稱全螢幕遮罩、淡出後返回
+## Boss 出場演出：依關卡設定切換 Boss BGM、顯示 Boss 名稱全螢幕遮罩、淡出後返回
 func _show_boss_intro() -> void:
-	# 交叉淡入 Boss BGM（循環播放，存於 GameState）
-	GameState.crossfade_bgm(load("res://assets/music/fez_boss.mp3"), true, 0.8, "boss")
-	_bgm_player = GameState.bgm_player
+	if current_stage != null and current_stage.boss_bgm != null:
+		var boss_bgm_id: String = current_stage.boss_bgm.resource_path
+		if boss_bgm_id.is_empty():
+			boss_bgm_id = current_stage.stage_id
+		GameState.crossfade_bgm(current_stage.boss_bgm, true, 0.8, "boss:" + boss_bgm_id)
+		_bgm_player = GameState.bgm_player
 
-	# Boss 警告橫幅文字
-	var boss_name := "BOSS INCOMING"
-
-	var font: Font = load("res://assets/fonts/game_ui_font.tres")
-	var ui_layer: CanvasLayer = $UILayer
-
-	var overlay := Control.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.z_index = 50
-	ui_layer.add_child(overlay)
-
-	# 半透明黑色背景
-	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.0, 0.0, 0.0, 0.0)
-	overlay.add_child(bg)
-
-	# Boss 名稱標籤
-	var title_lbl := Label.new()
-	title_lbl.text = boss_name
-	title_lbl.add_theme_font_override("font", font)
-	title_lbl.add_theme_font_size_override("font_size", 64)
-	title_lbl.add_theme_color_override("font_color", Color(0.91, 0.26, 0.21))
-	title_lbl.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
-	title_lbl.add_theme_constant_override("shadow_offset_x", 3)
-	title_lbl.add_theme_constant_override("shadow_offset_y", 3)
-	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title_lbl.modulate.a = 0.0
-	overlay.add_child(title_lbl)
-
-	# Fade in
-	var tw_in := create_tween().set_parallel(true)
-	tw_in.tween_property(bg, "color", Color(0.0, 0.0, 0.0, 0.65), 0.4)
-	tw_in.tween_property(title_lbl, "modulate:a", 1.0, 0.4)
-	await tw_in.finished
-
-	await get_tree().create_timer(1.8).timeout
-
-	# Fade out
-	var tw_out := create_tween().set_parallel(true)
-	tw_out.tween_property(bg, "color", Color(0.0, 0.0, 0.0, 0.0), 0.4)
-	tw_out.tween_property(title_lbl, "modulate:a", 0.0, 0.4)
-	await tw_out.finished
-	overlay.queue_free()
+	# Boss incoming banner temporarily disabled because the round transition
+	# already shows "Round x/y".
+	# var boss_name := "BOSS INCOMING"
+	#
+	# var font: Font = load("res://assets/fonts/game_ui_font.tres")
+	# var ui_layer: CanvasLayer = $UILayer
+	#
+	# var overlay := Control.new()
+	# overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# overlay.z_index = 50
+	# ui_layer.add_child(overlay)
+	#
+	# var bg := ColorRect.new()
+	# bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# bg.color = Color(0.0, 0.0, 0.0, 0.0)
+	# overlay.add_child(bg)
+	#
+	# var title_lbl := Label.new()
+	# title_lbl.text = boss_name
+	# title_lbl.add_theme_font_override("font", font)
+	# title_lbl.add_theme_font_size_override("font_size", 64)
+	# title_lbl.add_theme_color_override("font_color", Color(0.91, 0.26, 0.21))
+	# title_lbl.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.8))
+	# title_lbl.add_theme_constant_override("shadow_offset_x", 3)
+	# title_lbl.add_theme_constant_override("shadow_offset_y", 3)
+	# title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# title_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# title_lbl.modulate.a = 0.0
+	# overlay.add_child(title_lbl)
+	#
+	# var tw_in := create_tween().set_parallel(true)
+	# tw_in.tween_property(bg, "color", Color(0.0, 0.0, 0.0, 0.65), 0.4)
+	# tw_in.tween_property(title_lbl, "modulate:a", 1.0, 0.4)
+	# await tw_in.finished
+	#
+	# await get_tree().create_timer(1.8).timeout
+	#
+	# var tw_out := create_tween().set_parallel(true)
+	# tw_out.tween_property(bg, "color", Color(0.0, 0.0, 0.0, 0.0), 0.4)
+	# tw_out.tween_property(title_lbl, "modulate:a", 0.0, 0.4)
+	# await tw_out.finished
+	# overlay.queue_free()
 
 	# Boss 橫幅結束後才讓頂部 Boss 條淡入
 	_reveal_boss_bar()
+	await _fade_in_spawned_enemies(0.45, true)
 
 
 ## 敵人死亡掉落戰利品：存入本場積累、更新 GameState、顯示浮動文字

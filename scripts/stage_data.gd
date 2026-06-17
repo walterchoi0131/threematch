@@ -244,6 +244,7 @@ func _default_element_distribution() -> Dictionary:
 @export_enum("aurora", "church", "dessert", "dungeon", "forest", "heaven", "iceberg", "meadow", "ruin", "school", "swamp", "underwater", "volcano") var area: String = DEFAULT_AREA  # 關卡地區 key
 @export var battle_background_override_path: String = ""
 @export var battle_music_override_path: String = ""
+@export var boss_bgm: AudioStream = null
 @export var stretch_battle_background: bool = false
 @export var one_time_reward_item_type: ItemDefs.Type = ItemDefs.Type.GOLD
 @export var one_time_reward_item_amount: int = 0

@@ -173,6 +173,7 @@ func _spawn_round(round_idx: int) -> void:
 		else:
 			main_boss_spawn = ed.is_main_boss
 		enemy.setup(ed, init_cd, spawn_level, estimated_team_hp, estimated_max_hp, main_boss_spawn)
+		enemy.modulate.a = 0.0
 		enemy.pressed.connect(_on_enemy_pressed)
 		enemy.long_pressed.connect(func(long_enemy: Enemy) -> void:
 			enemy_long_pressed.emit(long_enemy)
