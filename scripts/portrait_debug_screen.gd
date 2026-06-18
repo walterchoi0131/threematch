@@ -30,6 +30,7 @@ const _SYS: Array = [
 ]
 
 var _char_data: CharacterData = null
+var _previous_char_data: CharacterData = null
 
 ## 每欄的「576px 寬場景容器」節點 — rebuild 時清空並填入
 var _scene_nodes: Array[Control] = []
@@ -179,7 +180,7 @@ func _build() -> void:
 		_build_char_btn(char_row, chars[i], i)
 
 	if chars.size() > 0:
-		_select_char(0)
+		_select_char(0, false)
 
 
 func _debug_characters() -> Array[CharacterData]:
@@ -1012,6 +1013,7 @@ func _build_scene_dialog_phase(scene: Control, scene_h: float) -> TextureRect:
 	const PHASE_PORTRAIT_SCALE: float = 7.2
 	const PHASE_PORTRAIT_Y_RATIO: float = 0.527
 	const PHASE_LEFT_X_RATIO: float = 0.064
+	const PHASE_REF_X_RATIO: float = 0.62
 	const PHASE_PANEL_H: float = 300.0
 	var actual_vp: Vector2 = ViewportUtils.get_size()
 	var preview_scale: float = _dialog_phase_preview_scale()
@@ -1041,24 +1043,36 @@ func _build_scene_dialog_phase(scene: Control, scene_h: float) -> TextureRect:
 		viewport_root.add_child(bg_color)
 
 	var portrait_ref: TextureRect = null
-	if _char_data.portrait_texture != null:
-		var portrait_w: float = 300.0 * (PHASE_PORTRAIT_SCALE / 4.0)
-		var portrait_h: float = 400.0 * (PHASE_PORTRAIT_SCALE / 4.0)
-		var base_position := Vector2(
-			actual_vp.x * PHASE_LEFT_X_RATIO - (portrait_w - 300.0) * 0.5 - 30.0,
+	var portrait_w: float = 300.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+	var portrait_h: float = 400.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+	var current_base_position := Vector2(
+		actual_vp.x * PHASE_LEFT_X_RATIO - (portrait_w - 300.0) * 0.5 - 30.0,
+		actual_vp.y * PHASE_PORTRAIT_Y_RATIO - (portrait_h - 400.0)
+	)
+	portrait_ref = _make_dialog_phase_portrait(
+		viewport_root,
+		_char_data,
+		current_base_position,
+		Vector2(portrait_w, portrait_h),
+		1.0
+	)
+
+	if _previous_char_data != null and _previous_char_data != _char_data:
+		var ref_base_position := Vector2(
+			actual_vp.x * PHASE_REF_X_RATIO - (portrait_w - 300.0) * 0.5,
 			actual_vp.y * PHASE_PORTRAIT_Y_RATIO - (portrait_h - 400.0)
 		)
-		var portrait := TextureRect.new()
-		portrait.texture = _char_data.portrait_texture
-		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		portrait.size = Vector2(portrait_w, portrait_h)
-		portrait.custom_minimum_size = portrait.size
-		portrait.pivot_offset = Vector2(portrait_w * 0.5, portrait_h)
-		portrait.set_meta("debug_base_position", base_position)
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		viewport_root.add_child(portrait)
-		portrait_ref = portrait
+		var ref_portrait := _make_dialog_phase_portrait(
+			viewport_root,
+			_previous_char_data,
+			ref_base_position,
+			Vector2(portrait_w, portrait_h),
+			0.72
+		)
+		if ref_portrait != null:
+			ref_portrait.scale = Vector2(_previous_char_data.dialog_phase_scale, _previous_char_data.dialog_phase_scale)
+			ref_portrait.position = ref_base_position + _previous_char_data.dialog_phase_offset
+			_add_dialog_phase_reference_label(viewport_root, _previous_char_data, ref_base_position)
 
 	var panel := PanelContainer.new()
 	panel.position = Vector2(0.0, actual_vp.y - PHASE_PANEL_H)
@@ -1102,6 +1116,44 @@ func _build_scene_dialog_phase(scene: Control, scene_h: float) -> TextureRect:
 	scene.add_child(outline)
 
 	return portrait_ref
+
+
+func _make_dialog_phase_portrait(parent: Control, character: CharacterData, base_position: Vector2, portrait_size: Vector2, alpha: float) -> TextureRect:
+	if character == null or character.portrait_texture == null:
+		return null
+	var portrait := TextureRect.new()
+	portrait.texture = character.portrait_texture
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.size = portrait_size
+	portrait.custom_minimum_size = portrait.size
+	portrait.pivot_offset = Vector2(portrait_size.x * 0.5, portrait_size.y)
+	portrait.modulate = Color(1.0, 1.0, 1.0, alpha)
+	portrait.set_meta("debug_base_position", base_position)
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(portrait)
+	return portrait
+
+
+func _add_dialog_phase_reference_label(parent: Control, character: CharacterData, base_position: Vector2) -> void:
+	var panel := PanelContainer.new()
+	panel.position = base_position + Vector2(70.0, 24.0)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.045, 0.07, 0.74)
+	style.border_color = Color(0.9, 0.88, 0.62, 0.42)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", style)
+	parent.add_child(panel)
+
+	var lbl := Label.new()
+	lbl.text = "參照物: %s" % Locale.tr_ui(character.character_name)
+	lbl.add_theme_font_size_override("font_size", 18)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.94, 0.68, 0.94))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(lbl)
 
 
 func _dialog_phase_preview_height() -> float:
@@ -1191,11 +1243,14 @@ func _build_char_btn(parent: HBoxContainer, c: CharacterData, idx: int) -> void:
 # ─────────────────────────────────────────────────────────────
 # 邏輯
 # ─────────────────────────────────────────────────────────────
-func _select_char(idx: int) -> void:
+func _select_char(idx: int, record_previous: bool = true) -> void:
 	var chars: Array[CharacterData] = _debug_characters()
 	if idx < 0 or idx >= chars.size():
 		return
-	_char_data = chars[idx]
+	var next_char: CharacterData = chars[idx]
+	if record_previous and _char_data != null and _char_data != next_char:
+		_previous_char_data = _char_data
+	_char_data = next_char
 	for j: int in _char_btns.size():
 		var sel: Node = _char_btns[j].get_node_or_null("SelBorder")
 		if sel != null:
@@ -1248,7 +1303,7 @@ func _rebuild_preserving_selection(selected_path: String) -> void:
 	for i in chars.size():
 		var character: CharacterData = chars[i]
 		if character != null and character.resource_path == selected_path:
-			_select_char(i)
+			_select_char(i, false)
 			return
 
 
