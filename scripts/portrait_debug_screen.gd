@@ -8,7 +8,7 @@
 ## 拖拽 = 調整 Offset，滚輪 = 調整 Scale。Save 按鈕寫回 .tres。
 extends Control
 
-const _SCALE_STEP: float    = 0.05
+const _SCALE_STEP: float    = 0.01
 const _RECT_IMG_SIZE: float = 1200.0  # battle_result 使用 300×4
 const _STAT_LEVEL_MIN: int = 1
 const _STAT_LEVEL_MAX: int = 99
