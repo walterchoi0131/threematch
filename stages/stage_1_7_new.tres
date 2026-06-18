@@ -7,7 +7,7 @@
 script = ExtResource("1_i3ou7")
 stage_id = "1-7-new"
 prerequisite_stage_id = "1-7"
-map_position = Vector2(469.54248, 860.55554)
+map_position = Vector2(376, 886)
 stage_name = "Stage 1-7-new"
 element_weights = Array[int]([25])
 allowed_types = Array[int]([2])

@@ -1,4 +1,4 @@
-## MapDebugPanel — 世界地圖 F9 浮動 debug 面板。
+## MapDebugPanel — 世界地圖 F4 浮動 debug 面板。
 ## 目前提供：地圖進度、角色清單與道具的快速調整。
 class_name MapDebugPanel
 extends RefCounted
@@ -31,7 +31,7 @@ static func build(parent: Node, on_cleared: Callable) -> Control:
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "Map Debug (F9 close)"
+	title.text = "Map Debug (F4 close)"
 	title.add_theme_font_size_override("font_size", 16)
 	vbox.add_child(title)
 

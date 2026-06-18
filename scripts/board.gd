@@ -24,6 +24,9 @@ const OBSTACLE_DEBRIS_SHARDS := 8
 const WOOD_SPEAR_THRUST_SCALE := 0.18
 const WOOD_SPEAR_THRUST_TIP_FROM_TOP := 48.0
 const WOOD_SPEAR_ROW_HIT_INTERVAL := 0.075
+const FUSE_POP_PEAK_DURATION := 0.2
+const FUSE_POP_SETTLE_DURATION := 0.2
+const FUSE_POP_PEAK_SCALE := Vector2(1.4, 1.4)
 const SELECTION_ORDER_FONT := preload("res://assets/fonts/game_ui_font.tres")
 
 @export var stage: StageData  # 當前關卡資料
@@ -92,6 +95,7 @@ var _draining: bool = false       # 正在 drain queue（避免遞迴）
 var _next_click_is_drained: bool = false
 # 由 main.gd 設定：attack worker 仍在處理 queue（影響 upper-gem drain 時機）
 var external_attack_busy: bool = false
+var fuse_preflight_handler: Callable = Callable()
 
 
 func _player_is_defeated() -> bool:
@@ -154,6 +158,7 @@ var _longpress_trigger_pop_tweens: Dictionary = {} # 預覽中觸發 upper 的 P
 var _longpress_press_tween: Tween = null   # 長按預覽時 upper gem 的按壓/放開動畫
 var _longpress_press_block: Block = null
 var _longpress_press_original_scale: Vector2 = Vector2.ONE
+var _fuse_animation_tweens: Dictionary = {}
 var _longpress_press_original_position: Vector2 = Vector2.ZERO
 var _longpress_raised_blocks: Array[Block] = []  # 預覽時被抬高 z_index 的方塊
 
@@ -1497,6 +1502,8 @@ func _logic_would_trigger_fuse(gem_type: int, count: int) -> bool:
 
 ## 嘗試將點擊放入 deferred queue（is_busy 期間呼叫）。
 func _try_queue_click(pos: Vector2i) -> void:
+	if _board_input_paused:
+		return
 	if _selection_mode:
 		return
 	if is_fusing:
@@ -1564,6 +1571,9 @@ func _drain_deferred_clicks() -> void:
 func notify_external_attack_busy(busy: bool) -> void:
 	external_attack_busy = busy
 	if _player_is_defeated():
+		clear_deferred_clicks()
+		return
+	if _board_input_paused:
 		clear_deferred_clicks()
 		return
 	if not busy and not is_busy:
@@ -2527,10 +2537,20 @@ func _play_element_stone_drop(block: Block, sequence_index: int = 0) -> float:
 func play_fuse_animation(block: Block) -> void:
 	if block == null or not is_instance_valid(block):
 		return
+	if _fuse_animation_tweens.has(block):
+		var old_tween: Tween = _fuse_animation_tweens[block] as Tween
+		if old_tween != null and old_tween.is_valid():
+			old_tween.kill()
+		_fuse_animation_tweens.erase(block)
 	block.scale = Vector2(1.0, 1.0)
 	var tween := create_tween()
-	tween.tween_property(block, "scale", Vector2(1.4, 1.4), 0.2).set_ease(Tween.EASE_OUT)
-	tween.tween_property(block, "scale", Vector2(1.0, 1.0), 0.2).set_trans(Tween.TRANS_BACK)
+	_fuse_animation_tweens[block] = tween
+	tween.tween_property(block, "scale", FUSE_POP_PEAK_SCALE, FUSE_POP_PEAK_DURATION).set_ease(Tween.EASE_OUT)
+	tween.tween_property(block, "scale", Vector2(1.0, 1.0), FUSE_POP_SETTLE_DURATION).set_trans(Tween.TRANS_BACK)
+	tween.finished.connect(func() -> void:
+		if _fuse_animation_tweens.get(block, null) == tween:
+			_fuse_animation_tweens.erase(block)
+	, CONNECT_ONE_SHOT)
 	var flash := ColorRect.new()
 	flash.color = Color(1, 1, 1, 0.85)
 	flash.size = Vector2(CELL_SIZE, CELL_SIZE)
@@ -2541,6 +2561,29 @@ func play_fuse_animation(block: Block) -> void:
 	var flash_tw := create_tween()
 	flash_tw.tween_property(flash, "color:a", 0.0, 0.2).set_ease(Tween.EASE_IN)
 	flash_tw.tween_callback(flash.queue_free)
+
+
+func get_fuse_pop_peak_duration() -> float:
+	return FUSE_POP_PEAK_DURATION
+
+
+func get_fuse_pop_full_duration() -> float:
+	return FUSE_POP_PEAK_DURATION + FUSE_POP_SETTLE_DURATION
+
+
+func get_fuse_pop_peak_scale() -> Vector2:
+	return FUSE_POP_PEAK_SCALE
+
+
+func hold_fuse_animation_at_peak(block: Block) -> void:
+	if block == null or not is_instance_valid(block):
+		return
+	if _fuse_animation_tweens.has(block):
+		var tween: Tween = _fuse_animation_tweens[block] as Tween
+		if tween != null and tween.is_valid():
+			tween.kill()
+		_fuse_animation_tweens.erase(block)
+	block.scale = FUSE_POP_PEAK_SCALE
 
 
 ## 寶石變身動畫：縮小 → 替換類型 → 放大 + 融合闃光/彈跳 → 更新融合提示
@@ -3430,6 +3473,8 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 		Block.UpperType.SNOWBALL:
 			return _get_surrounding_positions(pos)
 		Block.UpperType.ICEBALL:
+			return _get_surrounding_positions(pos)
+		Block.UpperType.LEAF_RAY:
 			return _get_surrounding_positions(pos)
 		Block.UpperType.LIGHT_SHIELD:
 			return _get_row_positions(pos.y)
@@ -4652,9 +4697,23 @@ func _would_trigger_fuse(gem_type: Block.Type, group: Array[Vector2i]) -> bool:
 	return false
 
 
+func _blast_value_for_group(group: Array[Vector2i]) -> int:
+	var total := 0
+	for pos in group:
+		if not _is_valid(pos):
+			continue
+		var block: Block = grid[pos.x][pos.y]
+		if block == null:
+			continue
+		total += block.get_blast_value()
+	return total
+
+
 ## 嘗試在融合動畫期間立即觸發並行融合。
 ## 驗證：1) 模擬掉落後棋盤仍可行 2) 真實棋盤也可行 → 立即消除並發出信號。
 func _try_concurrent_fuse(click_pos: Vector2i, local_pos: Vector2) -> void:
+	if _board_input_paused:
+		return
 	var block: Block = grid[click_pos.x][click_pos.y]
 	if block == null or block.is_upper_gem() or block.is_obstacle():
 		return
@@ -4677,6 +4736,11 @@ func _try_concurrent_fuse(click_pos: Vector2i, local_pos: Vector2) -> void:
 		return
 	if not _would_trigger_fuse(gem_type, real_matches):
 		return
+	if fuse_preflight_handler.is_valid():
+		var can_fuse: bool = bool(fuse_preflight_handler.call(gem_type, _blast_value_for_group(real_matches), real_matches, click_pos))
+		if not can_fuse:
+			play_rejected_cell_animation(click_pos)
+			return
 
 	# 3. 立即消除（skip_collapse 已為 true）並發出 gems_blasted 信號
 	_concurrent_fuse_tapped_pos = click_pos

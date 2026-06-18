@@ -63,6 +63,7 @@ const DEFAULT_FUSE_THRESHOLD: Dictionary = {
 	Block.UpperType.WOOD_SPEAR_UP: 7,
 	Block.UpperType.WOOD_SPEAR_DOWN: 7,
 	Block.UpperType.LIGHT_SHIELD: 6,
+	Block.UpperType.LEAF_RAY: 6,
 }
 
 const UPGRADE_EFFECTS: Dictionary = {
@@ -173,6 +174,11 @@ static func _ensure_init() -> void:
 		Block.Type.LIGHT,
 		Color(0.55, 0.82, 1.0),
 		"Light Shield",
+	)
+	_defs[Block.UpperType.LEAF_RAY] = Def.new(
+		Block.Type.GREEN,
+		Color(0.62, 1.0, 0.12),
+		"Leaf Ray",
 	)
 	_defs[Block.UpperType.WATER_SLASH] = Def.new(
 		Block.Type.BLUE,

@@ -431,7 +431,7 @@ func _blast_pattern_for(upper_type: int) -> Array:
 				for y in range(1, 4):
 					cells_b.append(Vector2i(x, y))
 			return cells_b
-		Block.UpperType.ICEBALL, Block.UpperType.LEAF_SHIELD, Block.UpperType.BAMBOO_SUPPLY:
+		Block.UpperType.ICEBALL, Block.UpperType.LEAF_RAY, Block.UpperType.LEAF_SHIELD, Block.UpperType.BAMBOO_SUPPLY:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
@@ -572,6 +572,7 @@ func _upper_gem_templates() -> Array[Dictionary]:
 		_skill_template("Turtle", "Turtle", "Turtle", Block.UpperType.TURTLE, "count", "summon a Turtle gem at tapped cell."),
 		_skill_template("Bamboo Supply", "Bamboo", "Bamboo", Block.UpperType.BAMBOO_SUPPLY, "count", "create a Bamboo Supply gem at tapped cell."),
 		_skill_template("Wood Spear", "Wood Spear", "Spear", Block.UpperType.WOOD_SPEAR_UP, "count", "create a Wood Spear gem at tapped cell."),
+		_skill_template("Leaf Ray", "Leaf Ray", "Ray", Block.UpperType.LEAF_RAY, "count", "create an instant Leaf Ray gem at tapped cell."),
 		_skill_template("光之盾", "光之盾", "Light", Block.UpperType.LIGHT_SHIELD, "count", "create a Light Shield upper gem."),
 	]
 

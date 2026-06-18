@@ -199,6 +199,8 @@ static func responding_upper_type_from_name(skill_name: String) -> Block.UpperTy
 			return Block.UpperType.BAMBOO_SUPPLY
 		"Wood Spear":
 			return Block.UpperType.WOOD_SPEAR_UP
+		"Leaf Ray":
+			return Block.UpperType.LEAF_RAY
 		"光之盾":
 			return Block.UpperType.LIGHT_SHIELD
 	return Block.UpperType.NONE

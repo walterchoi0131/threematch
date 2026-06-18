@@ -201,6 +201,10 @@ var _translations: Dictionary = {
 	"LOG_CONVERT_TO": {"zh": "轉換為", "en": "→"},
 	"SPELL_CHAIN": {"zh": "法術連撃", "en": "Spell Chain"},
 	"SPELL_CHAIN_SHORT": {"zh": "法", "en": "spell"},
+	"咒術印記: 陽光射線": {"zh": "咒術印記：陽光射線", "en": "Spell Sigil: Sunbeam"},
+	"咒術印記: 陽光射線 DESC": {"zh": "將棋盤左上與右下各 2×3 格轉為葉寶石。CD：4 回合。", "en": "Turn two 2x3 piles at the top-left and bottom-right of the board into leaf gems. CD: 4 turns."},
+	"Leaf Ray": {"zh": "葉光射線", "en": "Leaf Ray"},
+	"Leaf Ray DESC": {"zh": "6 顆以上葉寶石合成時，生成立即咒語葉光射線。寶石會向敵人發射 1 秒射線，造成施放者魔力 × 3.5 傷害。", "en": "Fuse 6+ leaf gems to create an instant Leaf Ray. The gem fires a 1s ray at an enemy, dealing caster magic x3.5 damage."},
 	"TAP_HERO_TO_USE_SKILL": {"zh": "點擊角色使用技能", "en": "Tap the hero to use skill"},
 }
 

@@ -509,7 +509,7 @@ func _blast_pattern_for(upper_type: int) -> Array:
 				for y in range(1, 4):
 					cells_b.append(Vector2i(x, y))
 			return cells_b
-		Block.UpperType.ICEBALL:
+		Block.UpperType.ICEBALL, Block.UpperType.LEAF_RAY:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]

@@ -556,6 +556,49 @@ func take_damage_with_hp_floor(amount: int, hp_floor: int = 1) -> int:
 	return _take_damage_internal(amount, maxi(0, hp_floor))
 
 
+func get_damage_after_passives(amount: int) -> int:
+	var applied_amount: int = _apply_damage_passives(amount)
+	last_applied_damage = applied_amount
+	return applied_amount
+
+
+func take_applied_damage_tick(applied_amount: int) -> int:
+	if applied_amount <= 0:
+		return 0
+	last_applied_damage = applied_amount
+	var prev_hp: int = current_hp
+	var next_hp: int = current_hp - applied_amount
+	var floor_was_triggered: bool = damage_hp_floor >= 0 and next_hp < damage_hp_floor
+	if floor_was_triggered:
+		current_hp = damage_hp_floor
+	else:
+		current_hp = max(0, next_hp)
+	var actual_damage: int = maxi(0, prev_hp - current_hp)
+	hp_changed.emit(current_hp, max_hp)
+	if floor_was_triggered:
+		hp_floor_triggered.emit(self)
+	if hp_bar_label:
+		hp_bar_label.text = "%d" % current_hp
+	if hp_bar_fill:
+		var target_ratio: float = float(current_hp) / float(max_hp) if max_hp > 0 else 0.0
+		var bar_tween := create_tween()
+		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	var blink := create_tween()
+	blink.tween_property(self, "modulate", Color(2.0, 0.3, 0.3), 0.05)
+	blink.tween_property(self, "modulate", Color.WHITE, 0.08)
+
+	if current_hp <= 0:
+		if defer_death:
+			return actual_damage
+		if blink.is_valid():
+			blink.kill()
+		modulate = Color.WHITE
+		died.emit(self)
+		_play_death_animation()
+	return actual_damage
+
+
 func set_damage_hp_floor(hp_floor: int) -> void:
 	damage_hp_floor = maxi(0, hp_floor)
 

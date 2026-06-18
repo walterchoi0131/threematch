@@ -528,14 +528,13 @@ func _play_overlay_close(layer: CanvasLayer, frame: Control, backdrop: Control) 
 	tw.chain().tween_callback(layer.queue_free)
 
 
-# ── F4/F9 Dev and Debug Panel ───────────────────────────────
+# ── World Map Dev and Debug Panel ───────────────────────────────
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F4:
 			_toggle_dev_mode()
-		elif event.keycode == KEY_F9:
-			_toggle_debug_panel()
+			_set_debug_panel_visible(GameState.dev_mode)
 
 
 func _toggle_dev_mode() -> void:
@@ -570,10 +569,21 @@ func _refresh_dev_mode_ui() -> void:
 	_dev_mode_label.text = "DEV MODE  F4"
 
 
-func _toggle_debug_panel() -> void:
+func _set_debug_panel_visible(visible: bool) -> void:
+	if visible:
+		_show_debug_panel()
+	else:
+		_close_debug_panel()
+
+
+func _close_debug_panel() -> void:
 	if _debug_panel != null and is_instance_valid(_debug_panel):
 		_debug_panel.queue_free()
-		_debug_panel = null
+	_debug_panel = null
+
+
+func _show_debug_panel() -> void:
+	if _debug_panel != null and is_instance_valid(_debug_panel):
 		return
 	var layer := CanvasLayer.new()
 	layer.layer = 64
@@ -583,6 +593,8 @@ func _toggle_debug_panel() -> void:
 	)
 	# 關閉時連同 CanvasLayer 一起移除
 	_debug_panel.tree_exited.connect(func() -> void:
+		if _debug_panel != null and not is_instance_valid(_debug_panel):
+			_debug_panel = null
 		if is_instance_valid(layer):
 			layer.queue_free()
 	)

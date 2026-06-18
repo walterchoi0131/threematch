@@ -4,6 +4,7 @@ const ProjectileScript := preload("res://scripts/projectile.gd")
 const GemParticleScript := preload("res://scripts/gem_particle.gd")
 const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
+const LeafRayLaserVfxScript := preload("res://scripts/leaf_ray_laser_vfx.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
 const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.gd")
@@ -22,7 +23,7 @@ const GOLD_COIN_VIEWPORT_SIZE := 72
 const GOLD_COIN_FLOOR_DROP := Vector2(0.0, 46.0)
 const GOLD_COIN_DROP_DURATION := 0.34
 const GOLD_COIN_SPIN_HOLD_DURATION := 0.5
-const GOLD_COIN_FLY_DURATION := 1.04
+const GOLD_COIN_FLY_DURATION := 0.728
 const GOLD_COIN_FADE_DURATION := 0.18
 const LOOT_FLY_ICON_SIZE := 52
 const LOOT_TOAST_SIZE := Vector2(184.0, 64.0)
@@ -35,6 +36,7 @@ const LOOT_TOAST_HOLD_DURATION := 1.15
 const LOOT_TOAST_SLIDE_OUT_DURATION := 0.28
 
 signal loot_animations_finished()
+signal loot_flights_finished()
 
 # ── scene references ──────────────────────────────────────────────────
 @onready var board = $Board
@@ -121,9 +123,13 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
+const LEAF_RAY_MAGIC_MULT := 3.5
+const LEAF_RAY_LASER_DURATION := 1.0
+const LEAF_RAY_DAMAGE_TICK_INTERVAL := 0.2
+const LEAF_RAY_DEBRIS_SHARDS := 9
 const COMBO_UI_MARGIN := Vector2(28.0, 92.0)
 const COMBO_UI_SLOT_GAP := 142.0
 const COMBO_UI_VALUE_OFFSET_Y := 20.0
@@ -181,6 +187,10 @@ var _battle_shake_original_positions: Dictionary = {}
 # ── 並行融合狀態 ──
 var _fuse_pipeline_active: bool = false  # 融合管線正在執行中
 var _concurrent_fuses: Array = []        # 並行融合資料 [{ tapped_pos, responses, arrival_msec, gem_type, count, grid_positions }]
+var _pending_instant_upper_tasks: Array[Dictionary] = []
+var _reserved_instant_upper_tasks: Array[Dictionary] = []
+var _instant_upper_resolvers: Dictionary = {}
+var _instant_upper_predictors: Dictionary = {}
 
 # ── 攻擊管線佇列（State/UI 分離：blast 動畫與角色攻擊解耦）──
 # 每個 item: { gem_type, count, global_positions, grid_positions, responses }
@@ -189,6 +199,8 @@ var _attack_worker_running: bool = false
 
 # ── VFX 粒子池 ──
 const MAX_VFX_PARTICLES := 16
+const TRANSMUTE_TRAILS_PER_CELL := 8
+const TRANSMUTE_TRAIL_POOL_SIZE := 128
 var _vfx_pool: Array = []
 
 # ── 攻擊交錯延遲（多角色連打時，下一位開始攻擊前等待的秒數）──
@@ -223,6 +235,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.WOOD_SPEAR_UP: "res://assets/gems/gem_wood_spear.png",
 	Block.UpperType.WOOD_SPEAR_DOWN: "res://assets/gems/gem_wood_spear.png",
 	Block.UpperType.LIGHT_SHIELD: "res://assets/gems/gem_light_shield.png",
+	Block.UpperType.LEAF_RAY: "res://assets/gems/gem_leaf_ray.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -235,6 +248,7 @@ var _se_impact: AudioStream = null
 var _se_join_team: AudioStream = null
 var _se_thor_active: AudioStream = null
 var _se_goal_achieve: AudioStream = null
+var _se_water_bubble: AudioStream = null
 var _se_stone_impacts: Array[AudioStream] = []
 
 # ── BGM 預覽模式狀態 ──
@@ -246,6 +260,7 @@ var _battle_loot: Dictionary = {}  # 本場戰鬥積累的戰利品; key=ItemDef
 var _battle_exp: int = 0           # 本場戰鬥積累的經驗值
 var _loot_toast_totals: Dictionary = {}
 var _active_loot_animation_count: int = 0
+var _active_loot_flight_count: int = 0
 var _active_loot_toasts: Array[Dictionary] = []
 var _loot_toast_queue: Array[Dictionary] = []
 var _loot_toast_starting: bool = false
@@ -414,9 +429,12 @@ func _ready() -> void:
 			await _apply_burning_tick()
 	# State/UI 分離：board 需引用 battle_manager 以查詢邏輯狀態
 	board.battle_manager_ref = battle_manager
+	board.fuse_preflight_handler = Callable(self, "_can_accept_concurrent_fuse")
 
 	battle_manager.enemy_container = enemy_container
 	battle_manager.auto_enemy_action_handler = Callable(self, "_handle_auto_enemy_action")
+	battle_manager.round_transition_wait_handler = Callable(self, "_wait_for_loot_flights_finished")
+	_register_instant_upper_resolvers()
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
 	battle_manager.player_shield_changed.connect(_on_player_shield_changed)
 	battle_manager.player_defeated.connect(_on_player_defeated)
@@ -444,6 +462,7 @@ func _ready() -> void:
 	_setup_kill_all_button()
 	_setup_escape_hud()
 	_setup_puzzle_goal_hud()
+	_prewarm_trail_projectile_pool(TRANSMUTE_TRAIL_POOL_SIZE)
 
 	_se_blast = _load_audio_stream("res://assets/se/111.wav")
 	_se_freeze = _load_audio_stream("res://assets/se/skef_freeze.mp3")
@@ -451,6 +470,7 @@ func _ready() -> void:
 	_se_join_team = _load_audio_stream("res://assets/se/join_team2.mp3")
 	_se_thor_active = _load_audio_stream("res://assets/se/magical_star_transmu.mp3")
 	_se_goal_achieve = _load_audio_stream("res://assets/se/goal_achieve.mp3")
+	_se_water_bubble = _load_audio_stream("res://assets/se/water_bubble.mp3")
 	_se_stone_impacts = [
 		_load_audio_stream("res://assets/se/stone1.mp3"),
 		_load_audio_stream("res://assets/se/stone2.mp3"),
@@ -5153,6 +5173,269 @@ func _is_instant_response(resp: Dictionary) -> bool:
 	return Block.upper_type_has_instant(_upper_type_for_response(resp))
 
 
+func _has_living_battle_enemy() -> bool:
+	return _living_battle_enemy_count() > 0
+
+
+func _living_battle_enemy_count() -> int:
+	var count := 0
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy) and enemy.current_hp > 0:
+			count += 1
+	return count
+
+
+func _response_list_has_instant_spell(responses: Array) -> bool:
+	for resp in responses:
+		if _is_instant_response(resp):
+			return true
+	return false
+
+
+func _is_battle_stage_mode() -> bool:
+	return current_stage == null or int(current_stage.mode) == int(StageData.Mode.NORMAL)
+
+
+func _should_abort_pending_instant_flow() -> bool:
+	if battle_manager.is_round_transitioning:
+		return true
+	return _is_battle_stage_mode() and not _has_living_battle_enemy()
+
+
+func _lock_input_for_instant_spell() -> void:
+	board.clear_deferred_clicks()
+	board.set_board_input_paused(true)
+
+
+func _clear_pending_instant_spell_work() -> void:
+	_concurrent_fuses.clear()
+	_pending_instant_upper_tasks.clear()
+	_reserved_instant_upper_tasks.clear()
+	_attack_queue.clear()
+	board.clear_deferred_clicks()
+
+
+func _get_instant_upper_pop_full_duration() -> float:
+	var pop_duration := 0.4
+	if board != null and board.has_method("get_fuse_pop_full_duration"):
+		pop_duration = float(board.get_fuse_pop_full_duration())
+	return pop_duration
+
+
+func _register_instant_upper_resolvers() -> void:
+	_instant_upper_resolvers.clear()
+	_instant_upper_predictors.clear()
+	_instant_upper_resolvers[Block.UpperType.ICEBALL] = Callable(self, "_resolve_iceball_instant")
+	_instant_upper_resolvers[Block.UpperType.LEAF_RAY] = Callable(self, "_resolve_leaf_ray_instant")
+	_instant_upper_predictors[Block.UpperType.ICEBALL] = Callable(self, "_predict_iceball_instant")
+	_instant_upper_predictors[Block.UpperType.LEAF_RAY] = Callable(self, "_predict_leaf_ray_instant")
+
+
+func _has_instant_upper_resolver(upper_type: Block.UpperType) -> bool:
+	var resolver: Callable = _instant_upper_resolvers.get(upper_type, Callable()) as Callable
+	return resolver.is_valid()
+
+
+func _has_instant_upper_predictor(upper_type: Block.UpperType) -> bool:
+	var predictor: Callable = _instant_upper_predictors.get(upper_type, Callable()) as Callable
+	return predictor.is_valid()
+
+
+func _pending_instant_spell_mult(index: int) -> float:
+	return 1.0 + float(_spell_chain_count + index) * 0.10
+
+
+func _predict_targeted_instant_damage(gem_type: Block.Type, base_damage: int, spell_mult: float, sim_hp: Dictionary) -> Dictionary:
+	var target: Enemy = battle_manager.targeted_enemy
+	if target != null and (not is_instance_valid(target) or int(sim_hp.get(target, 0)) <= 0):
+		target = null
+	if target == null:
+		target = _get_best_target_for_damage(gem_type, base_damage, spell_mult, sim_hp)
+	if target == null:
+		return {}
+	var element_mult: float = battle_manager.get_element_multiplier(gem_type, target.data.element) if target.data != null else 1.0
+	var final_damage: int = maxi(1, int(float(base_damage) * element_mult * spell_mult))
+	var predicted_damage: int = battle_manager.get_enemy_damage_after_passives(target, final_damage)
+	return {
+		"target": target,
+		"damage": predicted_damage,
+	}
+
+
+func _predict_iceball_instant(resp: Dictionary, spell_mult: float, sim_hp: Dictionary) -> Dictionary:
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	return _predict_targeted_instant_damage(Block.Type.BLUE, magic_value * ICEBALL_MAGIC_MULT, spell_mult, sim_hp)
+
+
+func _predict_leaf_ray_instant(resp: Dictionary, spell_mult: float, sim_hp: Dictionary) -> Dictionary:
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	var base_damage: int = maxi(1, int(round(float(magic_value) * LEAF_RAY_MAGIC_MULT)))
+	return _predict_targeted_instant_damage(Block.Type.GREEN, base_damage, spell_mult, sim_hp)
+
+
+func _apply_instant_prediction_to_sim(prediction: Dictionary, sim_hp: Dictionary) -> void:
+	var target_ref: Variant = prediction.get("target", null)
+	if not is_instance_valid(target_ref):
+		return
+	var target: Enemy = target_ref as Enemy
+	if target == null:
+		return
+	var predicted_damage: int = maxi(0, int(prediction.get("damage", 0)))
+	sim_hp[target] = int(sim_hp.get(target, target.current_hp)) - predicted_damage
+
+
+func _instant_task_matches_response(task: Dictionary, resp: Dictionary, upper_type: Block.UpperType) -> bool:
+	if (task.get("upper_type", Block.UpperType.NONE) as Block.UpperType) != upper_type:
+		return false
+	var task_resp: Dictionary = task.get("resp", {}) as Dictionary
+	return int(task_resp.get("char_index", -1)) == int(resp.get("char_index", -1)) \
+		and int(task_resp.get("gem_type", -999)) == int(resp.get("gem_type", -999)) \
+		and int(task_resp.get("skill_order", -1)) == int(resp.get("skill_order", -1))
+
+
+func _make_instant_task(resp: Dictionary, upper_type: Block.UpperType) -> Dictionary:
+	return {
+		"resp": resp.duplicate(true),
+		"upper_type": upper_type,
+	}
+
+
+func _reserve_instant_upper_responses(responses: Array) -> void:
+	for resp in responses:
+		var response: Dictionary = resp as Dictionary
+		var upper_type: Block.UpperType = _upper_type_for_response(response)
+		if upper_type == Block.UpperType.NONE or not Block.upper_type_has_instant(upper_type):
+			continue
+		if not _has_instant_upper_resolver(upper_type) or not _has_instant_upper_predictor(upper_type):
+			continue
+		_reserved_instant_upper_tasks.append(_make_instant_task(response, upper_type))
+
+
+func _consume_instant_upper_reservation(resp: Dictionary, upper_type: Block.UpperType) -> void:
+	for index in _reserved_instant_upper_tasks.size():
+		if _instant_task_matches_response(_reserved_instant_upper_tasks[index], resp, upper_type):
+			_reserved_instant_upper_tasks.remove_at(index)
+			return
+
+
+func _predict_instant_upper_task(task: Dictionary, sim_hp: Dictionary, pending_index: int) -> Dictionary:
+	var upper_type: Block.UpperType = task.get("upper_type", Block.UpperType.NONE) as Block.UpperType
+	var predictor: Callable = _instant_upper_predictors.get(upper_type, Callable()) as Callable
+	if not predictor.is_valid():
+		return {}
+	var resp: Dictionary = task.get("resp", {}) as Dictionary
+	return predictor.call(resp, _pending_instant_spell_mult(pending_index), sim_hp) as Dictionary
+
+
+func _can_queue_instant_upper_response(resp: Dictionary, upper_type: Block.UpperType, include_reservations: bool = true) -> bool:
+	if not _has_instant_upper_predictor(upper_type):
+		push_warning("Instant upper gem has no predictor: %s" % str(upper_type))
+		return false
+	var sim_hp: Dictionary = _get_current_enemy_hp_sim()
+	var simulated_tasks: Array[Dictionary] = []
+	simulated_tasks.append_array(_pending_instant_upper_tasks)
+	if include_reservations:
+		simulated_tasks.append_array(_reserved_instant_upper_tasks)
+	for index in simulated_tasks.size():
+		var queued_prediction: Dictionary = _predict_instant_upper_task(simulated_tasks[index], sim_hp, index)
+		if queued_prediction.is_empty():
+			return false
+		_apply_instant_prediction_to_sim(queued_prediction, sim_hp)
+	return not _predict_instant_upper_task(_make_instant_task(resp, upper_type), sim_hp, simulated_tasks.size()).is_empty()
+
+
+func _queue_pending_instant_upper_task(pos: Vector2i, resp: Dictionary, upper_type: Block.UpperType) -> void:
+	var block: Block = null
+	if board != null and board._is_valid(pos):
+		block = board.grid[pos.x][pos.y]
+	_pending_instant_upper_tasks.append({
+		"pos": pos,
+		"block": block,
+		"resp": resp.duplicate(true),
+		"upper_type": upper_type,
+		"ready_msec": Time.get_ticks_msec() + int(_get_instant_upper_pop_full_duration() * 1000.0),
+	})
+
+
+func _find_pending_instant_task_pos(task: Dictionary) -> Vector2i:
+	var fallback: Vector2i = task.get("pos", Vector2i(-1, -1)) as Vector2i
+	var raw_block: Variant = task.get("block", null)
+	if not is_instance_valid(raw_block):
+		return fallback
+	var block: Block = raw_block as Block
+	if block == null:
+		return fallback
+	if board == null:
+		return fallback
+	if board != null and board._is_valid(fallback) and board.grid[fallback.x][fallback.y] == block:
+		return fallback
+	for x in board.columns:
+		for y in board.rows:
+			if board.grid[x][y] == block:
+				return Vector2i(x, y)
+	return fallback
+
+
+func _prepare_pending_instant_upper_tasks_for_effect() -> void:
+	var latest_ready_msec := Time.get_ticks_msec()
+	for task in _pending_instant_upper_tasks:
+		latest_ready_msec = maxi(latest_ready_msec, int(task.get("ready_msec", latest_ready_msec)))
+	var now := Time.get_ticks_msec()
+	if now < latest_ready_msec:
+		await get_tree().create_timer(float(latest_ready_msec - now) / 1000.0).timeout
+	await get_tree().process_frame
+
+
+func _play_pending_instant_upper_task(task: Dictionary) -> void:
+	if battle_manager.is_round_transitioning:
+		return
+	var pos: Vector2i = _find_pending_instant_task_pos(task)
+	if board == null or not board._is_valid(pos) or board.grid[pos.x][pos.y] == null:
+		return
+	var resp: Dictionary = task.get("resp", {}) as Dictionary
+	var upper_type: Block.UpperType = task.get("upper_type", Block.UpperType.NONE) as Block.UpperType
+	var resolver: Callable = _instant_upper_resolvers.get(upper_type, Callable()) as Callable
+	if not resolver.is_valid():
+		push_warning("Instant upper gem has no resolver: %s" % str(upper_type))
+		return
+	var spell_mult: float = _register_spell_chain()
+	await resolver.call(pos, resp, spell_mult)
+
+
+func _play_pending_instant_upper_tasks() -> void:
+	if _pending_instant_upper_tasks.is_empty():
+		return
+	_lock_input_for_instant_spell()
+	await _prepare_pending_instant_upper_tasks_for_effect()
+	while not _pending_instant_upper_tasks.is_empty():
+		var task: Dictionary = _pending_instant_upper_tasks.pop_front()
+		await _play_pending_instant_upper_task(task)
+
+
+func _place_instant_upper_response(resp: Dictionary, upper_type: Block.UpperType, fuse_gem_type: Block.Type) -> bool:
+	if not _has_instant_upper_resolver(upper_type):
+		push_warning("Instant upper gem is marked instant but has no resolver: %s" % str(upper_type))
+		return false
+	_consume_instant_upper_reservation(resp, upper_type)
+	if not _can_queue_instant_upper_response(resp, upper_type, false):
+		return false
+	var pos: Vector2i = board.last_tapped_pos
+	var upper_gem_type: Block.Type = Block.UPPER_ELEMENT.get(upper_type, fuse_gem_type) as Block.Type
+	if not board.place_upper_gem(pos, upper_type, upper_gem_type, Block.UpperOwnerTeam.PLAYER, 0):
+		return false
+	_play_sfx(_se_freeze)
+	var char_index: int = int(resp.get("char_index", -1))
+	var character: CharacterData = party[char_index] if char_index >= 0 and char_index < party.size() else null
+	var fuse_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+	_add_log_entry(_format_fuse_bbcode(fuse_gem_type, fuse_count, upper_type), fuse_gem_type, character)
+	_queue_pending_instant_upper_task(pos, resp, upper_type)
+	return true
+
+
 ## 新增一筆日誌條目（三層結構：元素漸層 + 角色眼部肖像 + 文字）
 func _add_log_entry(bbcode_text: String, gem_type: Block.Type = Block.Type.RED, char_data: CharacterData = null) -> void:
 	if _log_vbox == null:
@@ -5344,18 +5627,30 @@ func _on_score_changed(new_score: int) -> void:
 	score_label.text = "Score: %d" % new_score
 
 
+func _create_trail_projectile() -> Node2D:
+	var p := Node2D.new()
+	p.set_script(TrailProjectileScript)
+	fx_layer.add_child(p)
+	p.setup()
+	p.visible = false
+	_vfx_pool.append(p)
+	return p
+
+
+func _prewarm_trail_projectile_pool(target_size: int) -> void:
+	if fx_layer == null:
+		return
+	while _vfx_pool.size() < target_size:
+		_create_trail_projectile()
+
+
 ## 從池中取得一個可用的 VFX 粒子節點（池滿且全忙時回傳 null）
-func _acquire_particle() -> Node2D:
+func _acquire_particle(pool_limit: int = MAX_VFX_PARTICLES) -> Node2D:
 	for p in _vfx_pool:
 		if p.is_available:
 			return p
-	if _vfx_pool.size() < MAX_VFX_PARTICLES:
-		var p := Node2D.new()
-		p.set_script(TrailProjectileScript)
-		fx_layer.add_child(p)
-		p.setup()
-		_vfx_pool.append(p)
-		return p
+	if _vfx_pool.size() < pool_limit:
+		return _create_trail_projectile()
 	return null
 
 
@@ -5482,6 +5777,9 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 	board.is_fusing = true
 	_fuse_pipeline_active = true
 	_concurrent_fuses.clear()
+	_pending_instant_upper_tasks.clear()
+	_reserved_instant_upper_tasks.clear()
+	_reserve_instant_upper_responses(responses)
 
 	var first_tapped_pos: Vector2i = board.last_tapped_pos
 	var first_tapped_local_pos: Vector2 = board.last_tapped_local_pos
@@ -5522,6 +5820,9 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 		for resp in cf.responses:
 			await _execute_responding_skill(resp)
 
+	await _play_pending_instant_upper_tasks()
+	_reserved_instant_upper_tasks.clear()
+
 	_fuse_pipeline_active = false
 	board.is_fusing = false
 
@@ -5537,11 +5838,48 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 		battle_manager.clear_logic_pending_attack()
 		battle_manager.resync_logic_state()
 		board.resync_logic_from_visual()
+		board.set_board_input_paused(false)
 		board.is_busy = false
+
+
+func _can_accept_concurrent_fuse(gem_type: Block.Type, count: int, grid_positions: Array, _tap_pos: Vector2i) -> bool:
+	if battle_manager == null or board == null or battle_manager.is_round_transitioning:
+		return false
+
+	var typed_positions: Array[Vector2i] = []
+	for value in grid_positions:
+		typed_positions.append(value as Vector2i)
+
+	var saved_blasts: Dictionary = battle_manager.turn_gem_blasts.duplicate()
+	var saved_positions: Array[Vector2i] = battle_manager.last_blast_positions.duplicate()
+	battle_manager.turn_gem_blasts = {}
+	battle_manager.last_blast_positions = []
+	battle_manager.record_blast(gem_type, count, typed_positions)
+	var responses := battle_manager.check_responding_skills(board)
+	battle_manager.turn_gem_blasts = saved_blasts
+	battle_manager.last_blast_positions = saved_positions
+
+	if responses.is_empty():
+		return false
+
+	var has_instant_response := false
+	for resp in responses:
+		var response: Dictionary = resp as Dictionary
+		var upper_type: Block.UpperType = _upper_type_for_response(response)
+		if upper_type == Block.UpperType.NONE or not Block.upper_type_has_instant(upper_type):
+			continue
+		has_instant_response = true
+		if not _can_queue_instant_upper_response(response, upper_type):
+			return false
+	if has_instant_response:
+		_reserve_instant_upper_responses(responses)
+	return true
 
 
 ## 處理並行融合的 gems_blasted 信號：立即發射粒子並記錄待處理資料
 func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positions: Array[Vector2i], global_positions: Array) -> void:
+	if battle_manager.is_round_transitioning:
+		return
 	# 暫存並替換 battle_manager 狀態以檢查此次消除的回應技能
 	var saved_blasts: Dictionary = battle_manager.turn_gem_blasts.duplicate()
 	var saved_positions: Array[Vector2i] = battle_manager.last_blast_positions.duplicate()
@@ -6180,6 +6518,9 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 	var skill_name: String = resp.skill_name
 	var upper_type: Block.UpperType = _upper_type_for_response(resp)
 	var fuse_gem_type: Block.Type = int(resp.get("gem_type", party[int(resp.char_index)].gem_type))
+	if upper_type != Block.UpperType.NONE and Block.upper_type_has_instant(upper_type):
+		_place_instant_upper_response(resp, upper_type, fuse_gem_type)
+		return
 	if upper_type != Block.UpperType.NONE and not _is_instant_response(resp):
 		_reset_spell_chain()
 	var response_key: Variant = skill_name if upper_type == Block.UpperType.NONE else upper_type
@@ -6242,17 +6583,6 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _sc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _sc_count, Block.UpperType.SNOWBALL), fuse_gem_type, _sc)
 			await get_tree().create_timer(0.15).timeout
-		Block.UpperType.ICEBALL:
-			var pos: Vector2i = board.last_tapped_pos
-			if not board.place_upper_gem(pos, Block.UpperType.ICEBALL, Block.Type.BLUE):
-				return
-			_play_sfx(_se_freeze)
-			var _ic: CharacterData = party[resp.char_index]
-			var _ic_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _ic_count, Block.UpperType.ICEBALL), fuse_gem_type, _ic)
-			await get_tree().create_timer(0.12).timeout
-			var spell_mult: float = _register_spell_chain()
-			await _resolve_iceball_instant(pos, resp, spell_mult)
 		Block.UpperType.LIGHT_SHIELD:
 			var pos: Vector2i = board.last_tapped_pos
 			if not board.place_upper_gem(pos, Block.UpperType.LIGHT_SHIELD, Block.Type.LIGHT):
@@ -6423,6 +6753,18 @@ func _get_current_living_target(gem_type: Block.Type = Block.Type.BLUE, base_dam
 	return _get_best_target_for_damage(gem_type, base_damage, damage_mult, _get_current_enemy_hp_sim())
 
 
+func _move_block_to_fx_layer_preserving_transform(block: Block, z_index: int) -> void:
+	if block == null or not is_instance_valid(block) or fx_layer == null:
+		return
+	var preserved_transform: Transform2D = block.global_transform
+	var block_parent: Node = block.get_parent()
+	if block_parent != null:
+		block_parent.remove_child(block)
+	fx_layer.add_child(block)
+	block.global_transform = preserved_transform
+	block.z_index = z_index
+
+
 func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float) -> void:
 	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
 		return
@@ -6433,14 +6775,9 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	board.grid[pos.x][pos.y] = null
 
 	var start_global: Vector2 = block.global_position
-	var block_parent: Node = block.get_parent()
-	if block_parent != null:
-		block_parent.remove_child(block)
-	fx_layer.add_child(block)
-	block.global_position = start_global
-	block.z_index = 42
-	block.scale = Vector2.ONE
+	_move_block_to_fx_layer_preserving_transform(block, 42)
 	block.modulate = Color.WHITE
+	block.refresh_upper_particle_system()
 
 	var caster_index: int = int(resp.get("char_index", -1))
 	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
@@ -6496,6 +6833,123 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 			enemy.defer_death = false
 			if enemy.current_hp <= 0:
 				enemy.finalize_death()
+
+
+func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: float) -> void:
+	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
+		return
+	var block: Block = board.grid[pos.x][pos.y]
+	if block == null:
+		return
+	board.is_busy = true
+	board.grid[pos.x][pos.y] = null
+
+	var start_global: Vector2 = block.global_position
+	_move_block_to_fx_layer_preserving_transform(block, 95)
+	block.modulate = Color.WHITE
+	block.refresh_upper_particle_system()
+
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	var base_damage: int = maxi(1, int(round(float(magic_value) * LEAF_RAY_MAGIC_MULT)))
+	var target: Enemy = _get_current_living_target(Block.Type.GREEN, base_damage, spell_mult)
+	var leaf_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.30, 0.69, 0.31))
+	if target == null:
+		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LEAF_RAY, null) as Texture2D
+		DebrisVfx.play(fx_layer, fallback_texture, start_global, LEAF_RAY_DEBRIS_SHARDS, Vector2(0.80, 1.18), Vector2(0.70, 1.0), 120, leaf_color)
+		block.queue_free()
+		await board._collapse_and_fill()
+		board.is_busy = false
+		return
+
+	var element_mult: float = battle_manager.get_element_multiplier(Block.Type.GREEN, target.data.element) if target.data != null else 1.0
+	var final_damage: int = maxi(1, int(float(base_damage) * element_mult * spell_mult))
+	var is_super: bool = element_mult > 1.0
+
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			enemy.defer_death = true
+
+	var leaf_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LEAF_RAY, null) as Texture2D
+	var beam_start: Vector2 = block.global_position
+	var target_pos: Vector2 = _get_enemy_image_center(target) if is_instance_valid(target) else beam_start
+	var laser := Node2D.new()
+	laser.set_script(LeafRayLaserVfxScript)
+	fx_layer.add_child(laser)
+	laser.start_following(block, target_pos, LEAF_RAY_LASER_DURATION)
+
+	var recoil_dir: Vector2 = (beam_start - target_pos).normalized()
+	if recoil_dir.length_squared() < 0.001:
+		recoil_dir = Vector2(0.0, -1.0)
+	var recoil_tw := create_tween().set_parallel(true)
+	recoil_tw.tween_property(block, "global_position", beam_start + recoil_dir * 46.0, LEAF_RAY_LASER_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	recoil_tw.tween_property(block, "rotation", block.rotation + recoil_dir.x * 0.45, LEAF_RAY_LASER_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_play_sfx(_se_impact)
+
+	var applied_damage := 0
+	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
+		var applied_total: int = target.get_damage_after_passives(final_damage)
+		var tick_count: int = maxi(1, ceili(LEAF_RAY_LASER_DURATION / LEAF_RAY_DAMAGE_TICK_INTERVAL))
+		var tick_base: int = floori(float(applied_total) / float(tick_count))
+		var tick_remainder: int = applied_total % tick_count
+		for tick_index in range(tick_count):
+			await get_tree().create_timer(LEAF_RAY_DAMAGE_TICK_INTERVAL).timeout
+			if not is_instance_valid(target) or not (target.current_hp > 0 or target.defer_death):
+				continue
+			var tick_damage: int = tick_base + (1 if tick_index < tick_remainder else 0)
+			if tick_damage <= 0:
+				continue
+			var actual_tick_damage: int = target.take_applied_damage_tick(tick_damage)
+			if actual_tick_damage <= 0:
+				continue
+			applied_damage += actual_tick_damage
+			var tick_pos: Vector2 = _get_enemy_image_center(target)
+			_spawn_damage_number(tick_pos, actual_tick_damage, leaf_color, true, is_super)
+			DebrisVfx.play(fx_layer, leaf_texture, tick_pos, 4, Vector2(0.42, 0.78), Vector2(0.32, 0.52), 118, leaf_color)
+	elif is_instance_valid(laser):
+		await laser.finished
+
+	if is_instance_valid(block):
+		await _play_leaf_ray_gem_falloff(block)
+
+	var mult_text := ""
+	if element_mult > 1.0:
+		mult_text += " ×%.1f" % element_mult
+	if spell_mult > 1.0:
+		mult_text += " ×%.1f%s" % [spell_mult, Locale.tr_ui("SPELL_CHAIN_SHORT")]
+	_add_log_entry("[b]%s[/b] %s MAG%d%s = %d" % [Locale.tr_ui("Leaf Ray"), _gem_bbcode(Block.Type.GREEN), base_damage, mult_text, applied_damage], Block.Type.GREEN, caster)
+
+	for enemy in battle_manager.active_enemies.duplicate():
+		if is_instance_valid(enemy):
+			enemy.defer_death = false
+			if enemy.current_hp <= 0:
+				enemy.finalize_death()
+
+
+func _play_leaf_ray_gem_falloff(block: Node2D) -> void:
+	if not is_instance_valid(block):
+		return
+	var start_pos: Vector2 = block.global_position
+	var start_scale: Vector2 = block.scale
+	var side: float = 1.0 if randf() >= 0.5 else -1.0
+	var push_x: float = side * randf_range(42.0, 78.0)
+	var jump_height: float = randf_range(56.0, 84.0)
+	var fall_distance: float = randf_range(220.0, 300.0)
+	var duration: float = 0.86
+
+	var motion_tw := create_tween().set_parallel(true)
+	motion_tw.tween_property(block, "global_position:x", start_pos.x + push_x, duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	motion_tw.tween_property(block, "rotation", block.rotation + side * randf_range(1.1, 1.8) * PI, duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	motion_tw.tween_property(block, "scale", start_scale * 0.58, duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	motion_tw.tween_property(block, "modulate:a", 0.0, duration * 0.45).set_delay(duration * 0.55)
+
+	var y_tw := create_tween()
+	y_tw.tween_property(block, "global_position:y", start_pos.y - jump_height, duration * 0.28).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	y_tw.tween_property(block, "global_position:y", start_pos.y + fall_distance, duration * 0.72).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	await y_tw.finished
+	if is_instance_valid(block):
+		block.queue_free()
 
 
 # ── upper gem handlers ───────────────────────────────────────────────
@@ -6929,6 +7383,7 @@ func _handle_active_skill(char_index: int) -> void:
 			_update_skill_ui()
 		"冰球法印":
 			battle_manager.use_active_skill(char_index)
+			_play_sfx(_se_water_bubble)
 			_update_skill_ui()
 			board.is_busy = true
 			var centers: Array[Vector2i] = [Vector2i(board.columns - 2, 1), Vector2i(1, board.rows - 2)]
@@ -7142,6 +7597,45 @@ func _handle_active_skill(char_index: int) -> void:
 			_play_sfx(_se_freeze)
 			_add_log_entry("%s：%s ×%d" % [Locale.tr_ui("Leaf Spear Call"), _upper_gem_bbcode(last_spear_type), placed_count], Block.Type.GREEN, c)
 			await get_tree().create_timer(0.25).timeout
+			board.is_busy = false
+		"咒術印記: 陽光射線":
+			var targets: Array[Vector2i] = []
+			var seen: Dictionary = {}
+			var areas: Array[Dictionary] = [
+				{"x": 0, "y": 0},
+				{"x": maxi(0, board.columns - 2), "y": maxi(0, board.rows - 3)},
+			]
+			for area in areas:
+				var start_x: int = int(area.get("x", 0))
+				var start_y: int = int(area.get("y", 0))
+				for y in range(start_y, mini(start_y + 3, board.rows)):
+					for x in range(start_x, mini(start_x + 2, board.columns)):
+						var p := Vector2i(x, y)
+						if seen.has(p):
+							continue
+						seen[p] = true
+						if not board._is_valid(p):
+							continue
+						var tb: Block = board.grid[p.x][p.y]
+						if tb == null or tb.is_obstacle() or tb.is_upper_gem():
+							continue
+						targets.append(p)
+			if targets.is_empty():
+				return
+			battle_manager.use_active_skill(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			var converted := 0
+			for p: Vector2i in targets:
+				var tb: Block = board.grid[p.x][p.y]
+				if tb == null or tb.is_obstacle() or tb.is_upper_gem():
+					continue
+				if tb.block_type != Block.Type.GREEN:
+					board._animate_gem_morph(tb, Block.Type.GREEN)
+					converted += 1
+			_add_log_entry("%s：%d/%d→%s" % [Locale.tr_ui("咒術印記: 陽光射線"), converted, targets.size(), _gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, c)
+			await get_tree().create_timer(0.4).timeout
+			board.resync_logic_from_visual()
 			board.is_busy = false
 		"Resurgence", "Resurgence+":
 			# 生息：選一顆寶石，將其上下左右四鄰轉換為相同元素
@@ -8090,41 +8584,49 @@ func _on_enemy_stone_magic_cast(enemy: Enemy) -> void:
 func _play_transmute_spiral_vfx_for_cells(positions: Array, color: Color, duration: float = 0.36) -> void:
 	if positions.is_empty():
 		return
+	var targets: Array[Vector2] = []
 	for value in positions:
 		var pos: Vector2i = value as Vector2i
 		if not board._is_valid(pos):
 			continue
 		var target_global: Vector2 = board.to_global(board.grid_to_world(pos))
-		_play_transmute_spiral_vfx(target_global, color, duration)
+		targets.append(target_global)
+	if targets.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var total_trails: int = maxi(1, targets.size() * TRANSMUTE_TRAILS_PER_CELL)
+	for i in total_trails:
+		var target_global: Vector2 = targets[i % targets.size()]
+		_launch_transmute_spiral_trail(target_global, color, duration, rng, i, total_trails)
+		if i % 16 == 15:
+			await get_tree().process_frame
 	await get_tree().create_timer(duration).timeout
 
 
 ## 轉換前置特效：重用現有攻擊 trail，弧光在目標格周圍出現並旋入中心。
 func _play_transmute_spiral_vfx(target_global: Vector2, color: Color, duration: float) -> void:
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	var rng := RandomNumberGenerator.new()
 	rng.randomize()
+	var trail_count: int = TRANSMUTE_TRAILS_PER_CELL
+	for i in trail_count:
+		_launch_transmute_spiral_trail(target_global, color, duration, rng, i, trail_count)
+
+
+func _launch_transmute_spiral_trail(target_global: Vector2, color: Color, duration: float, rng: RandomNumberGenerator, index: int, total: int) -> void:
 	var trail_color: Color = color
 	trail_color.a = 1.0
-	var trail_count: int = 8
 	# TrailProjectile 內部會再除以 speed_divisor，這裡先乘回去，讓最後一條軌跡能在 duration 結束時貼齊轉石動畫。
 	var launch_duration: float = duration * 0.72 * TrailProjectileScript.speed_divisor
-	for i in trail_count:
-		var angle: float = TAU * float(i) / float(trail_count) + rng.randf_range(-0.22, 0.22)
-		var radius: float = rng.randf_range(120.0, 172.0)
-		var from_pos: Vector2 = target_global + Vector2(cos(angle), sin(angle)) * radius
-		var swirl_spread: float = rng.randf_range(0.9, 1.65) * (-1.0 if rng.randf() < 0.5 else 1.0)
-		var delay: float = duration * rng.randf_range(0.0, 0.28)
-		get_tree().create_timer(delay).timeout.connect(func() -> void:
-			var trail: Node2D = Node2D.new()
-			trail.set_script(TrailProjectileScript)
-			trail.z_index = 100
-			fx_layer.add_child(trail)
-			trail.released.connect(func() -> void:
-				if is_instance_valid(trail):
-					trail.queue_free()
-			, CONNECT_ONE_SHOT)
-			trail.launch(from_pos, target_global, trail_color, launch_duration, swirl_spread)
-		, CONNECT_ONE_SHOT)
+	var angle: float = TAU * float(index) / float(maxi(total, 1)) + rng.randf_range(-0.28, 0.28)
+	var radius: float = rng.randf_range(96.0, 148.0)
+	var from_pos: Vector2 = target_global + Vector2(cos(angle), sin(angle)) * radius
+	var swirl_spread: float = rng.randf_range(0.9, 1.65) * (-1.0 if rng.randf() < 0.5 else 1.0)
+	var trail: Node2D = _acquire_particle(TRANSMUTE_TRAIL_POOL_SIZE)
+	if trail == null:
+		return
+	trail.z_index = 100
+	trail.launch(from_pos, target_global, trail_color, launch_duration, swirl_spread)
 
 
 # ── 戰鬥回呼 ──────────────────────────────────────────────────
@@ -8527,6 +9029,8 @@ func _play_round_walk_background_motion() -> void:
 
 ## 波次轉換中：鎖定棋盤避免玩家在過場期間操作
 func _on_round_transitioning() -> void:
+	_clear_pending_instant_spell_work()
+	board.set_board_input_paused(true)
 	board.is_busy = true
 	# 波次轉場：將棋盤暗化（同長按預覽色）
 	board.darken_all_gems(0.4)
@@ -8772,6 +9276,16 @@ func _begin_loot_animation() -> void:
 	_active_loot_animation_count += 1
 
 
+func _begin_loot_flight() -> void:
+	_active_loot_flight_count += 1
+
+
+func _finish_loot_flight() -> void:
+	_active_loot_flight_count = maxi(0, _active_loot_flight_count - 1)
+	if _active_loot_flight_count == 0:
+		loot_flights_finished.emit()
+
+
 func _finish_loot_animation() -> void:
 	_active_loot_animation_count = maxi(0, _active_loot_animation_count - 1)
 	if _active_loot_animation_count == 0:
@@ -8781,6 +9295,11 @@ func _finish_loot_animation() -> void:
 func _wait_for_loot_animations_finished() -> void:
 	while _active_loot_animation_count > 0:
 		await loot_animations_finished
+
+
+func _wait_for_loot_flights_finished() -> void:
+	while _active_loot_flight_count > 0:
+		await loot_flights_finished
 
 
 func _animate_loot_toast_label(label: Label, from_total: int, to_total: int) -> void:
@@ -9019,6 +9538,7 @@ func _make_gold_coin_viewport(pixel_size: int, animate_spin: bool = true) -> Sub
 
 func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount: int, target_total: int) -> void:
 	_begin_loot_animation()
+	_begin_loot_flight()
 	var previous_total: int = int(_loot_toast_totals.get(item_type, 0))
 	_loot_toast_totals[item_type] = target_total
 	var icon_factory := func():
@@ -9026,6 +9546,7 @@ func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount:
 	var finished_callback := func() -> void:
 		_finish_loot_animation()
 	if fx_layer == null:
+		_finish_loot_flight()
 		_enqueue_loot_toast(item_type, previous_total, target_total, icon_factory, finished_callback)
 		return
 	var base_fly_size: int = GOLD_COIN_VIEWPORT_SIZE if item_type == ItemDefs.Type.GOLD else LOOT_FLY_ICON_SIZE
@@ -9057,6 +9578,7 @@ func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount:
 	, 0.0, 1.0, GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
 	tw.parallel().tween_property(loot_view, "scale", Vector2(0.42, 0.42), GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
+		_finish_loot_flight()
 		_enqueue_loot_toast(item_type, previous_total, target_total, icon_factory, finished_callback)
 		if is_instance_valid(loot_view):
 			loot_view.queue_free()
@@ -10856,15 +11378,15 @@ func _setup_kill_all_button() -> void:
 	var exit_btn: Node = ui_layer.get_node_or_null("ReturnButton")
 	var restart_btn: Node = ui_layer.get_node_or_null("RestartButton")
 
-	# 五顆按鈕同寬，間距 6px，整組以 anchor 0.5 置中。
+	# 偵錯按鈕同寬，間距 6px，整組以 anchor 0.5 置中。
 	var top_off: float = -96.0
 	var bot_off: float = -56.0
 	if restart_btn is Button:
 		var rb: Button = restart_btn as Button
 		top_off = rb.offset_top
 		bot_off = rb.offset_bottom
-		rb.offset_left = -162.0
-		rb.offset_right = -58.0
+		rb.offset_left = -217.0
+		rb.offset_right = -113.0
 	if exit_btn is Button:
 		var eb: Button = exit_btn as Button
 		eb.text = Locale.tr_ui("EXIT")
@@ -10873,8 +11395,8 @@ func _setup_kill_all_button() -> void:
 		eb.anchor_top = 1.0
 		eb.anchor_right = 0.5
 		eb.anchor_bottom = 1.0
-		eb.offset_left = -272.0
-		eb.offset_right = -168.0
+		eb.offset_left = -327.0
+		eb.offset_right = -223.0
 		eb.offset_top = top_off
 		eb.offset_bottom = bot_off
 
@@ -10886,8 +11408,8 @@ func _setup_kill_all_button() -> void:
 	_kill_all_btn.anchor_top = 1.0
 	_kill_all_btn.anchor_right = 0.5
 	_kill_all_btn.anchor_bottom = 1.0
-	_kill_all_btn.offset_left = -52.0
-	_kill_all_btn.offset_right = 52.0
+	_kill_all_btn.offset_left = -107.0
+	_kill_all_btn.offset_right = -3.0
 	_kill_all_btn.offset_top = top_off
 	_kill_all_btn.offset_bottom = bot_off
 	_kill_all_btn.pressed.connect(_on_kill_all_pressed)
@@ -10901,12 +11423,27 @@ func _setup_kill_all_button() -> void:
 	combo_btn.anchor_top = 1.0
 	combo_btn.anchor_right = 0.5
 	combo_btn.anchor_bottom = 1.0
-	combo_btn.offset_left = 58.0
-	combo_btn.offset_right = 162.0
+	combo_btn.offset_left = 3.0
+	combo_btn.offset_right = 107.0
 	combo_btn.offset_top = top_off
 	combo_btn.offset_bottom = bot_off
 	combo_btn.pressed.connect(_on_combo_test_pressed.bind(combo_btn))
 	ui_layer.add_child(combo_btn)
+
+	var test_board_btn := Button.new()
+	test_board_btn.name = "TestBoardButton"
+	test_board_btn.text = "Test Board"
+	test_board_btn.modulate = Color(0.65, 0.9, 1.0)
+	test_board_btn.anchor_left = 0.5
+	test_board_btn.anchor_top = 1.0
+	test_board_btn.anchor_right = 0.5
+	test_board_btn.anchor_bottom = 1.0
+	test_board_btn.offset_left = 113.0
+	test_board_btn.offset_right = 217.0
+	test_board_btn.offset_top = top_off
+	test_board_btn.offset_bottom = bot_off
+	test_board_btn.pressed.connect(_on_test_board_pressed)
+	ui_layer.add_child(test_board_btn)
 
 	var skill_reset_btn := Button.new()
 	skill_reset_btn.name = "SkillResetButton"
@@ -10916,8 +11453,8 @@ func _setup_kill_all_button() -> void:
 	skill_reset_btn.anchor_top = 1.0
 	skill_reset_btn.anchor_right = 0.5
 	skill_reset_btn.anchor_bottom = 1.0
-	skill_reset_btn.offset_left = 168.0
-	skill_reset_btn.offset_right = 272.0
+	skill_reset_btn.offset_left = 223.0
+	skill_reset_btn.offset_right = 327.0
 	skill_reset_btn.offset_top = top_off
 	skill_reset_btn.offset_bottom = bot_off
 	skill_reset_btn.pressed.connect(_on_skill_reset_pressed)
@@ -11345,6 +11882,44 @@ func _on_kill_all_pressed() -> void:
 	for e: Enemy in snapshot:
 		if is_instance_valid(e) and e.current_hp > 0:
 			e.take_damage(e.current_hp)
+
+
+## 偵錯：將棋盤改成 3x3 九宮格元素堆，方便測試 fusion。
+func _on_test_board_pressed() -> void:
+	if board == null or battle_manager == null:
+		return
+	if battle_manager.is_round_transitioning:
+		return
+
+	var pattern: Array[Block.Type] = [
+		Block.Type.RED,
+		Block.Type.BLUE,
+		Block.Type.GREEN,
+		Block.Type.LIGHT,
+	]
+	var tile_size := 3
+	var tile_columns: int = maxi(1, ceili(float(board.columns) / float(tile_size)))
+	board.clear_deferred_clicks()
+	for y in board.rows:
+		for x in board.columns:
+			var block: Block = board.grid[x][y]
+			if block == null or block.is_obstacle():
+				continue
+			var tile_x: int = int(floor(float(x) / float(tile_size)))
+			var tile_y: int = int(floor(float(y) / float(tile_size)))
+			var tile_index: int = tile_y * tile_columns + tile_x
+			var gem_type: Block.Type = pattern[tile_index % pattern.size()]
+			block.visible = true
+			block.modulate = Color.WHITE
+			block.rotation = 0.0
+			block.scale = Vector2.ONE
+			block.set_upper_type(Block.UpperType.NONE)
+			block.clear_extras()
+			block.set_block_type(gem_type)
+	board.resync_logic_from_visual()
+	battle_manager.clear_logic_pending_attack()
+	battle_manager.resync_logic_state()
+	_setup_fuse_hints()
 
 
 ## 偵錯：Combo Test 按鈕 — 在按鈕上方彈出當前隊伍可用的高階寶石選單

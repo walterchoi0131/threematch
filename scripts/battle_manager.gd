@@ -61,6 +61,7 @@ var logic_turn: int = 0
 # 預測下回合會觸發敵人攻擊（阻擋玩家輸入直到視覺敵人攻擊播完）
 var logic_pending_enemy_attack: bool = false
 var auto_enemy_action_handler: Callable = Callable()
+var round_transition_wait_handler: Callable = Callable()
 
 
 # ── 初始化 ─────────────────────────────────────────────────────
@@ -769,6 +770,8 @@ func _on_enemy_died(dead_enemy: Enemy) -> void:	# 擲骰掉落表
 	is_round_transitioning = true
 	round_transitioning.emit()
 	await get_tree().create_timer(0.5).timeout
+	if round_transition_wait_handler.is_valid():
+		await round_transition_wait_handler.call()
 	current_round += 1
 	_spawn_round(current_round)
 	is_round_transitioning = false

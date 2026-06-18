@@ -19,30 +19,16 @@ square_scale = 0.85
 square_offset = Vector2(-83, -25)
 rectangular_scale = 0.25
 rectangular_offset = Vector2(-71, 157)
-active_skill_name = "Resurgence+"
-active_skill_desc = "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/融合時計為 5 顆）。CD：6 回合。"
-active_skill_cd = 6
+active_skill_name = "咒術印記: 陽光射線"
+active_skill_desc = "將棋盤左上與右下各 2x3 格轉為葉寶石。CD: 4 回合。"
+active_skill_cd = 4
 responding_skills = Array[Dictionary]([{
-"desc": "summon a Turtle gem at tapped cell. Self-blast only. Heals player for ΣTeamMagic × 0.8 each turn.",
-"fuse_label": "5",
-"name": "Turtle",
-"priority": 2,
-"threshold": 5,
-"trigger_type": "count"
-}, {
-"desc": "summon a Porcupine gem at tapped cell. Self-blast only. Attacks first enemy for ΣTeamMagic × 0.5 each turn.",
-"fuse_label": "9",
-"name": "Porcupine",
-"priority": 1,
-"threshold": 9,
-"trigger_type": "count"
-}, {
-"desc": "create a Wood Spear gem at tapped cell.",
-"fuse_label": "7",
+"desc": "Fuse 6+ leaf gems to create an instant Leaf Ray. It fires a 1s ray at an enemy, dealing caster magic x3.5 damage.",
+"fuse_label": "6",
 "gem_type": 2,
-"name": "Wood Spear",
+"name": "Leaf Ray",
 "priority": 1,
-"threshold": 7,
+"threshold": 6,
 "trigger_type": "count",
-"upper_type": 11
+"upper_type": 15
 }])
