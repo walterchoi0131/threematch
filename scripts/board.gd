@@ -12,6 +12,7 @@ const WOOD_SPEAR_THRUST_TEXTURE := preload("res://assets/leafspear.png")
 const GEM_DEBRIS_Z_INDEX := 90
 const OBSTACLE_DEBRIS_Z_INDEX := 100
 const WOOD_SPEAR_THRUST_Z_INDEX := 110
+const ELEMENT_STONE_DROP_Z_INDEX := 96
 const FLOATING_UPPER_Z_INDEX := 18
 const FUSE_SOLUTION_1 := 1  # 舊版融合：高階寶石留在棋盤內，掉落時會跟著坍塌移動。
 const FUSE_SOLUTION_2 := 2  # 上一版融合：高階寶石暫時浮起，原格用固定佔位保留。
@@ -148,7 +149,8 @@ var _longpress_timer: float = 0.0          # 已按住時間
 var _longpress_active: bool = false        # 長按預覽是否已顯示
 var _longpress_overlays: Array[Node] = []  # 爆炸範圍高亮覆蓋層
 var _longpress_dim_tween: Tween = null     # 暗化/還原動畫 tween
-var _longpress_initial_tween: Tween = null # 初始爆炸色層循環動畫 tween
+var _longpress_preview_tweens: Array[Tween] = [] # 初始爆炸色層錯峰循環 tween
+var _longpress_trigger_pop_tweens: Dictionary = {} # 預覽中觸發 upper 的 POP tween
 var _longpress_press_tween: Tween = null   # 長按預覽時 upper gem 的按壓/放開動畫
 var _longpress_press_block: Block = null
 var _longpress_press_original_scale: Vector2 = Vector2.ONE
@@ -2461,6 +2463,7 @@ func drop_random_gems_of_type(type: Block.Type, count: int) -> int:
 	candidates.shuffle()
 	var removed_blocks: Array[Block] = []
 	var removed_count: int = mini(clamped_count, candidates.size())
+	var longest_drop_time: float = 0.0
 	is_busy = true
 	for i in removed_count:
 		var pos: Vector2i = candidates[i]
@@ -2470,23 +2473,54 @@ func drop_random_gems_of_type(type: Block.Type, count: int) -> int:
 		grid[pos.x][pos.y] = null
 		logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
 		removed_blocks.append(block)
-		_play_gem_break_debris(block)
+		longest_drop_time = maxf(longest_drop_time, _play_element_stone_drop(block, i))
 
 	if removed_blocks.is_empty():
 		is_busy = false
 		return 0
 
 	_emit_goal_cells_for_blocks(removed_blocks)
-	get_tree().create_timer(0.2).timeout.connect(func() -> void:
-		for block in removed_blocks:
-			if is_instance_valid(block):
-				block.queue_free()
-	, CONNECT_ONE_SHOT)
 
-	await get_tree().create_timer(0.25).timeout
+	await get_tree().create_timer(maxf(longest_drop_time + 0.05, 0.25)).timeout
+	for block in removed_blocks:
+		if is_instance_valid(block):
+			block.queue_free()
 	await _collapse_and_fill()
 	is_busy = false
 	return removed_blocks.size()
+
+
+func _play_element_stone_drop(block: Block, sequence_index: int = 0) -> float:
+	if block == null or not is_instance_valid(block):
+		return 0.0
+	var delay: float = float(sequence_index) * 0.055 + randf_range(0.0, 0.035)
+	var jump_h: float = randf_range(32.0, 72.0)
+	var dx: float = randf_range(-120.0, 120.0)
+	var fall_dy: float = randf_range(560.0, 760.0)
+	var spin: float = block.rotation + randf_range(-PI * 1.35, PI * 1.35)
+	var up_duration: float = 0.18
+	var down_duration: float = 0.62
+	var total_duration: float = up_duration + down_duration
+	var start_pos: Vector2 = block.position
+
+	block.z_index = ELEMENT_STONE_DROP_Z_INDEX
+	var spin_tween := create_tween()
+	spin_tween.tween_interval(delay)
+	spin_tween.tween_property(block, "rotation", spin, total_duration)
+
+	var x_tween := create_tween()
+	x_tween.tween_interval(delay)
+	x_tween.tween_property(block, "position:x", start_pos.x + dx, total_duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	var y_tween := create_tween()
+	y_tween.tween_interval(delay)
+	y_tween.tween_property(block, "position:y", start_pos.y - jump_h, up_duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	y_tween.tween_property(block, "position:y", start_pos.y + fall_dy, down_duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+
+	var fade_tween := create_tween()
+	fade_tween.tween_interval(delay + total_duration - 0.28)
+	fade_tween.tween_property(block, "modulate:a", 0.0, 0.28).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	return delay + total_duration
 
 
 ## 公開的「融合/變身」闃光+彈跳動畫—可被任何「變成其它寶石」的流程調用
@@ -4667,26 +4701,21 @@ const PREVIEW_LOOP_BORDER_ALPHA_MAX := 0.90
 const PREVIEW_LOOP_BORDER_STEP_DUR := 0.018
 const PREVIEW_LOOP_BORDER_HOLD := 0.24
 const PREVIEW_LOOP_BORDER_FADE_OUT := 0.18
-const PREVIEW_FAST_COMBO_BASE_STEPS := 5.0
-const PREVIEW_FAST_COMBO_MIN_SCALE := 0.45
 const PREVIEW_PRESS_SCALE := 0.86
 const PREVIEW_PRESS_BOUNCE_SCALE := 1.08
 const PREVIEW_PRESS_DOWN_OFFSET := 4.0
 const PREVIEW_PRESS_DOWN_DUR := 0.08
 const PREVIEW_PRESS_RELEASE_DUR := 0.13
 const PREVIEW_PRESS_SETTLE_DUR := 0.09
+const PREVIEW_TRIGGER_POP_SCALE := 1.18
+const PREVIEW_TRIGGER_POP_UP_DUR := 0.09
+const PREVIEW_TRIGGER_POP_SETTLE_DUR := 0.13
 
 
 func _is_player_upper_gem(block: Block) -> bool:
 	return block != null \
 			and block.is_upper_gem() \
 			and block.upper_owner_team == Block.UpperOwnerTeam.PLAYER
-
-
-func _preview_combo_time_scale(step_count: int) -> float:
-	if step_count <= 0:
-		return 1.0
-	return clampf(PREVIEW_FAST_COMBO_BASE_STEPS / float(maxi(step_count, 1)), PREVIEW_FAST_COMBO_MIN_SCALE, 1.0)
 
 
 ## 計算高階寶石的完整爆炸範圍（含連鏈遞迴）
@@ -4772,6 +4801,7 @@ func _calc_blast_preview(start_pos: Vector2i, start_ut: Block.UpperType) -> Dict
 		"direct": direct_blast.keys(),
 		"initial": initial_blast.keys(),
 		"direct_ut": start_ut,
+		"trigger_pos": start_pos,
 		"chain_groups": chain_groups,
 		"chain_uppers": chain_uppers,
 	}
@@ -4980,7 +5010,10 @@ func _build_blast_preview_steps(result: Dictionary, initial_color: Color) -> Arr
 	var steps: Array[Dictionary] = []
 	var initial_positions: Array[Vector2i] = _unique_preview_positions(result.initial as Array)
 	if not initial_positions.is_empty():
-		steps.append({"positions": initial_positions, "color": initial_color})
+		var initial_step: Dictionary = {"positions": initial_positions, "color": initial_color}
+		if result.has("trigger_pos"):
+			initial_step["trigger_pos"] = result["trigger_pos"]
+		steps.append(initial_step)
 
 	var chain_groups: Array = result.get("chain_groups", []) as Array
 	for group_value in chain_groups:
@@ -4998,10 +5031,13 @@ func _build_blast_preview_steps(result: Dictionary, initial_color: Color) -> Arr
 			if _same_preview_positions(previous_step.get("positions", []) as Array, group_positions):
 				continue
 		var ut: Block.UpperType = group.get("ut", Block.UpperType.NONE) as Block.UpperType
-		steps.append({
+		var step_data: Dictionary = {
 			"positions": group_positions,
 			"color": UpperGemDefs.get_preview_color(ut, initial_color),
-		})
+		}
+		if group.has("trigger_pos"):
+			step_data["trigger_pos"] = group["trigger_pos"]
+		steps.append(step_data)
 	return steps
 
 
@@ -5128,12 +5164,26 @@ func _reset_loop_preview_border_segments(segments: Array[Dictionary]) -> void:
 		rect.scale = Vector2(0.0, 1.0) if axis == "x" else Vector2(1.0, 0.0)
 
 
-func _add_initial_blast_overlay(steps: Array[Dictionary]) -> void:
-	if _longpress_initial_tween != null and _longpress_initial_tween.is_valid():
-		_longpress_initial_tween.kill()
-	_longpress_initial_tween = null
+func _kill_longpress_preview_tweens() -> void:
+	for tween in _longpress_preview_tweens.duplicate():
+		if tween != null and tween.is_valid():
+			tween.kill()
+	_longpress_preview_tweens.clear()
+	for block_value in _longpress_trigger_pop_tweens.keys():
+		var block: Block = block_value as Block
+		var entry: Dictionary = _longpress_trigger_pop_tweens[block_value] as Dictionary
+		var tween: Tween = entry.get("tween", null) as Tween
+		if tween != null and tween.is_valid():
+			tween.kill()
+		if is_instance_valid(block):
+			block.scale = entry.get("scale", Vector2.ONE) as Vector2
+	_longpress_trigger_pop_tweens.clear()
 
-	var step_rects: Array[Array] = []
+
+func _add_initial_blast_overlay(steps: Array[Dictionary]) -> void:
+	_kill_longpress_preview_tweens()
+
+	var step_rects: Array = []
 	var loop_border_segments: Array[Dictionary] = _create_loop_preview_border_segments(
 		_collect_preview_step_positions(steps),
 		_preview_loop_border_color(steps)
@@ -5158,55 +5208,165 @@ func _add_initial_blast_overlay(steps: Array[Dictionary]) -> void:
 			_longpress_overlays.append(rect)
 			pulse_rects.append(rect)
 		if not pulse_rects.is_empty():
-			step_rects.append(pulse_rects)
+			var step_info: Dictionary = {"rects": pulse_rects}
+			if step.has("trigger_pos"):
+				step_info["trigger_pos"] = step["trigger_pos"]
+			step_rects.append(step_info)
 
 	if step_rects.is_empty():
 		return
-	var time_scale: float = _preview_combo_time_scale(step_rects.size())
-	var fade_in_dur: float = maxf(PREVIEW_INITIAL_FADE_IN * time_scale, 0.06)
-	var hold_dur: float = maxf(PREVIEW_INITIAL_HOLD * time_scale, 0.04)
-	var fade_out_dur: float = maxf(PREVIEW_INITIAL_FADE_OUT * time_scale, 0.05)
-	var step_gap: float = maxf(PREVIEW_CHAIN_STEP_GAP * time_scale, 0.01)
-	var border_step_dur: float = maxf(PREVIEW_LOOP_BORDER_STEP_DUR * time_scale, 0.006)
-	var border_hold_dur: float = maxf(PREVIEW_LOOP_BORDER_HOLD * time_scale, 0.06)
-	var border_fade_out_dur: float = maxf(PREVIEW_LOOP_BORDER_FADE_OUT * time_scale, 0.05)
-	_longpress_initial_tween = create_tween().set_loops()
-	for pulse_rects_value in step_rects:
-		var pulse_rects: Array = pulse_rects_value as Array
-		_longpress_initial_tween.set_parallel(true)
-		for rect_value in pulse_rects:
-			var fade_in_rect: ColorRect = rect_value as ColorRect
-			_longpress_initial_tween.tween_property(fade_in_rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, fade_in_dur) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(hold_dur)
-		_longpress_initial_tween.chain()
-		_longpress_initial_tween.set_parallel(true)
-		for rect_value in pulse_rects:
-			var fade_out_rect: ColorRect = rect_value as ColorRect
-			_longpress_initial_tween.tween_property(fade_out_rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, fade_out_dur) \
-				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(step_gap)
-
+	var fade_in_dur: float = PREVIEW_INITIAL_FADE_IN
+	var hold_dur: float = PREVIEW_INITIAL_HOLD
+	var fade_out_dur: float = PREVIEW_INITIAL_FADE_OUT
+	var step_gap: float = PREVIEW_CHAIN_STEP_GAP
+	var border_step_dur: float = PREVIEW_LOOP_BORDER_STEP_DUR
+	var border_hold_dur: float = PREVIEW_LOOP_BORDER_HOLD
+	var border_fade_out_dur: float = PREVIEW_LOOP_BORDER_FADE_OUT
+	var pulse_visible_dur: float = fade_in_dur + hold_dur + fade_out_dur
+	var step_start_gap: float = pulse_visible_dur * 0.5
+	var final_pulse_start: float = step_start_gap * float(maxi(step_rects.size() - 1, 0))
+	var pulse_sequence_dur: float = final_pulse_start + pulse_visible_dur + step_gap
+	var border_sequence_dur: float = 0.0
 	if not loop_border_segments.is_empty():
-		_longpress_initial_tween.chain().tween_callback(_reset_loop_preview_border_segments.bind(loop_border_segments))
-		_longpress_initial_tween.chain()
-		_longpress_initial_tween.set_parallel(false)
-		for segment_value in loop_border_segments:
-			var draw_segment: Dictionary = segment_value as Dictionary
-			var draw_rect: ColorRect = draw_segment["rect"] as ColorRect
-			var draw_axis: String = draw_segment["axis"] as String
-			var scale_property := "scale:x" if draw_axis == "x" else "scale:y"
-			_longpress_initial_tween.tween_property(draw_rect, scale_property, 1.0, border_step_dur) \
+		border_sequence_dur = float(loop_border_segments.size()) * border_step_dur + border_hold_dur + border_fade_out_dur + step_gap
+	var preview_cycle_dur: float = maxf(pulse_sequence_dur, final_pulse_start + pulse_visible_dur + border_sequence_dur)
+	_queue_preview_step_pulse_sequence(
+		step_rects,
+		loop_border_segments,
+		step_start_gap,
+		preview_cycle_dur,
+		pulse_visible_dur,
+		fade_in_dur,
+		hold_dur,
+		fade_out_dur,
+		border_step_dur,
+		border_hold_dur,
+		border_fade_out_dur
+	)
+
+
+func _queue_preview_step_pulse_sequence(
+		step_rects: Array,
+		loop_border_segments: Array,
+		step_start_gap: float,
+		preview_cycle_dur: float,
+		pulse_visible_dur: float,
+		fade_in_dur: float,
+		hold_dur: float,
+		fade_out_dur: float,
+		border_step_dur: float,
+		border_hold_dur: float,
+		border_fade_out_dur: float
+	) -> float:
+	var manager := create_tween().set_loops()
+	_longpress_preview_tweens.append(manager)
+	for step_index in step_rects.size():
+		if step_index > 0:
+			manager.tween_interval(step_start_gap)
+		var step_info: Dictionary = step_rects[step_index] as Dictionary
+		var pulse_rects: Array = step_info.get("rects", []) as Array
+		var trigger_pos: Vector2i = step_info.get("trigger_pos", Vector2i(-1, -1)) as Vector2i
+		manager.tween_callback(Callable(self, "_play_preview_step_pulse_once").bind(pulse_rects, trigger_pos, fade_in_dur, hold_dur, fade_out_dur))
+	var final_pulse_start: float = step_start_gap * float(maxi(step_rects.size() - 1, 0))
+	manager.tween_interval(pulse_visible_dur)
+	if not loop_border_segments.is_empty():
+		manager.tween_callback(Callable(self, "_play_preview_border_once").bind(loop_border_segments, border_step_dur, border_hold_dur, border_fade_out_dur))
+	var trailing_wait: float = maxf(preview_cycle_dur - final_pulse_start - pulse_visible_dur, 0.01)
+	manager.tween_interval(trailing_wait)
+	return preview_cycle_dur
+
+
+func _play_preview_step_pulse_once(pulse_rects: Array, trigger_pos: Vector2i, fade_in_dur: float, hold_dur: float, fade_out_dur: float) -> void:
+	if not _longpress_active:
+		return
+	_play_preview_trigger_pop(trigger_pos)
+	var tween := create_tween()
+	_longpress_preview_tweens.append(tween)
+	tween.finished.connect(func() -> void:
+		_longpress_preview_tweens.erase(tween)
+	, CONNECT_ONE_SHOT)
+	tween.set_parallel(true)
+	for rect_value in pulse_rects:
+		var rect: ColorRect = rect_value as ColorRect
+		if is_instance_valid(rect):
+			var color: Color = rect.color
+			color.a = PREVIEW_INITIAL_ALPHA_MIN
+			rect.color = color
+			tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, fade_in_dur) \
 				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(border_hold_dur)
-		_longpress_initial_tween.chain()
-		_longpress_initial_tween.set_parallel(true)
-		for fade_segment_value in loop_border_segments:
-			var fade_segment: Dictionary = fade_segment_value as Dictionary
-			var fade_rect: ColorRect = fade_segment["rect"] as ColorRect
-			_longpress_initial_tween.tween_property(fade_rect, "color:a", 0.0, border_fade_out_dur) \
+	tween.chain().tween_interval(hold_dur)
+	tween.chain()
+	tween.set_parallel(true)
+	for rect_value in pulse_rects:
+		var rect: ColorRect = rect_value as ColorRect
+		if is_instance_valid(rect):
+			tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, fade_out_dur) \
 				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-		_longpress_initial_tween.chain().tween_interval(step_gap)
+
+
+func _play_preview_border_once(loop_border_segments: Array, border_step_dur: float, border_hold_dur: float, border_fade_out_dur: float) -> void:
+	if not _longpress_active or loop_border_segments.is_empty():
+		return
+	_reset_loop_preview_border_segments(loop_border_segments)
+	var tween := create_tween()
+	_longpress_preview_tweens.append(tween)
+	tween.finished.connect(func() -> void:
+		_longpress_preview_tweens.erase(tween)
+	, CONNECT_ONE_SHOT)
+	tween.set_parallel(false)
+	for segment_value in loop_border_segments:
+		var draw_segment: Dictionary = segment_value as Dictionary
+		var draw_rect: ColorRect = draw_segment["rect"] as ColorRect
+		if not is_instance_valid(draw_rect):
+			continue
+		var draw_axis: String = draw_segment["axis"] as String
+		var scale_property := "scale:x" if draw_axis == "x" else "scale:y"
+		tween.tween_property(draw_rect, scale_property, 1.0, border_step_dur) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	tween.chain().tween_interval(border_hold_dur)
+	tween.chain()
+	tween.set_parallel(true)
+	for fade_segment_value in loop_border_segments:
+		var fade_segment: Dictionary = fade_segment_value as Dictionary
+		var fade_rect: ColorRect = fade_segment["rect"] as ColorRect
+		if is_instance_valid(fade_rect):
+			tween.tween_property(fade_rect, "color:a", 0.0, border_fade_out_dur) \
+				.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+
+
+func _play_preview_trigger_pop(trigger_pos: Vector2i) -> void:
+	if not _is_valid(trigger_pos):
+		return
+	var block: Block = grid[trigger_pos.x][trigger_pos.y]
+	if not _is_player_upper_gem(block):
+		return
+	if block == _longpress_press_block and _longpress_press_tween != null and _longpress_press_tween.is_valid():
+		_longpress_press_tween.kill()
+		_longpress_press_tween = null
+		block.scale = _longpress_press_original_scale * PREVIEW_PRESS_SCALE
+		block.position = _longpress_press_original_position + Vector2(0.0, PREVIEW_PRESS_DOWN_OFFSET)
+	if _longpress_trigger_pop_tweens.has(block):
+		var old_entry: Dictionary = _longpress_trigger_pop_tweens[block] as Dictionary
+		var old_tween: Tween = old_entry.get("tween", null) as Tween
+		if old_tween != null and old_tween.is_valid():
+			old_tween.kill()
+		if is_instance_valid(block):
+			block.scale = old_entry.get("scale", block.scale) as Vector2
+
+	var base_scale: Vector2 = block.scale
+	var pop_tween := create_tween()
+	_longpress_trigger_pop_tweens[block] = {"tween": pop_tween, "scale": base_scale}
+	pop_tween.tween_property(block, "scale", base_scale * PREVIEW_TRIGGER_POP_SCALE, PREVIEW_TRIGGER_POP_UP_DUR) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	pop_tween.tween_property(block, "scale", base_scale, PREVIEW_TRIGGER_POP_SETTLE_DUR) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	pop_tween.finished.connect(func() -> void:
+		var current_entry: Dictionary = _longpress_trigger_pop_tweens.get(block, {}) as Dictionary
+		if current_entry.get("tween", null) == pop_tween:
+			_longpress_trigger_pop_tweens.erase(block)
+			if is_instance_valid(block):
+				block.scale = base_scale
+	, CONNECT_ONE_SHOT)
 
 
 ## 漸變邊框覆蓋層透明度（對其下所有 ColorRect 子節點）
@@ -5259,6 +5419,7 @@ func _create_border_overlay(gp: Vector2i, color: Color) -> Node:
 ## 隱藏長按爆炸預覽：漸變還原暗化 + 漸變移除覆蓋層
 func _hide_blast_preview() -> void:
 	_longpress_active = false
+	_kill_longpress_preview_tweens()
 	_play_longpress_release_bounce()
 
 	# 還原被抬高的方塊 z_index
@@ -5268,9 +5429,6 @@ func _hide_blast_preview() -> void:
 	_longpress_raised_blocks.clear()
 
 	# 終止先前的暗化/還原 tween
-	if _longpress_initial_tween != null and _longpress_initial_tween.is_valid():
-		_longpress_initial_tween.kill()
-	_longpress_initial_tween = null
 	if _longpress_dim_tween != null and _longpress_dim_tween.is_valid():
 		_longpress_dim_tween.kill()
 	_longpress_dim_tween = create_tween().set_parallel(true)
