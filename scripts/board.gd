@@ -1612,6 +1612,10 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 
 	# 高階寶石 — 特殊點擊（消耗一回合，觸發範圍/橫列爆炸並可連鏈）
 	if block.is_upper_gem():
+		if block.has_instant_upper_attribute():
+			play_rejected_cell_animation(pos)
+			_next_click_is_drained = false
+			return
 		_next_click_is_drained = false
 		is_busy = true
 		await _handle_upper_click(pos)
@@ -1632,6 +1636,13 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 			play_rejected_cell_animation(pos)
 		_next_click_is_drained = false
 		return
+
+	if not _next_click_is_drained and _would_trigger_fuse(block.block_type, matches) and fuse_preflight_handler.is_valid():
+		var can_fuse: bool = bool(fuse_preflight_handler.call(block.block_type, _blast_value_for_group(matches), matches, pos))
+		if not can_fuse:
+			play_rejected_cell_animation(pos)
+			_next_click_is_drained = false
+			return
 
 	# 通過 match 檢查後立即鎖住輸入；逃脫/無敵人模式尤其需要等掉落補滿後才還控制權。
 	if _is_no_enemy_mode():

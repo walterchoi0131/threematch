@@ -112,12 +112,9 @@ initial_music = ExtResource("9_music")
 
 [sub_resource type="Resource" id="Resource_57o8d"]
 script = ExtResource("6_y33w2")
-
-[sub_resource type="Resource" id="Resource_y33w2"]
-script = ExtResource("6_y33w2")
 item_type = 1
 
-[sub_resource type="Resource" id="Resource_8idvt"]
+[sub_resource type="Resource" id="Resource_y33w2"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Sword"
 enemy_name_zh = "黑暗爪牙。劍"
@@ -129,17 +126,14 @@ action_counts = Array[int]([3, 3])
 portrait_color = Color(0.3, 0.2, 0.45, 1)
 portrait_texture = ExtResource("7_8idvt")
 element = 7
-stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_y33w2")])
+stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_57o8d")])
 metadata/stage_editor_source_path = "res://enemies/dark_minion_warrior.tres"
 
-[sub_resource type="Resource" id="Resource_enq8n"]
-script = ExtResource("6_y33w2")
-
-[sub_resource type="Resource" id="Resource_w6yip"]
+[sub_resource type="Resource" id="Resource_8idvt"]
 script = ExtResource("6_y33w2")
 item_type = 1
 
-[sub_resource type="Resource" id="Resource_kqu2e"]
+[sub_resource type="Resource" id="Resource_enq8n"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Rogue"
 enemy_name_zh = "黑暗爪牙。盜"
@@ -151,13 +145,10 @@ action_counts = Array[int]([3, 3, 3])
 portrait_color = Color(0.3, 0.2, 0.45, 1)
 portrait_texture = ExtResource("9_w6yip")
 element = 7
-stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_w6yip")])
+stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_8idvt")])
 metadata/stage_editor_source_path = "res://enemies/dark_minion_rogue.tres"
 
-[sub_resource type="Resource" id="Resource_ssn5h"]
-script = ExtResource("6_y33w2")
-
-[sub_resource type="Resource" id="Resource_ihorc"]
+[sub_resource type="Resource" id="Resource_w6yip"]
 script = ExtResource("8_enq8n")
 max_hp = 1475
 action_pattern = Array[int]([2, 2, 2, 0])
@@ -165,12 +156,7 @@ action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("10_kqu2e")
 metadata/stage_editor_source_path = "res://enemies/slime.tres"
 
-[sub_resource type="Resource" id="Resource_cwsa5"]
-script = ExtResource("6_y33w2")
-amount_min = 28
-amount_max = 45
-
-[sub_resource type="Resource" id="Resource_b4so5"]
+[sub_resource type="Resource" id="Resource_kqu2e"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Mage"
 enemy_name_zh = "黑暗爪牙。法"
@@ -184,12 +170,7 @@ portrait_texture = ExtResource("11_ssn5h")
 element = 7
 metadata/stage_editor_source_path = "res://enemies/dark_minion_mage.tres"
 
-[sub_resource type="Resource" id="Resource_l0pyy"]
-script = ExtResource("6_y33w2")
-amount_min = 24
-amount_max = 38
-
-[sub_resource type="Resource" id="Resource_ti8aa"]
+[sub_resource type="Resource" id="Resource_ssn5h"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Archer"
 enemy_name_zh = "黑暗爪牙。弓"
@@ -210,14 +191,14 @@ prerequisite_stage_id = "1-2"
 connects_to = Array[String](["1-4"])
 map_position = Vector2(319, 598)
 stage_name = "Stage 1-3 Sanctuary Ambush"
-element_weights = Array[int]([24, 24, 24, 24])
-allowed_types = Array[int]([0, 1, 2, 6])
+element_weights = Array[int]([24, 24])
+allowed_types = Array[int]([1, 2])
 area = "church"
 battle_music_override_path = "res://assets/music/Wolf Banner Clash.mp3"
 one_time_reward_item_type = 1
 one_time_reward_item_amount = 1
 one_time_reward_character = ExtResource("1_57o8d")
-rounds = Array[Array]([[SubResource("Resource_8idvt"), SubResource("Resource_kqu2e"), SubResource("Resource_ihorc")], [SubResource("Resource_b4so5"), SubResource("Resource_ti8aa")]])
+rounds = Array[Array]([[SubResource("Resource_y33w2"), SubResource("Resource_enq8n"), SubResource("Resource_w6yip")], [SubResource("Resource_kqu2e"), SubResource("Resource_ssn5h")]])
 rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0]])
 rounds_enemy_levels = Array[Array]([[4, 4, 4], [5, 5]])
 rounds_main_bosses = Array[Array]([[false, false, false], [false, false]])
