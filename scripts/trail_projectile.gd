@@ -38,6 +38,9 @@ var _orbit_center_global := Vector2.ZERO
 var _orbit_radius := 28.0
 var _orbit_angle := 0.0
 var _orbit_speed := 2.6
+var _following := false
+var _follow_target: Node2D = null
+var _follow_offset := Vector2.ZERO
 
 
 ## 初始化（池模式呼叫一次）
@@ -74,6 +77,8 @@ func set_visual_size_multiplier(value: float) -> void:
 func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0) -> void:
 	is_available = false
 	_orbiting = false
+	_following = false
+	_follow_target = null
 	duration = duration / speed_divisor  # 速度加快
 	_color = color
 	_trail.clear()
@@ -118,6 +123,8 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 func launch_power_attack(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0, power_level: int = 1) -> void:
 	is_available = false
 	_orbiting = false
+	_following = false
+	_follow_target = null
 	duration = duration / speed_divisor
 	_color = color
 	_trail.clear()
@@ -176,6 +183,8 @@ func _set_head_position(pos: Vector2) -> void:
 func start_orbit(center_global: Vector2, radius: float, color: Color, start_angle: float = 0.0, speed: float = 2.6, visual_size: float = 0.72) -> void:
 	is_available = false
 	_orbiting = true
+	_following = false
+	_follow_target = null
 	_flying = true
 	_bursting = false
 	_color = color
@@ -200,6 +209,61 @@ func start_orbit(center_global: Vector2, radius: float, color: Color, start_angl
 		_set_head_position(_orbit_center_global + Vector2(cos(tail_angle), sin(tail_angle)) * _orbit_radius)
 
 
+func launch_hold_at_end(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0) -> void:
+	launch(from, to, color, duration, spread)
+	if _tween and _tween.is_valid():
+		_tween.kill()
+	var adjusted_duration: float = duration / speed_divisor
+	var dir: Vector2 = to - from
+	var perp := Vector2(-dir.y, dir.x).normalized()
+	var arc_height: float = dir.length() * 0.35
+	var control: Vector2 = (from + to) * 0.5 + perp * arc_height * spread + Vector2(0, -arc_height * 0.5)
+	_tween = create_tween()
+	_tween.tween_method(func(t: float) -> void:
+		var inv: float = 1.0 - t
+		_set_head_position(inv * inv * from + 2.0 * inv * t * control + t * t * to)
+	, 0.0, 1.0, adjusted_duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+	_tween.tween_callback(func() -> void:
+		_flying = false
+		if _particles:
+			_particles.emitting = true
+	)
+
+
+func follow_node(target: Node2D, color: Color, offset: Vector2 = Vector2.ZERO, visual_size: float = 0.56, preserve_trail: bool = false) -> void:
+	if target == null or not is_instance_valid(target):
+		return
+	is_available = false
+	_orbiting = false
+	_following = true
+	_follow_target = target
+	_follow_offset = offset
+	_flying = true
+	_bursting = false
+	_color = color
+	if not preserve_trail:
+		_trail.clear()
+	top_level = true
+	global_position = Vector2.ZERO
+	visible = true
+	modulate.a = 1.0
+	set_visual_size_multiplier(visual_size)
+	if _particles == null:
+		_build_particles()
+	_apply_particle_size()
+	_apply_particle_color(color)
+	_particles.emitting = true
+	if _tween and _tween.is_valid():
+		_tween.kill()
+	set_process(true)
+	var start_pos: Vector2 = target.global_position + _follow_offset
+	if preserve_trail and not _trail.is_empty():
+		_set_head_position(start_pos)
+	else:
+		for i in TRAIL_LENGTH:
+			_set_head_position(start_pos)
+
+
 func set_orbit_center(center_global: Vector2) -> void:
 	_orbit_center_global = center_global
 
@@ -208,6 +272,8 @@ func scatter_from_orbit(direction: Vector2, distance: float = 280.0, duration: f
 	if _tween and _tween.is_valid():
 		_tween.kill()
 	_orbiting = false
+	_following = false
+	_follow_target = null
 	_flying = true
 	is_available = false
 	visible = true
@@ -234,6 +300,12 @@ func scatter_from_orbit(direction: Vector2, distance: float = 280.0, duration: f
 
 
 func _process(delta: float) -> void:
+	if _following:
+		if _follow_target == null or not is_instance_valid(_follow_target):
+			force_release()
+			return
+		_set_head_position(_follow_target.global_position + _follow_offset)
+		return
 	if not _orbiting:
 		return
 	_orbit_angle = fmod(_orbit_angle + _orbit_speed * delta, TAU)
@@ -243,6 +315,8 @@ func _process(delta: float) -> void:
 func launch_guest_join(from: Vector2, to: Vector2, color: Color, duration: float = 1.0, spread: float = 0.35) -> void:
 	is_available = false
 	_orbiting = false
+	_following = false
+	_follow_target = null
 	duration = duration / speed_divisor
 	_color = color
 	_trail.clear()
@@ -341,6 +415,8 @@ func force_release() -> void:
 	if _tween and _tween.is_valid():
 		_tween.kill()
 	_orbiting = false
+	_following = false
+	_follow_target = null
 	_flying = false
 	_bursting = false
 	if _particles:

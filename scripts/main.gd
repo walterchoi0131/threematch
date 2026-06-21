@@ -194,6 +194,21 @@ var _reserved_instant_upper_tasks: Array[Dictionary] = []
 var _instant_upper_resolvers: Dictionary = {}
 var _instant_upper_predictors: Dictionary = {}
 var _instant_upper_effect_worker_running: bool = false
+var _next_instant_upper_follow_trail: Node2D = null
+const INSTANT_UPPER_TRANSFER_METHOD_FLY := 0
+const INSTANT_UPPER_TRANSFER_METHOD_VOID := 1
+const INSTANT_UPPER_TRANSFER_METHOD := INSTANT_UPPER_TRANSFER_METHOD_FLY
+const INSTANT_UPPER_ORBIT_FLY_DURATION := 0.6
+const INSTANT_UPPER_VOID_SHRINK_DURATION := 0.7
+const INSTANT_UPPER_VOID_APPEAR_DURATION := 0.22
+const INSTANT_UPPER_ORBIT_RADIUS := 36.0
+const INSTANT_UPPER_ORBIT_PERIOD := 1.05
+const INSTANT_UPPER_ORBIT_SCALE := Vector2.ONE
+const INSTANT_UPPER_TRAIL_OFFSET := Vector2(0.0, 18.0)
+const INSTANT_UPPER_ORBIT_TILT := -0.52
+const INSTANT_UPPER_ORBIT_Y_SCALE := 0.42
+const INSTANT_UPPER_ORBIT_SPEED_STEP := 0.22
+const INSTANT_UPPER_ORBIT_MIN_PERIOD := 0.42
 
 # ── 攻擊管線佇列（State/UI 分離：blast 動畫與角色攻擊解耦）──
 # 每個 item: { gem_type, count, global_positions, grid_positions, responses }
@@ -5215,6 +5230,10 @@ func _lock_input_for_instant_spell() -> void:
 func _clear_pending_instant_spell_work() -> void:
 	_concurrent_fuses.clear()
 	_instant_fuse_pipeline_active = false
+	_clear_instant_upper_task_visuals(_active_instant_upper_tasks)
+	_clear_instant_upper_task_visuals(_pending_instant_upper_tasks)
+	_release_trail_projectile(_next_instant_upper_follow_trail)
+	_next_instant_upper_follow_trail = null
 	_active_instant_upper_tasks.clear()
 	_pending_instant_upper_tasks.clear()
 	_reserved_instant_upper_tasks.clear()
@@ -5368,13 +5387,320 @@ func _queue_pending_instant_upper_task(pos: Vector2i, resp: Dictionary, upper_ty
 			_move_block_to_fx_layer_preserving_transform(block, _instant_upper_fx_z_index(upper_type))
 			block.modulate = Color.WHITE
 			block.refresh_upper_particle_system()
-	_pending_instant_upper_tasks.append({
+	var orbit_slot := _instant_upper_orbit_slot(resp)
+	var task := {
 		"pos": pos,
 		"block": block,
 		"resp": resp.duplicate(true),
 		"upper_type": upper_type,
+		"orbit_center": _instant_upper_owner_orbit_center(resp),
+		"orbit_radius": INSTANT_UPPER_ORBIT_RADIUS + float(orbit_slot % 2) * 5.0,
+		"orbit_angle": -PI * 0.5 + float(orbit_slot) * 0.72,
+		"orbiting": false,
 		"ready_msec": Time.get_ticks_msec() + int(_get_instant_upper_pop_full_duration() * 1000.0),
-	})
+	}
+	_pending_instant_upper_tasks.append(task)
+	_refresh_instant_upper_orbits_for_char(int(resp.get("char_index", -1)))
+	match INSTANT_UPPER_TRANSFER_METHOD:
+		INSTANT_UPPER_TRANSFER_METHOD_VOID:
+			_transfer_instant_upper_to_owner_orbit_by_void(task)
+		_:
+			_attach_instant_upper_follow_trail(task)
+			_send_instant_upper_to_owner_orbit(task)
+
+
+func _instant_upper_orbit_slot(resp: Dictionary) -> int:
+	var char_index: int = int(resp.get("char_index", -1))
+	var slot := 0
+	for task in _active_instant_upper_tasks:
+		var task_resp: Dictionary = task.get("resp", {}) as Dictionary
+		if int(task_resp.get("char_index", -2)) == char_index:
+			slot += 1
+	for task in _pending_instant_upper_tasks:
+		var task_resp: Dictionary = task.get("resp", {}) as Dictionary
+		if int(task_resp.get("char_index", -2)) == char_index:
+			slot += 1
+	return slot
+
+
+func _instant_upper_task_char_index(task: Dictionary) -> int:
+	var task_resp: Dictionary = task.get("resp", {}) as Dictionary
+	return int(task_resp.get("char_index", -1))
+
+
+func _instant_upper_orbit_count_for_char(char_index: int) -> int:
+	var count := 0
+	for task in _active_instant_upper_tasks:
+		if _instant_upper_task_char_index(task) == char_index and not bool(task.get("orbit_cancelled", false)) and is_instance_valid(task.get("block", null)):
+			count += 1
+	for task in _pending_instant_upper_tasks:
+		if _instant_upper_task_char_index(task) == char_index and not bool(task.get("orbit_cancelled", false)) and is_instance_valid(task.get("block", null)):
+			count += 1
+	return maxi(1, count)
+
+
+func _instant_upper_orbit_period(task: Dictionary) -> float:
+	var char_index := _instant_upper_task_char_index(task)
+	var orbit_count := _instant_upper_orbit_count_for_char(char_index)
+	var speed_mult := 1.0 + float(maxi(orbit_count - 1, 0)) * INSTANT_UPPER_ORBIT_SPEED_STEP
+	return maxf(INSTANT_UPPER_ORBIT_MIN_PERIOD, INSTANT_UPPER_ORBIT_PERIOD / speed_mult)
+
+
+func _instant_upper_orbit_offset(angle: float, radius: float) -> Vector2:
+	var local := Vector2(cos(angle) * radius, sin(angle) * radius * INSTANT_UPPER_ORBIT_Y_SCALE)
+	var c := cos(INSTANT_UPPER_ORBIT_TILT)
+	var s := sin(INSTANT_UPPER_ORBIT_TILT)
+	return Vector2(local.x * c - local.y * s, local.x * s + local.y * c)
+
+
+func _refresh_instant_upper_orbits_for_char(char_index: int) -> void:
+	for task in _active_instant_upper_tasks:
+		if _instant_upper_task_char_index(task) == char_index and bool(task.get("orbiting", false)):
+			_start_instant_upper_orbit(task)
+	for task in _pending_instant_upper_tasks:
+		if _instant_upper_task_char_index(task) == char_index and bool(task.get("orbiting", false)):
+			_start_instant_upper_orbit(task)
+
+
+func _instant_upper_owner_orbit_center(resp: Dictionary) -> Vector2:
+	var char_index: int = int(resp.get("char_index", -1))
+	if character_panel != null and char_index >= 0:
+		if character_panel.has_method("get_card"):
+			var card: Control = character_panel.get_card(char_index)
+			if card != null:
+				var rect: Rect2 = card.get_global_rect()
+				if rect.size != Vector2.ZERO:
+					return Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.34)
+		if character_panel.has_method("get_card_screen_center"):
+			var center: Vector2 = character_panel.get_card_screen_center(char_index)
+			if center != Vector2.ZERO:
+				return center + Vector2(0.0, -16.0)
+	return get_viewport_rect().size * Vector2(0.5, 0.88)
+
+
+func _stop_board_fuse_animation_for_block(block: Block, target_scale: Vector2 = Vector2.ONE) -> void:
+	if block == null or not is_instance_valid(block):
+		return
+	if board != null and board.has_method("hold_fuse_animation_at_peak"):
+		board.hold_fuse_animation_at_peak(block)
+	block.scale = target_scale
+
+
+func _kill_instant_upper_task_tween(task: Dictionary, key: String) -> void:
+	var raw_tween: Variant = task.get(key, null)
+	if raw_tween is Tween:
+		var tween := raw_tween as Tween
+		if tween.is_valid():
+			tween.kill()
+	task[key] = null
+
+
+func _release_instant_upper_follow_trail(task: Dictionary) -> void:
+	var raw_trail: Variant = task.get("follow_trail", null)
+	if is_instance_valid(raw_trail):
+		var trail := raw_trail as Node2D
+		if trail != null and trail.has_method("force_release"):
+			trail.force_release()
+	task["follow_trail"] = null
+
+
+func _release_trail_projectile(trail: Variant) -> void:
+	if is_instance_valid(trail):
+		var node := trail as Node2D
+		if node != null and node.has_method("force_release"):
+			node.force_release()
+
+
+func _take_next_instant_upper_follow_trail() -> Node2D:
+	if not is_instance_valid(_next_instant_upper_follow_trail):
+		_next_instant_upper_follow_trail = null
+		return null
+	var trail := _next_instant_upper_follow_trail
+	_next_instant_upper_follow_trail = null
+	return trail
+
+
+func _prime_next_instant_upper_follow_trail(trail: Variant) -> void:
+	if not is_instance_valid(trail):
+		return
+	_release_trail_projectile(_next_instant_upper_follow_trail)
+	_next_instant_upper_follow_trail = trail as Node2D
+
+
+func _release_unconsumed_next_instant_upper_follow_trail() -> void:
+	_release_trail_projectile(_next_instant_upper_follow_trail)
+	_next_instant_upper_follow_trail = null
+
+
+func _clear_instant_upper_task_visuals(tasks: Array[Dictionary]) -> void:
+	for task in tasks:
+		task["orbit_cancelled"] = true
+		task["orbiting"] = false
+		_kill_instant_upper_task_tween(task, "travel_tween")
+		_kill_instant_upper_task_tween(task, "orbit_tween")
+		_release_instant_upper_follow_trail(task)
+		var raw_block: Variant = task.get("block", null)
+		if is_instance_valid(raw_block):
+			var block: Block = raw_block as Block
+			if block != null:
+				block.queue_free()
+
+
+func _instant_upper_follow_trail_color(resp: Dictionary, upper_type: Block.UpperType) -> Color:
+	var fallback_type: Block.Type = int(resp.get("gem_type", Block.Type.RED)) as Block.Type
+	var element_type: Block.Type = Block.UPPER_ELEMENT.get(upper_type, fallback_type) as Block.Type
+	return Block.COLORS.get(element_type, Color.WHITE)
+
+
+func _attach_instant_upper_follow_trail(task: Dictionary) -> void:
+	var raw_block: Variant = task.get("block", null)
+	if not is_instance_valid(raw_block):
+		return
+	var block := raw_block as Block
+	if block == null:
+		return
+	var preserve_trail := false
+	var trail: Node2D = _take_next_instant_upper_follow_trail()
+	if trail != null:
+		preserve_trail = true
+	else:
+		trail = _acquire_particle(TRANSMUTE_TRAIL_POOL_SIZE)
+	if trail == null:
+		return
+	trail.z_index = block.z_index - 1
+	var resp: Dictionary = task.get("resp", {}) as Dictionary
+	var upper_type: Block.UpperType = task.get("upper_type", Block.UpperType.NONE) as Block.UpperType
+	var color: Color = _instant_upper_follow_trail_color(resp, upper_type)
+	if trail.has_method("follow_node"):
+		trail.follow_node(block, color, INSTANT_UPPER_TRAIL_OFFSET, 0.48, preserve_trail)
+	task["follow_trail"] = trail
+
+
+func _send_instant_upper_to_owner_orbit(task: Dictionary) -> void:
+	var raw_block: Variant = task.get("block", null)
+	if not is_instance_valid(raw_block):
+		return
+	var block: Block = raw_block as Block
+	if block == null:
+		return
+	var center: Vector2 = task.get("orbit_center", block.global_position) as Vector2
+	var radius: float = float(task.get("orbit_radius", INSTANT_UPPER_ORBIT_RADIUS))
+	var angle: float = float(task.get("orbit_angle", -PI * 0.5))
+	_stop_board_fuse_animation_for_block(block, INSTANT_UPPER_ORBIT_SCALE)
+	var target_pos: Vector2 = center + _instant_upper_orbit_offset(angle, radius)
+	var start_pos: Vector2 = block.global_position
+	var travel_distance: float = start_pos.distance_to(target_pos)
+	var travel_arc_height: float = maxf(travel_distance * 0.56, 160.0)
+	_kill_instant_upper_task_tween(task, "travel_tween")
+	var tw := create_tween().set_parallel(true)
+	task["travel_tween"] = tw
+	tw.tween_method(
+		func(u: float) -> void:
+			if not is_instance_valid(block):
+				return
+			var t := clampf(u + 0.085 * sin(TAU * u), 0.0, 1.0)
+			var path_pos := start_pos.lerp(target_pos, t)
+			path_pos.y -= travel_arc_height * 4.0 * t * (1.0 - t)
+			block.global_position = path_pos,
+		0.0,
+		1.0,
+		INSTANT_UPPER_ORBIT_FLY_DURATION
+	).set_trans(Tween.TRANS_LINEAR)
+	tw.tween_property(block, "scale", INSTANT_UPPER_ORBIT_SCALE, INSTANT_UPPER_ORBIT_FLY_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	await tw.finished
+	task["travel_tween"] = null
+	if bool(task.get("orbit_cancelled", false)) or not is_instance_valid(block):
+		return
+	_start_instant_upper_orbit(task)
+
+
+func _transfer_instant_upper_to_owner_orbit_by_void(task: Dictionary) -> void:
+	var raw_block: Variant = task.get("block", null)
+	if not is_instance_valid(raw_block):
+		return
+	var block: Block = raw_block as Block
+	if block == null:
+		return
+	_release_unconsumed_next_instant_upper_follow_trail()
+	var center: Vector2 = task.get("orbit_center", block.global_position) as Vector2
+	var radius: float = float(task.get("orbit_radius", INSTANT_UPPER_ORBIT_RADIUS))
+	var angle: float = float(task.get("orbit_angle", -PI * 0.5))
+	var target_pos: Vector2 = center + _instant_upper_orbit_offset(angle, radius)
+	var target_scale: Vector2 = INSTANT_UPPER_ORBIT_SCALE
+	_stop_board_fuse_animation_for_block(block, target_scale)
+	task["void_original_scale"] = target_scale
+	_kill_instant_upper_task_tween(task, "travel_tween")
+	block.modulate = Color.WHITE
+	var shrink_tw := create_tween().set_parallel(true)
+	task["travel_tween"] = shrink_tw
+	shrink_tw.tween_property(block, "scale", Vector2.ZERO, INSTANT_UPPER_VOID_SHRINK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
+	shrink_tw.tween_property(block, "modulate:a", 0.0, INSTANT_UPPER_VOID_SHRINK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+	await shrink_tw.finished
+	if bool(task.get("orbit_cancelled", false)) or not is_instance_valid(block):
+		return
+	block.global_position = target_pos
+	block.scale = Vector2.ZERO
+	block.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_attach_instant_upper_follow_trail(task)
+	var appear_tw := create_tween().set_parallel(true)
+	task["travel_tween"] = appear_tw
+	appear_tw.tween_property(block, "scale", target_scale, INSTANT_UPPER_VOID_APPEAR_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	appear_tw.tween_property(block, "modulate:a", 1.0, INSTANT_UPPER_VOID_APPEAR_DURATION * 0.72).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await appear_tw.finished
+	task["travel_tween"] = null
+	if bool(task.get("orbit_cancelled", false)) or not is_instance_valid(block):
+		return
+	block.scale = target_scale
+	block.modulate = Color.WHITE
+	_start_instant_upper_orbit(task)
+
+
+func _start_instant_upper_orbit(task: Dictionary) -> void:
+	if bool(task.get("orbit_cancelled", false)):
+		return
+	var raw_block: Variant = task.get("block", null)
+	if not is_instance_valid(raw_block):
+		return
+	var block: Block = raw_block as Block
+	if block == null:
+		return
+	_kill_instant_upper_task_tween(task, "orbit_tween")
+	var center: Vector2 = task.get("orbit_center", block.global_position) as Vector2
+	var radius: float = float(task.get("orbit_radius", INSTANT_UPPER_ORBIT_RADIUS))
+	var start_angle: float = float(task.get("orbit_angle", 0.0))
+	var orbit_period := _instant_upper_orbit_period(task)
+	var orbit_tw := create_tween().set_loops()
+	task["orbiting"] = true
+	task["orbit_tween"] = orbit_tw
+	orbit_tw.tween_method(
+		func(angle: float) -> void:
+			if not is_instance_valid(block) or bool(task.get("orbit_cancelled", false)):
+				return
+			task["orbit_angle"] = fmod(angle, TAU)
+			block.global_position = center + _instant_upper_orbit_offset(angle, radius),
+		start_angle,
+		start_angle + TAU,
+		orbit_period
+	).set_trans(Tween.TRANS_LINEAR)
+
+
+func _prepare_instant_upper_task_for_effect(task: Dictionary) -> void:
+	task["orbit_cancelled"] = true
+	task["orbiting"] = false
+	var char_index := _instant_upper_task_char_index(task)
+	_kill_instant_upper_task_tween(task, "travel_tween")
+	_kill_instant_upper_task_tween(task, "orbit_tween")
+	_release_instant_upper_follow_trail(task)
+	var raw_block: Variant = task.get("block", null)
+	if not is_instance_valid(raw_block):
+		return
+	var block: Block = raw_block as Block
+	if block == null:
+		return
+	block.modulate = Color.WHITE
+	block.refresh_upper_particle_system()
+	_refresh_instant_upper_orbits_for_char(char_index)
+	await get_tree().process_frame
 
 
 func _find_pending_instant_task_pos(task: Dictionary) -> Vector2i:
@@ -5437,6 +5763,8 @@ func _play_pending_instant_upper_task(task: Dictionary) -> void:
 	if not resolver.is_valid():
 		push_warning("Instant upper gem has no resolver: %s" % str(upper_type))
 		return
+	await _prepare_instant_upper_task_for_effect(task)
+	raw_block = task.get("block", null)
 	var spell_mult: float = float(task.get("spell_mult", 0.0))
 	if spell_mult <= 0.0:
 		spell_mult = _register_spell_chain()
@@ -5846,20 +6174,32 @@ func _execute_instant_fuse_pipeline(gem_type: Block.Type, count: int, global_pos
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
 	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
+	var retained_follow_trail: Node2D = null
 	for idx in fuse_total:
 		var particle: Node2D = _acquire_particle()
 		if particle == null:
 			break
 		var gem_pos: Vector2 = global_positions[idx]
 		var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
-		particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
+		if idx == fuse_total - 1 and particle.has_method("launch_hold_at_end"):
+			particle.launch_hold_at_end(gem_pos, fuse_target, color, particle_duration, spread)
+			retained_follow_trail = particle
+		else:
+			particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
 	await get_tree().create_timer(particle_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
 
 	board.set_last_tapped_input(first_tapped_pos, first_tapped_local_pos)
 	battle_manager.turn_gem_blasts = { gem_type: count }
 	battle_manager.last_blast_positions = grid_positions
+	var retained_follow_trail_used := false
 	for resp in responses:
+		if not retained_follow_trail_used and _is_instant_response(resp):
+			_prime_next_instant_upper_follow_trail(retained_follow_trail)
+			retained_follow_trail_used = true
 		await _execute_responding_skill(resp)
+	_release_unconsumed_next_instant_upper_follow_trail()
+	if not retained_follow_trail_used:
+		_release_trail_projectile(retained_follow_trail)
 
 	while _concurrent_fuses.size() > 0:
 		var cf: Dictionary = _concurrent_fuses.pop_front()
@@ -5873,8 +6213,16 @@ func _execute_instant_fuse_pipeline(gem_type: Block.Type, count: int, global_pos
 		board.set_last_tapped_input(cf_tapped_pos, cf_tapped_local_pos)
 		battle_manager.turn_gem_blasts = { cf.gem_type: cf.count }
 		battle_manager.last_blast_positions = cf.grid_positions as Array[Vector2i]
+		var cf_follow_trail: Node2D = cf.get("follow_trail", null) as Node2D
+		var cf_follow_trail_used := false
 		for resp in cf.responses:
+			if not cf_follow_trail_used and _is_instant_response(resp):
+				_prime_next_instant_upper_follow_trail(cf_follow_trail)
+				cf_follow_trail_used = true
 			await _execute_responding_skill(resp)
+		_release_unconsumed_next_instant_upper_follow_trail()
+		if not cf_follow_trail_used:
+			_release_trail_projectile(cf_follow_trail)
 	_reserved_instant_upper_tasks.clear()
 
 	_instant_fuse_pipeline_active = false
@@ -5939,8 +6287,16 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 		board.set_last_tapped_input(cf_tapped_pos, cf_tapped_local_pos)
 		battle_manager.turn_gem_blasts = { cf.gem_type: cf.count }
 		battle_manager.last_blast_positions = cf.grid_positions as Array[Vector2i]
+		var cf_follow_trail: Node2D = cf.get("follow_trail", null) as Node2D
+		var cf_follow_trail_used := false
 		for resp in cf.responses:
+			if not cf_follow_trail_used and _is_instant_response(resp):
+				_prime_next_instant_upper_follow_trail(cf_follow_trail)
+				cf_follow_trail_used = true
 			await _execute_responding_skill(resp)
+		_release_unconsumed_next_instant_upper_follow_trail()
+		if not cf_follow_trail_used:
+			_release_trail_projectile(cf_follow_trail)
 
 	_reserved_instant_upper_tasks.clear()
 
@@ -6035,13 +6391,18 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
 	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
+	var retained_follow_trail: Node2D = null
 	for idx in fuse_total:
 		var particle: Node2D = _acquire_particle()
 		if particle == null:
 			break
 		var gem_pos: Vector2 = global_positions[idx]
 		var spread: float = (float(idx) / max(fuse_total - 1, 1)) * 2.0 - 1.0 if fuse_total > 1 else 0.0
-		particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
+		if has_instant_response and idx == fuse_total - 1 and particle.has_method("launch_hold_at_end"):
+			particle.launch_hold_at_end(gem_pos, fuse_target, color, particle_duration, spread)
+			retained_follow_trail = particle
+		else:
+			particle.launch(gem_pos, fuse_target, color, particle_duration, spread)
 	var arrival_msec: int = Time.get_ticks_msec() + int((particle_duration / TrailProjectileScript.speed_divisor + 0.05) * 1000)
 	_concurrent_fuses.append({
 		"tapped_pos": tapped_pos,
@@ -6051,6 +6412,7 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 		"gem_type": gem_type,
 		"count": count,
 		"grid_positions": grid_positions,
+		"follow_trail": retained_follow_trail,
 	})
 
 
