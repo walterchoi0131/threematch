@@ -10,6 +10,8 @@ const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
 const SelectionDimOverlayScript := preload("res://scripts/selection_dim_overlay.gd")
 const PuzzleGoalPulseParticlesScript := preload("res://scripts/upper_gem_pulse_particles.gd")
 const PuzzleGoalRayBurstScript := preload("res://scripts/ray_burst.gd")
+const GoldCoin3DProxyScript := preload("res://scripts/gold_coin_3d_proxy.gd")
+const BattleVfx3DLayerScript := preload("res://scripts/battle_vfx_3d_layer.gd")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -283,6 +285,7 @@ var _active_loot_flight_count: int = 0
 var _active_loot_toasts: Array[Dictionary] = []
 var _loot_toast_queue: Array[Dictionary] = []
 var _loot_toast_starting: bool = false
+var _battle_vfx_3d_layer: BattleVfx3DLayer = null
 var _defeat_overlay: Control = null  # 敗戰覆蓋層
 var _victory_overlay: Control = null  # 勝利覆蓋層
 const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
@@ -7371,6 +7374,8 @@ func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: floa
 	var target_pos: Vector2 = _get_enemy_image_center(target) if is_instance_valid(target) else beam_start
 	var laser := Node2D.new()
 	laser.set_script(LeafRayLaserVfxScript)
+	if laser.has_method("set_shared_vfx_layer"):
+		laser.call("set_shared_vfx_layer", _get_battle_vfx_3d_layer())
 	fx_layer.add_child(laser)
 	laser.start_following(block, target_pos, LEAF_RAY_LASER_DURATION)
 
@@ -9627,7 +9632,42 @@ func _get_loot_toast_target_center() -> Vector2:
 	return _get_loot_toast_rect().get_center()
 
 
+func _get_battle_vfx_3d_layer() -> BattleVfx3DLayer:
+	if is_instance_valid(_battle_vfx_3d_layer):
+		return _battle_vfx_3d_layer
+	if fx_layer == null:
+		return null
+	_battle_vfx_3d_layer = BattleVfx3DLayerScript.new() as BattleVfx3DLayer
+	_battle_vfx_3d_layer.name = "BattleVfx3DLayer"
+	fx_layer.add_child(_battle_vfx_3d_layer)
+	return _battle_vfx_3d_layer
+
+
+func _make_gold_coin_3d_proxy(pixel_size: int, animate_spin: bool = true) -> Control:
+	var layer := _get_battle_vfx_3d_layer()
+	var proxy := GoldCoin3DProxyScript.new() as GoldCoin3DProxy
+	if layer != null:
+		proxy.configure(layer, pixel_size, animate_spin)
+	else:
+		proxy.custom_minimum_size = Vector2(pixel_size, pixel_size)
+		proxy.size = Vector2(pixel_size, pixel_size)
+		proxy.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return proxy
+
+
+func _release_gold_3d_proxies(root: Node) -> void:
+	if root == null:
+		return
+	if root is GoldCoin3DProxy:
+		(root as GoldCoin3DProxy).release_3d_coin()
+	for child in root.get_children():
+		if child is Node:
+			_release_gold_3d_proxies(child as Node)
+
+
 func _make_loot_toast_icon(item_type: ItemDefs.Type, icon_factory: Callable) -> Control:
+	if item_type == ItemDefs.Type.GOLD:
+		return _make_gold_coin_3d_proxy(LOOT_TOAST_ICON_SIZE, true)
 	var icon: Control = null
 	if icon_factory.is_valid():
 		var node: Variant = icon_factory.call()
@@ -9640,7 +9680,7 @@ func _make_loot_toast_icon(item_type: ItemDefs.Type, icon_factory: Callable) -> 
 
 func _make_loot_visual_control(item_type: ItemDefs.Type, pixel_size: int, animate: bool = false) -> Control:
 	if item_type == ItemDefs.Type.GOLD:
-		return _make_gold_coin_viewport(pixel_size, animate)
+		return _make_gold_coin_3d_proxy(pixel_size, animate)
 	var image: Texture2D = ItemDefs.get_image(item_type)
 	if image != null:
 		var icon := TextureRect.new()
@@ -9962,73 +10002,11 @@ func _start_next_loot_toast() -> void:
 			if callback.is_valid():
 				callback.call()
 		if is_instance_valid(panel):
+			_release_gold_3d_proxies(panel)
 			panel.queue_free()
 		_layout_active_loot_toasts(true)
 		_start_next_loot_toast()
 	)
-
-
-func _make_gold_coin_viewport(pixel_size: int, animate_spin: bool = true) -> SubViewportContainer:
-	var container := SubViewportContainer.new()
-	container.name = "GoldCoin3D"
-	container.custom_minimum_size = Vector2(pixel_size, pixel_size)
-	container.size = Vector2(pixel_size, pixel_size)
-	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	container.stretch = true
-
-	var viewport := SubViewport.new()
-	viewport.size = Vector2i(pixel_size, pixel_size)
-	viewport.transparent_bg = true
-	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	container.add_child(viewport)
-
-	var root := Node3D.new()
-	root.name = "CoinRoot"
-	viewport.add_child(root)
-
-	var coin_mat := StandardMaterial3D.new()
-	coin_mat.albedo_color = Color(1.0, 0.72, 0.08, 1.0)
-	coin_mat.metallic = 0.75
-	coin_mat.roughness = 0.24
-
-	var coin_mesh := CylinderMesh.new()
-	coin_mesh.top_radius = 0.82
-	coin_mesh.bottom_radius = 0.82
-	coin_mesh.height = 0.16
-	coin_mesh.radial_segments = 64
-	var coin := MeshInstance3D.new()
-	coin.name = "CoinMesh"
-	coin.mesh = coin_mesh
-	coin.material_override = coin_mat
-	coin.rotation_degrees.x = 90.0
-	root.add_child(coin)
-
-	var label := Label3D.new()
-	label.name = "CoinMark"
-	label.text = "$"
-	label.font_size = 72
-	label.modulate = Color(1.0, 0.94, 0.42, 1.0)
-	label.outline_modulate = Color(0.38, 0.20, 0.02, 1.0)
-	label.outline_size = 8
-	label.position = Vector3(0.0, 0.0, 0.11)
-	root.add_child(label)
-
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-38.0, -28.0, 0.0)
-	light.light_energy = 2.2
-	viewport.add_child(light)
-
-	var camera := Camera3D.new()
-	camera.position = Vector3(0.0, 0.0, 3.0)
-	camera.look_at(Vector3.ZERO)
-	camera.current = true
-	viewport.add_child(camera)
-
-	if animate_spin:
-		var spin := create_tween().set_loops()
-		spin.tween_property(root, "rotation_degrees:y", 360.0, 0.72).from(0.0)
-	container.set_meta("coin_root", root)
-	return container
 
 
 func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount: int, target_total: int) -> void:
@@ -10074,9 +10052,10 @@ func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount:
 	tw.parallel().tween_property(loot_view, "scale", Vector2(0.42, 0.42), GOLD_COIN_FLY_DURATION).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func() -> void:
 		_finish_loot_flight()
-		_enqueue_loot_toast(item_type, previous_total, target_total, icon_factory, finished_callback)
 		if is_instance_valid(loot_view):
+			_release_gold_3d_proxies(loot_view)
 			loot_view.queue_free()
+		_enqueue_loot_toast(item_type, previous_total, target_total, icon_factory, finished_callback)
 	)
 
 	var fade_tw := create_tween()

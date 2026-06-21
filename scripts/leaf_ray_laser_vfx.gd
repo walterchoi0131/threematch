@@ -25,6 +25,7 @@ var _camera: Camera3D = null
 var _beam: Node3D = null
 var _beam_end_point: Node3D = null
 var _using_beam_scene: bool = false
+var _shared_vfx_layer: BattleVfx3DLayer = null
 
 
 func _init() -> void:
@@ -50,6 +51,10 @@ func play(p_from: Vector2, p_to: Vector2, p_duration: float = 1.0) -> void:
 	await finished
 
 
+func set_shared_vfx_layer(layer: BattleVfx3DLayer) -> void:
+	_shared_vfx_layer = layer
+
+
 func _begin(p_duration: float) -> void:
 	duration = maxf(p_duration, 0.05)
 	elapsed = 0.0
@@ -62,23 +67,34 @@ func _begin(p_duration: float) -> void:
 func _setup_binbun_beam() -> bool:
 	if BeamVFXScene == null:
 		return false
-	if _container == null:
+	if _shared_vfx_layer != null:
+		_shared_vfx_layer.call("_ensure_viewport")
+		_viewport = _shared_vfx_layer.viewport
+		_camera = _shared_vfx_layer.camera
+	elif _container == null:
 		_setup_viewport()
 	if _viewport == null or _camera == null:
 		return false
 	_clear_beam()
 
-	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	_container.visible = true
+	if _shared_vfx_layer == null:
+		_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		_container.visible = true
 
 	_beam = BeamVFXScene.instantiate() as Node3D
 	if _beam == null:
 		return false
 	_duplicate_beam_materials(_beam)
-	_viewport.add_child(_beam)
+	if _shared_vfx_layer != null:
+		_shared_vfx_layer.add_world_node(_beam)
+	else:
+		_viewport.add_child(_beam)
 
 	_beam_end_point = Node3D.new()
-	_viewport.add_child(_beam_end_point)
+	if _shared_vfx_layer != null:
+		_shared_vfx_layer.add_world_node(_beam_end_point)
+	else:
+		_viewport.add_child(_beam_end_point)
 
 	_beam.set("primary_color", PRIMARY_COLOR)
 	_beam.set("secondary_color", SECONDARY_COLOR)
@@ -201,6 +217,8 @@ func _show_end_spray_only(open_value: float = 1.0) -> void:
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector3:
+	if _shared_vfx_layer != null:
+		return _shared_vfx_layer.screen_to_world(screen_pos)
 	var view_size: Vector2 = _container.size if _container != null else ViewportUtils.get_size()
 	var local_pos := screen_pos + Vector2(VIEWPORT_PADDING, VIEWPORT_PADDING)
 	var fov_rad: float = deg_to_rad(_camera.fov if _camera != null else 75.0)
@@ -231,15 +249,21 @@ func _duplicate_beam_materials(root: Node) -> void:
 
 func _clear_beam() -> void:
 	if is_instance_valid(_beam):
-		_beam.queue_free()
+		if _shared_vfx_layer != null:
+			_shared_vfx_layer.remove_world_node(_beam)
+		else:
+			_beam.queue_free()
 	_beam = null
 	if is_instance_valid(_beam_end_point):
-		_beam_end_point.queue_free()
+		if _shared_vfx_layer != null:
+			_shared_vfx_layer.remove_world_node(_beam_end_point)
+		else:
+			_beam_end_point.queue_free()
 	_beam_end_point = null
 
 
 func _exit_tree() -> void:
-	if _viewport != null:
+	if _viewport != null and _shared_vfx_layer == null:
 		_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_clear_beam()
 

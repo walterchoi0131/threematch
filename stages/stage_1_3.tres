@@ -1,19 +1,18 @@
-[gd_resource type="Resource" script_class="StageData" format=3]
+[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://x8qvo82lvg6l"]
 
 [ext_resource type="Resource" path="res://characters/char_polar.tres" id="1_57o8d"]
-[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="2_dline"]
-[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="3_dseq"]
-[ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_y33w2"]
-[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_warrior.png" id="7_8idvt"]
-[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_church.png" id="8_church_bg"]
-[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="8_enq8n"]
-[ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="9_music"]
-[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_rouge.png" id="9_w6yip"]
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="10_gxyjn"]
-[ext_resource type="Texture2D" path="res://assets/slime.png" id="10_kqu2e"]
-[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_mage.png" id="11_ssn5h"]
-[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_archer.png" id="12_ihorc"]
+[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="2_dline"]
+[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="3_dseq"]
+[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_y33w2"]
+[ext_resource type="Texture2D" uid="uid://eg7wxms24oe1" path="res://assets/enemy/dark_minion_warrior.png" id="7_8idvt"]
+[ext_resource type="Texture2D" uid="uid://hvr2h3v6b8qp" path="res://assets/dialog_background/dialog_bg_church.png" id="8_church_bg"]
+[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="8_enq8n"]
+[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="9_music"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="10_gxyjn"]
+[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="10_kqu2e"]
+[ext_resource type="Texture2D" uid="uid://cha8n71gpm0qc" path="res://assets/enemy/dark_minion_mage.png" id="11_ssn5h"]
+[ext_resource type="Texture2D" uid="uid://cx4f82omj3lyi" path="res://assets/enemy/dark_minion_archer.png" id="12_ihorc"]
 
 [sub_resource type="Resource" id="post_clear"]
 script = ExtResource("2_dline")
@@ -110,11 +109,15 @@ cast = Array[String](["dragon", "panda", "duan", "shark"])
 background = ExtResource("8_church_bg")
 initial_music = ExtResource("9_music")
 
-[sub_resource type="Resource" id="Resource_57o8d"]
-script = ExtResource("6_y33w2")
-item_type = 1
+[sub_resource type="Resource" id="Resource_3pugy"]
+script = ExtResource("8_enq8n")
+max_hp = 1475
+action_pattern = Array[int]([2, 2, 2, 0])
+action_percents = Array[int]([15, 15, 15, 15])
+portrait_texture = ExtResource("10_kqu2e")
+metadata/stage_editor_source_path = "res://enemies/slime.tres"
 
-[sub_resource type="Resource" id="Resource_y33w2"]
+[sub_resource type="Resource" id="Resource_57o8d"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Sword"
 enemy_name_zh = "黑暗爪牙。劍"
@@ -126,37 +129,9 @@ action_counts = Array[int]([3, 3])
 portrait_color = Color(0.3, 0.2, 0.45, 1)
 portrait_texture = ExtResource("7_8idvt")
 element = 7
-stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_57o8d")])
 metadata/stage_editor_source_path = "res://enemies/dark_minion_warrior.tres"
 
-[sub_resource type="Resource" id="Resource_8idvt"]
-script = ExtResource("6_y33w2")
-item_type = 1
-
-[sub_resource type="Resource" id="Resource_enq8n"]
-script = ExtResource("8_enq8n")
-enemy_name = "Dark Minion Rogue"
-enemy_name_zh = "黑暗爪牙。盜"
-enemy_name_en = "Dark Minion Rogue"
-max_hp = 1400
-action_pattern = Array[int]([2, 0, 0])
-action_percents = Array[int]([15, 12, 20])
-action_counts = Array[int]([3, 3, 3])
-portrait_color = Color(0.3, 0.2, 0.45, 1)
-portrait_texture = ExtResource("9_w6yip")
-element = 7
-stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_8idvt")])
-metadata/stage_editor_source_path = "res://enemies/dark_minion_rogue.tres"
-
-[sub_resource type="Resource" id="Resource_w6yip"]
-script = ExtResource("8_enq8n")
-max_hp = 1475
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("10_kqu2e")
-metadata/stage_editor_source_path = "res://enemies/slime.tres"
-
-[sub_resource type="Resource" id="Resource_kqu2e"]
+[sub_resource type="Resource" id="Resource_y33w2"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Mage"
 enemy_name_zh = "黑暗爪牙。法"
@@ -170,7 +145,7 @@ portrait_texture = ExtResource("11_ssn5h")
 element = 7
 metadata/stage_editor_source_path = "res://enemies/dark_minion_mage.tres"
 
-[sub_resource type="Resource" id="Resource_ssn5h"]
+[sub_resource type="Resource" id="Resource_8idvt"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Archer"
 enemy_name_zh = "黑暗爪牙。弓"
@@ -198,10 +173,10 @@ battle_music_override_path = "res://assets/music/Wolf Banner Clash.mp3"
 one_time_reward_item_type = 1
 one_time_reward_item_amount = 1
 one_time_reward_character = ExtResource("1_57o8d")
-rounds = Array[Array]([[SubResource("Resource_y33w2"), SubResource("Resource_enq8n"), SubResource("Resource_w6yip")], [SubResource("Resource_kqu2e"), SubResource("Resource_ssn5h")]])
-rounds_init_cd = Array[Array]([[0, 0, 0], [0, 0]])
-rounds_enemy_levels = Array[Array]([[4, 4, 4], [5, 5]])
-rounds_main_bosses = Array[Array]([[false, false, false], [false, false]])
+rounds = Array[Array]([[SubResource("Resource_3pugy"), SubResource("Resource_57o8d")], [SubResource("Resource_y33w2"), SubResource("Resource_8idvt")]])
+rounds_init_cd = Array[Array]([[0, 0], [0, 0]])
+rounds_enemy_levels = Array[Array]([[1, 1], [5, 5]])
+rounds_main_bosses = Array[Array]([[false, false], [false, false]])
 pre_dialog = SubResource("pre_dialog")
 post_dialog = SubResource("post_dialog")
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]

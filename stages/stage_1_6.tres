@@ -1,13 +1,13 @@
-[gd_resource type="Resource" script_class="StageData" format=3]
+[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://bqoxjlk1s5psh"]
 
-[ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
-[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Resource" path="res://enemies/slime.tres" id="2_rxw68"]
-[ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
-[ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
-[ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Script" path="res://scripts/character_data.gd" id="7_76jdj"]
+[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
+[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="Resource" uid="uid://cwlbnblhs083t" path="res://enemies/slime.tres" id="2_rxw68"]
+[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
+[ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
+[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
+[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_76jdj"]
 
 [sub_resource type="Resource" id="gold_loot_shared"]
 script = ExtResource("5_loot")

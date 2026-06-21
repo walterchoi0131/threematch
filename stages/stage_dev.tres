@@ -12,9 +12,9 @@
 [ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
 [ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
 [ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_jsm3v"]
-[ext_resource type="Resource" uid="uid://dk7dkiuhci2xs" path="res://characters/char_dragon.tres" id="13_7x61u"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="13_7x61u"]
 [ext_resource type="Resource" uid="uid://7kwe3q1qbp3y" path="res://characters/char_shark.tres" id="14_epvkr"]
-[ext_resource type="Resource" uid="uid://b0oiymmnufjwt" path="res://characters/char_panda.tres" id="15_wrajf"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
 
 [sub_resource type="Resource" id="Resource_stage1_intro_morning"]
 script = ExtResource("3_6yv1j")
