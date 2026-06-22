@@ -8,6 +8,7 @@ var coin_root: Node3D = null
 var coin_material: StandardMaterial3D = null
 var coin_label: Label3D = null
 var _last_alpha: float = -1.0
+var _has_synced_once: bool = false
 
 const MODEL_DIAMETER := 1.64
 const WORLD_SIZE_CALIBRATION := 0.36
@@ -27,21 +28,33 @@ func configure(layer: BattleVfx3DLayer, p_pixel_size: int, p_animate_spin: bool 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process(coin_root != null)
+	_sync_coin_to_control(0.0)
 
 
 func _process(delta: float) -> void:
+	_sync_coin_to_control(delta)
+
+
+func _sync_coin_to_control(delta: float = 0.0) -> void:
 	if coin_root == null or not is_instance_valid(coin_root) or vfx_layer == null:
 		return
+	if not is_inside_tree():
+		coin_root.visible = false
+		return
 	var rect := get_global_rect()
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		coin_root.visible = false
+		return
 	var alpha := _get_inherited_canvas_alpha()
 	_apply_alpha(alpha)
-	coin_root.visible = is_visible_in_tree() and alpha > 0.01
 	coin_root.global_position = vfx_layer.screen_to_world(rect.get_center())
 	var transform_scale := get_global_transform().get_scale()
 	var visual_scale: float = maxf(0.01, (absf(transform_scale.x) + absf(transform_scale.y)) * 0.5)
 	var target_world_diameter: float = float(pixel_size) * visual_scale * vfx_layer.world_units_per_pixel() * WORLD_SIZE_CALIBRATION
 	var scale_value: float = target_world_diameter / MODEL_DIAMETER
 	coin_root.scale = Vector3(scale_value, scale_value, scale_value)
+	_has_synced_once = true
+	coin_root.visible = _has_synced_once and is_visible_in_tree() and alpha > 0.01
 	if animate_spin:
 		coin_root.rotation_degrees.y = fmod(coin_root.rotation_degrees.y + delta * 500.0, 360.0)
 
@@ -98,6 +111,9 @@ func _create_coin() -> void:
 		return
 	coin_root = Node3D.new()
 	coin_root.name = "LootGoldCoin3D"
+	coin_root.visible = false
+	coin_root.scale = Vector3(0.01, 0.01, 0.01)
+	_has_synced_once = false
 
 	coin_material = StandardMaterial3D.new()
 	coin_material.albedo_color = Color(1.0, 0.72, 0.08, 1.0)
