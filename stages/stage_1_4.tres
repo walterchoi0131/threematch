@@ -85,6 +85,34 @@ cast = Array[String](["husky", "owen"])
 background = ExtResource("2_vwwgi")
 initial_music = ExtResource("3_3pugy")
 
+[sub_resource type="Resource" id="stage14_start_line_1"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "你為什麼要這樣做！"
+text_en = "Why are you doing this!"
+shake = false
+
+[sub_resource type="Resource" id="stage14_start_line_2"]
+script = ExtResource("3_dline")
+character_id = "owen"
+position = "right"
+text_zh = "我受夠像你這樣的偽善者統治這個國家。"
+text_en = "I'm sick of hypocrites like you ruling the country."
+shake = false
+
+[sub_resource type="Resource" id="stage14_start_line_3"]
+script = ExtResource("3_dline")
+character_id = "owen"
+position = "right"
+text_zh = "準備迎接一個再也沒有光的世界吧。"
+text_en = "Prepare for a world with no light anymore."
+shake = false
+
+[sub_resource type="Resource" id="stage14_start_dialog"]
+script = ExtResource("4_dseq")
+lines = Array[ExtResource("3_dline")]([SubResource("stage14_start_line_1"), SubResource("stage14_start_line_2"), SubResource("stage14_start_line_3")])
+cast = Array[String](["husky", "owen"])
+
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-4"
@@ -101,5 +129,6 @@ rounds_main_bosses = Array[Array]([[true]])
 background = 1
 bgm = ExtResource("1_lvgyu")
 pre_dialog = SubResource("stage13_pre_dialog")
+start_stage_dialog = SubResource("stage14_start_dialog")
 set_party = Array[ExtResource("8_char")]([ExtResource("5_milo"), ExtResource("6_pan"), ExtResource("7_ed")])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
