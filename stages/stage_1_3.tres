@@ -1,18 +1,18 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://x8qvo82lvg6l"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
 [ext_resource type="Resource" path="res://characters/char_polar.tres" id="1_57o8d"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="2_dline"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="3_dseq"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_y33w2"]
-[ext_resource type="Texture2D" uid="uid://eg7wxms24oe1" path="res://assets/enemy/dark_minion_warrior.png" id="7_8idvt"]
-[ext_resource type="Texture2D" uid="uid://hvr2h3v6b8qp" path="res://assets/dialog_background/dialog_bg_church.png" id="8_church_bg"]
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="8_enq8n"]
-[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="9_music"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="10_gxyjn"]
-[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="10_kqu2e"]
-[ext_resource type="Texture2D" uid="uid://cha8n71gpm0qc" path="res://assets/enemy/dark_minion_mage.png" id="11_ssn5h"]
-[ext_resource type="Texture2D" uid="uid://cx4f82omj3lyi" path="res://assets/enemy/dark_minion_archer.png" id="12_ihorc"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="2_dline"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="3_dseq"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_y33w2"]
+[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_warrior.png" id="7_8idvt"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_church.png" id="8_church_bg"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="8_enq8n"]
+[ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="9_music"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="10_gxyjn"]
+[ext_resource type="Texture2D" path="res://assets/slime.png" id="10_kqu2e"]
+[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_mage.png" id="11_ssn5h"]
+[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_archer.png" id="12_ihorc"]
 
 [sub_resource type="Resource" id="post_clear"]
 script = ExtResource("2_dline")
@@ -102,14 +102,27 @@ character_id = "panda"
 text_zh = "看來這趟差事一點也不簡單。"
 text_en = "So much for a simple errand."
 
+[sub_resource type="Resource" id="Resource_3pugy"]
+script = ExtResource("2_dline")
+character_id = "enemy_dark_minion_sword"
+text_zh = "測試"
+
 [sub_resource type="Resource" id="pre_dialog"]
 script = ExtResource("3_dseq")
-lines = Array[ExtResource("2_dline")]([SubResource("pre_arrive"), SubResource("pre_dragon"), SubResource("pre_panda"), SubResource("pre_duan"), SubResource("pre_shark"), SubResource("pre_minion"), SubResource("pre_panda_2")])
-cast = Array[String](["dragon", "panda", "duan", "shark"])
+lines = Array[ExtResource("2_dline")]([SubResource("pre_arrive"), SubResource("pre_dragon"), SubResource("pre_panda"), SubResource("pre_duan"), SubResource("pre_shark"), SubResource("pre_minion"), SubResource("pre_panda_2"), SubResource("Resource_3pugy")])
+cast = Array[String](["dragon", "panda", "duan", "shark", "enemy_dark_minion_sword"])
+cast_profiles = {
+"enemy_dark_minion_sword": {
+"enemy_path": "res://enemies/dark_minion_warrior.tres",
+"kind": "enemy",
+"name_en": "Dark Minion Sword",
+"name_zh": "爪牙"
+}
+}
 background = ExtResource("8_church_bg")
 initial_music = ExtResource("9_music")
 
-[sub_resource type="Resource" id="Resource_3pugy"]
+[sub_resource type="Resource" id="Resource_57o8d"]
 script = ExtResource("8_enq8n")
 max_hp = 1475
 action_pattern = Array[int]([2, 2, 2, 0])
@@ -117,7 +130,7 @@ action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("10_kqu2e")
 metadata/stage_editor_source_path = "res://enemies/slime.tres"
 
-[sub_resource type="Resource" id="Resource_57o8d"]
+[sub_resource type="Resource" id="Resource_y33w2"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Sword"
 enemy_name_zh = "黑暗爪牙。劍"
@@ -131,7 +144,7 @@ portrait_texture = ExtResource("7_8idvt")
 element = 7
 metadata/stage_editor_source_path = "res://enemies/dark_minion_warrior.tres"
 
-[sub_resource type="Resource" id="Resource_y33w2"]
+[sub_resource type="Resource" id="Resource_8idvt"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Mage"
 enemy_name_zh = "黑暗爪牙。法"
@@ -145,7 +158,7 @@ portrait_texture = ExtResource("11_ssn5h")
 element = 7
 metadata/stage_editor_source_path = "res://enemies/dark_minion_mage.tres"
 
-[sub_resource type="Resource" id="Resource_8idvt"]
+[sub_resource type="Resource" id="Resource_enq8n"]
 script = ExtResource("8_enq8n")
 enemy_name = "Dark Minion Archer"
 enemy_name_zh = "黑暗爪牙。弓"
@@ -173,7 +186,7 @@ battle_music_override_path = "res://assets/music/Wolf Banner Clash.mp3"
 one_time_reward_item_type = 1
 one_time_reward_item_amount = 1
 one_time_reward_character = ExtResource("1_57o8d")
-rounds = Array[Array]([[SubResource("Resource_3pugy"), SubResource("Resource_57o8d")], [SubResource("Resource_y33w2"), SubResource("Resource_8idvt")]])
+rounds = Array[Array]([[SubResource("Resource_57o8d"), SubResource("Resource_y33w2")], [SubResource("Resource_8idvt"), SubResource("Resource_enq8n")]])
 rounds_init_cd = Array[Array]([[0, 0], [0, 0]])
 rounds_enemy_levels = Array[Array]([[1, 1], [5, 5]])
 rounds_main_bosses = Array[Array]([[false, false], [false, false]])

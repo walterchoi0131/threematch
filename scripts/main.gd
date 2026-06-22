@@ -358,6 +358,9 @@ var _stage_editor_dialog_title_label: Label = null
 var _stage_editor_dialog_line_list: VBoxContainer = null
 var _stage_editor_dialog_cast_list: HBoxContainer = null
 var _stage_editor_dialog_add_cast_option: OptionButton = null
+var _stage_editor_dialog_enemy_cast_option: OptionButton = null
+var _stage_editor_dialog_enemy_cast_zh_edit: LineEdit = null
+var _stage_editor_dialog_enemy_cast_en_edit: LineEdit = null
 var _stage_editor_dialog_background_option: OptionButton = null
 var _stage_editor_dialog_music_option: OptionButton = null
 var _stage_editor_dialog_exit_cast_option: OptionButton = null
@@ -656,6 +659,8 @@ func _hide_battle_ui_for_stage_editor() -> void:
 
 func _build_stage_editor_ui() -> void:
 	_stage_editor_load_character_catalog()
+	if _stage_editor_available_enemies.is_empty():
+		_stage_editor_available_enemies = _stage_editor_load_available_enemies()
 	_stage_editor_load_dialog_background_catalog()
 	_stage_editor_load_dialog_music_catalog()
 	_build_stage_editor_area_panel()
@@ -1086,7 +1091,7 @@ func _build_stage_editor_dialog_panel() -> void:
 
 	_stage_editor_dialog_background_option = OptionButton.new()
 	_stage_editor_dialog_background_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_dialog_background_option.custom_minimum_size = Vector2(132, 30)
+	_stage_editor_dialog_background_option.custom_minimum_size = Vector2(104, 30)
 	_stage_editor_dialog_background_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_make_compact_option_button(_stage_editor_dialog_background_option)
 	_stage_editor_dialog_background_option.item_selected.connect(_on_stage_editor_dialog_background_selected)
@@ -1101,13 +1106,21 @@ func _build_stage_editor_dialog_panel() -> void:
 
 	_stage_editor_dialog_music_option = OptionButton.new()
 	_stage_editor_dialog_music_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_dialog_music_option.custom_minimum_size = Vector2(132, 30)
+	_stage_editor_dialog_music_option.custom_minimum_size = Vector2(104, 30)
 	_stage_editor_dialog_music_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_make_compact_option_button(_stage_editor_dialog_music_option)
 	_stage_editor_dialog_music_option.item_selected.connect(_on_stage_editor_dialog_music_selected)
 	header_row.add_child(_stage_editor_dialog_music_option)
 
-	header_row.add_child(_make_stage_editor_small_button("Test Play", _on_stage_editor_dialog_test_play_pressed, Vector2(86, 30)))
+	var dialog_action_row := HBoxContainer.new()
+	dialog_action_row.add_theme_constant_override("separation", 6)
+	root.add_child(dialog_action_row)
+	var dialog_action_spacer := Control.new()
+	dialog_action_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialog_action_row.add_child(dialog_action_spacer)
+	dialog_action_row.add_child(_make_stage_editor_small_button("Test Play", _on_stage_editor_dialog_test_play_pressed, Vector2(76, 30)))
+	dialog_action_row.add_child(_make_stage_editor_small_button("Save", _on_stage_editor_save_pressed, Vector2(58, 30)))
+	dialog_action_row.add_child(_make_stage_editor_small_button("Back", _on_stage_editor_back_pressed, Vector2(58, 30)))
 
 	var cast_row := HBoxContainer.new()
 	cast_row.add_theme_constant_override("separation", 6)
@@ -1121,16 +1134,70 @@ func _build_stage_editor_dialog_panel() -> void:
 	cast_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	cast_row.add_child(cast_label)
 
+	var cast_scroll := ScrollContainer.new()
+	cast_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	cast_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	cast_scroll.custom_minimum_size = Vector2(72, 30)
+	cast_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cast_row.add_child(cast_scroll)
+
 	_stage_editor_dialog_cast_list = HBoxContainer.new()
 	_stage_editor_dialog_cast_list.add_theme_constant_override("separation", 4)
 	_stage_editor_dialog_cast_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cast_row.add_child(_stage_editor_dialog_cast_list)
+	cast_scroll.add_child(_stage_editor_dialog_cast_list)
 
 	_stage_editor_dialog_add_cast_option = OptionButton.new()
 	_stage_editor_dialog_add_cast_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_dialog_add_cast_option.custom_minimum_size = Vector2(148, 30)
+	_stage_editor_dialog_add_cast_option.custom_minimum_size = Vector2(104, 30)
+	_stage_editor_make_compact_option_button(_stage_editor_dialog_add_cast_option)
 	cast_row.add_child(_stage_editor_dialog_add_cast_option)
-	cast_row.add_child(_make_stage_editor_small_button("Add Cast", _on_stage_editor_dialog_add_cast_pressed, Vector2(78, 30)))
+	cast_row.add_child(_make_stage_editor_small_button("Add", _on_stage_editor_dialog_add_cast_pressed, Vector2(46, 30)))
+
+	var enemy_cast_row := HBoxContainer.new()
+	enemy_cast_row.add_theme_constant_override("separation", 6)
+	root.add_child(enemy_cast_row)
+
+	var enemy_cast_label := Label.new()
+	enemy_cast_label.text = "Enemy Cast"
+	enemy_cast_label.custom_minimum_size = Vector2(72, 0)
+	enemy_cast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	enemy_cast_label.add_theme_font_size_override("font_size", 12)
+	enemy_cast_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	enemy_cast_row.add_child(enemy_cast_label)
+
+	_stage_editor_dialog_enemy_cast_option = OptionButton.new()
+	_stage_editor_dialog_enemy_cast_option.focus_mode = Control.FOCUS_NONE
+	_stage_editor_dialog_enemy_cast_option.custom_minimum_size = Vector2(148, 30)
+	_stage_editor_dialog_enemy_cast_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_make_compact_option_button(_stage_editor_dialog_enemy_cast_option)
+	_stage_editor_dialog_enemy_cast_option.item_selected.connect(_on_stage_editor_dialog_enemy_cast_selected)
+	enemy_cast_row.add_child(_stage_editor_dialog_enemy_cast_option)
+
+	var enemy_name_row := HBoxContainer.new()
+	enemy_name_row.add_theme_constant_override("separation", 6)
+	root.add_child(enemy_name_row)
+
+	var enemy_name_label := Label.new()
+	enemy_name_label.text = "Names"
+	enemy_name_label.custom_minimum_size = Vector2(72, 0)
+	enemy_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	enemy_name_label.add_theme_font_size_override("font_size", 12)
+	enemy_name_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	enemy_name_row.add_child(enemy_name_label)
+
+	_stage_editor_dialog_enemy_cast_zh_edit = LineEdit.new()
+	_stage_editor_dialog_enemy_cast_zh_edit.placeholder_text = "中文名"
+	_stage_editor_dialog_enemy_cast_zh_edit.custom_minimum_size = Vector2(92, 30)
+	_stage_editor_dialog_enemy_cast_zh_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enemy_name_row.add_child(_stage_editor_dialog_enemy_cast_zh_edit)
+
+	_stage_editor_dialog_enemy_cast_en_edit = LineEdit.new()
+	_stage_editor_dialog_enemy_cast_en_edit.placeholder_text = "English name"
+	_stage_editor_dialog_enemy_cast_en_edit.custom_minimum_size = Vector2(110, 30)
+	_stage_editor_dialog_enemy_cast_en_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	enemy_name_row.add_child(_stage_editor_dialog_enemy_cast_en_edit)
+
+	enemy_name_row.add_child(_make_stage_editor_small_button("Add Enemy", _on_stage_editor_dialog_add_enemy_cast_pressed, Vector2(86, 30)))
 
 	var exit_row := HBoxContainer.new()
 	exit_row.add_theme_constant_override("separation", 6)
@@ -1409,10 +1476,41 @@ func _stage_editor_character_id_from_path(resource_path: String) -> String:
 func _stage_editor_character_display_name(char_id: String) -> String:
 	if char_id.is_empty():
 		return "旁白"
+	var profile: Dictionary = _stage_editor_dialog_cast_profile(char_id)
+	if not profile.is_empty():
+		var locale_key: String = Locale.current_locale
+		var name: String = String(profile.get("name_en" if locale_key == "en" else "name_zh", "")).strip_edges()
+		if name.is_empty():
+			name = String(profile.get("name_zh" if locale_key == "en" else "name_en", "")).strip_edges()
+		if not name.is_empty():
+			return name
 	var entry: Dictionary = _stage_editor_character_by_id.get(char_id, {})
 	if not entry.is_empty():
 		return String(entry.get("name", char_id.capitalize()))
 	return Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
+
+
+func _stage_editor_dialog_cast_profile(char_id: String) -> Dictionary:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return {}
+	if sequence.has_method("get_cast_profile"):
+		return sequence.get_cast_profile(char_id)
+	if sequence.cast_profiles.has(char_id):
+		var profile: Variant = sequence.cast_profiles.get(char_id, {})
+		return profile if profile is Dictionary else {}
+	return {}
+
+
+func _stage_editor_dialog_cast_enemy_data(char_id: String) -> EnemyData:
+	var profile: Dictionary = _stage_editor_dialog_cast_profile(char_id)
+	if profile.is_empty() or String(profile.get("kind", "")) != "enemy":
+		return null
+	var enemy_path: String = String(profile.get("enemy_path", "")).strip_edges()
+	if enemy_path.is_empty() or not ResourceLoader.exists(enemy_path):
+		return null
+	var resource: Resource = load(enemy_path)
+	return resource as EnemyData
 
 
 func _stage_editor_ensure_dialog_cast(sequence: DialogSequence) -> void:
@@ -1572,6 +1670,8 @@ func _refresh_stage_editor_dialog_cast_controls(sequence: DialogSequence) -> voi
 			_stage_editor_add_option_item(_stage_editor_dialog_add_cast_option, String(entry.get("name", entry_id.capitalize())), entry_id)
 		_stage_editor_dialog_add_cast_option.disabled = _stage_editor_dialog_add_cast_option.item_count == 0
 
+	_refresh_stage_editor_dialog_enemy_cast_controls()
+
 	if _stage_editor_dialog_exit_cast_option != null:
 		_stage_editor_dialog_exit_cast_option.clear()
 		for cast_variant in sequence.cast:
@@ -1580,6 +1680,27 @@ func _refresh_stage_editor_dialog_cast_controls(sequence: DialogSequence) -> voi
 		_stage_editor_dialog_exit_cast_option.disabled = _stage_editor_dialog_exit_cast_option.item_count == 0
 	if _stage_editor_dialog_exit_side_option != null:
 		_stage_editor_dialog_exit_side_option.disabled = sequence.cast.is_empty()
+
+
+func _refresh_stage_editor_dialog_enemy_cast_controls() -> void:
+	if _stage_editor_dialog_enemy_cast_option == null:
+		return
+	if _stage_editor_available_enemies.is_empty():
+		_stage_editor_available_enemies = _stage_editor_load_available_enemies()
+	_stage_editor_dialog_enemy_cast_option.clear()
+	for entry: Dictionary in _stage_editor_available_enemies:
+		var enemy_data: EnemyData = entry.get("data", null) as EnemyData
+		var resource_path: String = String(entry.get("path", ""))
+		if enemy_data == null or resource_path.is_empty():
+			continue
+		var display_name: String = enemy_data.get_display_name()
+		if display_name.is_empty():
+			display_name = resource_path.get_file().get_basename().capitalize()
+		_stage_editor_add_option_item(_stage_editor_dialog_enemy_cast_option, "%s (%s)" % [display_name, resource_path.get_file()], resource_path)
+	_stage_editor_dialog_enemy_cast_option.disabled = _stage_editor_dialog_enemy_cast_option.item_count == 0
+	if _stage_editor_dialog_enemy_cast_option.item_count > 0:
+		_stage_editor_dialog_enemy_cast_option.select(0)
+		_stage_editor_apply_enemy_cast_name_defaults()
 
 
 func _refresh_stage_editor_dialog_line_list() -> void:
@@ -1918,6 +2039,9 @@ func _stage_editor_make_character_indicator(char_id: String) -> Control:
 
 
 func _stage_editor_character_portrait_texture(char_id: String) -> Texture2D:
+	var enemy_data: EnemyData = _stage_editor_dialog_cast_enemy_data(char_id)
+	if enemy_data != null:
+		return enemy_data.portrait_texture
 	var entry: Dictionary = _stage_editor_character_by_id.get(char_id, {})
 	if entry.is_empty():
 		return null
@@ -2267,11 +2391,110 @@ func _on_stage_editor_dialog_add_cast_pressed() -> void:
 	_refresh_stage_editor_dialog_editor()
 
 
+func _on_stage_editor_dialog_enemy_cast_selected(_item_index: int) -> void:
+	_stage_editor_apply_enemy_cast_name_defaults(true)
+
+
+func _stage_editor_apply_enemy_cast_name_defaults(force: bool = false) -> void:
+	if _stage_editor_dialog_enemy_cast_option == null:
+		return
+	var enemy_path: String = _stage_editor_get_option_value(_stage_editor_dialog_enemy_cast_option)
+	var enemy_data: EnemyData = _stage_editor_enemy_data_for_path(enemy_path)
+	if enemy_data == null:
+		return
+	if _stage_editor_dialog_enemy_cast_zh_edit != null and (force or _stage_editor_dialog_enemy_cast_zh_edit.text.strip_edges().is_empty()):
+		_stage_editor_dialog_enemy_cast_zh_edit.text = enemy_data.enemy_name_zh if not enemy_data.enemy_name_zh.strip_edges().is_empty() else enemy_data.get_display_name("zh")
+	if _stage_editor_dialog_enemy_cast_en_edit != null and (force or _stage_editor_dialog_enemy_cast_en_edit.text.strip_edges().is_empty()):
+		_stage_editor_dialog_enemy_cast_en_edit.text = enemy_data.enemy_name_en if not enemy_data.enemy_name_en.strip_edges().is_empty() else enemy_data.get_display_name("en")
+
+
+func _on_stage_editor_dialog_add_enemy_cast_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null or _stage_editor_dialog_enemy_cast_option == null:
+		return
+	var enemy_path: String = _stage_editor_get_option_value(_stage_editor_dialog_enemy_cast_option)
+	var enemy_data: EnemyData = _stage_editor_enemy_data_for_path(enemy_path)
+	if enemy_data == null:
+		_set_stage_editor_status("Enemy cast load failed", false)
+		return
+	var name_zh: String = _stage_editor_dialog_enemy_cast_zh_edit.text.strip_edges() if _stage_editor_dialog_enemy_cast_zh_edit != null else ""
+	var name_en: String = _stage_editor_dialog_enemy_cast_en_edit.text.strip_edges() if _stage_editor_dialog_enemy_cast_en_edit != null else ""
+	if name_zh.is_empty():
+		name_zh = enemy_data.get_display_name("zh")
+	if name_en.is_empty():
+		name_en = enemy_data.get_display_name("en")
+	var cast_id: String = _stage_editor_make_enemy_cast_id(sequence, enemy_path, name_en if not name_en.is_empty() else name_zh)
+	if cast_id.is_empty():
+		_set_stage_editor_status("Enemy cast id failed", false)
+		return
+	if sequence.has_method("set_enemy_cast_profile"):
+		sequence.set_enemy_cast_profile(cast_id, enemy_path, name_zh, name_en)
+	else:
+		sequence.cast_profiles[cast_id] = {
+			"kind": "enemy",
+			"enemy_path": enemy_path,
+			"name_zh": name_zh,
+			"name_en": name_en,
+	}
+	sequence.cast.append(cast_id)
+	_refresh_stage_editor_dialog_editor()
+	_stage_editor_apply_enemy_cast_name_defaults(true)
+	_set_stage_editor_status("Enemy cast added: %s / %s" % [name_zh, name_en])
+
+
+func _stage_editor_enemy_data_for_path(enemy_path: String) -> EnemyData:
+	if enemy_path.is_empty():
+		return null
+	for entry: Dictionary in _stage_editor_available_enemies:
+		if String(entry.get("path", "")) != enemy_path:
+			continue
+		var enemy_data: EnemyData = entry.get("data", null) as EnemyData
+		if enemy_data != null:
+			return enemy_data
+	if not ResourceLoader.exists(enemy_path):
+		return null
+	var resource: Resource = load(enemy_path)
+	return resource as EnemyData
+
+
+func _stage_editor_make_enemy_cast_id(sequence: DialogSequence, enemy_path: String, label_text: String) -> String:
+	var base: String = label_text.strip_edges().to_lower()
+	if base.is_empty():
+		base = enemy_path.get_file().get_basename().to_lower()
+	base = "enemy_" + _stage_editor_sanitize_cast_id(base)
+	if base == "enemy_":
+		base = "enemy_cast"
+	var candidate: String = base
+	var index: int = 2
+	while sequence.cast.has(candidate) or sequence.cast_profiles.has(candidate):
+		candidate = "%s_%d" % [base, index]
+		index += 1
+	return candidate
+
+
+func _stage_editor_sanitize_cast_id(value: String) -> String:
+	var result: String = ""
+	for i in value.length():
+		var ch: String = value.substr(i, 1)
+		var code: int = ch.unicode_at(0)
+		var is_digit: bool = code >= 48 and code <= 57
+		var is_lower: bool = code >= 97 and code <= 122
+		if is_digit or is_lower:
+			result += ch
+		else:
+			result += "_"
+	while result.contains("__"):
+		result = result.replace("__", "_")
+	return result.trim_prefix("_").trim_suffix("_")
+
+
 func _on_stage_editor_dialog_remove_cast_pressed(char_id: String) -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
 	if sequence == null or _stage_editor_dialog_line_references_cast(sequence, char_id):
 		return
 	sequence.cast.erase(char_id)
+	if sequence.cast_profiles.has(char_id):
+		sequence.cast_profiles.erase(char_id)
 	_refresh_stage_editor_dialog_editor()
 
 
@@ -12066,10 +12289,23 @@ func _on_enemy_long_pressed(enemy: Enemy) -> void:
 	_show_enemy_status_popup(enemy)
 
 
+func _enemy_status_visual_data(data: EnemyData) -> EnemyData:
+	if data == null:
+		return null
+	var source_path: String = String(data.get_meta("stage_editor_source_path", data.resource_path)).strip_edges()
+	if source_path.is_empty() or not ResourceLoader.exists(source_path):
+		return data
+	var resource: Resource = load(source_path)
+	if resource is EnemyData:
+		return resource as EnemyData
+	return data
+
+
 func _show_enemy_status_popup(enemy: Enemy) -> void:
 	if _enemy_popup_layer != null or enemy == null or not is_instance_valid(enemy) or enemy.data == null:
 		return
 	var data: EnemyData = enemy.data
+	var visual_data: EnemyData = _enemy_status_visual_data(data)
 	_enemy_popup_layer = CanvasLayer.new()
 	_enemy_popup_layer.layer = 83
 	var host: Node = get_tree().current_scene
@@ -12117,9 +12353,9 @@ func _show_enemy_status_popup(enemy: Enemy) -> void:
 	header.clip_contents = true
 	vbox.add_child(header)
 
-	if data.portrait_texture != null:
+	if visual_data != null and visual_data.portrait_texture != null:
 		var portrait_tex := TextureRect.new()
-		portrait_tex.texture = data.portrait_texture
+		portrait_tex.texture = visual_data.portrait_texture
 		portrait_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		portrait_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		portrait_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -12127,10 +12363,11 @@ func _show_enemy_status_popup(enemy: Enemy) -> void:
 		portrait_tex.anchor_top = 1.0
 		portrait_tex.anchor_right = 0.0
 		portrait_tex.anchor_bottom = 1.0
-		portrait_tex.offset_left = 4.0
-		portrait_tex.offset_top = -260.0
-		portrait_tex.offset_right = 264.0
-		portrait_tex.offset_bottom = 0.0
+		portrait_tex.offset_left = 4.0 + visual_data.info_popup_offset.x
+		portrait_tex.offset_top = -260.0 + visual_data.info_popup_offset.y
+		portrait_tex.offset_right = 264.0 + visual_data.info_popup_offset.x
+		portrait_tex.offset_bottom = visual_data.info_popup_offset.y
+		portrait_tex.scale = Vector2(visual_data.info_popup_scale, visual_data.info_popup_scale)
 		header.add_child(portrait_tex)
 
 	var info_vbox := VBoxContainer.new()

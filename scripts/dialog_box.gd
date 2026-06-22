@@ -483,7 +483,7 @@ func _show_line(line: _DialogLine) -> void:
 			_play_squeeze_bounce(portrait, _portrait_target_scale(char_id, side))
 
 		# ── 名稱 ──
-		_name_label.text = Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
+		_name_label.text = _dialog_display_name(char_id)
 		_name_label.add_theme_color_override("font_color", _dialog_name_color(char_id))
 
 	# ── 打字機效果 ──
@@ -662,6 +662,9 @@ func _portrait_target_scale(char_id: String, side: String) -> Vector2:
 func _dialog_phase_scale(char_id: String) -> float:
 	var character: CharacterData = _find_character_data(char_id)
 	if character == null:
+		var enemy_data: EnemyData = _dialog_enemy_data(char_id)
+		if enemy_data != null:
+			return maxf(0.05, enemy_data.dialog_phase_scale)
 		return 1.0
 	return maxf(0.05, character.dialog_phase_scale)
 
@@ -669,6 +672,9 @@ func _dialog_phase_scale(char_id: String) -> float:
 func _dialog_phase_offset(char_id: String) -> Vector2:
 	var character: CharacterData = _find_character_data(char_id)
 	if character == null:
+		var enemy_data: EnemyData = _dialog_enemy_data(char_id)
+		if enemy_data != null:
+			return enemy_data.dialog_phase_offset
 		return Vector2.ZERO
 	return character.dialog_phase_offset
 
@@ -678,7 +684,48 @@ func _dialog_name_color(char_id: String) -> Color:
 	if character != null:
 		var element_color: Color = Block.COLORS.get(character.gem_type, Color.WHITE)
 		return element_color.lightened(0.35)
+	var enemy_data: EnemyData = _dialog_enemy_data(char_id)
+	if enemy_data != null:
+		var enemy_color: Color = Block.COLORS.get(enemy_data.element, Color.WHITE)
+		return enemy_color.lightened(0.35)
 	return CHAR_NAME_COLORS.get(char_id, Color.WHITE)
+
+
+func _dialog_display_name(char_id: String) -> String:
+	var profile: Dictionary = _dialog_cast_profile(char_id)
+	if not profile.is_empty():
+		var locale_key: String = "zh"
+		var locale_node: Node = get_node_or_null("/root/Locale")
+		if locale_node != null:
+			locale_key = String(locale_node.get("current_locale"))
+		var name: String = String(profile.get("name_en" if locale_key == "en" else "name_zh", "")).strip_edges()
+		if name.is_empty():
+			name = String(profile.get("name_zh" if locale_key == "en" else "name_en", "")).strip_edges()
+		if not name.is_empty():
+			return name
+	return Locale.tr_or("DIALOG_" + char_id, char_id.capitalize())
+
+
+func _dialog_cast_profile(char_id: String) -> Dictionary:
+	if _sequence == null or char_id.is_empty():
+		return {}
+	if _sequence.has_method("get_cast_profile"):
+		return _sequence.get_cast_profile(char_id)
+	if _sequence.cast_profiles.has(char_id):
+		var profile: Variant = _sequence.cast_profiles.get(char_id, {})
+		return profile if profile is Dictionary else {}
+	return {}
+
+
+func _dialog_enemy_data(char_id: String) -> EnemyData:
+	var profile: Dictionary = _dialog_cast_profile(char_id)
+	if profile.is_empty() or String(profile.get("kind", "")) != "enemy":
+		return null
+	var enemy_path: String = String(profile.get("enemy_path", "")).strip_edges()
+	if enemy_path.is_empty() or not ResourceLoader.exists(enemy_path):
+		return null
+	var resource: Resource = load(enemy_path)
+	return resource as EnemyData
 
 
 func _find_character_data(char_id: String) -> CharacterData:
@@ -895,6 +942,9 @@ func _update_portrait_texture(portrait: TextureRect, char_id: String, emotion: S
 
 
 func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
+	var enemy_data: EnemyData = _dialog_enemy_data(char_id)
+	if enemy_data != null and enemy_data.portrait_texture != null:
+		return enemy_data.portrait_texture
 	# 角色 ID 別名（例如 raccoon → raccoon_baby）
 	var aliased: String = _CHAR_ID_ALIAS.get(char_id, char_id)
 	# 嘗試情緒差分貼圖

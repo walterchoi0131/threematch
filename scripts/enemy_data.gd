@@ -32,6 +32,10 @@ const PASSIVE_REDUCED_DAMAGE_DEFAULT: int = 1
 @export var auto_use_max_skill_upgrades: bool = true
 @export var portrait_color: Color = Color(0.2, 0.7, 0.2)
 @export var portrait_texture: Texture2D = null
+@export var info_popup_scale: float = 1.0
+@export var info_popup_offset: Vector2 = Vector2.ZERO
+@export var dialog_phase_scale: float = 1.0
+@export var dialog_phase_offset: Vector2 = Vector2.ZERO
 @export var element: Block.Type = Block.Type.GREEN
 ## ??撅祆改?RED=?怒LUE=瘞氬REEN=??@export var element: Block.Type = Block.Type.GREEN
 ## Legacy: 銝餉? Boss ?曉?梢???spawn 閮剖?嚗??迨甈??芰霈??鞈?

@@ -16,21 +16,32 @@ const _STAT_HP_COLOR: Color = Color(0.36, 0.82, 0.96, 1.0)
 const _STAT_MAGIC_COLOR: Color = Color(0.78, 0.58, 1.0, 1.0)
 const _STAT_ATK_COLOR: Color = Color(1.0, 0.50, 0.42, 1.0)
 const _DIALOG_PHASE_PREVIEW_MAX_H: float = 640.0
+const _ENEMY_ROOT: String = "res://enemies"
 ## 遊戲 viewport 實際寬度（由 ViewportUtils.get_size().x 動態設定，預設等於專案基準 720px）
 var _VP_W: float = 720.0
 
 
+enum TargetMode { CHARACTER, ENEMY }
+
 ## [scale_prop, offset_prop, column_label]
-const _SYS: Array = [
+const _CHAR_SYS: Array = [
 	["portrait_scale",      "portrait_offset",      "Battle Panel"],
 	["square_scale",        "square_offset",        "Square Card"],
 	["rectangular_scale",   "rectangular_offset",   "Result Row"],
 	["dialog_square_scale", "dialog_square_offset", "Dialog Box"],
 	["dialog_phase_scale",  "dialog_phase_offset",  "Dialog Phase"],
 ]
+const _ENEMY_SYS: Array = [
+	["info_popup_scale",    "info_popup_offset",    "Info Popup"],
+	["dialog_phase_scale",  "dialog_phase_offset",  "Dialog Phase"],
+]
 
 var _char_data: CharacterData = null
 var _previous_char_data: CharacterData = null
+var _enemy_data: EnemyData = null
+var _target_mode: int = TargetMode.CHARACTER
+var _mode_char_btn: Button = null
+var _mode_enemy_btn: Button = null
 
 ## 每欄的「576px 寬場景容器」節點 — rebuild 時清空並填入
 var _scene_nodes: Array[Control] = []
@@ -47,6 +58,7 @@ var _drag_active: Array[bool]         = []
 var _drag_start_mouse: Array[Vector2] = []
 var _drag_start_offset: Array[Vector2] = []
 var _char_btns: Array[Button]         = []
+var _enemy_btns: Array[Button]        = []
 var _hp_chart: StatChart = null
 var _magic_chart: StatChart = null
 var _atk_chart: StatChart = null
@@ -66,12 +78,16 @@ var _syncing_growth_mode_options: bool = false
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	for _i: int in _SYS.size():
+	for _i: int in _systems().size():
 		_drag_active.append(false)
 		_drag_start_mouse.append(Vector2.ZERO)
 		_drag_start_offset.append(Vector2.ZERO)
 		_portraits.append(null)
 	_build()
+
+
+func _systems() -> Array:
+	return _ENEMY_SYS if _target_mode == TargetMode.ENEMY else _CHAR_SYS
 
 
 func _build() -> void:
@@ -150,7 +166,7 @@ func _build() -> void:
 	preview_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_scroll.add_child(preview_vbox)
 
-	for i: int in _SYS.size():
+	for i: int in _systems().size():
 		_build_preview_col(preview_vbox, i)
 
 	# 分割線
@@ -160,6 +176,25 @@ func _build() -> void:
 	main_vbox.add_child(divider)
 
 	# ── 底部角色列表 ──
+	var selector_mode_row := HBoxContainer.new()
+	selector_mode_row.add_theme_constant_override("separation", 8)
+	selector_mode_row.custom_minimum_size = Vector2(0, 40)
+	main_vbox.add_child(selector_mode_row)
+
+	var selector_pad := Control.new()
+	selector_pad.custom_minimum_size = Vector2(8, 1)
+	selector_mode_row.add_child(selector_pad)
+
+	_mode_char_btn = _make_mode_button("Character", TargetMode.CHARACTER)
+	selector_mode_row.add_child(_mode_char_btn)
+	_mode_enemy_btn = _make_mode_button("Enemy", TargetMode.ENEMY)
+	selector_mode_row.add_child(_mode_enemy_btn)
+	_refresh_mode_buttons()
+
+	var selector_spacer := Control.new()
+	selector_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	selector_mode_row.add_child(selector_spacer)
+
 	var char_scroll := ScrollContainer.new()
 	char_scroll.custom_minimum_size = Vector2(0, 140)
 	char_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -175,16 +210,86 @@ func _build() -> void:
 	cl_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	char_row.add_child(cl_pad)
 
-	var chars: Array[CharacterData] = _debug_characters()
-	for i: int in chars.size():
-		_build_char_btn(char_row, chars[i], i)
-
-	if chars.size() > 0:
-		_select_char(0, false)
+	if _target_mode == TargetMode.ENEMY:
+		var enemies: Array[EnemyData] = _debug_enemies()
+		for i: int in enemies.size():
+			_build_enemy_btn(char_row, enemies[i], i)
+		if enemies.size() > 0:
+			_select_enemy(0)
+	else:
+		var chars: Array[CharacterData] = _debug_characters()
+		for i: int in chars.size():
+			_build_char_btn(char_row, chars[i], i)
+		if chars.size() > 0:
+			_select_char(0, false)
 
 
 func _debug_characters() -> Array[CharacterData]:
 	return GameState.get_character_catalog()
+
+
+func _debug_enemies() -> Array[EnemyData]:
+	var result: Array[EnemyData] = []
+	_collect_enemy_resources(_ENEMY_ROOT, result)
+	result.sort_custom(func(a: EnemyData, b: EnemyData) -> bool:
+		var left: String = a.get_display_name() if a != null else ""
+		var right: String = b.get_display_name() if b != null else ""
+		return left.naturalnocasecmp_to(right) < 0
+	)
+	return result
+
+
+func _collect_enemy_resources(dir_path: String, result: Array[EnemyData]) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	while true:
+		var file_name: String = dir.get_next()
+		if file_name.is_empty():
+			break
+		if file_name == "." or file_name == "..":
+			continue
+		if dir.current_is_dir():
+			_collect_enemy_resources("%s/%s" % [dir_path, file_name], result)
+			continue
+		if not (file_name.ends_with(".tres") or file_name.ends_with(".res")):
+			continue
+		var resource: Resource = load("%s/%s" % [dir_path, file_name])
+		if resource is EnemyData:
+			result.append(resource as EnemyData)
+	dir.list_dir_end()
+
+
+func _make_mode_button(label_text: String, mode: int) -> Button:
+	var btn := Button.new()
+	btn.text = label_text
+	btn.toggle_mode = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.custom_minimum_size = Vector2(112, 32)
+	btn.pressed.connect(func() -> void:
+		_switch_mode(mode)
+	)
+	return btn
+
+
+func _switch_mode(mode: int) -> void:
+	if _target_mode == mode:
+		_refresh_mode_buttons()
+		return
+	_target_mode = mode
+	_rebuild_preserving_selection("")
+
+
+func _refresh_mode_buttons() -> void:
+	if _mode_char_btn != null:
+		_mode_char_btn.button_pressed = _target_mode == TargetMode.CHARACTER
+	if _mode_enemy_btn != null:
+		_mode_enemy_btn.button_pressed = _target_mode == TargetMode.ENEMY
+
+
+func _selected_target() -> Resource:
+	return _enemy_data if _target_mode == TargetMode.ENEMY else _char_data
 
 
 # ─────────────────────────────────────────────────────────────
@@ -216,7 +321,7 @@ func _build_preview_col(parent: VBoxContainer, sys_idx: int) -> void:
 	row.add_child(info_vbox)
 
 	var sys_lbl := Label.new()
-	sys_lbl.text = _SYS[sys_idx][2] as String
+	sys_lbl.text = _systems()[sys_idx][2] as String
 	sys_lbl.add_theme_font_size_override("font_size", 13)
 	sys_lbl.add_theme_color_override("font_color", Color(0.72, 0.88, 1.0))
 	sys_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -703,7 +808,7 @@ func _fit_scene_to_wrapper(idx: int) -> void:
 # 重建單欄的場景內容（切角色後呼叫）
 # ─────────────────────────────────────────────────────────────
 func _rebuild_preview(idx: int) -> void:
-	if _char_data == null:
+	if _selected_target() == null:
 		return
 	var scene: Control = _scene_nodes[idx]
 	# 清空舊內容
@@ -716,19 +821,28 @@ func _rebuild_preview(idx: int) -> void:
 	# Square: VP_W / 7 ≈ 82px（同 characters_screen / prepare_screen 公式）
 	var cell: float = _VP_W / 7.0
 	var scene_heights: Array[float] = [60.0, cell, 112.0, 190.0, _dialog_phase_preview_height()]
+	if _target_mode == TargetMode.ENEMY:
+		scene_heights = [240.0, _dialog_phase_preview_height()]
 	var scene_h: float = scene_heights[idx]
 
-	match idx:
-		0:
-			portrait_ref = _build_scene_battle(scene, scene_h)
-		1:
-			portrait_ref = _build_scene_square(scene, scene_h)
-		2:
-			portrait_ref = _build_scene_result(scene, scene_h)
-		3:
-			portrait_ref = _build_scene_dialog(scene, scene_h)
-		4:
-			portrait_ref = _build_scene_dialog_phase(scene, scene_h)
+	if _target_mode == TargetMode.ENEMY:
+		match idx:
+			0:
+				portrait_ref = _build_scene_enemy_info_popup(scene, scene_h)
+			1:
+				portrait_ref = _build_scene_enemy_dialog_phase(scene, scene_h)
+	else:
+		match idx:
+			0:
+				portrait_ref = _build_scene_battle(scene, scene_h)
+			1:
+				portrait_ref = _build_scene_square(scene, scene_h)
+			2:
+				portrait_ref = _build_scene_result(scene, scene_h)
+			3:
+				portrait_ref = _build_scene_dialog(scene, scene_h)
+			4:
+				portrait_ref = _build_scene_dialog_phase(scene, scene_h)
 
 	scene.size = Vector2(_VP_W, scene_h)
 	_portraits[idx] = portrait_ref
@@ -1168,6 +1282,159 @@ func _dialog_phase_preview_scale() -> float:
 	return minf(1.0, minf(available_w / actual_vp.x, _DIALOG_PHASE_PREVIEW_MAX_H / actual_vp.y))
 
 
+func _build_scene_enemy_info_popup(scene: Control, scene_h: float) -> TextureRect:
+	if _enemy_data == null:
+		return null
+	var bg := ColorRect.new()
+	bg.color = Color(0.06, 0.07, 0.12, 1.0)
+	bg.size = Vector2(_VP_W, scene_h)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scene.add_child(bg)
+
+	const PANEL_W: float = 480.0
+	const HEADER_H: float = 150.0
+	var panel := PanelContainer.new()
+	panel.position = Vector2(maxf(12.0, (_VP_W - PANEL_W) * 0.5), 18.0)
+	panel.size = Vector2(minf(PANEL_W, _VP_W - 24.0), HEADER_H)
+	panel.clip_contents = true
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.12, 0.18, 0.97)
+	style.border_color = Color(0.85, 0.72, 0.30)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	style.set_content_margin_all(0)
+	panel.add_theme_stylebox_override("panel", style)
+	scene.add_child(panel)
+
+	var header := Control.new()
+	header.custom_minimum_size = Vector2(panel.size.x, HEADER_H)
+	header.clip_contents = true
+	panel.add_child(header)
+
+	var portrait_ref: TextureRect = null
+	if _enemy_data.portrait_texture != null:
+		var portrait := TextureRect.new()
+		portrait.texture = _enemy_data.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait.anchor_left = 0.0
+		portrait.anchor_top = 1.0
+		portrait.anchor_right = 0.0
+		portrait.anchor_bottom = 1.0
+		portrait.offset_left = 4.0
+		portrait.offset_top = -260.0
+		portrait.offset_right = 264.0
+		portrait.offset_bottom = 0.0
+		portrait.set_meta("debug_base_position", Vector2.ZERO)
+		portrait.set_meta("debug_enemy_info_popup", true)
+		header.add_child(portrait)
+		portrait_ref = portrait
+
+	var name_lbl := Label.new()
+	name_lbl.text = _enemy_data.get_display_name()
+	name_lbl.position = Vector2(156.0, 48.0)
+	name_lbl.size = Vector2(maxf(120.0, panel.size.x - 176.0), 42.0)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	name_lbl.add_theme_font_size_override("font_size", 27)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	name_lbl.add_theme_constant_override("outline_size", 4)
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(name_lbl)
+
+	return portrait_ref
+
+
+func _build_scene_enemy_dialog_phase(scene: Control, scene_h: float) -> TextureRect:
+	if _enemy_data == null:
+		return null
+	const PHASE_PORTRAIT_SCALE: float = 7.2
+	const PHASE_PORTRAIT_Y_RATIO: float = 0.527
+	const PHASE_LEFT_X_RATIO: float = 0.064
+	const PHASE_PANEL_H: float = 300.0
+	var actual_vp: Vector2 = ViewportUtils.get_size()
+	var preview_scale: float = _dialog_phase_preview_scale()
+	var preview_size: Vector2 = actual_vp * preview_scale
+	scene.set_meta("debug_input_scale", preview_scale)
+
+	var viewport_root := Control.new()
+	viewport_root.size = actual_vp
+	viewport_root.scale = Vector2(preview_scale, preview_scale)
+	viewport_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scene.add_child(viewport_root)
+
+	var bg_color := ColorRect.new()
+	bg_color.color = Color(0.08, 0.09, 0.13, 1.0)
+	bg_color.size = actual_vp
+	bg_color.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	viewport_root.add_child(bg_color)
+
+	var portrait_ref: TextureRect = null
+	if _enemy_data.portrait_texture != null:
+		var portrait_w: float = 300.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+		var portrait_h: float = 400.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+		var base_position := Vector2(
+			actual_vp.x * PHASE_LEFT_X_RATIO - (portrait_w - 300.0) * 0.5 - 30.0,
+			actual_vp.y * PHASE_PORTRAIT_Y_RATIO - (portrait_h - 400.0)
+		)
+		var portrait := TextureRect.new()
+		portrait.texture = _enemy_data.portrait_texture
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		portrait.size = Vector2(portrait_w, portrait_h)
+		portrait.custom_minimum_size = portrait.size
+		portrait.pivot_offset = Vector2(portrait_w * 0.5, portrait_h)
+		portrait.set_meta("debug_base_position", base_position)
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		viewport_root.add_child(portrait)
+		portrait_ref = portrait
+
+	var panel := PanelContainer.new()
+	panel.position = Vector2(0.0, actual_vp.y - PHASE_PANEL_H)
+	panel.size = Vector2(actual_vp.x, PHASE_PANEL_H)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0.08, 0.08, 0.14, 0.92)
+	ps.border_color = Color(0.35, 0.35, 0.5, 0.6)
+	ps.set_border_width_all(2)
+	ps.set_corner_radius_all(0)
+	ps.set_content_margin_all(24)
+	panel.add_theme_stylebox_override("panel", ps)
+	viewport_root.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	panel.add_child(vbox)
+
+	var name_lbl := Label.new()
+	name_lbl.text = _enemy_data.get_display_name()
+	name_lbl.add_theme_font_size_override("font_size", 28)
+	name_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.5))
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(name_lbl)
+
+	var text_lbl := Label.new()
+	text_lbl.text = "Enemy dialog phase portrait preview"
+	text_lbl.add_theme_font_size_override("font_size", 24)
+	text_lbl.add_theme_color_override("font_color", Color.WHITE)
+	text_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(text_lbl)
+
+	var outline := Panel.new()
+	outline.size = preview_size
+	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var outline_style := StyleBoxFlat.new()
+	outline_style.draw_center = false
+	outline_style.border_color = Color(0.5, 0.52, 0.68, 0.65)
+	outline_style.set_border_width_all(1)
+	outline.add_theme_stylebox_override("panel", outline_style)
+	scene.add_child(outline)
+
+	return portrait_ref
+
+
 func _add_label(parent: Control, text: String, x: float, y: float, font_size: int) -> void:
 	var lbl := Label.new()
 	lbl.text = text
@@ -1240,6 +1507,66 @@ func _build_char_btn(parent: HBoxContainer, c: CharacterData, idx: int) -> void:
 	btn.pressed.connect(func() -> void: _select_char(ci))
 
 
+func _build_enemy_btn(parent: HBoxContainer, enemy_data: EnemyData, idx: int) -> void:
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(104, 116)
+	btn.clip_contents = true
+
+	var sbox := StyleBoxFlat.new()
+	sbox.bg_color = Color(0.10, 0.11, 0.16, 1.0)
+	sbox.set_corner_radius_all(6)
+	sbox.set_border_width_all(2)
+	sbox.border_color = Color(0.28, 0.30, 0.40, 1.0)
+	btn.add_theme_stylebox_override("normal",  sbox)
+	btn.add_theme_stylebox_override("hover",   sbox)
+	btn.add_theme_stylebox_override("pressed", sbox)
+	btn.add_theme_stylebox_override("focus",   sbox)
+	parent.add_child(btn)
+	_enemy_btns.append(btn)
+
+	if enemy_data.portrait_texture != null:
+		var tex := TextureRect.new()
+		tex.texture = enemy_data.portrait_texture
+		tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		tex.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(tex)
+
+	var name_bg := ColorRect.new()
+	name_bg.color = Color(0, 0, 0, 0.65)
+	name_bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	name_bg.offset_top = -30.0
+	name_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(name_bg)
+
+	var name_lbl := Label.new()
+	name_lbl.text = enemy_data.get_display_name()
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.add_theme_font_size_override("font_size", 10)
+	name_lbl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	name_lbl.offset_top = -28.0
+	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(name_lbl)
+
+	var sel := Panel.new()
+	sel.name = "SelBorder"
+	var sel_style := StyleBoxFlat.new()
+	sel_style.draw_center = false
+	sel_style.border_color = Color(1.0, 0.85, 0.2)
+	sel_style.set_border_width_all(3)
+	sel_style.set_corner_radius_all(6)
+	sel.add_theme_stylebox_override("panel", sel_style)
+	sel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sel.visible = false
+	btn.add_child(sel)
+
+	var enemy_index: int = idx
+	btn.pressed.connect(func() -> void: _select_enemy(enemy_index))
+
+
 # ─────────────────────────────────────────────────────────────
 # 邏輯
 # ─────────────────────────────────────────────────────────────
@@ -1255,11 +1582,26 @@ func _select_char(idx: int, record_previous: bool = true) -> void:
 		var sel: Node = _char_btns[j].get_node_or_null("SelBorder")
 		if sel != null:
 			(sel as Control).visible = (j == idx)
-	for i: int in _SYS.size():
+	for i: int in _systems().size():
+		_rebuild_preview(i)
+
+
+func _select_enemy(idx: int) -> void:
+	var enemies: Array[EnemyData] = _debug_enemies()
+	if idx < 0 or idx >= enemies.size():
+		return
+	_enemy_data = enemies[idx]
+	for j: int in _enemy_btns.size():
+		var sel: Node = _enemy_btns[j].get_node_or_null("SelBorder")
+		if sel != null:
+			(sel as Control).visible = (j == idx)
+	for i: int in _systems().size():
 		_rebuild_preview(i)
 
 
 func _on_grant_all_owned_pressed() -> void:
+	if _target_mode == TargetMode.ENEMY:
+		return
 	var selected_path: String = _char_data.resource_path if _char_data != null else ""
 	GameState.debug_grant_all_characters(true)
 	_rebuild_preserving_selection(selected_path)
@@ -1274,15 +1616,17 @@ func _rebuild_preserving_selection(selected_path: String) -> void:
 	_scale_lbls.clear()
 	_offset_lbls.clear()
 	_char_btns.clear()
+	_enemy_btns.clear()
 	_drag_active.clear()
 	_drag_start_mouse.clear()
 	_drag_start_offset.clear()
-	for _i: int in _SYS.size():
+	for _i: int in _systems().size():
 		_drag_active.append(false)
 		_drag_start_mouse.append(Vector2.ZERO)
 		_drag_start_offset.append(Vector2.ZERO)
 		_portraits.append(null)
 	_char_data = null
+	_enemy_data = null
 	_hp_chart = null
 	_magic_chart = null
 	_atk_chart = null
@@ -1299,12 +1643,20 @@ func _rebuild_preserving_selection(selected_path: String) -> void:
 	_build()
 	if selected_path == "":
 		return
-	var chars: Array[CharacterData] = _debug_characters()
-	for i in chars.size():
-		var character: CharacterData = chars[i]
-		if character != null and character.resource_path == selected_path:
-			_select_char(i, false)
-			return
+	if _target_mode == TargetMode.ENEMY:
+		var enemies: Array[EnemyData] = _debug_enemies()
+		for i in enemies.size():
+			var enemy_data: EnemyData = enemies[i]
+			if enemy_data != null and enemy_data.resource_path == selected_path:
+				_select_enemy(i)
+				return
+	else:
+		var chars: Array[CharacterData] = _debug_characters()
+		for i in chars.size():
+			var character: CharacterData = chars[i]
+			if character != null and character.resource_path == selected_path:
+				_select_char(i, false)
+				return
 
 
 func _on_preview_input(ev: InputEvent, idx: int) -> void:
@@ -1333,7 +1685,7 @@ func _on_preview_input(ev: InputEvent, idx: int) -> void:
 
 
 func _refresh_preview(idx: int) -> void:
-	if _char_data == null:
+	if _selected_target() == null:
 		return
 	var portrait_node = _portraits[idx]
 	if portrait_node == null:
@@ -1342,7 +1694,13 @@ func _refresh_preview(idx: int) -> void:
 	var scale_v: float    = _get_scale(idx)
 	var offset_v: Vector2 = _get_offset(idx)
 
-	if _is_rect[idx]:
+	if bool(portrait.get_meta("debug_enemy_info_popup", false)):
+		portrait.scale = Vector2(scale_v, scale_v)
+		portrait.offset_left = 4.0 + offset_v.x
+		portrait.offset_top = -260.0 + offset_v.y
+		portrait.offset_right = 264.0 + offset_v.x
+		portrait.offset_bottom = offset_v.y
+	elif _is_rect_preview(idx):
 		portrait.scale         = Vector2(scale_v, scale_v)
 		portrait.offset_left   = 0.0             + offset_v.x
 		portrait.offset_top    = -_RECT_IMG_SIZE + offset_v.y
@@ -1358,27 +1716,35 @@ func _refresh_preview(idx: int) -> void:
 
 
 func _get_scale(idx: int) -> float:
-	if _char_data == null:
+	var target: Resource = _selected_target()
+	if target == null:
 		return 1.0
-	return _char_data.get(_SYS[idx][0]) as float
+	return target.get(_systems()[idx][0]) as float
 
 
 func _set_scale(idx: int, v: float) -> void:
-	if _char_data == null:
+	var target: Resource = _selected_target()
+	if target == null:
 		return
-	_char_data.set(_SYS[idx][0], v)
+	target.set(_systems()[idx][0], v)
 
 
 func _get_offset(idx: int) -> Vector2:
-	if _char_data == null:
+	var target: Resource = _selected_target()
+	if target == null:
 		return Vector2.ZERO
-	return _char_data.get(_SYS[idx][1]) as Vector2
+	return target.get(_systems()[idx][1]) as Vector2
 
 
 func _set_offset(idx: int, v: Vector2) -> void:
-	if _char_data == null:
+	var target: Resource = _selected_target()
+	if target == null:
 		return
-	_char_data.set(_SYS[idx][1], v)
+	target.set(_systems()[idx][1], v)
+
+
+func _is_rect_preview(idx: int) -> bool:
+	return _target_mode == TargetMode.CHARACTER and idx >= 0 and idx < _is_rect.size() and _is_rect[idx]
 
 
 func _preview_input_scale(idx: int) -> float:
@@ -1391,9 +1757,11 @@ func _preview_input_scale(idx: int) -> float:
 
 
 func _save() -> void:
-	if _char_data == null or _char_data.resource_path == "":
+	var target: Resource = _selected_target()
+	if target == null or target.resource_path == "":
 		return
-	_commit_growth_edits()
-	var err: int = ResourceSaver.save(_char_data, _char_data.resource_path)
+	if _target_mode == TargetMode.CHARACTER:
+		_commit_growth_edits()
+	var err: int = ResourceSaver.save(target, target.resource_path)
 	if err != OK:
-		push_warning("PortraitDebugScreen: save failed for %s (err=%d)" % [_char_data.resource_path, err])
+		push_warning("PortraitDebugScreen: save failed for %s (err=%d)" % [target.resource_path, err])
