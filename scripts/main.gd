@@ -232,7 +232,10 @@ var _tutorial_manager: _TutorialManager = null
 var _enemy_popup_layer: CanvasLayer = null
 
 # ── 戰鬥日誌 ──
+# 設 false 或註解 _ready() 裡的 _setup_dev_log() 區塊即可隱藏 dev character action log。
+const DEV_ACTION_LOG_ENABLED := true
 const LOG_PANEL_WIDTH := 272
+const LOG_PANEL_HEIGHT := 320
 const LOG_ENTRY_HEIGHT := 40
 const GAME_X_OFFSET := 0  # 遊戲內容向右偏移量（日誌面板已隱藏）
 const GEM_ICON_PATHS := {
@@ -259,6 +262,7 @@ const UPPER_GEM_ICON_PATHS := {
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
+var _log_outer: Control = null
 var _speed_label: Label = null
 
 # ── SE ───────────────────────────────────────────────────────
@@ -509,7 +513,6 @@ func _ready() -> void:
 		_load_audio_stream("res://assets/se/stone2.mp3"),
 	]
 
-	#_setup_dev_log()  # 開發日誌已隱藏
 	_update_skill_ui()
 	_setup_fuse_hints()
 	_style_player_hp_label()
@@ -520,6 +523,8 @@ func _ready() -> void:
 	_layout_board()
 	ViewportUtils.viewport_changed.connect(_on_viewport_changed)
 	_apply_safe_area()
+	if DEV_ACTION_LOG_ENABLED:
+		_setup_dev_log() # 關掉 dev character action log：註解這個 if 區塊。
 
 	_play_stage_intro()
 
@@ -560,12 +565,14 @@ func _layout_board() -> void:
 	else:
 		var battle_bg_height: float = maxf(board.position.y + 16.0, vp.y * 0.34)
 		_battle_bg_rect.size = Vector2(vp.x, battle_bg_height)
+	_position_dev_log()
 
 
 ## Viewport 改變時重排棋盤與 UI。
 func _on_viewport_changed(_size: Vector2) -> void:
 	_layout_board()
 	_apply_safe_area()
+	_position_dev_log()
 	if battle_manager != null and battle_manager.player_shield > 0:
 		_update_player_shield_layout()
 	_refresh_active_selection_dim_holes()
@@ -5701,17 +5708,50 @@ func _on_enemy_break_pulse() -> void:
 
 # ── 開發戰鬥日誌 ──────────────────────────────────────────────
 
-## 建立戰鬥日誌 UI（視窗左側獨立區域，不影響右側遊戲畫面）
+func _position_dev_log() -> void:
+	if _log_outer == null or not is_instance_valid(_log_outer) or board == null:
+		return
+	var columns: int = current_stage.columns if current_stage != null else 8
+	var rows: int = current_stage.rows if current_stage != null else 8
+	var board_size := Vector2(float(columns) * 64.0 * board.scale.x, float(rows) * 64.0 * board.scale.y)
+	var inset := 6.0
+	var log_w: float = minf(float(LOG_PANEL_WIDTH), maxf(180.0, board_size.x - inset * 2.0))
+	var log_h: float = minf(float(LOG_PANEL_HEIGHT), maxf(180.0, board_size.y - inset * 2.0))
+	var left: float = board.position.x + board_size.x - log_w - inset
+	var top: float = board.position.y + inset
+	_log_outer.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_log_outer.offset_left = left
+	_log_outer.offset_top = top
+	_log_outer.offset_right = left + log_w
+	_log_outer.offset_bottom = top + log_h
+
+
+## 建立 dev character action log UI（棋盤右上角浮層）
 func _setup_dev_log() -> void:
-	var outer := VBoxContainer.new()
+	var outer := PanelContainer.new()
 	outer.name = "BattleLogOuter"
-	outer.offset_left = 4
-	outer.offset_top = 4
-	outer.offset_right = LOG_PANEL_WIDTH
-	outer.offset_bottom = 1020
+	outer.clip_contents = true
+	outer.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var outer_style := StyleBoxFlat.new()
+	outer_style.bg_color = Color(0.02, 0.025, 0.045, 0.86)
+	outer_style.border_color = Color(1.0, 0.82, 0.18, 0.42)
+	outer_style.set_border_width_all(1)
+	outer_style.set_corner_radius_all(6)
+	outer_style.set_content_margin(SIDE_LEFT, 6.0)
+	outer_style.set_content_margin(SIDE_TOP, 6.0)
+	outer_style.set_content_margin(SIDE_RIGHT, 6.0)
+	outer_style.set_content_margin(SIDE_BOTTOM, 6.0)
+	outer.add_theme_stylebox_override("panel", outer_style)
+
+	var content := VBoxContainer.new()
+	content.name = "BattleLogContent"
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var panel := Control.new()
 	panel.name = "BattleLog"
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.clip_contents = true
 
@@ -5724,11 +5764,12 @@ func _setup_dev_log() -> void:
 	_log_scroll.add_child(_log_vbox)
 
 	panel.add_child(_log_scroll)
-	outer.add_child(panel)
+	content.add_child(panel)
 
 	# ── 速度調整滑桿區 ──
 	var speed_section := VBoxContainer.new()
 	speed_section.name = "SpeedSection"
+	speed_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var speed_title := Label.new()
 	speed_title.text = "Projectile Speed"
@@ -5748,7 +5789,7 @@ func _setup_dev_log() -> void:
 	slider.max_value = 5.0
 	slider.step = 0.1
 	slider.value = TrailProjectileScript.speed_divisor
-	slider.custom_minimum_size = Vector2(LOG_PANEL_WIDTH - 8, 28)
+	slider.custom_minimum_size = Vector2(LOG_PANEL_WIDTH - 20, 28)
 	slider.value_changed.connect(func(v: float) -> void:
 		TrailProjectileScript.speed_divisor = v
 		if _speed_label:
@@ -5756,16 +5797,19 @@ func _setup_dev_log() -> void:
 	)
 	speed_section.add_child(slider)
 
-	outer.add_child(speed_section)
+	content.add_child(speed_section)
 
 	# ── 重新開始按鈕 ──
 	var restart_btn := Button.new()
 	restart_btn.text = "Restart Battle"
-	restart_btn.custom_minimum_size = Vector2(LOG_PANEL_WIDTH - 8, 36)
+	restart_btn.custom_minimum_size = Vector2(LOG_PANEL_WIDTH - 20, 36)
 	restart_btn.pressed.connect(_on_restart_pressed)
-	outer.add_child(restart_btn)
+	content.add_child(restart_btn)
 
+	outer.add_child(content)
 	$UILayer.add_child(outer)
+	_log_outer = outer
+	_position_dev_log()
 
 
 ## 取得寶石圖示的 BBCode（有貼圖用 [img]，否則用彩色文字）
