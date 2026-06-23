@@ -37,6 +37,7 @@ const LOOT_TOAST_TOP_OFFSET := 48.0
 const LOOT_TOAST_SLIDE_IN_DURATION := 0.18
 const LOOT_TOAST_HOLD_DURATION := 1.15
 const LOOT_TOAST_SLIDE_OUT_DURATION := 0.28
+const BATTLE_BG_TOP_OVERSCAN := 12.0
 
 signal loot_animations_finished()
 signal loot_flights_finished()
@@ -559,12 +560,12 @@ func _layout_board() -> void:
 	var s: float = max(0.1, max_w / board_w)
 	board.scale = Vector2(s, s)
 	board.position = Vector2((vp.x - board_w * s) * 0.5, vp.y * 0.22)
-	_battle_bg_rect.position = Vector2(0.0, 0.0)
+	_battle_bg_rect.position = Vector2(0.0, -BATTLE_BG_TOP_OVERSCAN)
 	if current_stage != null and current_stage.stretch_battle_background:
-		_battle_bg_rect.size = vp
+		_battle_bg_rect.size = Vector2(vp.x, vp.y + BATTLE_BG_TOP_OVERSCAN)
 	else:
 		var battle_bg_height: float = maxf(board.position.y + 16.0, vp.y * 0.34)
-		_battle_bg_rect.size = Vector2(vp.x, battle_bg_height)
+		_battle_bg_rect.size = Vector2(vp.x, battle_bg_height + BATTLE_BG_TOP_OVERSCAN)
 	_position_dev_log()
 
 
@@ -10217,7 +10218,7 @@ func _play_round_switch_transition(round_idx: int, total_rounds: int) -> void:
 	label_tw.parallel().tween_property(new_number_label, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	label_tw.tween_property(new_number_label, "position:y", -5.0 + number_baseline_nudge, 0.11).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	label_tw.tween_property(new_number_label, "position:y", number_baseline_nudge, 0.13).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	label_tw.tween_interval(1.62)
+	label_tw.tween_interval(0.82)
 	label_tw.tween_property(title, "modulate:a", 0.0, 0.32).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 
 	_play_round_walk_background_motion()
