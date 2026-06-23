@@ -39,7 +39,7 @@ const PANEL_MARGIN := 24.0
 const NAME_FONT_SIZE := 28
 const TEXT_FONT_SIZE := 26
 const SKIP_FONT_SIZE := 20
-const SKIP_BUTTON_SIZE := Vector2(136, 34)
+const SKIP_BUTTON_SIZE := Vector2(95, 34)
 
 # 音樂淡入淡出
 const BGM_FADE_DUR := 0.8
@@ -518,6 +518,7 @@ func _start_skip_hold_progress() -> void:
 	_skip_hold_active = true
 	_skip_hold_progress = 0.0
 	_update_skip_button_text()
+	_update_skip_active_visual()
 	_update_skip_hold_fill()
 
 
@@ -527,6 +528,7 @@ func _end_skip_hold() -> void:
 	_skip_hold_active = false
 	_skip_hold_progress = 0.0
 	_update_skip_button_text()
+	_update_skip_active_visual()
 	_update_skip_hold_fill()
 	if _skip_timer != null and _auto_skipping and not _dialog_finishing:
 		_skip_timer.start(SKIP_INTERVAL)
@@ -539,6 +541,7 @@ func _reset_skip_hold() -> void:
 	_skip_hold_completed = false
 	_skip_hold_progress = 0.0
 	_update_skip_button_text()
+	_update_skip_active_visual()
 	_update_skip_hold_fill()
 
 
@@ -566,7 +569,7 @@ func _update_skip_hold_fill() -> void:
 func _update_skip_active_visual() -> void:
 	if _skip_arrow_label == null:
 		return
-	if _auto_skipping:
+	if _auto_skipping and not _skip_hold_active:
 		_skip_arrow_label.visible = true
 		_skip_arrow_label.modulate = Color(1.0, 0.85, 0.18)
 		_start_skip_arrow_tween()
