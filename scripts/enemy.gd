@@ -257,7 +257,7 @@ func _refresh_intent() -> void:
 	_set_lightbreak_intent_visible(action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK)
 	match action_type:
 		EnemyData.ActionType.AUTO:
-			intent_label.text = "AUTO"
+			intent_label.text = Locale.tr_ui("ENEMY_INTENT_DUEL")
 		EnemyData.ActionType.STONE_MAGIC:
 			intent_label.text = "ROCK  CD %d" % [turns_until_attack]
 		EnemyData.ActionType.REST:
@@ -363,7 +363,7 @@ func flash_action(action_type: int, attack_percent: int = -1, action_count: int 
 	_set_lightbreak_intent_visible(action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK)
 	match action_type:
 		EnemyData.ActionType.AUTO:
-			intent_label.text = "AUTO"
+			intent_label.text = Locale.tr_ui("ENEMY_INTENT_DUEL")
 			intent_label.modulate = Color(1.0, 0.35, 0.2)
 		EnemyData.ActionType.STONE_MAGIC:
 			intent_label.text = "ROCK!"

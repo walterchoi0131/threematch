@@ -45,6 +45,7 @@ var _translations: Dictionary = {
 	"SELECT_PARTY": {"zh": "選擇隊員", "en": "SELECT PARTY"},
 	"DEPLOYED": {"zh": "出戰", "en": "DEPLOYED"},
 	"AUTO_TEAM": {"zh": "自動組隊", "en": "Auto Team"},
+	"ENEMY_INTENT_DUEL": {"zh": "決鬥", "en": "Duel"},
 	"CONFIRM": {"zh": "確認", "en": "Confirm"},
 	"EMBARK": {"zh": "出發", "en": "Embark"},
 	"CANCEL": {"zh": "取消", "en": "Cancel"},

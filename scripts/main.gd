@@ -226,6 +226,7 @@ var _vfx_pool: Array = []
 
 # ── 攻擊交錯延遲（多角色連打時，下一位開始攻擊前等待的秒數）──
 const ATTACK_STAGGER_SEC := 0.2
+const AUTO_ENEMY_LEAF_SPEAR_PLACE_INTERVAL := 0.05
 
 # ── 教學系統 ──
 var _battle_dialog: _BattleDialog = null
@@ -234,7 +235,7 @@ var _enemy_popup_layer: CanvasLayer = null
 
 # ── 戰鬥日誌 ──
 # 設 false 或註解 _ready() 裡的 _setup_dev_log() 區塊即可隱藏 dev character action log。
-const DEV_ACTION_LOG_ENABLED := true
+const DEV_ACTION_LOG_ENABLED := false
 const LOG_PANEL_WIDTH := 272
 const LOG_PANEL_HEIGHT := 320
 const LOG_ENTRY_HEIGHT := 40
@@ -3730,12 +3731,18 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	card.add_child(remove_button)
 	_stage_editor_set_control_rect(remove_button, Rect2(154.0, 4.0, 22.0, 22.0))
 
-	var level_label := Label.new()
-	level_label.text = "Lv%d" % level_value
-	level_label.add_theme_font_size_override("font_size", 10)
-	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add_child(level_label)
-	_stage_editor_set_control_rect(level_label, Rect2(50.0, 28.0, 46.0, 20.0))
+	var level_spin := SpinBox.new()
+	level_spin.min_value = 1
+	level_spin.max_value = 99
+	level_spin.step = 1
+	level_spin.value = level_value
+	level_spin.prefix = "Lv "
+	level_spin.add_theme_font_size_override("font_size", 9)
+	level_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	level_spin.tooltip_text = "Enemy spawn level"
+	level_spin.value_changed.connect(_on_stage_editor_level_value_changed.bind(round_index, enemy_index))
+	card.add_child(level_spin)
+	_stage_editor_set_control_rect(level_spin, Rect2(50.0, 28.0, 70.0, 22.0))
 
 	var boss_button: Button = _make_stage_editor_small_button("B", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(22, 22))
 	boss_button.tooltip_text = "Main boss spawn"
@@ -3756,6 +3763,7 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	card.add_child(plus_button)
 	_stage_editor_set_control_rect(plus_button, Rect2(76.0, 52.0, 22.0, 22.0))
 	var auto_button: Button = _make_stage_editor_small_button("A", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(22, 22))
+	auto_button.tooltip_text = "Auto initial CD"
 	card.add_child(auto_button)
 	_stage_editor_set_control_rect(auto_button, Rect2(100.0, 52.0, 22.0, 22.0))
 
@@ -4059,15 +4067,25 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	control_row.add_child(cd_label)
 	control_row.add_child(_make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(34, 30)))
 	control_row.add_child(_make_stage_editor_small_button("+", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, 1), Vector2(34, 30)))
-	control_row.add_child(_make_stage_editor_small_button("Auto", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(54, 30)))
+	var auto_button: Button = _make_stage_editor_small_button("Auto", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(54, 30))
+	auto_button.tooltip_text = "Auto initial CD"
+	control_row.add_child(auto_button)
 	var level_label := Label.new()
-	level_label.text = "Lv %d" % level_value
-	level_label.custom_minimum_size = Vector2(52, 0)
+	level_label.text = "Lv"
+	level_label.custom_minimum_size = Vector2(22, 0)
 	level_label.add_theme_font_size_override("font_size", 11)
 	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	control_row.add_child(level_label)
-	control_row.add_child(_make_stage_editor_small_button("-", _on_stage_editor_level_delta_pressed.bind(round_index, enemy_index, -1), Vector2(34, 30)))
-	control_row.add_child(_make_stage_editor_small_button("+", _on_stage_editor_level_delta_pressed.bind(round_index, enemy_index, 1), Vector2(34, 30)))
+	var level_spin := SpinBox.new()
+	level_spin.min_value = 1
+	level_spin.max_value = 99
+	level_spin.step = 1
+	level_spin.value = level_value
+	level_spin.custom_minimum_size = Vector2(76, 28)
+	level_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
+	level_spin.tooltip_text = "Enemy spawn level"
+	level_spin.value_changed.connect(_on_stage_editor_level_value_changed.bind(round_index, enemy_index))
+	control_row.add_child(level_spin)
 	var boss_button: Button = _make_stage_editor_small_button("Boss", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(58, 30))
 	boss_button.tooltip_text = "Use this spawn as the main boss"
 	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
@@ -4405,6 +4423,16 @@ func _on_stage_editor_level_delta_pressed(round_index: int, enemy_index: int, de
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
+
+
+func _on_stage_editor_level_value_changed(value: float, round_index: int, enemy_index: int) -> void:
+	if not _stage_editor_has_enemy_slot(round_index, enemy_index):
+		return
+	var level_list: Array = _stage_editor_rounds_enemy_levels[round_index]
+	var level_value: int = clampi(int(round(value)), 1, 99)
+	level_list[enemy_index] = level_value
+	_stage_editor_rounds_enemy_levels[round_index] = level_list
+	_set_stage_editor_status("Enemy Lv: %d" % level_value)
 
 
 func _on_stage_editor_boss_toggle_pressed(round_index: int, enemy_index: int) -> void:
@@ -9258,7 +9286,7 @@ func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData)
 			placed_count += 1
 			_play_sfx(_se_freeze)
 			if entry_index < selected_entries.size() - 1:
-				await get_tree().create_timer(0.5).timeout
+				await get_tree().create_timer(AUTO_ENEMY_LEAF_SPEAR_PLACE_INTERVAL).timeout
 				if not _auto_enemy_can_continue(enemy):
 					break
 	if placed_count > 0:
@@ -9484,8 +9512,7 @@ func _auto_enemy_group_positions_for_type(group: Array[Vector2i], gem_type: Bloc
 func _play_auto_enemy_cursor_tap(target_pos: Vector2i, gem_type: Block.Type) -> void:
 	if not board._cell_accepts_block(target_pos):
 		return
-	var target_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
-	target_global += Vector2(15.0, 15.0)
+	var cell_center_global: Vector2 = board.to_global(board.grid_to_world(target_pos))
 	var cursor_texture: Texture2D = load("res://assets/Hand3.png")
 	if cursor_texture == null:
 		return
@@ -9499,33 +9526,36 @@ func _play_auto_enemy_cursor_tap(target_pos: Vector2i, gem_type: Block.Type) -> 
 	cursor.scale = Vector2(base_scale, base_scale)
 	cursor.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	var cursor_cell_top_center_offset := Vector2(32.0, 0.0)
-	var hover_pos: Vector2 = target_global + Vector2(-74.0, -56.0) + cursor_cell_top_center_offset
+	var press_pos: Vector2 = cell_center_global + Vector2(-20.0, -18.0) + cursor_cell_top_center_offset
+	var hover_pos: Vector2 = press_pos + Vector2(0.0, -14.0)
 	var board_center_global: Vector2 = board.to_global(Vector2(
 		float(board.columns) * float(board.CELL_SIZE) * 0.5,
 		float(board.rows) * float(board.CELL_SIZE) * 0.5
 	))
 	cursor.position = board_center_global + Vector2(-20.0, -18.0)
+	cursor.rotation_degrees = 8.0
 	fx_layer.add_child(cursor)
 
 	var intro_tw := create_tween()
 	intro_tw.set_parallel(true)
 	intro_tw.tween_property(cursor, "modulate:a", 1.0, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	intro_tw.tween_property(cursor, "position", hover_pos, 0.42).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
+	intro_tw.tween_property(cursor, "scale", Vector2(base_scale * 1.04, base_scale * 1.04), 0.42).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	await intro_tw.finished
 
-	var press_pos: Vector2 = target_global + Vector2(-20.0, -18.0) + cursor_cell_top_center_offset
 	var color: Color = Block.COLORS.get(gem_type, Color.WHITE)
 	var tw := create_tween()
 	tw.set_parallel(true)
-	tw.tween_property(cursor, "modulate:a", 1.0, 0.16)
-	tw.tween_property(cursor, "position", press_pos, 0.36).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	tw.tween_property(cursor, "scale", Vector2(base_scale * 0.86, base_scale * 0.86), 0.36).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(cursor, "position", press_pos, 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(cursor, "rotation_degrees", -20.0, 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(cursor, "scale", Vector2(base_scale * 0.9, base_scale * 0.9), 0.18).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	await tw.finished
 
-	_spawn_auto_enemy_tap_ring(target_global, color)
+	_spawn_auto_enemy_tap_ring(cell_center_global, color)
 	var release_tw := create_tween()
 	release_tw.set_parallel(true)
-	release_tw.tween_property(cursor, "position", press_pos + Vector2(8.0, -10.0), 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	release_tw.tween_property(cursor, "position", hover_pos, 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	release_tw.tween_property(cursor, "rotation_degrees", 8.0, 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	release_tw.tween_property(cursor, "scale", Vector2(base_scale, base_scale), 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	release_tw.tween_property(cursor, "modulate:a", 0.0, 0.32).set_delay(0.12)
 	await release_tw.finished
@@ -9534,6 +9564,7 @@ func _play_auto_enemy_cursor_tap(target_pos: Vector2i, gem_type: Block.Type) -> 
 
 
 func _spawn_auto_enemy_tap_ring(center_global: Vector2, color: Color) -> void:
+	var ring := Node2D.new()
 	var ring_script := GDScript.new()
 	ring_script.source_code = (
 		"extends Node2D\n"
@@ -9546,7 +9577,6 @@ func _spawn_auto_enemy_tap_ring(center_global: Vector2, color: Color) -> void:
 		+ "\tqueue_redraw()\n"
 	)
 	ring_script.reload()
-	var ring := Node2D.new()
 	ring.set_script(ring_script)
 	ring.set("ring_color", color)
 	ring.position = center_global
@@ -12509,12 +12539,18 @@ func _on_return_pressed() -> void:
 
 # ── Boss HP 條 + Kill-All 偵錯按鈕 ─────────────────────────────────
 
-const BOSS_BAR_HEIGHT: float = 56.0
+const BOSS_BAR_HEIGHT: float = 42.0
+const BOSS_BAR_SIDE_MARGIN: float = 54.0
+const BOSS_BAR_TOP_MARGIN: float = 10.0
 
 var _boss_bar: Control = null
 var _boss_bar_fill: TextureRect = null
 var _boss_bar_bg: ColorRect = null
 var _boss_bar_label: Label = null
+var _boss_bar_element_slot: Control = null
+var _boss_bar_element_icon: TextureRect = null
+var _boss_bar_element_ray: Node2D = null
+var _boss_bar_element_fx: Node2D = null
 var _boss_bar_enemy: Enemy = null
 var _boss_bar_reveal_tween: Tween = null
 var _kill_all_btn: Button = null
@@ -12526,10 +12562,11 @@ func _setup_boss_bar() -> void:
 	_boss_bar = Control.new()
 	_boss_bar.name = "BossBar"
 	_boss_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_boss_bar.offset_left = 16.0
-	_boss_bar.offset_right = -16.0
-	_boss_bar.offset_top = 4.0
-	_boss_bar.offset_bottom = 4.0 + BOSS_BAR_HEIGHT
+	_boss_bar.offset_left = BOSS_BAR_SIDE_MARGIN
+	_boss_bar.offset_right = -BOSS_BAR_SIDE_MARGIN
+	_boss_bar.offset_top = BOSS_BAR_TOP_MARGIN
+	_boss_bar.offset_bottom = BOSS_BAR_TOP_MARGIN + BOSS_BAR_HEIGHT
+	_boss_bar.clip_contents = false
 	_boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_boss_bar.visible = false
 	ui_layer.add_child(_boss_bar)
@@ -12537,6 +12574,7 @@ func _setup_boss_bar() -> void:
 	# 血條容器（占滿整條，不再預留元素圖示位置）
 	var bar := Control.new()
 	bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bar.clip_contents = false
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_boss_bar.add_child(bar)
 
@@ -12558,13 +12596,59 @@ func _setup_boss_bar() -> void:
 	_boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_fill)
 
+	_boss_bar_element_slot = Control.new()
+	_boss_bar_element_slot.name = "BossBarElementGem"
+	_boss_bar_element_slot.anchor_left = 0.0
+	_boss_bar_element_slot.anchor_top = 0.0
+	_boss_bar_element_slot.anchor_right = 0.0
+	_boss_bar_element_slot.anchor_bottom = 0.0
+	var element_slot_size: float = BOSS_BAR_HEIGHT * 1.38
+	_boss_bar_element_slot.offset_left = -element_slot_size * 0.34
+	_boss_bar_element_slot.offset_top = (BOSS_BAR_HEIGHT - element_slot_size) * 0.5
+	_boss_bar_element_slot.offset_right = _boss_bar_element_slot.offset_left + element_slot_size
+	_boss_bar_element_slot.offset_bottom = _boss_bar_element_slot.offset_top + element_slot_size
+	_boss_bar_element_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(_boss_bar_element_slot)
+
+	var element_center := Vector2(element_slot_size, element_slot_size) * 0.5
+	_boss_bar_element_ray = Node2D.new()
+	_boss_bar_element_ray.name = "BossElementRayBurst"
+	_boss_bar_element_ray.position = element_center
+	_boss_bar_element_ray.z_index = 0
+	_boss_bar_element_ray.set_script(PuzzleGoalRayBurstScript)
+	_boss_bar_element_ray.set("outer_radius", element_slot_size * 0.62)
+	_boss_bar_element_ray.set("ray_count", 7)
+	_boss_bar_element_ray.set("rotation_speed", 0.78)
+	_boss_bar_element_slot.add_child(_boss_bar_element_ray)
+
+	_boss_bar_element_fx = Node2D.new()
+	_boss_bar_element_fx.name = "BossElementPulseParticles"
+	_boss_bar_element_fx.position = element_center
+	_boss_bar_element_fx.z_index = 1
+	_boss_bar_element_fx.scale = Vector2(0.78, 0.78)
+	_boss_bar_element_fx.set_script(PuzzleGoalPulseParticlesScript)
+	_boss_bar_element_fx.set("draw_particles", true)
+	_boss_bar_element_fx.set("draw_rings", true)
+	_boss_bar_element_slot.add_child(_boss_bar_element_fx)
+
+	_boss_bar_element_icon = TextureRect.new()
+	_boss_bar_element_icon.name = "BossElementIcon"
+	_boss_bar_element_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_boss_bar_element_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_boss_bar_element_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon_size: float = element_slot_size * 0.9
+	_boss_bar_element_icon.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_boss_bar_element_icon.offset_left = (element_slot_size - icon_size) * 0.5
+	_boss_bar_element_icon.offset_top = (element_slot_size - icon_size) * 0.5
+	_boss_bar_element_icon.offset_right = _boss_bar_element_icon.offset_left + icon_size
+	_boss_bar_element_icon.offset_bottom = _boss_bar_element_icon.offset_top + icon_size
+	_boss_bar_element_slot.add_child(_boss_bar_element_icon)
+
 	var font: Font = load("res://assets/fonts/game_ui_font.tres")
 
 	_boss_bar_label = Label.new()
-	_boss_bar_label.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	_boss_bar_label.offset_left = -160.0
-	_boss_bar_label.offset_right = -8.0
-	_boss_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_boss_bar_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_boss_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_boss_bar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_boss_bar_label.add_theme_font_override("font", font)
 	_boss_bar_label.add_theme_font_size_override("font_size", 18)
@@ -12717,6 +12801,19 @@ func _on_auto_enemy_died(enemy: Enemy) -> void:
 		board.destroy_enemy_upper_gems_for_owner(owner_id)
 
 
+func _set_boss_bar_element(element_type: int, element_color: Color) -> void:
+	if _boss_bar_element_slot == null:
+		return
+	_boss_bar_element_slot.visible = true
+	if _boss_bar_element_icon != null:
+		_boss_bar_element_icon.texture = Block.GEM_TEXTURES.get(element_type, null)
+	var vfx_color := Color(element_color.r, element_color.g, element_color.b, 0.72)
+	if _boss_bar_element_ray != null:
+		_boss_bar_element_ray.set("ray_color", Color(element_color.r, element_color.g, element_color.b, 0.50))
+	if _boss_bar_element_fx != null:
+		_boss_bar_element_fx.call("configure", vfx_color)
+
+
 ## 將 Boss 條綁定到指定敵人；傳 null 則隱藏
 func _bind_boss_bar(boss: Enemy) -> void:
 	if _boss_bar == null:
@@ -12741,9 +12838,10 @@ func _bind_boss_bar(boss: Enemy) -> void:
 	_boss_bar_bg.color = Color(0, 0, 0, 1)
 	_boss_bar_fill.scale.x = 1.0
 	_boss_bar_label.text = "%d / %d" % [boss.current_hp, boss.max_hp]
+	_set_boss_bar_element(elem, elem_color)
 	# 預設隗入狀態：隱藏並安置在頂部之上，由 _reveal_boss_bar() 負責漸入
 	_boss_bar.modulate.a = 0.0
-	_boss_bar.offset_top = 4.0 - BOSS_BAR_HEIGHT - 16.0
+	_boss_bar.offset_top = BOSS_BAR_TOP_MARGIN - BOSS_BAR_HEIGHT - 16.0
 	_boss_bar.offset_bottom = _boss_bar.offset_top + BOSS_BAR_HEIGHT
 	_boss_bar.visible = true
 	boss.set_main_boss_mode(true)
@@ -12763,9 +12861,9 @@ func _reveal_boss_bar() -> void:
 	_boss_bar_reveal_tween = create_tween().set_parallel(true)
 	_boss_bar_reveal_tween.tween_property(_boss_bar, "modulate:a", 1.0, 0.4) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_top", 4.0, 0.4) \
+	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_top", BOSS_BAR_TOP_MARGIN, 0.4) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_bottom", 4.0 + BOSS_BAR_HEIGHT, 0.4) \
+	_boss_bar_reveal_tween.tween_property(_boss_bar, "offset_bottom", BOSS_BAR_TOP_MARGIN + BOSS_BAR_HEIGHT, 0.4) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	if is_instance_valid(_boss_bar_enemy):
 		_boss_bar_reveal_tween.tween_property(_boss_bar_enemy, "modulate:a", 1.0, 0.4) \

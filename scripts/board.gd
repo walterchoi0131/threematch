@@ -23,7 +23,16 @@ const UPPER_GEM_DEBRIS_SHARDS := 7
 const OBSTACLE_DEBRIS_SHARDS := 8
 const WOOD_SPEAR_THRUST_SCALE := 0.18
 const WOOD_SPEAR_THRUST_TIP_FROM_TOP := 48.0
-const WOOD_SPEAR_ROW_HIT_INTERVAL := 0.075
+const WOOD_SPEAR_WINDUP_PULL_DURATION := 0.1
+const WOOD_SPEAR_WINDUP_HOLD_DURATION := 0.1
+const WOOD_SPEAR_WINDUP_RELEASE_DURATION := 0.1
+const WOOD_SPEAR_DASH_DURATION := 0.2
+const WOOD_SPEAR_WINDUP_PULLBACK_PROGRESS := 0.08
+const WOOD_SPEAR_WINDUP_COMPRESS_SCALE := 0.86
+const WOOD_SPEAR_BOUNCE_DURATION := 0.21
+const WOOD_SPEAR_BOUNCE_ROTATION := 0.16
+const WOOD_SPEAR_DISAPPEAR_HOLD_DURATION := 0.2
+const WOOD_SPEAR_FADE_DURATION := 0.12
 const FUSE_POP_PEAK_DURATION := 0.2
 const FUSE_POP_SETTLE_DURATION := 0.2
 const FUSE_POP_PEAK_SCALE := Vector2(1.4, 1.4)
@@ -2712,7 +2721,7 @@ func _handle_wood_spear_sequence(start_pos: Vector2i, chain_data: Array = [], to
 	var positions: Array[Vector2i] = _get_blast_positions_for_upper(start_pos, ut)
 	var row_groups: Array[Array] = _build_wood_spear_row_groups(start_pos, positions, direction_y)
 	var destination: Vector2i = _wood_spear_destination(start_pos, positions, direction_y)
-	var thrust_duration: float = maxf(float(maxi(row_groups.size(), 1)) * WOOD_SPEAR_ROW_HIT_INTERVAL, 0.18)
+	var thrust_duration: float = _wood_spear_thrust_duration()
 	_play_wood_spear_thrust(grid_to_world(start_pos), grid_to_world(destination), direction_y, thrust_duration)
 
 	var start_type: Block.Type = start_block.block_type as Block.Type
@@ -2728,12 +2737,10 @@ func _handle_wood_spear_sequence(start_pos: Vector2i, chain_data: Array = [], to
 
 	var chained_positions: Array[Vector2i] = []
 	for group_index in row_groups.size():
-		await get_tree().create_timer(WOOD_SPEAR_ROW_HIT_INTERVAL).timeout
-		var group: Array = row_groups[group_index]
-		_destroy_wood_spear_row_group(group, total_blasted_by_type, chained_positions)
+		var hit_delay: float = _wood_spear_row_hit_delay(group_index, row_groups.size())
+		_schedule_wood_spear_row_group_destroy(row_groups[group_index], hit_delay, total_blasted_by_type, chained_positions)
 
-	if row_groups.is_empty():
-		await get_tree().create_timer(thrust_duration).timeout
+	await get_tree().create_timer(_wood_spear_total_effect_duration()).timeout
 
 	if not chained_positions.is_empty():
 		await _execute_upper_blast_chain(chained_positions, chain_data, total_blasted_by_type)
@@ -2785,26 +2792,144 @@ func _wood_spear_destination(origin: Vector2i, positions: Array[Vector2i], direc
 	return Vector2i(origin.x, destination_y)
 
 
+func _wood_spear_row_hit_delay(_group_index: int, _group_count: int) -> float:
+	if _group_count <= 0:
+		return _wood_spear_thrust_duration()
+	var progress: float = clampf(float(_group_index + 1) / float(_group_count), 0.0, 1.0)
+	return _wood_spear_windup_duration() + progress * WOOD_SPEAR_DASH_DURATION
+
+
+func _wood_spear_windup_duration() -> float:
+	return WOOD_SPEAR_WINDUP_PULL_DURATION + WOOD_SPEAR_WINDUP_HOLD_DURATION + WOOD_SPEAR_WINDUP_RELEASE_DURATION
+
+
+func _wood_spear_thrust_duration() -> float:
+	return _wood_spear_windup_duration() + WOOD_SPEAR_DASH_DURATION
+
+
+func _wood_spear_total_effect_duration() -> float:
+	return _wood_spear_thrust_duration() + WOOD_SPEAR_BOUNCE_DURATION + WOOD_SPEAR_DISAPPEAR_HOLD_DURATION + WOOD_SPEAR_FADE_DURATION
+
+
+func _schedule_wood_spear_row_group_destroy(group: Array, delay: float, total_blasted_by_type: Dictionary, chained_positions: Array[Vector2i]) -> void:
+	var scheduled_group: Array = group.duplicate()
+	get_tree().create_timer(maxf(delay, 0.0)).timeout.connect(func() -> void:
+		_destroy_wood_spear_row_group(scheduled_group, total_blasted_by_type, chained_positions)
+	, CONNECT_ONE_SHOT)
+
+
+func _schedule_enemy_wood_spear_row_group_destroy(
+		group: Array,
+		delay: float,
+		owner_id: int,
+		counts_by_type: Dictionary,
+		positions_by_type: Dictionary,
+		normal_world_positions: Array[Vector2],
+		chained_positions: Array[Vector2i],
+		spear_destroy_state: Dictionary
+) -> void:
+	var scheduled_group: Array = group.duplicate()
+	get_tree().create_timer(maxf(delay, 0.0)).timeout.connect(func() -> void:
+		spear_destroy_state["normal_count"] = int(spear_destroy_state["normal_count"]) + _destroy_enemy_wood_spear_row_group(
+				scheduled_group,
+				owner_id,
+				counts_by_type,
+				positions_by_type,
+				normal_world_positions,
+				chained_positions
+		)
+	, CONNECT_ONE_SHOT)
+
+
+func _wood_spear_thrust_progress(elapsed: float) -> float:
+	var pull_duration: float = maxf(WOOD_SPEAR_WINDUP_PULL_DURATION, 0.001)
+	var hold_duration: float = maxf(WOOD_SPEAR_WINDUP_HOLD_DURATION, 0.0)
+	var release_duration: float = maxf(WOOD_SPEAR_WINDUP_RELEASE_DURATION, 0.001)
+	var windup_duration: float = pull_duration + hold_duration + release_duration
+	var dash_duration: float = maxf(WOOD_SPEAR_DASH_DURATION, 0.001)
+	var pullback_progress: float = clampf(WOOD_SPEAR_WINDUP_PULLBACK_PROGRESS, 0.0, 0.4)
+	var time: float = clampf(elapsed, 0.0, windup_duration + dash_duration)
+	if time <= pull_duration:
+		var pull_t: float = time / pull_duration
+		return lerpf(0.0, -pullback_progress, sin(pull_t * PI * 0.5))
+	if time <= pull_duration + hold_duration:
+		return -pullback_progress
+	if time <= windup_duration:
+		var release_t: float = (time - pull_duration - hold_duration) / release_duration
+		return lerpf(-pullback_progress, 0.0, 1.0 - cos(release_t * PI * 0.5))
+	var dash_t: float = (time - windup_duration) / dash_duration
+	return dash_t
+
+
+func _wood_spear_windup_compress(elapsed: float) -> float:
+	var pull_duration: float = maxf(WOOD_SPEAR_WINDUP_PULL_DURATION, 0.001)
+	var hold_duration: float = maxf(WOOD_SPEAR_WINDUP_HOLD_DURATION, 0.0)
+	var release_duration: float = maxf(WOOD_SPEAR_WINDUP_RELEASE_DURATION, 0.001)
+	var windup_duration: float = pull_duration + hold_duration + release_duration
+	var time: float = clampf(elapsed, 0.0, windup_duration)
+	if time <= pull_duration:
+		var pull_t: float = time / pull_duration
+		return lerpf(1.0, WOOD_SPEAR_WINDUP_COMPRESS_SCALE, sin(pull_t * PI * 0.5))
+	if time <= pull_duration + hold_duration:
+		return WOOD_SPEAR_WINDUP_COMPRESS_SCALE
+	var release_t: float = (time - pull_duration - hold_duration) / release_duration
+	return lerpf(WOOD_SPEAR_WINDUP_COMPRESS_SCALE, 1.0, 1.0 - cos(release_t * PI * 0.5))
+
+
 func _play_wood_spear_thrust(start_local: Vector2, end_local: Vector2, direction_y: int, duration: float) -> void:
+	var pivot := Node2D.new()
+	pivot.name = "WoodSpearThrustPivot"
+	pivot.z_index = WOOD_SPEAR_THRUST_Z_INDEX
+	pivot.position = start_local - Vector2(0.0, float(direction_y) * float(CELL_SIZE) * 0.75)
+	pivot.rotation = 0.0 if direction_y < 0 else PI
+	pivot.modulate.a = 0.95
+	add_child(pivot)
+
 	var sprite := Sprite2D.new()
 	sprite.texture = WOOD_SPEAR_THRUST_TEXTURE
 	sprite.centered = true
-	sprite.z_index = WOOD_SPEAR_THRUST_Z_INDEX
-	sprite.scale = Vector2(WOOD_SPEAR_THRUST_SCALE, WOOD_SPEAR_THRUST_SCALE)
-	sprite.rotation = 0.0 if direction_y < 0 else PI
-	sprite.position = start_local - Vector2(0.0, float(direction_y) * float(CELL_SIZE) * 0.75)
-	sprite.modulate.a = 0.95
-	add_child(sprite)
-
+	var base_sprite_scale := Vector2(WOOD_SPEAR_THRUST_SCALE, WOOD_SPEAR_THRUST_SCALE)
+	sprite.scale = base_sprite_scale
 	var tip_to_center: float = (float(WOOD_SPEAR_THRUST_TEXTURE.get_height()) * 0.5 - WOOD_SPEAR_THRUST_TIP_FROM_TOP) * WOOD_SPEAR_THRUST_SCALE
-	var end_position: Vector2 = end_local - Vector2(0.0, float(direction_y) * tip_to_center)
-	var tween := sprite.create_tween().set_parallel(true)
-	tween.tween_property(sprite, "position", end_position, duration).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	tween.tween_property(sprite, "modulate:a", 0.0, duration * 0.28).set_delay(duration * 0.72)
-	tween.finished.connect(func() -> void:
-		if is_instance_valid(sprite):
-			sprite.queue_free()
-	, CONNECT_ONE_SHOT)
+	sprite.position = Vector2(0.0, tip_to_center)
+	pivot.add_child(sprite)
+	pivot.position += Vector2(0.0, float(direction_y) * tip_to_center)
+
+	var start_position: Vector2 = pivot.position
+	var end_position: Vector2 = end_local
+	var base_rotation: float = pivot.rotation
+	var tween := pivot.create_tween()
+	tween.tween_method(func(t: float) -> void:
+		if not is_instance_valid(pivot):
+			return
+		var travel_t: float = _wood_spear_thrust_progress(t)
+		pivot.position = start_position.lerp(end_position, travel_t)
+		var compress: float = _wood_spear_windup_compress(t) if t <= _wood_spear_windup_duration() else 1.0
+		sprite.scale = Vector2(base_sprite_scale.x, base_sprite_scale.y * compress)
+		sprite.position = Vector2(0.0, tip_to_center * compress)
+	, 0.0, duration, duration)
+	tween.tween_callback(func() -> void:
+		if not is_instance_valid(pivot):
+			return
+		var rotation_tween := pivot.create_tween()
+		var swing_direction := -float(direction_y)
+		rotation_tween.tween_property(pivot, "rotation", base_rotation + swing_direction * WOOD_SPEAR_BOUNCE_ROTATION, WOOD_SPEAR_BOUNCE_DURATION * 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		rotation_tween.tween_property(pivot, "rotation", base_rotation - swing_direction * WOOD_SPEAR_BOUNCE_ROTATION * 0.72, WOOD_SPEAR_BOUNCE_DURATION * 0.2).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		rotation_tween.tween_property(pivot, "rotation", base_rotation + swing_direction * WOOD_SPEAR_BOUNCE_ROTATION * 0.48, WOOD_SPEAR_BOUNCE_DURATION * 0.2).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		rotation_tween.tween_property(pivot, "rotation", base_rotation - swing_direction * WOOD_SPEAR_BOUNCE_ROTATION * 0.26, WOOD_SPEAR_BOUNCE_DURATION * 0.18).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		rotation_tween.tween_property(pivot, "rotation", base_rotation, WOOD_SPEAR_BOUNCE_DURATION * 0.24).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		rotation_tween.finished.connect(func() -> void:
+			if not is_instance_valid(pivot):
+				return
+			var disappear_tween := pivot.create_tween()
+			disappear_tween.tween_interval(WOOD_SPEAR_DISAPPEAR_HOLD_DURATION)
+			disappear_tween.tween_property(pivot, "modulate:a", 0.0, WOOD_SPEAR_FADE_DURATION)
+			disappear_tween.finished.connect(func() -> void:
+				if is_instance_valid(pivot):
+					pivot.queue_free()
+			, CONNECT_ONE_SHOT)
+		, CONNECT_ONE_SHOT)
+	)
 
 
 func _destroy_wood_spear_row_group(group: Array, total_blasted_by_type: Dictionary, chained_positions: Array[Vector2i]) -> void:
@@ -3838,7 +3963,7 @@ func _enemy_trigger_owned_upper_recursive(pos: Vector2i, owner_id: int, visited:
 		var direction_y: int = _wood_spear_direction(ut)
 		var destination: Vector2i = _wood_spear_destination(pos, positions, direction_y)
 		var row_groups: Array[Array] = _build_wood_spear_row_groups(pos, positions, direction_y)
-		var thrust_duration: float = maxf(float(maxi(row_groups.size(), 1)) * WOOD_SPEAR_ROW_HIT_INTERVAL, 0.18)
+		var thrust_duration: float = _wood_spear_thrust_duration()
 		_play_wood_spear_thrust(grid_to_world(pos), grid_to_world(destination), direction_y, thrust_duration)
 
 		grid[pos.x][pos.y] = null
@@ -3846,13 +3971,22 @@ func _enemy_trigger_owned_upper_recursive(pos: Vector2i, owner_id: int, visited:
 		_play_gem_break_debris(block, true)
 		_queue_free_blocks_after_debris(blocks_to_free)
 
+		var spear_destroy_state := {"normal_count": 0}
 		for group_index in row_groups.size():
-			await get_tree().create_timer(WOOD_SPEAR_ROW_HIT_INTERVAL).timeout
-			var group: Array = row_groups[group_index]
-			normal_count += _destroy_enemy_wood_spear_row_group(group, owner_id, counts_by_type, positions_by_type, normal_world_positions, chain_positions)
+			var hit_delay: float = _wood_spear_row_hit_delay(group_index, row_groups.size())
+			_schedule_enemy_wood_spear_row_group_destroy(
+					row_groups[group_index],
+					hit_delay,
+					owner_id,
+					counts_by_type,
+					positions_by_type,
+					normal_world_positions,
+					chain_positions,
+					spear_destroy_state
+			)
 
-		if row_groups.is_empty():
-			await get_tree().create_timer(thrust_duration).timeout
+		await get_tree().create_timer(_wood_spear_total_effect_duration()).timeout
+		normal_count += int(spear_destroy_state["normal_count"])
 	else:
 		grid[pos.x][pos.y] = null
 		blocks_to_free.append(block)

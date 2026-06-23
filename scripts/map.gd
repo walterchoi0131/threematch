@@ -21,6 +21,7 @@ var _scene_stage_paths: Dictionary = {}
 var _path_layer: Control = null
 var _debug_panel: Control = null
 var _dev_mode_label: Label = null
+var _dev_mode_back_button: Button = null
 var _portrait_debug_layer: CanvasLayer = null
 var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
 
@@ -63,6 +64,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_build_portrait_debug_btn()
 	_build_dev_mode_label()
+	_build_dev_mode_back_button()
 	_refresh_dev_mode_ui()
 
 
@@ -562,11 +564,38 @@ func _build_dev_mode_label() -> void:
 	_portrait_debug_layer.add_child(_dev_mode_label)
 
 
+func _build_dev_mode_back_button() -> void:
+	if _portrait_debug_layer == null:
+		return
+	_dev_mode_back_button = Button.new()
+	_dev_mode_back_button.name = "DevModeBackButton"
+	_dev_mode_back_button.text = "Back"
+	_dev_mode_back_button.tooltip_text = "Exit dev mode"
+	_dev_mode_back_button.anchor_left = 0.0
+	_dev_mode_back_button.anchor_top = 0.0
+	_dev_mode_back_button.offset_left = 16.0
+	_dev_mode_back_button.offset_top = 50.0
+	_dev_mode_back_button.offset_right = 104.0
+	_dev_mode_back_button.offset_bottom = 82.0
+	_dev_mode_back_button.add_theme_font_size_override("font_size", 14)
+	_dev_mode_back_button.pressed.connect(_on_dev_mode_back_pressed)
+	_portrait_debug_layer.add_child(_dev_mode_back_button)
+
+
 func _refresh_dev_mode_ui() -> void:
 	if _dev_mode_label == null:
 		return
 	_dev_mode_label.visible = GameState.dev_mode
 	_dev_mode_label.text = "DEV MODE  F4"
+	if _dev_mode_back_button != null:
+		_dev_mode_back_button.visible = GameState.dev_mode
+
+
+func _on_dev_mode_back_pressed() -> void:
+	GameState.dev_mode = false
+	_refresh_dev_mode_ui()
+	_refresh_stage_buttons()
+	_set_debug_panel_visible(false)
 
 
 func _set_debug_panel_visible(visible: bool) -> void:

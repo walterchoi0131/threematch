@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://fh2ssiymhslt"
+path="res://.godot/imported/Rainforest Clash.mp3-21e4461b6deb7975854b9170905f08c2.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Rainforest Clash.mp3"
+dest_files=["res://.godot/imported/Rainforest Clash.mp3-21e4461b6deb7975854b9170905f08c2.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
