@@ -10619,6 +10619,8 @@ func _animate_loot_toast_label(label: Label, from_total: int, to_total: int) -> 
 func _enqueue_loot_toast(item_type: ItemDefs.Type, from_total: int, to_total: int, icon_factory: Callable = Callable(), finished_callback: Callable = Callable()) -> void:
 	for active_index in _active_loot_toasts.size():
 		var active: Dictionary = _active_loot_toasts[active_index]
+		if bool(active.get("text_only", false)):
+			continue
 		if int(active.get("type", -1)) != int(item_type) or bool(active.get("closing", false)):
 			continue
 		var label: Label = active.get("label", null) as Label
@@ -10633,6 +10635,8 @@ func _enqueue_loot_toast(item_type: ItemDefs.Type, from_total: int, to_total: in
 		return
 	for entry_index in _loot_toast_queue.size():
 		var queued: Dictionary = _loot_toast_queue[entry_index]
+		if bool(queued.get("text_only", false)):
+			continue
 		if int(queued.get("type", -1)) != int(item_type):
 			continue
 		queued["to_total"] = maxi(int(queued.get("to_total", from_total)), to_total)
@@ -10650,6 +10654,25 @@ func _enqueue_loot_toast(item_type: ItemDefs.Type, from_total: int, to_total: in
 		"from_total": from_total,
 		"to_total": to_total,
 		"icon_factory": icon_factory,
+		"callbacks": callbacks,
+	})
+	_start_next_loot_toast()
+
+
+func show_loot_log(text: String) -> void:
+	var clean_text: String = text.strip_edges()
+	if clean_text.is_empty():
+		return
+	_enqueue_loot_text_toast(clean_text)
+
+
+func _enqueue_loot_text_toast(text: String, finished_callback: Callable = Callable()) -> void:
+	var callbacks: Array = []
+	if finished_callback.is_valid():
+		callbacks.append(finished_callback)
+	_loot_toast_queue.append({
+		"text_only": true,
+		"text": text,
 		"callbacks": callbacks,
 	})
 	_start_next_loot_toast()
@@ -10680,6 +10703,7 @@ func _start_next_loot_toast() -> void:
 		return
 	_loot_toast_starting = true
 	var entry: Dictionary = _loot_toast_queue.pop_front()
+	var text_only: bool = bool(entry.get("text_only", false))
 	var item_type: ItemDefs.Type = int(entry.get("type", ItemDefs.Type.GOLD)) as ItemDefs.Type
 	var from_total: int = int(entry.get("from_total", 0))
 	var to_total: int = int(entry.get("to_total", from_total))
@@ -10712,33 +10736,46 @@ func _start_next_loot_toast() -> void:
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
 
-	var icon_slot := CenterContainer.new()
-	icon_slot.custom_minimum_size = Vector2(46, 42)
-	icon_slot.clip_contents = true
-	row.add_child(icon_slot)
-
-	var icon := _make_loot_toast_icon(item_type, icon_factory)
-	icon_slot.add_child(icon)
-
 	var label := Label.new()
-	label.text = "%d" % maxi(0, from_total)
 	label.add_theme_font_size_override("font_size", 18)
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
 	label.add_theme_constant_override("outline_size", 4)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.custom_minimum_size = Vector2(64, 42)
-	row.add_child(label)
+	if text_only:
+		label.text = String(entry.get("text", ""))
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.custom_minimum_size = Vector2(LOOT_TOAST_SIZE.x - 12.0, 42)
+		row.add_child(label)
+	else:
+		var icon_slot := CenterContainer.new()
+		icon_slot.custom_minimum_size = Vector2(46, 42)
+		icon_slot.clip_contents = true
+		row.add_child(icon_slot)
+
+		var icon := _make_loot_toast_icon(item_type, icon_factory)
+		icon_slot.add_child(icon)
+		label.text = "%d" % maxi(0, from_total)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.custom_minimum_size = Vector2(68, 42)
+		var number_margin := MarginContainer.new()
+		number_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		number_margin.add_theme_constant_override("margin_right", 16)
+		number_margin.add_child(label)
+		row.add_child(number_margin)
 	entry["panel"] = panel
 	entry["label"] = label
 	entry["closing"] = false
 	entry["stack_index"] = stack_index
 	_active_loot_toasts.append(entry)
-	_animate_loot_toast_label(label, from_total, to_total)
+	if not text_only:
+		_animate_loot_toast_label(label, from_total, to_total)
 
 	var tw := create_tween()
 	tw.tween_property(panel, "position", toast_rect.position, LOOT_TOAST_SLIDE_IN_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
@@ -12659,7 +12696,7 @@ func _setup_boss_bar() -> void:
 	bar.add_child(_boss_bar_label)
 
 
-## 建立「Exit / Restart / Kill All / Combo Test / Skill Reset」按鈕列。
+## 建立「離開 / 重開 / 皆殺 / 生成 / 棋盤 / 技能 / 訊息」按鈕列。
 func _setup_kill_all_button() -> void:
 	var ui_layer: CanvasLayer = $UILayer
 	var exit_btn: Node = ui_layer.get_node_or_null("ReturnButton")
@@ -12668,84 +12705,59 @@ func _setup_kill_all_button() -> void:
 	# 偵錯按鈕同寬，間距 6px，整組以 anchor 0.5 置中。
 	var top_off: float = -96.0
 	var bot_off: float = -56.0
+	var button_w: float = 92.0
+	var button_gap: float = 6.0
+	var button_start: float = -((button_w * 7.0 + button_gap * 6.0) * 0.5)
 	if restart_btn is Button:
 		var rb: Button = restart_btn as Button
+		rb.text = "重開"
 		top_off = rb.offset_top
 		bot_off = rb.offset_bottom
-		rb.offset_left = -217.0
-		rb.offset_right = -113.0
+		_place_stage_bottom_button(rb, button_start + (button_w + button_gap) * 1.0, button_w, top_off, bot_off)
 	if exit_btn is Button:
 		var eb: Button = exit_btn as Button
-		eb.text = Locale.tr_ui("EXIT")
-		eb.visible = true
-		eb.anchor_left = 0.5
-		eb.anchor_top = 1.0
-		eb.anchor_right = 0.5
-		eb.anchor_bottom = 1.0
-		eb.offset_left = -327.0
-		eb.offset_right = -223.0
-		eb.offset_top = top_off
-		eb.offset_bottom = bot_off
+		eb.text = "離開"
+		_place_stage_bottom_button(eb, button_start, button_w, top_off, bot_off)
 
 	_kill_all_btn = Button.new()
 	_kill_all_btn.name = "KillAllButton"
-	_kill_all_btn.text = "Kill All"
+	_kill_all_btn.text = "皆殺"
 	_kill_all_btn.modulate = Color(1.0, 0.6, 0.6)
-	_kill_all_btn.anchor_left = 0.5
-	_kill_all_btn.anchor_top = 1.0
-	_kill_all_btn.anchor_right = 0.5
-	_kill_all_btn.anchor_bottom = 1.0
-	_kill_all_btn.offset_left = -107.0
-	_kill_all_btn.offset_right = -3.0
-	_kill_all_btn.offset_top = top_off
-	_kill_all_btn.offset_bottom = bot_off
+	_place_stage_bottom_button(_kill_all_btn, button_start + (button_w + button_gap) * 2.0, button_w, top_off, bot_off)
 	_kill_all_btn.pressed.connect(_on_kill_all_pressed)
 	ui_layer.add_child(_kill_all_btn)
 
 	var combo_btn := Button.new()
 	combo_btn.name = "ComboTestButton"
-	combo_btn.text = "Combo Test"
+	combo_btn.text = "生成"
 	combo_btn.modulate = Color(1.0, 0.85, 0.4)
-	combo_btn.anchor_left = 0.5
-	combo_btn.anchor_top = 1.0
-	combo_btn.anchor_right = 0.5
-	combo_btn.anchor_bottom = 1.0
-	combo_btn.offset_left = 3.0
-	combo_btn.offset_right = 107.0
-	combo_btn.offset_top = top_off
-	combo_btn.offset_bottom = bot_off
+	_place_stage_bottom_button(combo_btn, button_start + (button_w + button_gap) * 3.0, button_w, top_off, bot_off)
 	combo_btn.pressed.connect(_on_combo_test_pressed.bind(combo_btn))
 	ui_layer.add_child(combo_btn)
 
 	var test_board_btn := Button.new()
 	test_board_btn.name = "TestBoardButton"
-	test_board_btn.text = "Test Board"
+	test_board_btn.text = "棋盤"
 	test_board_btn.modulate = Color(0.65, 0.9, 1.0)
-	test_board_btn.anchor_left = 0.5
-	test_board_btn.anchor_top = 1.0
-	test_board_btn.anchor_right = 0.5
-	test_board_btn.anchor_bottom = 1.0
-	test_board_btn.offset_left = 113.0
-	test_board_btn.offset_right = 217.0
-	test_board_btn.offset_top = top_off
-	test_board_btn.offset_bottom = bot_off
+	_place_stage_bottom_button(test_board_btn, button_start + (button_w + button_gap) * 4.0, button_w, top_off, bot_off)
 	test_board_btn.pressed.connect(_on_test_board_pressed)
 	ui_layer.add_child(test_board_btn)
 
 	var skill_reset_btn := Button.new()
 	skill_reset_btn.name = "SkillResetButton"
-	skill_reset_btn.text = "Skill Reset"
+	skill_reset_btn.text = "技能"
 	skill_reset_btn.modulate = Color(0.5, 1.0, 0.8)
-	skill_reset_btn.anchor_left = 0.5
-	skill_reset_btn.anchor_top = 1.0
-	skill_reset_btn.anchor_right = 0.5
-	skill_reset_btn.anchor_bottom = 1.0
-	skill_reset_btn.offset_left = 223.0
-	skill_reset_btn.offset_right = 327.0
-	skill_reset_btn.offset_top = top_off
-	skill_reset_btn.offset_bottom = bot_off
+	_place_stage_bottom_button(skill_reset_btn, button_start + (button_w + button_gap) * 5.0, button_w, top_off, bot_off)
 	skill_reset_btn.pressed.connect(_on_skill_reset_pressed)
 	ui_layer.add_child(skill_reset_btn)
+
+	var message_btn := Button.new()
+	message_btn.name = "LootMessageButton"
+	message_btn.text = "訊息"
+	message_btn.modulate = Color(0.85, 0.78, 1.0)
+	_place_stage_bottom_button(message_btn, button_start + (button_w + button_gap) * 6.0, button_w, top_off, bot_off)
+	message_btn.pressed.connect(_on_loot_message_pressed)
+	ui_layer.add_child(message_btn)
 
 	# 連鎖間隔調整滑桿（偵錯）— 0.0 ~ 0.6 秒，置於按鈕列正下方
 	var chain_box := VBoxContainer.new()
@@ -12781,6 +12793,18 @@ func _setup_kill_all_button() -> void:
 		chain_lbl.text = "Chain Interval: %.2fs" % v
 	)
 	chain_box.add_child(chain_slider)
+
+
+func _place_stage_bottom_button(button: Button, left: float, width: float, top: float, bottom: float) -> void:
+	button.visible = true
+	button.anchor_left = 0.5
+	button.anchor_top = 1.0
+	button.anchor_right = 0.5
+	button.anchor_bottom = 1.0
+	button.offset_left = left
+	button.offset_right = left + width
+	button.offset_top = top
+	button.offset_bottom = bottom
 
 
 ## 一波敵人生成完畢 — 評估是否顯示 Boss 條
@@ -13336,6 +13360,10 @@ func _debug_spawn_upper_type(ut: Block.UpperType) -> void:
 func _on_skill_reset_pressed() -> void:
 	battle_manager.reset_all_skill_cooldowns()
 	_update_skill_ui()
+
+
+func _on_loot_message_pressed() -> void:
+	show_loot_log("TEST")
 
 
 ## HP 條傷害預覽白條：與 Fill 對齊（同 padding），停留 0.45s 後右邊崩興至新 HP 邊界
