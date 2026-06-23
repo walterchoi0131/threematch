@@ -39,6 +39,7 @@ const PANEL_MARGIN := 24.0
 const NAME_FONT_SIZE := 28
 const TEXT_FONT_SIZE := 26
 const SKIP_FONT_SIZE := 20
+const SKIP_BUTTON_SIZE := Vector2(136, 34)
 
 # 音樂淡入淡出
 const BGM_FADE_DUR := 0.8
@@ -46,6 +47,10 @@ const BG_SWITCH_FADE_DUR := 0.18
 
 # Skip 自動推進
 const SKIP_INTERVAL := 0.1
+const SKIP_HOLD_START_DELAY := 1.0
+const SKIP_HOLD_DURATION := 0.85
+const SKIP_ARROW_OFFSET := 10.0
+const SKIP_ARROW_Y_NUDGE := 3.0
 const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 
 # 角色名稱顏色
@@ -76,7 +81,10 @@ var _text_label: RichTextLabel
 var _tap_zone: Button
 var _dialog_panel: PanelContainer
 var _bgm_player: AudioStreamPlayer
+var _skip_control: Control
+var _skip_progress_rect: ColorRect
 var _skip_btn: Button
+var _skip_arrow_label: Label
 
 # ── 狀態 ─────────────────────────────────────────────────────
 var _sequence: _DialogSequence
@@ -98,6 +106,13 @@ var _bg_switch_tween: Tween = null
 var _texture_cache: Dictionary = {}  # path -> Texture2D
 var _auto_skipping: bool = false
 var _skip_timer: Timer = null
+var _skip_arrow_tween: Tween = null
+var _skip_press_active: bool = false
+var _skip_hold_delay: float = 0.0
+var _skip_hold_active: bool = false
+var _skip_hold_completed: bool = false
+var _skip_hold_progress: float = 0.0
+var _dialog_finishing: bool = false
 
 
 func _ready() -> void:
@@ -115,6 +130,24 @@ func _ready() -> void:
 		start(gs.selected_stage.pre_dialog)
 
 
+func _process(delta: float) -> void:
+	if _dialog_finishing:
+		return
+	if _skip_press_active and not _skip_hold_active:
+		_skip_hold_delay += delta
+		if _skip_hold_delay >= SKIP_HOLD_START_DELAY:
+			_start_skip_hold_progress()
+	if not _skip_hold_active:
+		return
+	_skip_hold_progress = clampf(_skip_hold_progress + delta / SKIP_HOLD_DURATION, 0.0, 1.0)
+	_update_skip_hold_fill()
+	if _skip_hold_progress >= 1.0:
+		_skip_hold_completed = true
+		_skip_press_active = false
+		_skip_hold_active = false
+		_skip_dialog_phase()
+
+
 # ── 公開 API ─────────────────────────────────────────────────
 
 ## 開始播放對話序列
@@ -124,6 +157,8 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 	_finish_with_fade = finish_with_fade
 	_start_with_fade = start_with_fade
 	_event_transitioning = false
+	_dialog_finishing = false
+	_reset_skip_hold()
 	_line_index = -1
 	_left_char_id = ""
 	_right_char_id = ""
@@ -302,10 +337,35 @@ func _build_ui() -> void:
 	name_row.add_child(_name_label)
 
 	# Skip 按鈕（與名稱同一列、靠右）— 文字風格與對話內文一致
+	_skip_control = Control.new()
+	_skip_control.custom_minimum_size = SKIP_BUTTON_SIZE
+	_skip_control.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_skip_control.clip_contents = true
+	_skip_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.add_child(_skip_control)
+
+	_skip_progress_rect = ColorRect.new()
+	_skip_progress_rect.color = Color(0.65, 0.65, 0.7, 0.35)
+	_skip_progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_skip_control.add_child(_skip_progress_rect)
+
+	_skip_arrow_label = Label.new()
+	_skip_arrow_label.text = "▶▶"
+	if dialog_font != null:
+		_skip_arrow_label.add_theme_font_override("font", dialog_font)
+	_skip_arrow_label.add_theme_font_size_override("font_size", SKIP_FONT_SIZE)
+	_skip_arrow_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.18))
+	_skip_arrow_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_skip_arrow_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_skip_arrow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_skip_arrow_label.visible = false
+	_skip_control.add_child(_skip_arrow_label)
+
 	_skip_btn = Button.new()
-	_skip_btn.text = Locale.tr_ui("SKIP")
+	_skip_btn.text = Locale.tr_ui("FAST_FORWARD")
 	_skip_btn.focus_mode = Control.FOCUS_NONE
 	_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_skip_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
 	if dialog_font != null:
 		_skip_btn.add_theme_font_override("font", dialog_font)
 	_skip_btn.add_theme_font_size_override("font_size", SKIP_FONT_SIZE)
@@ -317,9 +377,9 @@ func _build_ui() -> void:
 	_skip_btn.add_theme_stylebox_override("hover", skip_empty)
 	_skip_btn.add_theme_stylebox_override("pressed", skip_empty)
 	_skip_btn.add_theme_stylebox_override("focus", skip_empty)
-	_skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
-	_skip_btn.pressed.connect(_on_skip_pressed)
-	name_row.add_child(_skip_btn)
+	_skip_btn.gui_input.connect(_on_skip_button_gui_input)
+	_skip_control.add_child(_skip_btn)
+	_reset_skip_hold()
 
 	# 間隔
 	var spacer := Control.new()
@@ -373,6 +433,8 @@ func _build_ui() -> void:
 # ── 對話推進 ─────────────────────────────────────────────────
 
 func _advance() -> void:
+	if _dialog_finishing:
+		return
 	if _event_transitioning:
 		return
 	# 若正在打字 → 立即全顯
@@ -400,15 +462,162 @@ func _on_skip_pressed() -> void:
 func _set_auto_skip(enabled: bool) -> void:
 	_auto_skipping = enabled
 	if _skip_btn != null:
+		_update_skip_button_text()
 		_skip_btn.add_theme_color_override(
 			"font_color",
 			Color(1.0, 0.85, 0.3) if enabled else Color.WHITE)
+	_update_skip_active_visual()
 	if _skip_timer == null:
 		return
 	if enabled:
 		_skip_timer.start(SKIP_INTERVAL)
 	else:
 		_skip_timer.stop()
+
+
+func _on_skip_button_gui_input(event: InputEvent) -> void:
+	if _dialog_finishing:
+		return
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse_event.pressed:
+			_begin_skip_hold()
+		else:
+			var consumed: bool = _skip_hold_active or _skip_hold_completed
+			_end_skip_hold()
+			if not consumed:
+				_on_skip_pressed()
+		_skip_btn.accept_event()
+	elif event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		if touch_event.pressed:
+			_begin_skip_hold()
+		else:
+			var consumed_touch: bool = _skip_hold_active or _skip_hold_completed
+			_end_skip_hold()
+			if not consumed_touch:
+				_on_skip_pressed()
+		_skip_btn.accept_event()
+
+
+func _begin_skip_hold() -> void:
+	_skip_press_active = true
+	_skip_hold_delay = 0.0
+	_skip_hold_active = false
+	_skip_hold_completed = false
+	_skip_hold_progress = 0.0
+	_update_skip_button_text()
+	_update_skip_hold_fill()
+	if _skip_timer != null and _auto_skipping:
+		_skip_timer.stop()
+
+
+func _start_skip_hold_progress() -> void:
+	_skip_hold_active = true
+	_skip_hold_progress = 0.0
+	_update_skip_button_text()
+	_update_skip_hold_fill()
+
+
+func _end_skip_hold() -> void:
+	_skip_press_active = false
+	_skip_hold_delay = 0.0
+	_skip_hold_active = false
+	_skip_hold_progress = 0.0
+	_update_skip_button_text()
+	_update_skip_hold_fill()
+	if _skip_timer != null and _auto_skipping and not _dialog_finishing:
+		_skip_timer.start(SKIP_INTERVAL)
+
+
+func _reset_skip_hold() -> void:
+	_skip_press_active = false
+	_skip_hold_delay = 0.0
+	_skip_hold_active = false
+	_skip_hold_completed = false
+	_skip_hold_progress = 0.0
+	_update_skip_button_text()
+	_update_skip_hold_fill()
+
+
+func _update_skip_button_text() -> void:
+	if _skip_btn == null:
+		return
+	if _skip_hold_active:
+		_skip_btn.text = Locale.tr_ui("SKIP")
+	elif _auto_skipping:
+		_skip_btn.text = ""
+	else:
+		_skip_btn.text = Locale.tr_ui("FAST_FORWARD")
+
+
+func _update_skip_hold_fill() -> void:
+	if _skip_progress_rect == null or _skip_control == null:
+		return
+	var fill_width: float = maxf(_skip_control.size.x, SKIP_BUTTON_SIZE.x) * _skip_hold_progress
+	var fill_height: float = maxf(_skip_control.size.y, SKIP_BUTTON_SIZE.y)
+	_skip_progress_rect.position = Vector2.ZERO
+	_skip_progress_rect.size = Vector2(fill_width, fill_height)
+	_skip_progress_rect.visible = _skip_hold_progress > 0.0
+
+
+func _update_skip_active_visual() -> void:
+	if _skip_arrow_label == null:
+		return
+	if _auto_skipping:
+		_skip_arrow_label.visible = true
+		_skip_arrow_label.modulate = Color(1.0, 0.85, 0.18)
+		_start_skip_arrow_tween()
+	else:
+		_stop_skip_arrow_tween()
+
+
+func _start_skip_arrow_tween() -> void:
+	if _skip_arrow_label == null:
+		return
+	if _skip_arrow_tween != null and _skip_arrow_tween.is_valid():
+		_skip_arrow_tween.kill()
+	var base_x: float = _skip_arrow_base_x()
+	_skip_arrow_label.position = Vector2(base_x, SKIP_ARROW_Y_NUDGE)
+	_skip_arrow_label.size = _skip_arrow_size()
+	_skip_arrow_tween = create_tween().set_loops()
+	_skip_arrow_tween.tween_property(_skip_arrow_label, "position:x", base_x + SKIP_ARROW_OFFSET, 0.42) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	_skip_arrow_tween.tween_callback(func() -> void:
+		if is_instance_valid(_skip_arrow_label):
+			_skip_arrow_label.position.x = _skip_arrow_base_x()
+	)
+
+
+func _stop_skip_arrow_tween() -> void:
+	if _skip_arrow_tween != null and _skip_arrow_tween.is_valid():
+		_skip_arrow_tween.kill()
+	if _skip_arrow_label != null:
+		_skip_arrow_label.visible = false
+		_skip_arrow_label.position = Vector2(_skip_arrow_base_x(), SKIP_ARROW_Y_NUDGE)
+
+
+func _skip_arrow_base_x() -> float:
+	return 0.0
+
+
+func _skip_arrow_size() -> Vector2:
+	if _skip_control == null:
+		return SKIP_BUTTON_SIZE
+	return Vector2(maxf(SKIP_BUTTON_SIZE.x, _skip_control.size.x), maxf(SKIP_BUTTON_SIZE.y, _skip_control.size.y))
+
+
+func _skip_dialog_phase() -> void:
+	_set_auto_skip(false)
+	if _type_tween != null and _type_tween.is_valid():
+		_type_tween.kill()
+	if _bg_switch_tween != null and _bg_switch_tween.is_valid():
+		_bg_switch_tween.kill()
+	_typing = false
+	_event_transitioning = false
+	_finish_dialog()
 
 
 func _show_line(line: _DialogLine) -> void:
@@ -528,6 +737,11 @@ func _play_line_sound_effect(line: _DialogLine) -> void:
 
 
 func _finish_dialog() -> void:
+	if _dialog_finishing:
+		return
+	_dialog_finishing = true
+	_set_auto_skip(false)
+	_reset_skip_hold()
 	if _preview_mode:
 		if _finish_with_fade:
 			_finish_preview_with_fade()

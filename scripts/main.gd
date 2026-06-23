@@ -29,9 +29,9 @@ const GOLD_COIN_SPIN_HOLD_DURATION := 0.5
 const GOLD_COIN_FLY_DURATION := 0.728
 const GOLD_COIN_FADE_DURATION := 0.18
 const LOOT_FLY_ICON_SIZE := 52
-const LOOT_TOAST_SIZE := Vector2(184.0, 64.0)
-const LOOT_TOAST_GAP := 8.0
-const LOOT_TOAST_ICON_SIZE := 56
+const LOOT_TOAST_SIZE := Vector2(136.0, 46.0)
+const LOOT_TOAST_GAP := 5.0
+const LOOT_TOAST_ICON_SIZE := 40
 const LOOT_TOAST_RIGHT_MARGIN := 16.0
 const LOOT_TOAST_TOP_OFFSET := 48.0
 const LOOT_TOAST_SLIDE_IN_DURATION := 0.18
@@ -10613,17 +10613,17 @@ func _start_next_loot_toast() -> void:
 	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
 	style.set_border_width_all(0)
 	style.set_corner_radius_all(8)
-	style.set_content_margin_all(4)
+	style.set_content_margin_all(2)
 	panel.add_theme_stylebox_override("panel", style)
 	$UILayer.add_child(panel)
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
 
 	var icon_slot := CenterContainer.new()
-	icon_slot.custom_minimum_size = Vector2(64, 56)
+	icon_slot.custom_minimum_size = Vector2(46, 42)
 	icon_slot.clip_contents = true
 	row.add_child(icon_slot)
 
@@ -10632,13 +10632,13 @@ func _start_next_loot_toast() -> void:
 
 	var label := Label.new()
 	label.text = "%d" % maxi(0, from_total)
-	label.add_theme_font_size_override("font_size", 20)
-	label.add_theme_color_override("font_color", ItemDefs.get_color(item_type).lerp(Color.WHITE, 0.12))
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color.WHITE)
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
 	label.add_theme_constant_override("outline_size", 4)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.custom_minimum_size = Vector2(86, 54)
+	label.custom_minimum_size = Vector2(64, 42)
 	row.add_child(label)
 	entry["panel"] = panel
 	entry["label"] = label

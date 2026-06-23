@@ -4,9 +4,17 @@ extends Control
 
 const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
+const UpperPulseParticlesScript := preload("res://scripts/upper_gem_pulse_particles.gd")
+const RayBurstScript := preload("res://scripts/ray_burst.gd")
+const GoldCoin3DProxyScript := preload("res://scripts/gold_coin_3d_proxy.gd")
+const BattleVfx3DLayerScript := preload("res://scripts/battle_vfx_3d_layer.gd")
+
+const LOOT_CARD_SIZE := Vector2(112, 132)
+const LOOT_ICON_FRAME_SIZE := 96.0
+const LOOT_ICON_SIZE := 62
 
 # ── 階段列舉 ──
-enum Phase { GOLD, LOOT, EXP, DONE }
+enum Phase { GOLD, EXP, LOOT, DONE }
 
 var _font: Font
 var _phase: Phase = Phase.GOLD
@@ -29,6 +37,7 @@ var _char_cards: Array[Dictionary] = []       # [{card, bar_fill, lv_label, exp_
 var _tap_hint: Label = null                   # "Tap to continue" 提示
 
 # ── 全螢幕點擊 ──
+var _battle_vfx_3d_layer: BattleVfx3DLayer = null
 var _tap_button: Button = null
 
 
@@ -81,9 +90,8 @@ func _build_ui() -> void:
 	_content.add_theme_constant_override("separation", 20)
 	add_child(_content)
 
-	_build_gold_section()
-	_build_loot_section()
 	_build_exp_section()
+	_build_loot_section()
 	_build_tap_hint()
 
 
@@ -95,6 +103,9 @@ func _build_gold_section() -> void:
 
 	var icon_lbl := _make_styled_label("💰", 32, Color(1, 0.85, 0.15))
 	hbox.add_child(icon_lbl)
+	icon_lbl.visible = false
+	var coin_icon := _make_gold_coin_3d_proxy(48, true)
+	hbox.add_child(coin_icon)
 
 	_gold_label = _make_styled_label("0", 36, Color(1, 0.85, 0.15))
 	hbox.add_child(_gold_label)
@@ -104,68 +115,209 @@ func _build_loot_section() -> void:
 	_loot_container = VBoxContainer.new()
 	_loot_container.add_theme_constant_override("separation", 8)
 	_content.add_child(_loot_container)
+	var loot_title := _make_styled_label(Locale.tr_ui("LOOT"), 24, Color(0.95, 0.92, 0.82))
+	loot_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_loot_container.add_child(loot_title)
+
+	var flow := HFlowContainer.new()
+	flow.alignment = FlowContainer.ALIGNMENT_CENTER
+	flow.add_theme_constant_override("h_separation", 12)
+	flow.add_theme_constant_override("v_separation", 12)
+	_loot_container.add_child(flow)
 
 	# 預建所有戰利品項目（初始隱藏）
 	for type: ItemDefs.Type in _loot:
-		if type == ItemDefs.Type.GOLD:
-			continue
 		var amount: int = _loot[type]
-		var item_row := HBoxContainer.new()
-		item_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		item_row.add_theme_constant_override("separation", 8)
-		item_row.modulate.a = 0.0
-		item_row.scale = Vector2(0.0, 0.0)
-		item_row.pivot_offset = Vector2(60, 12)
-
-		var color: Color = ItemDefs.get_color(type)
-		var name_text: String = ItemDefs.get_display_name(type)
-
-		var image: Texture2D = ItemDefs.get_image(type)
-		if image != null:
-			var icon := TextureRect.new()
-			icon.custom_minimum_size = Vector2(28, 28)
-			icon.texture = image
-			icon.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			item_row.add_child(icon)
-		else:
-			var dot := ColorRect.new()
-			dot.custom_minimum_size = Vector2(16, 16)
-			dot.color = color
-			item_row.add_child(dot)
-
-		var lbl := _make_styled_label("%s  ×%d" % [name_text, amount], 24, color)
-		item_row.add_child(lbl)
-
-		_loot_container.add_child(item_row)
-		_loot_items.append(item_row)
+		if amount <= 0:
+			continue
+		var item_card := _make_loot_item_card(type, amount)
+		flow.add_child(item_card)
+		_loot_items.append(item_card)
 
 	for character: CharacterData in _reward_characters:
 		if character == null:
 			continue
 		var char_row := _make_reward_character_row(character)
-		_loot_container.add_child(char_row)
+		flow.add_child(char_row)
 		_loot_items.append(char_row)
 
 
+func _make_loot_item_card(type: ItemDefs.Type, amount: int) -> Control:
+	var color: Color = ItemDefs.get_color(type)
+	var card := VBoxContainer.new()
+	card.custom_minimum_size = LOOT_CARD_SIZE
+	card.modulate.a = 0.0
+	card.scale = Vector2(0.0, 0.0)
+	card.pivot_offset = LOOT_CARD_SIZE * 0.5
+	card.alignment = BoxContainer.ALIGNMENT_CENTER
+	card.add_theme_constant_override("separation", 5)
+
+	var frame := Control.new()
+	frame.custom_minimum_size = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE)
+	frame.size = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE)
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	frame.clip_contents = false
+
+	var frame_bg := PanelContainer.new()
+	frame_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame_bg.position = Vector2.ZERO
+	frame_bg.size = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.07, 0.10, 0.84)
+	style.border_color = color
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(0)
+	frame_bg.add_theme_stylebox_override("panel", style)
+	frame.add_child(frame_bg)
+	card.add_child(frame)
+
+	var frame_overlay := Control.new()
+	frame_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame_overlay.position = Vector2.ZERO
+	frame_overlay.size = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE)
+	frame_overlay.clip_contents = false
+	frame.add_child(frame_overlay)
+
+	var shining_color: Variant = ItemDefs.get_shining_color(type)
+	if shining_color is Color:
+		var ray := Node2D.new()
+		ray.name = "LootResultShiningRayBurst"
+		ray.position = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE) * 0.5
+		ray.z_index = 0
+		ray.scale = Vector2(0.9, 0.9)
+		ray.set_script(RayBurstScript)
+		ray.set("ray_color", shining_color)
+		ray.set("outer_radius", LOOT_ICON_FRAME_SIZE * 0.48)
+		frame_overlay.add_child(ray)
+
+		var pulse_ring := Node2D.new()
+		pulse_ring.name = "LootResultShiningPulseRing"
+		pulse_ring.position = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE) * 0.5
+		pulse_ring.z_index = 3
+		pulse_ring.scale = Vector2(0.95, 0.95)
+		pulse_ring.set_script(UpperPulseParticlesScript)
+		pulse_ring.set("draw_particles", false)
+		frame_overlay.add_child(pulse_ring)
+		pulse_ring.call("configure", shining_color)
+
+	var icon_center := Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE) * 0.5
+	if type == ItemDefs.Type.GOLD:
+		var coin := _make_gold_coin_3d_proxy(LOOT_ICON_SIZE, true)
+		coin.size = Vector2(LOOT_ICON_SIZE, LOOT_ICON_SIZE)
+		coin.position = icon_center - Vector2(LOOT_ICON_SIZE, LOOT_ICON_SIZE) * 0.5
+		coin.z_index = 4
+		frame_overlay.add_child(coin)
+	else:
+		var image: Texture2D = ItemDefs.get_image(type)
+		if image != null:
+			var icon := TextureRect.new()
+			var icon_size: float = float(LOOT_ICON_SIZE) * ItemDefs.get_size_multiplier(type)
+			icon.texture = image
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.size = Vector2(icon_size, icon_size)
+			icon.custom_minimum_size = icon.size
+			icon.position = icon_center - icon.size * 0.5
+			icon.z_index = 4
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			frame_overlay.add_child(icon)
+		else:
+			var dot := ColorRect.new()
+			dot.color = color
+			dot.size = Vector2(34, 34)
+			dot.position = icon_center - dot.size * 0.5
+			dot.z_index = 4
+			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			frame_overlay.add_child(dot)
+
+	if shining_color is Color:
+		var dust := Node2D.new()
+		dust.name = "LootResultShiningDust"
+		dust.position = Vector2(LOOT_ICON_FRAME_SIZE, LOOT_ICON_FRAME_SIZE) * 0.5
+		dust.z_index = 6
+		dust.scale = Vector2(0.72, 0.72)
+		dust.set_script(UpperPulseParticlesScript)
+		dust.set("draw_rings", false)
+		frame_overlay.add_child(dust)
+		dust.call("configure", shining_color)
+
+	var amount_lbl := _make_styled_label("%d" % amount, 17, Color.WHITE)
+	amount_lbl.z_index = 8
+	amount_lbl.custom_minimum_size = Vector2.ZERO
+	amount_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	amount_lbl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	amount_lbl.position = Vector2(LOOT_ICON_FRAME_SIZE - 58.0, LOOT_ICON_FRAME_SIZE - 28.0)
+	amount_lbl.size = Vector2(50.0, 24.0)
+	frame_overlay.add_child(amount_lbl)
+
+	var name_lbl := _make_styled_label(ItemDefs.get_display_name(type), 14, Color(0.9, 0.9, 0.95))
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_lbl.custom_minimum_size = Vector2(LOOT_CARD_SIZE.x, 0)
+	card.add_child(name_lbl)
+
+	return card
+
+
+func _get_battle_vfx_3d_layer() -> BattleVfx3DLayer:
+	if is_instance_valid(_battle_vfx_3d_layer):
+		return _battle_vfx_3d_layer
+	_battle_vfx_3d_layer = BattleVfx3DLayerScript.new() as BattleVfx3DLayer
+	_battle_vfx_3d_layer.name = "BattleResultVfx3DLayer"
+	add_child(_battle_vfx_3d_layer)
+	return _battle_vfx_3d_layer
+
+
+func _make_gold_coin_3d_proxy(pixel_size: int, animate_spin: bool = true) -> Control:
+	var layer := _get_battle_vfx_3d_layer()
+	var proxy := GoldCoin3DProxyScript.new() as GoldCoin3DProxy
+	if layer != null:
+		proxy.configure(layer, pixel_size, animate_spin)
+	else:
+		proxy.custom_minimum_size = Vector2(pixel_size, pixel_size)
+		proxy.size = Vector2(pixel_size, pixel_size)
+		proxy.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return proxy
+
+
 func _make_reward_character_row(character: CharacterData) -> Control:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 10)
+	var row := PanelContainer.new()
+	row.custom_minimum_size = Vector2(140, 132)
 	row.modulate.a = 0.0
 	row.scale = Vector2(0.0, 0.0)
-	row.pivot_offset = Vector2(90, 20)
+	row.pivot_offset = Vector2(70, 66)
+	row.clip_contents = true
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.07, 0.04, 0.86)
+	style.border_color = Color(1.0, 0.86, 0.25)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(8)
+	row.add_theme_stylebox_override("panel", style)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 5)
+	row.add_child(box)
 
 	if character.portrait_texture != null:
 		var portrait := TextureRect.new()
 		portrait.texture = character.portrait_texture
-		portrait.custom_minimum_size = Vector2(42, 42)
+		portrait.custom_minimum_size = Vector2(74, 66)
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		row.add_child(portrait)
+		box.add_child(portrait)
 
-	var label := _make_styled_label("New Character  %s" % Locale.tr_ui(character.character_name), 24, Color(1.0, 0.86, 0.25))
-	row.add_child(label)
+	var label := _make_styled_label("New Character", 14, Color(1.0, 0.86, 0.25))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(label)
+
+	var name_label := _make_styled_label(Locale.tr_ui(character.character_name), 16, Color.WHITE)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(name_label)
 	return row
 
 
@@ -360,10 +512,10 @@ func _advance_phase() -> void:
 	var next: Phase
 	match _phase:
 		Phase.GOLD:
-			next = Phase.LOOT
-		Phase.LOOT:
 			next = Phase.EXP
 		Phase.EXP:
+			next = Phase.LOOT
+		Phase.LOOT:
 			next = Phase.DONE
 		_:
 			next = Phase.DONE
@@ -382,7 +534,8 @@ func _skip_current_phase() -> void:
 
 	match _phase:
 		Phase.GOLD:
-			_gold_label.text = str(_gold_amount)
+			if _gold_label != null:
+				_gold_label.text = str(_gold_amount)
 		Phase.LOOT:
 			for item in _loot_items:
 				item.modulate.a = 1.0
@@ -397,6 +550,10 @@ func _skip_current_phase() -> void:
 # ── Gold 階段 ──────────────────────────────────────────────────
 
 func _play_gold_phase() -> void:
+	if _gold_label == null:
+		_phase_animating = false
+		_advance_phase()
+		return
 	if _gold_amount == 0:
 		_gold_label.text = "0"
 		_phase_animating = false
