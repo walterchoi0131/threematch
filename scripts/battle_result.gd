@@ -326,10 +326,6 @@ func _build_exp_section() -> void:
 	separator.add_theme_constant_override("separation", 12)
 	_content.add_child(separator)
 
-	var exp_title := _make_styled_label("%s  +%d" % [Locale.tr_ui("EXP"), _total_exp], 24, Color(0.6, 0.85, 1.0))
-	exp_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_content.add_child(exp_title)
-
 	var list_box := VBoxContainer.new()
 	list_box.add_theme_constant_override("separation", 10)
 	_content.add_child(list_box)
@@ -424,9 +420,22 @@ func _make_char_card(c: CharacterData) -> Dictionary:
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	name_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	name_lbl.add_theme_constant_override("outline_size", 3)
-	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(name_lbl)
+
+	var exp_gain_label := Label.new()
+	exp_gain_label.text = "+0EXP"
+	exp_gain_label.add_theme_font_override("font", _font)
+	exp_gain_label.add_theme_font_size_override("font_size", 16)
+	exp_gain_label.add_theme_color_override("font_color", Color(0.62, 0.88, 1.0))
+	exp_gain_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	exp_gain_label.add_theme_constant_override("outline_size", 3)
+	exp_gain_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	exp_gain_label.size_flags_vertical = Control.SIZE_SHRINK_END
+	exp_gain_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	exp_gain_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(exp_gain_label)
 
 	var lv_label := Label.new()
 	lv_label.text = "Lv.%d" % c.level
@@ -463,6 +472,7 @@ func _make_char_card(c: CharacterData) -> Dictionary:
 		"bar_bg": bar_bg,
 		"lv_label": lv_label,
 		"name_label": name_lbl,
+		"exp_gain_label": exp_gain_label,
 		"exp_before": c.current_exp,
 		"lv_before": c.level,
 		"char_data": c,
@@ -618,6 +628,7 @@ func _play_exp_phase() -> void:
 		var lv_label: Label = info.lv_label
 		var card: PanelContainer = info.card
 		var pop_target: PanelContainer = info.get("pop_target", card)
+		var exp_gain_label: Label = info.get("exp_gain_label", null) as Label
 
 		# 記錄動畫前狀態
 		var start_lv: int = c.level
@@ -629,6 +640,7 @@ func _play_exp_phase() -> void:
 
 		var tw := create_tween()
 		_exp_tweens.append(tw)
+		_animate_exp_gain_label(exp_gain_label, _total_exp)
 
 		if levels_gained == 0:
 			var end_ratio: float = float(end_exp) / float(maxi(c.exp_to_next_level(), 1))
@@ -661,15 +673,37 @@ func _play_exp_phase() -> void:
 	GameState.save_game()
 
 
+func _animate_exp_gain_label(label: Label, target_exp: int) -> void:
+	if label == null:
+		return
+	label.text = "+0EXP"
+	if target_exp <= 0:
+		return
+
+	var tw := create_tween()
+	_exp_tweens.append(tw)
+	tw.tween_method(func(value: float) -> void:
+		if is_instance_valid(label):
+			label.text = "+%dEXP" % int(round(value))
+	, 0.0, float(target_exp), 0.65)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(label):
+			label.text = "+%dEXP" % target_exp
+	)
+
+
 func _finalize_exp_phase() -> void:
 	# 跳過時：確保所有角色都已加完經驗（可能已在 _play_exp_phase 中加過）
 	for info in _char_cards:
 		var c: CharacterData = info.char_data
 		var bar_fill: ColorRect = info.bar_fill
 		var lv_label: Label = info.lv_label
+		var exp_gain_label: Label = info.get("exp_gain_label", null) as Label
 		var exp_ratio: float = float(c.current_exp) / float(maxi(c.exp_to_next_level(), 1))
 		bar_fill.scale.x = clampf(exp_ratio, 0.0, 1.0)
 		lv_label.text = "Lv.%d" % c.level
+		if exp_gain_label != null:
+			exp_gain_label.text = "+%dEXP" % _total_exp
 
 
 func _play_level_up_pop(card: PanelContainer, new_lv: int) -> void:
