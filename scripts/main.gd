@@ -10155,24 +10155,68 @@ func _play_round_switch_transition(round_idx: int, total_rounds: int) -> void:
 	ui_layer.add_child(overlay)
 
 	var font: Font = load("res://assets/fonts/game_ui_font.tres")
-	var title := Label.new()
-	title.text = Locale.tr_ui("ROUND_SWITCH_TITLE") % [round_idx + 1, total_rounds]
+	var title := CenterContainer.new()
 	title.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", font)
-	title.add_theme_font_size_override("font_size", 58)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	title.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.04, 1.0))
-	title.add_theme_constant_override("outline_size", 8)
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.65))
-	title.add_theme_constant_override("shadow_offset_x", 3)
-	title.add_theme_constant_override("shadow_offset_y", 4)
 	title.modulate.a = 0.0
 	overlay.add_child(title)
 
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 0)
+	title.add_child(row)
+
+	var current_round_num: int = round_idx + 1
+	var previous_round_num: int = maxi(1, current_round_num - 1)
+	var prefix_text: String = "Round " if Locale.current_locale == "en" else "回合 "
+	var current_text: String = str(current_round_num)
+	var previous_text: String = str(previous_round_num)
+	var suffix_text: String = "/%d" % total_rounds
+	var number_slot_width: float = maxf(54.0, float(maxi(current_text.length(), previous_text.length())) * 38.0)
+	var suffix_slot_width: float = maxf(54.0, float(suffix_text.length()) * 34.0)
+	var number_slot_size := Vector2(number_slot_width, 86.0)
+	var number_baseline_nudge := 8.0
+
+	var prefix_label := _make_round_switch_label(prefix_text, font)
+	prefix_label.custom_minimum_size = Vector2(0.0, number_slot_size.y)
+	prefix_label.size_flags_vertical = Control.SIZE_FILL
+	row.add_child(prefix_label)
+
+	var number_slot := Control.new()
+	number_slot.custom_minimum_size = number_slot_size
+	number_slot.clip_contents = true
+	number_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(number_slot)
+
+	var old_number_label := _make_round_switch_label(previous_text, font)
+	old_number_label.size = number_slot_size
+	old_number_label.position = Vector2(0.0, number_baseline_nudge)
+	number_slot.add_child(old_number_label)
+
+	var new_number_label := _make_round_switch_label(current_text, font)
+	new_number_label.size = number_slot_size
+	new_number_label.position = Vector2(0.0, -54.0 + number_baseline_nudge)
+	new_number_label.modulate.a = 0.0
+	number_slot.add_child(new_number_label)
+
+	var suffix_slot := Control.new()
+	suffix_slot.custom_minimum_size = Vector2(suffix_slot_width, number_slot_size.y)
+	suffix_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(suffix_slot)
+
+	var suffix_label := _make_round_switch_label(suffix_text, font)
+	suffix_label.position = Vector2(0.0, number_baseline_nudge)
+	suffix_label.size = Vector2(suffix_slot_width, number_slot_size.y)
+	suffix_slot.add_child(suffix_label)
+
 	var label_tw := create_tween()
 	label_tw.tween_property(title, "modulate:a", 1.0, 0.24).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	label_tw.tween_interval(0.7)
+	label_tw.tween_property(old_number_label, "position:y", 42.0 + number_baseline_nudge, 0.22).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	label_tw.parallel().tween_property(old_number_label, "modulate:a", 0.0, 0.22).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	label_tw.parallel().tween_property(new_number_label, "position:y", number_baseline_nudge, 0.34).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	label_tw.parallel().tween_property(new_number_label, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	label_tw.tween_property(new_number_label, "position:y", -5.0 + number_baseline_nudge, 0.11).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	label_tw.tween_property(new_number_label, "position:y", number_baseline_nudge, 0.13).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	label_tw.tween_interval(1.62)
 	label_tw.tween_property(title, "modulate:a", 0.0, 0.32).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 
@@ -10180,6 +10224,24 @@ func _play_round_switch_transition(round_idx: int, total_rounds: int) -> void:
 	await label_tw.finished
 	if is_instance_valid(overlay):
 		overlay.queue_free()
+
+
+func _make_round_switch_label(text: String, font: Font) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if font != null:
+		label.add_theme_font_override("font", font)
+	label.add_theme_font_size_override("font_size", 58)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color(0.03, 0.03, 0.04, 1.0))
+	label.add_theme_constant_override("outline_size", 8)
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.65))
+	label.add_theme_constant_override("shadow_offset_x", 3)
+	label.add_theme_constant_override("shadow_offset_y", 4)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
 
 
 func _play_round_walk_background_motion() -> void:
