@@ -8561,6 +8561,12 @@ func _get_random_convertible_cells(to_type: Block.Type, max_count: int) -> Array
 	return result
 
 
+func _use_active_skill_and_show_loot_toast(char_index: int) -> void:
+	battle_manager.use_active_skill(char_index)
+	var c: CharacterData = party[char_index] if char_index >= 0 and char_index < party.size() else null
+	_enqueue_active_skill_loot_toast(c)
+
+
 func _handle_active_skill(char_index: int) -> void:
 	if board.is_busy or _active_board_selection_running:
 		return
@@ -8573,20 +8579,20 @@ func _handle_active_skill(char_index: int) -> void:
 	match c.active_skill_name:
 		"Attack Form":
 			# 攻擊形態：將所有火寶石轉為水寶石
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Attack Form"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
 		"Tranquil Mirror":
 			# 止水明鏡：將棋盤上所有火寶石轉換為水寶石
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Tranquil Mirror"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
 		"冰球法印":
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_play_sfx(_se_water_bubble)
 			_update_skill_ui()
 			board.is_busy = true
@@ -8617,7 +8623,7 @@ func _handle_active_skill(char_index: int) -> void:
 			board.is_busy = false
 		"居合。水":
 			# 居合.水魂：消除棋盤上所有水寶石並儲存於 pending，下次水屬性攻擊時併入
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			# ── 水元素 VFX：從每顆水寶石飛向技能使用者卡片──
 			var water_positions: Array[Vector2] = []
@@ -8652,7 +8658,7 @@ func _handle_active_skill(char_index: int) -> void:
 			var positions: Array = selection.get("positions", [])
 			if positions.is_empty():
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			board.is_busy = true
 			# 範圍選擇完成後播放動畫前置（隕石/領域動畫）
@@ -8699,7 +8705,7 @@ func _handle_active_skill(char_index: int) -> void:
 			var positions: Array = selection.get("positions", [])
 			if positions.is_empty():
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			_play_sfx(_se_thor_active)
 			# 轉換十字範圍內的寶石
@@ -8718,7 +8724,7 @@ func _handle_active_skill(char_index: int) -> void:
 			var targets: Array[Vector2i] = _get_random_convertible_cells(Block.Type.LIGHT, 5)
 			if targets.is_empty():
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			board.is_busy = true
 			var light_color: Color = Block.COLORS.get(Block.Type.LIGHT, Color(1.0, 0.92, 0.23))
@@ -8775,7 +8781,7 @@ func _handle_active_skill(char_index: int) -> void:
 				last_spear_type = spear_type
 			if spear_targets.is_empty():
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			board.is_busy = true
 			var leaf_spiral_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.3, 0.85, 0.35))
@@ -8826,7 +8832,7 @@ func _handle_active_skill(char_index: int) -> void:
 						targets.append(p)
 			if targets.is_empty():
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			board.is_busy = true
 			var converted := 0
@@ -8854,7 +8860,7 @@ func _handle_active_skill(char_index: int) -> void:
 			var center_block: Block = board.grid[center_p.x][center_p.y]
 			if center_block == null:
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 
 			# ── 狸貓手掌點擊動畫 ────────────────────────────────
@@ -8948,7 +8954,7 @@ func _handle_active_skill(char_index: int) -> void:
 			await get_tree().create_timer(0.4).timeout
 		"Blast":
 			# 爆炸：由上到下逐行消除所有寶石，VFX 飛向角色卡 → 攻擊，然後填充
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			board.is_busy = true
 			_is_upper_gem_turn = true
 			_upper_blast_positions.clear()
@@ -8968,7 +8974,7 @@ func _handle_active_skill(char_index: int) -> void:
 			var snowballs: Array[Vector2i] = board.find_upper_gems(Block.UpperType.SNOWBALL)
 			if snowballs.is_empty():
 				return
-			battle_manager.use_active_skill(char_index)
+			_use_active_skill_and_show_loot_toast(char_index)
 			board.is_busy = true
 			var polar_atk := c.get_atk()
 			var snowball_dmg := polar_atk * 10
@@ -9126,6 +9132,7 @@ func _handle_auto_enemy_action(enemy: Enemy) -> void:
 	board.is_busy = true
 
 	if _auto_enemy_can_use_active(enemy, auto_character):
+		_enqueue_active_skill_loot_toast(auto_character, true)
 		var used_active: bool = await _run_auto_enemy_active_skill(enemy, auto_character)
 		if not _auto_enemy_can_continue(enemy):
 			board.is_busy = false
@@ -10678,6 +10685,23 @@ func _enqueue_loot_text_toast(text: String, finished_callback: Callable = Callab
 	_start_next_loot_toast()
 
 
+func _enqueue_active_skill_loot_toast(char_data: CharacterData, hostile: bool = false, finished_callback: Callable = Callable()) -> void:
+	if char_data == null or char_data.active_skill_name.strip_edges().is_empty():
+		return
+	var callbacks: Array = []
+	if finished_callback.is_valid():
+		callbacks.append(finished_callback)
+	_loot_toast_queue.append({
+		"skill_log": true,
+		"character": char_data,
+		"gem_type": int(char_data.gem_type),
+		"skill_name": char_data.active_skill_name,
+		"hostile": hostile,
+		"callbacks": callbacks,
+	})
+	_start_next_loot_toast()
+
+
 func _layout_active_loot_toasts(animated: bool = true) -> void:
 	var visible_index := 0
 	for entry_index in _active_loot_toasts.size():
@@ -10704,6 +10728,8 @@ func _start_next_loot_toast() -> void:
 	_loot_toast_starting = true
 	var entry: Dictionary = _loot_toast_queue.pop_front()
 	var text_only: bool = bool(entry.get("text_only", false))
+	var skill_log: bool = bool(entry.get("skill_log", false))
+	var hostile_log: bool = bool(entry.get("hostile", false))
 	var item_type: ItemDefs.Type = int(entry.get("type", ItemDefs.Type.GOLD)) as ItemDefs.Type
 	var from_total: int = int(entry.get("from_total", 0))
 	var to_total: int = int(entry.get("to_total", from_total))
@@ -10727,32 +10753,43 @@ func _start_next_loot_toast() -> void:
 	panel.modulate.a = 0.0
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.5)
-	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
-	style.set_border_width_all(0)
+	style.border_color = Color(1.0, 0.12, 0.1, 0.9) if hostile_log else Color(0.0, 0.0, 0.0, 0.0)
+	style.set_border_width_all(2 if hostile_log else 0)
 	style.set_corner_radius_all(8)
 	style.set_content_margin_all(2)
 	panel.add_theme_stylebox_override("panel", style)
 	$UILayer.add_child(panel)
 
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 6)
-	panel.add_child(row)
+	var content := Control.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.clip_contents = true
+	panel.add_child(content)
 
 	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
-	label.add_theme_constant_override("outline_size", 4)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var row: HBoxContainer = null
+	if skill_log:
+		label = _build_active_skill_loot_toast(content, entry)
+	else:
+		row = HBoxContainer.new()
+		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", 6)
+		content.add_child(row)
+
+		label.add_theme_font_size_override("font_size", 18)
+		label.add_theme_color_override("font_color", Color.WHITE)
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+		label.add_theme_constant_override("outline_size", 4)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if text_only:
 		label.text = String(entry.get("text", ""))
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.custom_minimum_size = Vector2(LOOT_TOAST_SIZE.x - 12.0, 42)
 		row.add_child(label)
-	else:
+	elif not skill_log:
 		var icon_slot := CenterContainer.new()
 		icon_slot.custom_minimum_size = Vector2(46, 42)
 		icon_slot.clip_contents = true
@@ -10774,7 +10811,7 @@ func _start_next_loot_toast() -> void:
 	entry["closing"] = false
 	entry["stack_index"] = stack_index
 	_active_loot_toasts.append(entry)
-	if not text_only:
+	if not text_only and not skill_log:
 		_animate_loot_toast_label(label, from_total, to_total)
 
 	var tw := create_tween()
@@ -10812,6 +10849,75 @@ func _start_next_loot_toast() -> void:
 		_layout_active_loot_toasts(true)
 		_start_next_loot_toast()
 	)
+
+
+func _build_active_skill_loot_toast(content: Control, entry: Dictionary) -> Label:
+	var gem_type: Block.Type = int(entry.get("gem_type", Block.Type.RED)) as Block.Type
+	var elem_color: Color = Block.COLORS.get(gem_type, Color.WHITE)
+
+	var grad_tex := GradientTexture2D.new()
+	var grad := Gradient.new()
+	grad.set_color(0, Color(elem_color.r, elem_color.g, elem_color.b, 0.72))
+	grad.set_color(1, Color(elem_color.r, elem_color.g, elem_color.b, 0.02))
+	grad_tex.gradient = grad
+	grad_tex.fill_from = Vector2(0.0, 0.5)
+	grad_tex.fill_to = Vector2(1.0, 0.5)
+	grad_tex.width = int(LOOT_TOAST_SIZE.x)
+	grad_tex.height = int(LOOT_TOAST_SIZE.y)
+
+	var grad_rect := TextureRect.new()
+	grad_rect.texture = grad_tex
+	grad_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	grad_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	grad_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	grad_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(grad_rect)
+
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 4.0
+	row.offset_right = -6.0
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(row)
+
+	var portrait_slot := Control.new()
+	portrait_slot.custom_minimum_size = Vector2(40.0, 42.0)
+	portrait_slot.clip_contents = true
+	portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(portrait_slot)
+
+	var char_data: CharacterData = entry.get("character", null) as CharacterData
+	if char_data != null and char_data.portrait_texture != null:
+		var portrait := TextureRect.new()
+		var atlas := AtlasTexture.new()
+		atlas.atlas = char_data.portrait_texture
+		var tex_size := char_data.portrait_texture.get_size()
+		atlas.region = Rect2(tex_size.x * 0.10, tex_size.y * 0.15, tex_size.x * 0.80, tex_size.y * 0.20)
+		portrait.texture = atlas
+		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.modulate = Color(1.0, 1.0, 1.0, 0.72)
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait_slot.add_child(portrait)
+
+	var label := Label.new()
+	var raw_skill_name: String = String(entry.get("skill_name", ""))
+	label.text = Locale.tr_or(raw_skill_name, raw_skill_name)
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 4)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.custom_minimum_size = Vector2(82.0, 42.0)
+	label.clip_text = true
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	return label
 
 
 func _play_loot_drop(start_position: Vector2, item_type: ItemDefs.Type, _amount: int, target_total: int) -> void:
