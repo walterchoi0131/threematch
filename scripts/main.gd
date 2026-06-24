@@ -12000,6 +12000,7 @@ func _show_start_stage_tutorial_canvas(pages: Array[_StartStageTutorialPage]) ->
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.modulate.a = 0.0
 	layer.add_child(root)
 
 	var dim := ColorRect.new()
@@ -12085,19 +12086,19 @@ func _show_start_stage_tutorial_canvas(pages: Array[_StartStageTutorialPage]) ->
 	var button_w := 118.0
 	var button_h := 38.0
 	var prev_btn := Button.new()
-	prev_btn.text = "Back"
+	prev_btn.text = Locale.tr_ui("BACK")
 	prev_btn.custom_minimum_size = Vector2(button_w, button_h)
 	prev_btn.position = Vector2(bottom_w * 0.5 - button_w - 10.0, button_y)
 	prev_btn.size = Vector2(button_w, button_h)
 	button_row.add_child(prev_btn)
 	var next_btn := Button.new()
-	next_btn.text = "Next"
+	next_btn.text = Locale.tr_ui("START_TUTORIAL_NEXT")
 	next_btn.custom_minimum_size = Vector2(button_w, button_h)
 	next_btn.position = Vector2(bottom_w * 0.5 + 10.0, button_y)
 	next_btn.size = Vector2(button_w, button_h)
 	button_row.add_child(next_btn)
 	var skip_btn := Button.new()
-	skip_btn.text = "Skip"
+	skip_btn.text = Locale.tr_ui("START_TUTORIAL_SKIP")
 	skip_btn.custom_minimum_size = Vector2(86, button_h)
 	skip_btn.position = Vector2(bottom_w - 86.0, button_y)
 	skip_btn.size = Vector2(86, button_h)
@@ -12149,9 +12150,13 @@ func _show_start_stage_tutorial_canvas(pages: Array[_StartStageTutorialPage]) ->
 		var image_path: String = page.image_path.strip_edges()
 		image.texture = load(image_path) as Texture2D if ResourceLoader.exists(image_path) or FileAccess.file_exists(image_path) else CHAR_DRAGON.portrait_texture
 		prev_btn.visible = page_index > 0
-		next_btn.text = "OK" if page_index >= tutorial_pages.size() - 1 else "Next"
+		next_btn.text = Locale.tr_ui("START_TUTORIAL_OK") if page_index >= tutorial_pages.size() - 1 else Locale.tr_ui("START_TUTORIAL_NEXT")
 		update_dots.call(page_index)
 	render_page.call()
+
+	var fade_in := create_tween()
+	fade_in.tween_property(root, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	await fade_in.finished
 
 	prev_btn.pressed.connect(func() -> void:
 		page_state.index = maxi(int(page_state.index) - 1, 0)
@@ -12169,6 +12174,9 @@ func _show_start_stage_tutorial_canvas(pages: Array[_StartStageTutorialPage]) ->
 	)
 	while not bool(closed.done):
 		await get_tree().process_frame
+	var fade_out := create_tween()
+	fade_out.tween_property(root, "modulate:a", 0.0, 0.18).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	await fade_out.finished
 	layer.queue_free()
 
 
