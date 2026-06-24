@@ -15,3 +15,6 @@ action_pattern = Array[int]([4])
 auto_character = ExtResource("3_character")
 portrait_color = Color(0.3, 0.69, 0.31, 1)
 portrait_texture = ExtResource("2_portrait")
+enemy_upper_touch_response_chance = 1.0
+enemy_upper_touch_lines = Array[String](["那是我的寶石", "你這人不講武德", "手別亂摸哈"])
+enemy_upper_touch_voice_paths = Array[String](["res://assets/voice/gory/gory_thats_my_gem.mp3", "res://assets/voice/gory/gory_youre_impolite.mp3", "res://assets/voice/gory/gory_dont_touch.mp3"])

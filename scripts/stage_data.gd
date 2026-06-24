@@ -252,7 +252,8 @@ func _default_element_distribution() -> Dictionary:
 @export var one_time_reward_item_amount: int = 0
 @export var one_time_reward_character: CharacterData = null
 
-## 每一波是一個 EnemyData 陣列。
+## 每一波是一個 StageEnemyEntry 陣列。
+## Legacy EnemyData 仍由 BattleManager 兼容讀取，但新保存的關卡應只保存 StageEnemyEntry。
 ## rounds[0] = 第一波，rounds[1] = 第二波，以此類推。
 @export var rounds: Array[Array] = []
 

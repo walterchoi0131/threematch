@@ -69,10 +69,7 @@ var round_transition_wait_handler: Callable = Callable()
 ## 設定關卡與角色資料，初始化血量、冷卻、並生成第一波敎人
 func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	characters = chars.duplicate()
-	stage_rounds = stage.rounds
-	stage_rounds_init_cd = stage.rounds_init_cd
-	stage_rounds_enemy_levels = stage.rounds_enemy_levels
-	stage_rounds_main_bosses = stage.rounds_main_bosses
+	_apply_stage_enemy_rounds(stage)
 	stage_mode = stage.mode
 
 	# 玩家總血量 = 所有角色的最大 HP 加總
@@ -105,6 +102,106 @@ func setup(stage: StageData, chars: Array[CharacterData]) -> void:
 	if stage_mode == StageData.Mode.ESCAPE or stage_mode == StageData.Mode.PUZZLE:
 		return
 	_spawn_round(current_round)
+
+
+func _apply_stage_enemy_rounds(stage: StageData) -> void:
+	stage_rounds = []
+	stage_rounds_init_cd = []
+	stage_rounds_enemy_levels = []
+	stage_rounds_main_bosses = []
+	for round_index in stage.rounds.size():
+		var round_variant: Array = stage.rounds[round_index]
+		var resolved_round: Array = []
+		var cd_round: Array = []
+		var level_round: Array = []
+		var boss_round: Array = []
+		var legacy_cd_round: Array = _stage_parallel_round_at(stage.rounds_init_cd, round_index)
+		var legacy_level_round: Array = _stage_parallel_round_at(stage.rounds_enemy_levels, round_index)
+		var legacy_boss_round: Array = _stage_parallel_round_at(stage.rounds_main_bosses, round_index)
+		for enemy_index in round_variant.size():
+			var entry_variant = round_variant[enemy_index]
+			var resolved_enemy: EnemyData = null
+			var init_cd: int = 0
+			var level: int = 1
+			var main_boss: bool = false
+			if entry_variant is StageEnemyEntry:
+				var entry: StageEnemyEntry = entry_variant as StageEnemyEntry
+				resolved_enemy = _resolve_stage_enemy_entry(entry)
+				init_cd = maxi(0, entry.init_cd)
+				level = clampi(entry.level, 1, 99)
+				main_boss = entry.main_boss
+			elif entry_variant is EnemyData:
+				resolved_enemy = _resolve_stage_enemy_data(entry_variant as EnemyData)
+				init_cd = 0
+				level = clampi(resolved_enemy.enemy_level if resolved_enemy != null else 1, 1, 99)
+				main_boss = resolved_enemy != null and resolved_enemy.is_main_boss
+			if resolved_enemy == null:
+				continue
+			if enemy_index < legacy_cd_round.size():
+				init_cd = maxi(0, int(legacy_cd_round[enemy_index]))
+			if enemy_index < legacy_level_round.size():
+				level = clampi(int(legacy_level_round[enemy_index]), 1, 99)
+			if enemy_index < legacy_boss_round.size():
+				main_boss = bool(legacy_boss_round[enemy_index])
+			resolved_round.append(resolved_enemy)
+			cd_round.append(init_cd)
+			level_round.append(level)
+			boss_round.append(main_boss)
+		stage_rounds.append(resolved_round)
+		stage_rounds_init_cd.append(cd_round)
+		stage_rounds_enemy_levels.append(level_round)
+		stage_rounds_main_bosses.append(boss_round)
+
+
+func _stage_parallel_round_at(source: Array[Array], round_index: int) -> Array:
+	if round_index < 0 or round_index >= source.size():
+		return []
+	if not (source[round_index] is Array):
+		return []
+	return source[round_index]
+
+
+func _resolve_stage_enemy_entry(entry: StageEnemyEntry) -> EnemyData:
+	if entry == null or entry.enemy == null:
+		return null
+	var source_enemy: EnemyData = _resolve_stage_enemy_data(entry.enemy)
+	var resolved: EnemyData = source_enemy.duplicate(true) as EnemyData
+	if resolved == null:
+		return source_enemy
+	resolved.enemy_level = clampi(entry.level, 1, 99)
+	resolved.max_hp = EnemyData.clamp_hp_percent(entry.hp_percent)
+	resolved.is_main_boss = entry.main_boss
+	resolved.monster_gold_multiplier = entry.monster_gold_multiplier
+	resolved.stage_extra_loot_table = entry.stage_extra_loot_table.duplicate(true)
+	var source_path: String = entry.get_source_path()
+	if not source_path.is_empty():
+		resolved.set_meta("stage_editor_source_path", source_path)
+	return resolved
+
+
+func _resolve_stage_enemy_data(stage_enemy: EnemyData) -> EnemyData:
+	if stage_enemy == null:
+		return null
+	var source_path: String = String(stage_enemy.get_meta("stage_editor_source_path", stage_enemy.resource_path)).strip_edges()
+	if source_path.is_empty() or source_path.find("::") >= 0:
+		return stage_enemy
+	var source_resource: Resource = load(source_path)
+	if not (source_resource is EnemyData):
+		return stage_enemy
+	var source_enemy: EnemyData = source_resource as EnemyData
+	var resolved: EnemyData = source_enemy.duplicate(true) as EnemyData
+	if resolved == null:
+		return source_enemy
+
+	# Stage-specific overrides only. Canonical enemy behavior, AI, dialog, voice,
+	# portrait, element, passive rules, and base loot stay sourced from the enemy resource.
+	resolved.enemy_level = stage_enemy.enemy_level
+	resolved.max_hp = stage_enemy.max_hp
+	resolved.is_main_boss = stage_enemy.is_main_boss
+	resolved.monster_gold_multiplier = stage_enemy.monster_gold_multiplier
+	resolved.stage_extra_loot_table = stage_enemy.stage_extra_loot_table.duplicate(true)
+	resolved.set_meta("stage_editor_source_path", source_path)
+	return resolved
 
 
 func add_temporary_character(character: CharacterData, add_current_hp: bool = true) -> int:

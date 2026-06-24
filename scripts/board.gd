@@ -211,6 +211,7 @@ signal score_changed(new_score: int)      # 分數變更時發出
 signal gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)  # 寶石消除時發出
 signal goal_cells_broken(block_type: int, count: int, global_positions: Array)  # Puzzle goal 用：實際破壞格數
 signal upper_gem_clicked()                # 高階寶石被點擊時發出
+signal enemy_upper_gem_rejected(owner_id: int, grid_pos: Vector2i, gem_type: int)
 signal upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, triggered_upper: Block.UpperType)  # 高階爆炸完成時發出
 signal upper_gem_chain_triggered(upper_type: Block.UpperType)  # 連鎖中特殊高階寶石被觸發時發出
 signal selection_confirmed(positions: Array)  # 選擇模式確認時發出
@@ -1615,6 +1616,7 @@ func _handle_click(pos: Vector2i) -> void:	# 教學過濾：只允許指定位�
 
 	if block != null and block.is_enemy_upper_gem():
 		play_rejected_cell_animation(pos)
+		enemy_upper_gem_rejected.emit(block.upper_owner_id, pos, int(block.block_type))
 		_next_click_is_drained = false
 		is_busy = false
 		return

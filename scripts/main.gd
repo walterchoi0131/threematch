@@ -32,11 +32,17 @@ const LOOT_FLY_ICON_SIZE := 52
 const LOOT_TOAST_SIZE := Vector2(136.0, 46.0)
 const LOOT_TOAST_GAP := 5.0
 const LOOT_TOAST_ICON_SIZE := 40
+const LOOT_TOAST_TEXT_FONT_SIZE := 20
+const LOOT_TOAST_SKILL_FONT_SIZE := 20
 const LOOT_TOAST_RIGHT_MARGIN := 16.0
-const LOOT_TOAST_TOP_OFFSET := 48.0
+const LOOT_TOAST_TOP_OFFSET := 86.0
 const LOOT_TOAST_SLIDE_IN_DURATION := 0.18
 const LOOT_TOAST_HOLD_DURATION := 1.15
 const LOOT_TOAST_SLIDE_OUT_DURATION := 0.28
+const ENEMY_VOICE_VOLUME_SCALE := 2.0
+const ENEMY_VOICE_BGM_DUCK_SCALE := 0.6
+const ENEMY_VOICE_BGM_DUCK_IN_DURATION := 0.08
+const ENEMY_VOICE_BGM_DUCK_OUT_DURATION := 0.16
 const BATTLE_BG_TOP_OVERSCAN := 12.0
 
 signal loot_animations_finished()
@@ -281,6 +287,9 @@ var _se_stone_impacts: Array[AudioStream] = []
 # ── BGM 預覽模式狀態 ──
 var _bgm_player: AudioStreamPlayer = null   # 背景音樂播放器引用
 var _bgm_preview_tween: Tween = null         # 音量/速度 tween
+var _voice_bgm_duck_tween: Tween = null
+var _voice_bgm_duck_count: int = 0
+var _voice_bgm_restore_volume_db: float = 0.0
 
 # ── 戰利品 ───────────────────────────────────────────────────
 var _battle_loot: Dictionary = {}  # 本場戰鬥積累的戰利品; key=ItemDefs.Type, value=int
@@ -451,6 +460,7 @@ func _ready() -> void:
 	board.gems_blasted.connect(_on_gems_blasted)
 	board.score_changed.connect(_on_score_changed)
 	board.upper_gem_clicked.connect(_on_upper_gem_clicked)
+	board.enemy_upper_gem_rejected.connect(_on_enemy_upper_gem_rejected)
 	board.upper_blast_completed.connect(_on_upper_blast_completed)
 	board.upper_gem_chain_triggered.connect(_on_upper_gem_chain_triggered)
 	board.selection_preview_changed.connect(_on_board_selection_preview_changed)
@@ -3287,9 +3297,23 @@ func _stage_editor_load_round_state() -> void:
 	for round_index in current_stage.rounds.size():
 		var source_round: Array = current_stage.rounds[round_index]
 		var round_copy: Array = []
+		var entry_cd_copy: Array = []
+		var entry_level_copy: Array = []
+		var entry_boss_copy: Array = []
 		for enemy_variant in source_round:
-			if enemy_variant is EnemyData:
+			if enemy_variant is StageEnemyEntry:
+				var entry: StageEnemyEntry = enemy_variant as StageEnemyEntry
+				var editable_from_entry: EnemyData = _stage_editor_make_editable_enemy_copy_from_entry(entry)
+				if editable_from_entry != null:
+					round_copy.append(editable_from_entry)
+					entry_cd_copy.append(maxi(0, entry.init_cd))
+					entry_level_copy.append(clampi(entry.level, 1, 99))
+					entry_boss_copy.append(entry.main_boss)
+			elif enemy_variant is EnemyData:
 				round_copy.append(_stage_editor_make_editable_enemy_copy(enemy_variant as EnemyData))
+				entry_cd_copy.append(null)
+				entry_level_copy.append(null)
+				entry_boss_copy.append(null)
 		_stage_editor_rounds.append(round_copy)
 
 		var cd_copy: Array = []
@@ -3300,6 +3324,8 @@ func _stage_editor_load_round_state() -> void:
 			var cd_value: int = 0
 			if enemy_index < source_cd.size():
 				cd_value = maxi(0, int(source_cd[enemy_index]))
+			elif enemy_index < entry_cd_copy.size() and entry_cd_copy[enemy_index] != null:
+				cd_value = maxi(0, int(entry_cd_copy[enemy_index]))
 			cd_copy.append(cd_value)
 		_stage_editor_rounds_init_cd.append(cd_copy)
 
@@ -3312,6 +3338,8 @@ func _stage_editor_load_round_state() -> void:
 			var level_value: int = enemy_data.enemy_level
 			if enemy_index < source_levels.size():
 				level_value = int(source_levels[enemy_index])
+			elif enemy_index < entry_level_copy.size() and entry_level_copy[enemy_index] != null:
+				level_value = int(entry_level_copy[enemy_index])
 			level_copy.append(clampi(level_value, 1, 99))
 		_stage_editor_rounds_enemy_levels.append(level_copy)
 
@@ -3326,6 +3354,8 @@ func _stage_editor_load_round_state() -> void:
 			var boss_value: bool = false
 			if has_source_bosses:
 				boss_value = enemy_index < source_bosses.size() and bool(source_bosses[enemy_index])
+			elif enemy_index < entry_boss_copy.size() and entry_boss_copy[enemy_index] != null:
+				boss_value = bool(entry_boss_copy[enemy_index])
 			else:
 				boss_value = enemy_data.is_main_boss
 			boss_copy.append(boss_value)
@@ -3337,10 +3367,16 @@ func _stage_editor_load_round_state() -> void:
 func _stage_editor_make_editable_enemy_copy(source: EnemyData) -> EnemyData:
 	if source == null:
 		return null
-	var copy: EnemyData = source.duplicate(true) as EnemyData
+	var source_path: String = String(source.get_meta("stage_editor_source_path", source.resource_path)).strip_edges()
+	var canonical: EnemyData = _stage_editor_enemy_source_for_snapshot(source, source_path)
+	var copy: EnemyData = canonical.duplicate(true) as EnemyData
 	if copy == null:
 		return source
-	var source_path: String = String(source.get_meta("stage_editor_source_path", source.resource_path)).strip_edges()
+	copy.enemy_level = source.enemy_level
+	copy.max_hp = source.max_hp
+	copy.is_main_boss = source.is_main_boss
+	copy.monster_gold_multiplier = source.monster_gold_multiplier
+	copy.stage_extra_loot_table = source.stage_extra_loot_table.duplicate(true)
 	copy.resource_path = ""
 	copy.set_meta("stage_editor_source_path", source_path)
 	if source.resource_path.is_empty() and copy.stage_extra_loot_table.is_empty():
@@ -3354,6 +3390,37 @@ func _stage_editor_make_editable_enemy_copy(source: EnemyData) -> EnemyData:
 		if loot != null:
 			loot.resource_path = ""
 	return copy
+
+
+func _stage_editor_make_editable_enemy_copy_from_entry(entry: StageEnemyEntry) -> EnemyData:
+	if entry == null or entry.enemy == null:
+		return null
+	var copy: EnemyData = _stage_editor_make_editable_enemy_copy(entry.enemy)
+	if copy == null:
+		return null
+	copy.enemy_level = clampi(entry.level, 1, 99)
+	copy.max_hp = EnemyData.clamp_hp_percent(entry.hp_percent)
+	copy.is_main_boss = entry.main_boss
+	copy.monster_gold_multiplier = entry.monster_gold_multiplier
+	copy.stage_extra_loot_table = entry.stage_extra_loot_table.duplicate(true)
+	for loot: LootItem in copy.stage_extra_loot_table:
+		if loot != null:
+			loot.resource_path = ""
+	return copy
+
+
+func _stage_editor_enemy_source_for_snapshot(enemy_data: EnemyData, source_path: String = "") -> EnemyData:
+	if enemy_data == null:
+		return null
+	var resolved_path: String = source_path.strip_edges()
+	if resolved_path.is_empty():
+		resolved_path = String(enemy_data.get_meta("stage_editor_source_path", enemy_data.resource_path)).strip_edges()
+	if resolved_path.is_empty() or resolved_path.find("::") >= 0:
+		return enemy_data
+	var source_resource: Resource = load(resolved_path)
+	if source_resource is EnemyData:
+		return source_resource as EnemyData
+	return enemy_data
 
 
 func _stage_editor_normalize_cd_lists() -> void:
@@ -5073,9 +5140,9 @@ func _on_stage_editor_save_pressed() -> void:
 	current_stage.fixed_layout = board.get_fixed_layout_snapshot()
 	current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
 	current_stage.rounds = _stage_editor_get_rounds_snapshot()
-	current_stage.rounds_init_cd = _stage_editor_get_round_cds_snapshot()
-	current_stage.rounds_enemy_levels = _stage_editor_get_round_levels_snapshot()
-	current_stage.rounds_main_bosses = _stage_editor_get_round_bosses_snapshot()
+	current_stage.rounds_init_cd = []
+	current_stage.rounds_enemy_levels = []
+	current_stage.rounds_main_bosses = []
 	_stage_editor_ensure_start_tutorial_pages()
 	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
 	if err == OK:
@@ -5122,29 +5189,40 @@ func _stage_editor_validate_rounds_for_save() -> String:
 
 func _stage_editor_get_rounds_snapshot() -> Array[Array]:
 	var snapshot: Array[Array] = []
-	for round_variant in _stage_editor_rounds:
-		var round_list: Array = round_variant
+	_stage_editor_normalize_cd_lists()
+	for round_index in _stage_editor_rounds.size():
+		var round_list: Array = _stage_editor_rounds[round_index]
 		var round_copy: Array = []
-		for enemy_variant in round_list:
+		for enemy_index in round_list.size():
+			var enemy_variant = round_list[enemy_index]
 			if enemy_variant is EnemyData:
-				round_copy.append(_stage_editor_make_stage_enemy_snapshot(enemy_variant as EnemyData))
+				var init_cd: int = int(_stage_editor_rounds_init_cd[round_index][enemy_index])
+				var level: int = int(_stage_editor_rounds_enemy_levels[round_index][enemy_index])
+				var is_boss: bool = bool(_stage_editor_rounds_main_bosses[round_index][enemy_index])
+				var entry: StageEnemyEntry = _stage_editor_make_stage_enemy_snapshot(enemy_variant as EnemyData, init_cd, level, is_boss)
+				if entry != null:
+					round_copy.append(entry)
 		snapshot.append(round_copy)
 	return snapshot
 
 
-func _stage_editor_make_stage_enemy_snapshot(enemy_data: EnemyData) -> EnemyData:
-	var snapshot: EnemyData = enemy_data.duplicate(true) as EnemyData
-	if snapshot == null:
-		return enemy_data
+func _stage_editor_make_stage_enemy_snapshot(enemy_data: EnemyData, init_cd: int, level: int, is_boss: bool) -> StageEnemyEntry:
 	var source_path: String = String(enemy_data.get_meta("stage_editor_source_path", enemy_data.resource_path)).strip_edges()
-	snapshot.resource_path = ""
-	if not source_path.is_empty():
-		snapshot.set_meta("stage_editor_source_path", source_path)
-	snapshot.loot_table = []
-	for loot: LootItem in snapshot.stage_extra_loot_table:
+	var canonical: EnemyData = _stage_editor_enemy_source_for_snapshot(enemy_data, source_path)
+	if canonical == null:
+		return null
+	var entry := StageEnemyEntry.new()
+	entry.enemy = canonical
+	entry.level = clampi(level, 1, 99)
+	entry.hp_percent = EnemyData.clamp_hp_percent(enemy_data.max_hp)
+	entry.init_cd = maxi(0, init_cd)
+	entry.main_boss = is_boss
+	entry.monster_gold_multiplier = enemy_data.monster_gold_multiplier
+	entry.stage_extra_loot_table = enemy_data.stage_extra_loot_table.duplicate(true)
+	for loot: LootItem in entry.stage_extra_loot_table:
 		if loot != null:
 			loot.resource_path = ""
-	return snapshot
+	return entry
 
 
 func _stage_editor_get_distribution_allowed_types_snapshot() -> Array[Block.Type]:
@@ -5631,9 +5709,9 @@ func _load_audio_stream(path: String) -> AudioStream:
 
 
 ## 播放一次性音效（volume_scale 為線性倍率，1.0 = 原音量）
-func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> void:
+func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> AudioStreamPlayer:
 	if stream == null:
-		return
+		return null
 	var player := AudioStreamPlayer.new()
 	player.stream = stream
 	if volume_scale > 0.0 and not is_equal_approx(volume_scale, 1.0):
@@ -5641,6 +5719,46 @@ func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> void:
 	player.finished.connect(player.queue_free)
 	add_child(player)
 	player.play()
+	return player
+
+
+func _play_enemy_voice_sfx(stream: AudioStream) -> void:
+	var player := _play_sfx(stream, ENEMY_VOICE_VOLUME_SCALE)
+	if player == null:
+		return
+	_duck_bgm_for_enemy_voice(player)
+
+
+func _get_current_bgm_player() -> AudioStreamPlayer:
+	if GameState.bgm_player != null and is_instance_valid(GameState.bgm_player):
+		return GameState.bgm_player
+	if _bgm_player != null and is_instance_valid(_bgm_player):
+		return _bgm_player
+	return null
+
+
+func _duck_bgm_for_enemy_voice(voice_player: AudioStreamPlayer) -> void:
+	var bgm := _get_current_bgm_player()
+	if bgm == null or not bgm.playing:
+		return
+	if _voice_bgm_duck_count <= 0:
+		_voice_bgm_restore_volume_db = bgm.volume_db
+	_voice_bgm_duck_count += 1
+	_tween_bgm_volume_for_voice(bgm, _voice_bgm_restore_volume_db + linear_to_db(ENEMY_VOICE_BGM_DUCK_SCALE), ENEMY_VOICE_BGM_DUCK_IN_DURATION)
+	voice_player.finished.connect(func() -> void:
+		_voice_bgm_duck_count = maxi(0, _voice_bgm_duck_count - 1)
+		if _voice_bgm_duck_count > 0:
+			return
+		if is_instance_valid(bgm) and bgm == _get_current_bgm_player():
+			_tween_bgm_volume_for_voice(bgm, _voice_bgm_restore_volume_db, ENEMY_VOICE_BGM_DUCK_OUT_DURATION)
+	)
+
+
+func _tween_bgm_volume_for_voice(bgm: AudioStreamPlayer, target_volume_db: float, duration: float) -> void:
+	if _voice_bgm_duck_tween != null and _voice_bgm_duck_tween.is_valid():
+		_voice_bgm_duck_tween.kill()
+	_voice_bgm_duck_tween = create_tween()
+	_voice_bgm_duck_tween.tween_property(bgm, "volume_db", target_volume_db, duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 
 func _play_random_stone_impact_sfx() -> void:
@@ -8174,6 +8292,38 @@ func _on_upper_gem_clicked() -> void:
 	_position_combo_ui()
 
 
+func _on_enemy_upper_gem_rejected(owner_id: int, _grid_pos: Vector2i, _gem_type: int) -> void:
+	var enemy := _find_active_enemy_by_owner_id(owner_id)
+	if enemy == null or enemy.data == null:
+		return
+	var data: EnemyData = enemy.data
+	if data.enemy_upper_touch_lines.is_empty():
+		return
+	var chance: float = clampf(data.enemy_upper_touch_response_chance, 0.0, 1.0)
+	if chance <= 0.0 or randf() > chance:
+		return
+	var line_index: int = randi() % data.enemy_upper_touch_lines.size()
+	var message: String = data.enemy_upper_touch_lines[line_index].strip_edges()
+	if message.is_empty():
+		return
+	if line_index < data.enemy_upper_touch_voice_paths.size():
+		var voice_path: String = data.enemy_upper_touch_voice_paths[line_index].strip_edges().replace("\\", "/")
+		if not voice_path.is_empty():
+			voice_path = ProjectSettings.localize_path(voice_path)
+			var voice_stream: AudioStream = _load_audio_stream(voice_path)
+			_play_enemy_voice_sfx(voice_stream)
+	_enqueue_enemy_message_loot_toast(data, message)
+
+
+func _find_active_enemy_by_owner_id(owner_id: int) -> Enemy:
+	if battle_manager == null:
+		return null
+	for enemy: Enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy) and enemy.get_instance_id() == owner_id:
+			return enemy
+	return null
+
+
 ## 連鎖爆炸中波及特殊高階寶石時：即時觸發其獨有效果
 func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 	_live_chain_count += 1
@@ -10393,14 +10543,14 @@ func _show_boss_intro() -> void:
 	await _fade_in_spawned_enemies(0.45, true)
 
 
-func _get_loot_toast_rect(stack_index: int = 0) -> Rect2:
+func _get_loot_toast_rect(stack_index: int = 0, toast_size: Vector2 = LOOT_TOAST_SIZE) -> Rect2:
 	var viewport_size: Vector2 = ViewportUtils.get_size()
 	var top_inset: float = ViewportUtils.get_safe_insets().x
 	var pos := Vector2(
-		viewport_size.x - LOOT_TOAST_RIGHT_MARGIN - LOOT_TOAST_SIZE.x,
-		top_inset + LOOT_TOAST_TOP_OFFSET + float(stack_index) * (LOOT_TOAST_SIZE.y + LOOT_TOAST_GAP)
+		viewport_size.x - LOOT_TOAST_RIGHT_MARGIN - toast_size.x,
+		top_inset + LOOT_TOAST_TOP_OFFSET + float(stack_index) * (toast_size.y + LOOT_TOAST_GAP)
 	)
-	return Rect2(pos, LOOT_TOAST_SIZE)
+	return Rect2(pos, toast_size)
 
 
 func _get_loot_toast_target_center() -> Vector2:
@@ -10702,6 +10852,48 @@ func _enqueue_active_skill_loot_toast(char_data: CharacterData, hostile: bool = 
 	_start_next_loot_toast()
 
 
+func _enqueue_enemy_message_loot_toast(enemy_data: EnemyData, message: String, finished_callback: Callable = Callable()) -> void:
+	var clean_message: String = message.strip_edges()
+	if enemy_data == null or clean_message.is_empty():
+		return
+	var callbacks: Array = []
+	if finished_callback.is_valid():
+		callbacks.append(finished_callback)
+	_loot_toast_queue.append({
+		"skill_log": true,
+		"enemy_data": enemy_data,
+		"gem_type": int(enemy_data.element),
+		"skill_name": clean_message,
+		"hostile": true,
+		"callbacks": callbacks,
+	})
+	_start_next_loot_toast()
+
+
+func _get_loot_toast_size_for_entry(entry: Dictionary) -> Vector2:
+	var toast_size := LOOT_TOAST_SIZE
+	if bool(entry.get("skill_log", false)):
+		var raw_skill_name: String = String(entry.get("skill_name", ""))
+		var display_text: String = Locale.tr_or(raw_skill_name, raw_skill_name)
+		var text_width: float = _estimate_loot_toast_text_width(display_text, LOOT_TOAST_SKILL_FONT_SIZE)
+		toast_size.x = maxf(LOOT_TOAST_SIZE.x, ceil(text_width + 66.0))
+	elif bool(entry.get("text_only", false)):
+		var text_width: float = _estimate_loot_toast_text_width(String(entry.get("text", "")), LOOT_TOAST_TEXT_FONT_SIZE)
+		toast_size.x = maxf(LOOT_TOAST_SIZE.x, ceil(text_width + 24.0))
+	return toast_size
+
+
+func _estimate_loot_toast_text_width(text: String, font_size: int) -> float:
+	var width: float = 0.0
+	for index in text.length():
+		var codepoint: int = text.unicode_at(index)
+		if codepoint <= 0x007f:
+			width += float(font_size) * 0.62
+		else:
+			width += float(font_size) * 1.0
+	return width + 10.0
+
+
 func _layout_active_loot_toasts(animated: bool = true) -> void:
 	var visible_index := 0
 	for entry_index in _active_loot_toasts.size():
@@ -10711,7 +10903,8 @@ func _layout_active_loot_toasts(animated: bool = true) -> void:
 		var panel: Control = entry.get("panel", null) as Control
 		if not is_instance_valid(panel):
 			continue
-		var target_rect := _get_loot_toast_rect(visible_index)
+		var toast_size: Vector2 = entry.get("toast_size", panel.size) as Vector2
+		var target_rect := _get_loot_toast_rect(visible_index, toast_size)
 		entry["stack_index"] = visible_index
 		_active_loot_toasts[entry_index] = entry
 		if animated:
@@ -10738,7 +10931,9 @@ func _start_next_loot_toast() -> void:
 	for active: Dictionary in _active_loot_toasts:
 		if not bool(active.get("closing", false)):
 			stack_index += 1
-	var toast_rect := _get_loot_toast_rect(stack_index)
+	var toast_size: Vector2 = _get_loot_toast_size_for_entry(entry)
+	entry["toast_size"] = toast_size
+	var toast_rect := _get_loot_toast_rect(stack_index, toast_size)
 	var viewport_size: Vector2 = ViewportUtils.get_size()
 	var panel := PanelContainer.new()
 	panel.name = "LootToast"
@@ -10753,10 +10948,12 @@ func _start_next_loot_toast() -> void:
 	panel.modulate.a = 0.0
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.5)
-	style.border_color = Color(1.0, 0.12, 0.1, 0.9) if hostile_log else Color(0.0, 0.0, 0.0, 0.0)
+	style.border_color = Color(0.95, 0.12, 0.12, 0.9) if hostile_log else Color(0.0, 0.0, 0.0, 0.0)
 	style.set_border_width_all(2 if hostile_log else 0)
+	if hostile_log:
+		style.shadow_size = 0
 	style.set_corner_radius_all(8)
-	style.set_content_margin_all(2)
+	style.set_content_margin_all(4 if hostile_log else 2)
 	panel.add_theme_stylebox_override("panel", style)
 	$UILayer.add_child(panel)
 
@@ -10769,7 +10966,7 @@ func _start_next_loot_toast() -> void:
 	var label := Label.new()
 	var row: HBoxContainer = null
 	if skill_log:
-		label = _build_active_skill_loot_toast(content, entry)
+		label = _build_active_skill_loot_toast(content, entry, toast_size)
 	else:
 		row = HBoxContainer.new()
 		row.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -10779,7 +10976,7 @@ func _start_next_loot_toast() -> void:
 		row.add_theme_constant_override("separation", 6)
 		content.add_child(row)
 
-		label.add_theme_font_size_override("font_size", 18)
+		label.add_theme_font_size_override("font_size", LOOT_TOAST_TEXT_FONT_SIZE)
 		label.add_theme_color_override("font_color", Color.WHITE)
 		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
 		label.add_theme_constant_override("outline_size", 4)
@@ -10787,7 +10984,7 @@ func _start_next_loot_toast() -> void:
 	if text_only:
 		label.text = String(entry.get("text", ""))
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.custom_minimum_size = Vector2(LOOT_TOAST_SIZE.x - 12.0, 42)
+		label.custom_minimum_size = Vector2(toast_size.x - 12.0, 42)
 		row.add_child(label)
 	elif not skill_log:
 		var icon_slot := CenterContainer.new()
@@ -10851,7 +11048,7 @@ func _start_next_loot_toast() -> void:
 	)
 
 
-func _build_active_skill_loot_toast(content: Control, entry: Dictionary) -> Label:
+func _build_active_skill_loot_toast(content: Control, entry: Dictionary, toast_size: Vector2) -> Label:
 	var gem_type: Block.Type = int(entry.get("gem_type", Block.Type.RED)) as Block.Type
 	var elem_color: Color = Block.COLORS.get(gem_type, Color.WHITE)
 
@@ -10862,8 +11059,8 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary) -> Labe
 	grad_tex.gradient = grad
 	grad_tex.fill_from = Vector2(0.0, 0.5)
 	grad_tex.fill_to = Vector2(1.0, 0.5)
-	grad_tex.width = int(LOOT_TOAST_SIZE.x)
-	grad_tex.height = int(LOOT_TOAST_SIZE.y)
+	grad_tex.width = int(toast_size.x)
+	grad_tex.height = int(toast_size.y)
 
 	var grad_rect := TextureRect.new()
 	grad_rect.texture = grad_tex
@@ -10889,6 +11086,8 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary) -> Labe
 	row.add_child(portrait_slot)
 
 	var char_data: CharacterData = entry.get("character", null) as CharacterData
+	var enemy_data: EnemyData = entry.get("enemy_data", null) as EnemyData
+	var enemy_portrait: Texture2D = enemy_data.portrait_texture if enemy_data != null else null
 	if char_data != null and char_data.portrait_texture != null:
 		var portrait := TextureRect.new()
 		var atlas := AtlasTexture.new()
@@ -10902,19 +11101,28 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary) -> Labe
 		portrait.modulate = Color(1.0, 1.0, 1.0, 0.72)
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		portrait_slot.add_child(portrait)
+	elif enemy_portrait != null:
+		var portrait := TextureRect.new()
+		portrait.texture = enemy_portrait
+		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.modulate = Color(1.0, 1.0, 1.0, 0.78)
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		portrait_slot.add_child(portrait)
 
 	var label := Label.new()
 	var raw_skill_name: String = String(entry.get("skill_name", ""))
 	label.text = Locale.tr_or(raw_skill_name, raw_skill_name)
-	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_font_size_override("font_size", LOOT_TOAST_SKILL_FONT_SIZE)
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 4)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.custom_minimum_size = Vector2(82.0, 42.0)
-	label.clip_text = true
-	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.custom_minimum_size = Vector2(maxf(82.0, toast_size.x - 58.0), 42.0)
+	label.clip_text = false
+	label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)
 	return label

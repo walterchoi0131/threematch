@@ -37,6 +37,9 @@ const PASSIVE_REDUCED_DAMAGE_DEFAULT: int = 1
 @export var dialog_phase_scale: float = 1.0
 @export var dialog_phase_offset: Vector2 = Vector2.ZERO
 @export var element: Block.Type = Block.Type.GREEN
+@export_range(0.0, 1.0, 0.01) var enemy_upper_touch_response_chance: float = 1.0
+@export var enemy_upper_touch_lines: Array[String] = []
+@export var enemy_upper_touch_voice_paths: Array[String] = []
 ## ??撅祆改?RED=?怒LUE=瘞氬REEN=??@export var element: Block.Type = Block.Type.GREEN
 ## Legacy: 銝餉? Boss ?曉?梢???spawn 閮剖?嚗??迨甈??芰霈??鞈?
 @export var is_main_boss: bool = false
