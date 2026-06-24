@@ -133,13 +133,15 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
 const LEAF_RAY_MAGIC_MULT := 3.5
 const LEAF_RAY_LASER_DURATION := 1.0
 const LEAF_RAY_DAMAGE_TICK_INTERVAL := 0.2
 const LEAF_RAY_DEBRIS_SHARDS := 9
+const LIGHT_TRIANGLE_MAGIC_MULT := 6
+const LIGHT_TRIANGLE_DEBRIS_SHARDS := 9
 const COMBO_UI_MARGIN := Vector2(28.0, 92.0)
 const COMBO_UI_SLOT_GAP := 142.0
 const COMBO_UI_VALUE_OFFSET_Y := 20.0
@@ -267,6 +269,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.WOOD_SPEAR_DOWN: "res://assets/gems/gem_wood_spear.png",
 	Block.UpperType.LIGHT_SHIELD: "res://assets/gems/gem_light_shield.png",
 	Block.UpperType.LEAF_RAY: "res://assets/gems/gem_leaf_ray.png",
+	Block.UpperType.LIGHT_TRIANGLE: "res://assets/gems/gem_light_triangle.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -6078,8 +6081,10 @@ func _register_instant_upper_resolvers() -> void:
 	_instant_upper_predictors.clear()
 	_instant_upper_resolvers[Block.UpperType.ICEBALL] = Callable(self, "_resolve_iceball_instant")
 	_instant_upper_resolvers[Block.UpperType.LEAF_RAY] = Callable(self, "_resolve_leaf_ray_instant")
+	_instant_upper_resolvers[Block.UpperType.LIGHT_TRIANGLE] = Callable(self, "_resolve_light_triangle_instant")
 	_instant_upper_predictors[Block.UpperType.ICEBALL] = Callable(self, "_predict_iceball_instant")
 	_instant_upper_predictors[Block.UpperType.LEAF_RAY] = Callable(self, "_predict_leaf_ray_instant")
+	_instant_upper_predictors[Block.UpperType.LIGHT_TRIANGLE] = Callable(self, "_predict_light_triangle_instant")
 
 
 func _has_instant_upper_resolver(upper_type: Block.UpperType) -> bool:
@@ -6094,6 +6099,15 @@ func _has_instant_upper_predictor(upper_type: Block.UpperType) -> bool:
 
 func _pending_instant_spell_mult(index: int) -> float:
 	return 1.0 + float(_spell_chain_count + index) * 0.10
+
+
+func _spell_combo_count_from_mult(spell_mult: float) -> int:
+	return maxi(1, int(round((spell_mult - 1.0) / 0.10)) + 1)
+
+
+func _light_triangle_combo_bonus(spell_mult: float) -> float:
+	var combo_count: int = _spell_combo_count_from_mult(spell_mult)
+	return 2.0 if combo_count % 3 == 0 else 1.0
 
 
 func _predict_targeted_instant_damage(gem_type: Block.Type, base_damage: int, spell_mult: float, sim_hp: Dictionary) -> Dictionary:
@@ -6126,6 +6140,14 @@ func _predict_leaf_ray_instant(resp: Dictionary, spell_mult: float, sim_hp: Dict
 	var magic_value: int = caster.get_magic() if caster != null else 1
 	var base_damage: int = maxi(1, int(round(float(magic_value) * LEAF_RAY_MAGIC_MULT)))
 	return _predict_targeted_instant_damage(Block.Type.GREEN, base_damage, spell_mult, sim_hp)
+
+
+func _predict_light_triangle_instant(resp: Dictionary, spell_mult: float, sim_hp: Dictionary) -> Dictionary:
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	var combo_bonus: float = _light_triangle_combo_bonus(spell_mult)
+	return _predict_targeted_instant_damage(Block.Type.LIGHT, int(float(magic_value * LIGHT_TRIANGLE_MAGIC_MULT) * combo_bonus), spell_mult, sim_hp)
 
 
 func _apply_instant_prediction_to_sim(prediction: Dictionary, sim_hp: Dictionary) -> void:
@@ -6551,6 +6573,8 @@ func _instant_upper_fx_z_index(upper_type: Block.UpperType) -> int:
 	match upper_type:
 		Block.UpperType.LEAF_RAY:
 			return 95
+		Block.UpperType.LIGHT_TRIANGLE:
+			return 48
 		Block.UpperType.ICEBALL:
 			return 42
 		_:
@@ -8153,6 +8177,84 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 				enemy.finalize_death()
 
 
+func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null) -> void:
+	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
+		return
+	var block: Block = null
+	if is_instance_valid(source_block):
+		block = source_block as Block
+	if block == null:
+		block = board.grid[pos.x][pos.y]
+		if block != null:
+			board.grid[pos.x][pos.y] = null
+			_move_block_to_fx_layer_preserving_transform(block, 48)
+	if block == null:
+		return
+
+	var start_global: Vector2 = block.global_position
+	block.modulate = Color.WHITE
+	block.refresh_upper_particle_system()
+
+	var caster_index: int = int(resp.get("char_index", -1))
+	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
+	var magic_value: int = caster.get_magic() if caster != null else 1
+	var base_damage: int = magic_value * LIGHT_TRIANGLE_MAGIC_MULT
+	var combo_bonus: float = _light_triangle_combo_bonus(spell_mult)
+	var target: Enemy = _get_current_living_target(Block.Type.LIGHT, int(float(base_damage) * combo_bonus), spell_mult)
+	var light_color: Color = Block.COLORS.get(Block.Type.LIGHT, Color(1.0, 0.92, 0.23))
+	if target == null:
+		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LIGHT_TRIANGLE, null) as Texture2D
+		DebrisVfx.play(fx_layer, fallback_texture, start_global, LIGHT_TRIANGLE_DEBRIS_SHARDS, Vector2(0.82, 1.20), Vector2(0.68, 1.0), 112, light_color)
+		block.queue_free()
+		return
+
+	var element_mult: float = battle_manager.get_element_multiplier(Block.Type.LIGHT, target.data.element) if target.data != null else 1.0
+	var final_damage: int = maxi(1, int(float(base_damage) * combo_bonus * element_mult * spell_mult))
+	var is_super: bool = element_mult > 1.0 or combo_bonus > 1.0
+
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			enemy.defer_death = true
+
+	var float_tw := create_tween()
+	float_tw.tween_property(block, "global_position:y", start_global.y - 28.0, 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await float_tw.finished
+
+	var target_pos: Vector2 = _get_enemy_image_center(target) if is_instance_valid(target) else start_global
+	var target_scale: Vector2 = Vector2(3.0, 3.0) if combo_bonus > 1.0 else Vector2(1.50, 1.50)
+	var rotation_amount: float = TAU * (4.0 if combo_bonus > 1.0 else 1.25)
+	var fly_tw := create_tween().set_parallel(true)
+	fly_tw.tween_property(block, "global_position", target_pos, 0.38).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	fly_tw.tween_property(block, "scale", target_scale, 0.38)
+	fly_tw.tween_property(block, "rotation", block.rotation + rotation_amount, 0.38).set_trans(Tween.TRANS_LINEAR)
+	fly_tw.tween_property(block, "modulate:a", 0.58, 0.26).set_delay(0.12)
+	await fly_tw.finished
+
+	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
+		var applied_damage: int = target.take_damage(final_damage)
+		_spawn_damage_number(_get_enemy_image_center(target), applied_damage, light_color, true, is_super)
+	_play_sfx(_se_impact)
+	var light_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LIGHT_TRIANGLE, null) as Texture2D
+	DebrisVfx.play(fx_layer, light_texture, target_pos, LIGHT_TRIANGLE_DEBRIS_SHARDS, Vector2(0.82, 1.20), Vector2(0.68, 1.0), 112, light_color)
+	if is_instance_valid(block):
+		block.queue_free()
+
+	var mult_text := ""
+	if combo_bonus > 1.0:
+		mult_text += " ×%.1f" % combo_bonus
+	if element_mult > 1.0:
+		mult_text += " ×%.1f" % element_mult
+	if spell_mult > 1.0:
+		mult_text += " ×%.1f%s" % [spell_mult, Locale.tr_ui("SPELL_CHAIN_SHORT")]
+	_add_log_entry("[b]%s[/b] %s MAG%d%s = %d" % [Locale.tr_ui("Light Triangle"), _gem_bbcode(Block.Type.LIGHT), base_damage, mult_text, final_damage], Block.Type.LIGHT, caster)
+
+	for enemy in battle_manager.active_enemies.duplicate():
+		if is_instance_valid(enemy):
+			enemy.defer_death = false
+			if enemy.current_hp <= 0:
+				enemy.finalize_death()
+
+
 func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null) -> void:
 	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
 		return
@@ -8870,6 +8972,32 @@ func _handle_active_skill(char_index: int) -> void:
 					converted += 1
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("There shall be light"), converted, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
 			await get_tree().create_timer(0.4).timeout
+		"Holy Triangle Seal":
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.LIGHT, "light_triangle")
+			if bool(selection.get("cancelled", false)):
+				return
+			var positions: Array = selection.get("positions", [])
+			if positions.is_empty():
+				return
+			_use_active_skill_and_show_loot_toast(char_index)
+			_update_skill_ui()
+			_play_sfx(_se_thor_active)
+			board.is_busy = true
+			var converted := 0
+			var affected := 0
+			for pos in positions:
+				var p: Vector2i = pos as Vector2i
+				var tb: Block = board.grid[p.x][p.y]
+				if tb == null or tb.is_obstacle() or tb.is_upper_gem():
+					continue
+				affected += 1
+				if tb.block_type != Block.Type.LIGHT:
+					board._animate_gem_morph(tb, Block.Type.LIGHT)
+					converted += 1
+			_add_log_entry("%s：%d/%d→%s" % [Locale.tr_ui("Holy Triangle Seal"), converted, affected, _gem_bbcode(Block.Type.LIGHT)], Block.Type.LIGHT, c)
+			await get_tree().create_timer(0.4).timeout
+			board.resync_logic_from_visual()
+			board.is_busy = false
 		"希望之光":
 			var targets: Array[Vector2i] = _get_random_convertible_cells(Block.Type.LIGHT, 5)
 			if targets.is_empty():

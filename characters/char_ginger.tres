@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/character/polarz/ginger/ginger.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Ginger"
+job_id = "wizard"
+gem_type = 6
+atk_growth = 4.5
+base_hp = 44
+hp_growth = 7.0
+base_magic = 5
+magic_growth = 8.5
+portrait_texture = ExtResource("2_portrait")
+portrait_color = Color(1, 0.92, 0.23, 1)
+portrait_offset = Vector2(21, -51)
+dialog_square_scale = 1.4000000000000001
+dialog_square_offset = Vector2(-70, -27)
+dialog_phase_scale = 1.2
+dialog_phase_offset = Vector2(100, 148)
+square_scale = 1.31
+square_offset = Vector2(-79, -45)
+rectangular_scale = 0.26
+rectangular_offset = Vector2(-6, 184)
+active_skill_name = "Holy Triangle Seal"
+active_skill_desc = "Select the board and convert the Holy Triangle sigil into light gems. CD: 4 turns."
+active_skill_cd = 4
+responding_skills = Array[Dictionary]([{
+"desc": "6+ light gems create an instant Light Triangle. It flies to the target enemy and deals Ginger MAGIC x6 damage. Every 3rd spell combo deals +100% damage and launches a larger spinning projectile.",
+"fuse_label": "6",
+"gem_type": 6,
+"name": "Light Triangle",
+"priority": 1,
+"threshold": 6,
+"trigger_type": "count",
+"upper_type": 16
+}])

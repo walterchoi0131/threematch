@@ -4399,11 +4399,41 @@ func _update_selection_preview(center: Vector2i) -> void:
 
 
 ## 依目前 _selection_pattern 取得選擇範圍位置
+func _get_light_triangle_positions(_center: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	var left_anchor: int = clampi(int(floor(float(columns) * 0.25)), 0, columns - 1)
+	var right_anchor: int = clampi(columns - left_anchor - 1, 0, columns - 1)
+	var top_band_end: int = maxi(0, int(floor(float(rows) * 0.5)) - 2)
+	var bottom_band_start: int = mini(rows - 1, int(ceil(float(rows) * 0.5)) + 1)
+	var max_width: int = maxi(1, mini(3, int(floor(float(columns) * 0.5))))
+	var seen: Dictionary = {}
+	for y in rows:
+		var width := 0
+		if y <= top_band_end:
+			width = mini(max_width, y + 1)
+		elif y >= bottom_band_start:
+			width = mini(max_width, rows - y)
+		if width <= 0:
+			continue
+		for i in width:
+			var left_pos := Vector2i(left_anchor - i, y)
+			if _cell_accepts_block(left_pos) and not seen.has(left_pos):
+				result.append(left_pos)
+				seen[left_pos] = true
+			var right_pos := Vector2i(right_anchor + i, y)
+			if _cell_accepts_block(right_pos) and not seen.has(right_pos):
+				result.append(right_pos)
+				seen[right_pos] = true
+	return result
+
+
 func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
 	if not _is_selection_center_viable(center):
 		return []
 	if _selection_pattern == "fireball":
 		return _get_area_positions(center)
+	if _selection_pattern == "light_triangle":
+		return _get_light_triangle_positions(center)
 	if _selection_pattern == "single":
 		var result: Array[Vector2i] = []
 		if _cell_accepts_block(center):
@@ -4421,6 +4451,8 @@ func _is_selection_center_viable(center: Vector2i) -> bool:
 	if not _cell_accepts_block(center):
 		return false
 	match _selection_pattern:
+		"light_triangle":
+			return not _get_light_triangle_positions(center).is_empty()
 		"single":
 			var block: Block = grid[center.x][center.y]
 			return block != null and not _is_static_obstacle(block)

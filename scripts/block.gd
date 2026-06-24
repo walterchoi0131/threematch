@@ -9,7 +9,7 @@ extends Node2D
 # WOOD_STRUCTURE：stationary + breakable obstacle.
 # PUZZLE_KEY：解謎鑰匙 — 固定障礙物；只會被上級寶石爆發解鎖。
 enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10, PUZZLE_KEY = 11 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構、解謎鑰匙
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線、聖光三角
 enum UpperOwnerTeam { PLAYER, ENEMY }
 
 # 額外效果（可同時掛載多個於單一寶石上）
@@ -84,6 +84,7 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.WOOD_SPEAR_DOWN: preload("res://assets/gems/gem_wood_spear.png"),
 	UpperType.LIGHT_SHIELD: preload("res://assets/gems/gem_light_shield.png"),
 	UpperType.LEAF_RAY: preload("res://assets/gems/gem_leaf_ray.png"),
+	UpperType.LIGHT_TRIANGLE: preload("res://assets/gems/gem_light_triangle.png"),
 }
 
 # 消除動畫精靈圖表（3 列 × 3 行 = 9 幀）
@@ -125,6 +126,7 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.WOOD_SPEAR_DOWN: 7,
 	UpperType.LIGHT_SHIELD: 6,
 	UpperType.LEAF_RAY: 6,
+	UpperType.LIGHT_TRIANGLE: 6,
 }
 
 # 高階寶石的「正規元素」：融合成高階寶石時強制設定 block_type，避免被誤指定
@@ -144,11 +146,13 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.WOOD_SPEAR_DOWN: Type.GREEN,
 	UpperType.LIGHT_SHIELD: Type.LIGHT,
 	UpperType.LEAF_RAY: Type.GREEN,
+	UpperType.LIGHT_TRIANGLE: Type.LIGHT,
 }
 
 const UPPER_INSTANT: Dictionary = {
 	UpperType.ICEBALL: true,
 	UpperType.LEAF_RAY: true,
+	UpperType.LIGHT_TRIANGLE: true,
 }
 
 # 融合提示描邊色（較深色，避免與白色文字混淆）
@@ -438,7 +442,7 @@ func refresh_upper_particle_system() -> void:
 		return
 	var burst_color: Color
 	match upper_type:
-		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD:
+		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD, UpperType.LIGHT_TRIANGLE:
 			burst_color = Color(1.0, 0.95, 0.40, 0.60)
 		UpperType.LEAF_SHIELD:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)
@@ -576,7 +580,7 @@ func _update_upper_overlay() -> void:
 	# 高階寶石 — 顯示對應元素底色
 	var upper_base_color: Color
 	match upper_type:
-		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD:
+		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD, UpperType.LIGHT_TRIANGLE:
 			upper_base_color = COLORS[Type.LIGHT]
 		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN, UpperType.LEAF_RAY:
 			upper_base_color = COLORS[Type.GREEN]
@@ -603,7 +607,7 @@ func _update_upper_overlay() -> void:
 	# 依高階寶石類型設定光芒顏色
 	var burst_color: Color
 	match upper_type:
-		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD:
+		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD, UpperType.LIGHT_TRIANGLE:
 			burst_color = Color(1.0, 0.95, 0.40, 0.60)
 		UpperType.LEAF_SHIELD:
 			burst_color = Color(0.40, 0.90, 0.35, 0.60)

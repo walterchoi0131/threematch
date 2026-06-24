@@ -217,16 +217,40 @@ var _translations: Dictionary = {
 
 ## 取得 UI 翻譯文字
 func tr_ui(key: String) -> String:
+	var ginger_override := _ginger_translations(key)
+	if not ginger_override.is_empty():
+		return ginger_override
 	var entry: Dictionary = _translations.get(key, {})
 	if entry.is_empty():
 		return key
 	return entry.get(current_locale, entry.get("en", key))
 
 
+func _ginger_translations(key: String) -> String:
+	var zh := current_locale != "en"
+	match key:
+		"Ginger":
+			return "啊橘" if zh else "Ginger"
+		"DIALOG_ginger":
+			return "啊橘" if zh else "Ginger"
+		"Holy Triangle Seal":
+			return "咒印: 聖光三角之印" if zh else "Holy Triangle Seal"
+		"Holy Triangle Seal DESC":
+			return "選擇棋盤位置，將聖光三角之印範圍轉換為光寶石。CD: 4 回合。" if zh else "Select the board and convert the Holy Triangle sigil into light gems. CD: 4 turns."
+		"Light Triangle":
+			return "聖光三角" if zh else "Light Triangle"
+		"Light Triangle DESC":
+			return "6+ 光寶石融合成即時法術聖光三角，射向敵人造成使用者魔力 6 倍傷害。若法術 combo 數為 3/6/9...，額外增加 1 倍傷害，投射物變大並持續旋轉。" if zh else "Fuse 6+ light gems to create an instant Light Triangle. It shoots at an enemy for caster magic x6 damage. Every 3rd spell combo deals +100% damage with a larger spinning projectile."
+	return ""
+
+
 ## 嘗試翻譯 key；若無對應條目則回傳 fallback（用於 .tres 描述等可能未本地化的字串）。
 func tr_or(key: String, fallback: String) -> String:
 	if key == "":
 		return fallback
+	var ginger_override := _ginger_translations(key)
+	if not ginger_override.is_empty():
+		return ginger_override
 	var entry: Dictionary = _translations.get(key, {})
 	if entry.is_empty():
 		return fallback
