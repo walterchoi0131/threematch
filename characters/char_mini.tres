@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/character/mini/mini.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Mini"
+job_id = "attacker"
+base_atk = 4
+atk_growth = 8.5
+base_hp = 48
+hp_growth = 7.5
+magic_growth = 4.5
+portrait_texture = ExtResource("2_portrait")
+portrait_scale = 1.17
+portrait_offset = Vector2(-51, -99)
+dialog_square_scale = 2.45
+dialog_square_offset = Vector2(-168, -190)
+dialog_phase_scale = 1.44
+dialog_phase_offset = Vector2(88, 234)
+square_scale = 1.7
+square_offset = Vector2(-104, -129)
+rectangular_scale = 0.36
+rectangular_offset = Vector2(-63, 235)
+active_skill_name = "燃薪猛火"
+active_skill_desc = "Convert all leaf gems on the board into fire gems. CD: 5 turns."
+active_skill_cd = 5
+responding_skills = Array[Dictionary]([{
+"desc": "6+ fire gems forge a Fire Greatsword upper gem. Re-fusing upgrades the nearest existing Lv1/Lv2 Fire Greatsword up to Lv3.",
+"fuse_label": "6",
+"gem_type": 0,
+"name": "Fire Greatsword",
+"priority": 1,
+"threshold": 6,
+"trigger_type": "count",
+"upper_type": 17
+}])

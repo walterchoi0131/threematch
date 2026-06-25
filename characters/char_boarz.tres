@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/character/boarz/boarz.png" id="2_portrait"]
+
+[resource]
+script = ExtResource("1_script")
+character_name = "Boarz"
+job_id = "breaker"
+base_atk = 3
+atk_growth = 7.0
+base_hp = 56
+hp_growth = 8.5
+base_magic = 3
+magic_growth = 5.5
+portrait_texture = ExtResource("2_portrait")
+portrait_scale = 1.59
+portrait_offset = Vector2(-30.238388, -32.52445)
+dialog_square_scale = 1.66
+dialog_square_offset = Vector2(-72.03299, 3.554779)
+dialog_phase_scale = 0.88
+dialog_phase_offset = Vector2(47.496246, 19.426514)
+square_scale = 1.56
+square_offset = Vector2(-84.383804, -2.890396)
+rectangular_scale = 0.45
+rectangular_offset = Vector2(-66.39731, 401.38956)
+active_skill_name = "Forge"
+active_skill_desc = "Select a forge upper gem to upgrade it by 1 level, or select a normal gem to grant x3. CD: 4 turns."
+active_skill_cd = 4
+responding_skills = Array[Dictionary]([{
+"desc": "5+ fire gems forge a Fire Hammer upper gem. Lv1 blasts its 3x3 area, Lv2 uses Milo's fireball area, and Lv3 uses the larger fireball area.",
+"fuse_label": "5",
+"gem_type": 0,
+"name": "Fire Hammer",
+"priority": 1,
+"threshold": 5,
+"trigger_type": "count",
+"upper_type": 18
+}])

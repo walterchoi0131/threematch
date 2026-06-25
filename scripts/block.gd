@@ -9,7 +9,7 @@ extends Node2D
 # WOOD_STRUCTURE：stationary + breakable obstacle.
 # PUZZLE_KEY：解謎鑰匙 — 固定障礙物；只會被上級寶石爆發解鎖。
 enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10, PUZZLE_KEY = 11 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構、解謎鑰匙
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線、聖光三角
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE, FIRE_GREATSWORD, FIRE_HAMMER }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線、聖光三角、火焰巨劍、火焰巨鎔
 enum UpperOwnerTeam { PLAYER, ENEMY }
 
 # 額外效果（可同時掛載多個於單一寶石上）
@@ -85,6 +85,21 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.LIGHT_SHIELD: preload("res://assets/gems/gem_light_shield.png"),
 	UpperType.LEAF_RAY: preload("res://assets/gems/gem_leaf_ray.png"),
 	UpperType.LIGHT_TRIANGLE: preload("res://assets/gems/gem_light_triangle.png"),
+	UpperType.FIRE_GREATSWORD: preload("res://assets/gems/gem_fire_greatsword_1.png"),
+	UpperType.FIRE_HAMMER: preload("res://assets/gems/gem_fire_hammer_1.png"),
+}
+
+const UPPER_FORGE_TEXTURES: Dictionary = {
+	UpperType.FIRE_GREATSWORD: {
+		1: preload("res://assets/gems/gem_fire_greatsword_1.png"),
+		2: preload("res://assets/gems/gem_fire_greatsword_2.png"),
+		3: preload("res://assets/gems/gem_fire_greatsword_3.png"),
+	},
+	UpperType.FIRE_HAMMER: {
+		1: preload("res://assets/gems/gem_fire_hammer_1.png"),
+		2: preload("res://assets/gems/gem_fire_hammer_2.png"),
+		3: preload("res://assets/gems/gem_fire_hammer_3.png"),
+	},
 }
 
 # 消除動畫精靈圖表（3 列 × 3 行 = 9 幀）
@@ -127,6 +142,21 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.LIGHT_SHIELD: 6,
 	UpperType.LEAF_RAY: 6,
 	UpperType.LIGHT_TRIANGLE: 6,
+	UpperType.FIRE_GREATSWORD: 6,
+	UpperType.FIRE_HAMMER: 5,
+}
+
+const UPPER_FORGE_INTRINSIC_VALUE: Dictionary = {
+	UpperType.FIRE_GREATSWORD: {
+		1: 6,
+		2: 15,
+		3: 25,
+	},
+	UpperType.FIRE_HAMMER: {
+		1: 5,
+		2: 10,
+		3: 15,
+	},
 }
 
 # 高階寶石的「正規元素」：融合成高階寶石時強制設定 block_type，避免被誤指定
@@ -147,6 +177,8 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.LIGHT_SHIELD: Type.LIGHT,
 	UpperType.LEAF_RAY: Type.GREEN,
 	UpperType.LIGHT_TRIANGLE: Type.LIGHT,
+	UpperType.FIRE_GREATSWORD: Type.RED,
+	UpperType.FIRE_HAMMER: Type.RED,
 }
 
 const UPPER_INSTANT: Dictionary = {
@@ -178,6 +210,7 @@ var board_columns: int = 8             # 棋盤欄數（woodStructure 選擇左�
 # 額外效果列表（儲存 ExtraEffect 列舉值，避免 typed enum array 的型別推論問題）
 var extra_effects: Array[int] = []
 var intrinsic_bonus: int = 0
+var forge_level: int = 0
 var wood_spear_pierce_breakable: bool = false
 var puzzle_key_unlocked: bool = false
 var _x5_badge: Label = null            # X5 標記（右上角紅色 "x5"）
@@ -227,8 +260,32 @@ static func upper_type_has_instant(ut: UpperType) -> bool:
 	return bool(UPPER_INSTANT.get(ut, false))
 
 
+static func upper_type_has_forge(ut: UpperType) -> bool:
+	return UPPER_FORGE_INTRINSIC_VALUE.has(ut)
+
+
+static func forge_max_level(ut: UpperType) -> int:
+	if not upper_type_has_forge(ut):
+		return 0
+	return 3
+
+
+static func forge_intrinsic_value(ut: UpperType, level: int) -> int:
+	var levels: Dictionary = UPPER_FORGE_INTRINSIC_VALUE.get(ut, {}) as Dictionary
+	return int(levels.get(clampi(level, 1, forge_max_level(ut)), UPPER_INTRINSIC_VALUE.get(ut, 1)))
+
+
+static func forge_texture(ut: UpperType, level: int) -> Texture2D:
+	var levels: Dictionary = UPPER_FORGE_TEXTURES.get(ut, {}) as Dictionary
+	return levels.get(clampi(level, 1, forge_max_level(ut)), UPPER_GEM_TEXTURES.get(ut, null)) as Texture2D
+
+
 func has_instant_upper_attribute() -> bool:
 	return upper_type_has_instant(upper_type)
+
+
+func has_forge_attribute() -> bool:
+	return upper_type_has_forge(upper_type)
 
 
 ## 是否為 block（無屬性方塊）— 不參與 BFS / 連鎖 / 融合
@@ -286,15 +343,37 @@ func set_upper_type(ut: UpperType) -> void:
 	if upper_type == UpperType.NONE:
 		upper_owner_team = UpperOwnerTeam.PLAYER
 		upper_owner_id = 0
+		forge_level = 0
 	intrinsic_bonus = 0
 	wood_spear_pierce_breakable = false
 	# 融合為高階寶石時清除所有額外效果（X5 不繼承）
 	if ut != UpperType.NONE:
 		clear_extras()
+		forge_level = 1 if upper_type_has_forge(ut) else 0
 		# 強制套用正規元素，以保證被爆時 block_type 計入正確的元素顆別
 		if UPPER_ELEMENT.has(ut):
 			block_type = UPPER_ELEMENT[ut]
 	update_visual()
+
+
+func set_forge_level(level: int) -> void:
+	if not has_forge_attribute():
+		forge_level = 0
+		update_visual()
+		return
+	forge_level = clampi(level, 1, forge_max_level(upper_type))
+	update_visual()
+
+
+func can_forge_upgrade() -> bool:
+	return has_forge_attribute() and forge_level >= 1 and forge_level < forge_max_level(upper_type)
+
+
+func upgrade_forge_level() -> bool:
+	if not can_forge_upgrade():
+		return false
+	set_forge_level(forge_level + 1)
+	return true
 
 
 func set_upper_owner(team: UpperOwnerTeam, owner_id: int = 0) -> void:
@@ -359,6 +438,8 @@ func get_blast_value() -> int:
 	if is_obstacle():
 		return 0
 	if is_upper_gem():
+		if has_forge_attribute():
+			return forge_intrinsic_value(upper_type, forge_level)
 		return maxi(1, int(UPPER_INTRINSIC_VALUE.get(upper_type, 1)) + intrinsic_bonus)
 	if has_extra(ExtraEffect.X5):
 		return 5
@@ -452,6 +533,8 @@ func refresh_upper_particle_system() -> void:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		UpperType.WATER_SLASH:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
+		UpperType.FIRE_GREATSWORD, UpperType.FIRE_HAMMER:
+			burst_color = Color(1.0, 0.42, 0.12, 0.64)
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)
 	_ensure_ray_burst(burst_color)
@@ -588,6 +671,8 @@ func _update_upper_overlay() -> void:
 			upper_base_color = COLORS[Type.BLUE]
 		UpperType.WATER_SLASH:
 			upper_base_color = COLORS[Type.BLUE]
+		UpperType.FIRE_GREATSWORD, UpperType.FIRE_HAMMER:
+			upper_base_color = COLORS[Type.RED]
 		_:
 			upper_base_color = COLORS[Type.RED]
 	if visual:
@@ -617,12 +702,14 @@ func _update_upper_overlay() -> void:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
 		UpperType.WATER_SLASH:
 			burst_color = Color(0.35, 0.65, 1.0, 0.60)
+		UpperType.FIRE_GREATSWORD, UpperType.FIRE_HAMMER:
+			burst_color = Color(1.0, 0.42, 0.12, 0.64)
 		_:
 			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙
 	_ensure_ray_burst(burst_color)
 
 	_upper_sprite.visible = true
-	_upper_sprite.texture = UPPER_GEM_TEXTURES.get(upper_type)
+	_upper_sprite.texture = forge_texture(upper_type, forge_level) if has_forge_attribute() else UPPER_GEM_TEXTURES.get(upper_type)
 	_upper_sprite.flip_h = false
 	_upper_sprite.flip_v = upper_type == UpperType.WOOD_SPEAR_DOWN
 	if upper_type == UpperType.FIRE_PILLAR_X:

@@ -203,6 +203,10 @@ static func responding_upper_type_from_name(skill_name: String) -> Block.UpperTy
 			return Block.UpperType.LEAF_RAY
 		"Light Triangle":
 			return Block.UpperType.LIGHT_TRIANGLE
+		"Fire Greatsword":
+			return Block.UpperType.FIRE_GREATSWORD
+		"Fire Hammer":
+			return Block.UpperType.FIRE_HAMMER
 		"光之盾":
 			return Block.UpperType.LIGHT_SHIELD
 	return Block.UpperType.NONE

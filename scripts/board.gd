@@ -206,6 +206,7 @@ var pre_refill_hook: Callable = Callable()
 ## 欲觸發前置回呼標記：僅在玩家實際消除回合（正常點擊拆除 / 高階寶石被點擊）前置為 true。
 ## 技能等非拆除回合觸發的準苯類型不會設定此標記，從而跟燃燒正常點擊區隔。
 var _blast_refill_armed: bool = false
+var _upper_blast_can_destroy_rock: bool = false
 
 signal score_changed(new_score: int)      # 分數變更時發出
 signal gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)  # 寶石消除時發出
@@ -2670,7 +2671,7 @@ func _play_gem_break_debris(block: Block, is_upper_break: bool = false) -> void:
 	var scale_range: Vector2 = Vector2(0.70, 1.10)
 	var lifetime_range: Vector2 = Vector2(0.55, 0.85)
 	if is_upper_break or block.is_upper_gem():
-		break_texture = Block.UPPER_GEM_TEXTURES.get(block.upper_type, null)
+		break_texture = Block.forge_texture(block.upper_type, block.forge_level) if block.has_forge_attribute() else Block.UPPER_GEM_TEXTURES.get(block.upper_type, null)
 		if break_texture == null:
 			break_texture = block.get_base_texture()
 		shard_count = UPPER_GEM_DEBRIS_SHARDS
@@ -3096,6 +3097,57 @@ func place_upper_gem(
 
 
 ## 偵錯：將棋盤上隨機 N 顆普通寶石轉為火炸彈（FIREBALL）
+func find_forge_upgrade_target(
+	ut: Block.UpperType,
+	from_pos: Vector2i,
+	owner_team: Block.UpperOwnerTeam = Block.UpperOwnerTeam.PLAYER,
+	owner_id: int = 0
+) -> Vector2i:
+	if not Block.upper_type_has_forge(ut):
+		return Vector2i(-1, -1)
+	var best_pos := Vector2i(-1, -1)
+	var best_dist: int = 2147483647
+	for x in columns:
+		for y in rows:
+			var p := Vector2i(x, y)
+			var block: Block = grid[x][y]
+			if block == null or not block.is_upper_gem():
+				continue
+			if block.upper_type != ut:
+				continue
+			if block.upper_owner_team != owner_team:
+				continue
+			if owner_team == Block.UpperOwnerTeam.ENEMY and block.upper_owner_id != owner_id:
+				continue
+			if not block.can_forge_upgrade():
+				continue
+			var diff: Vector2i = p - from_pos
+			var dist: int = diff.x * diff.x + diff.y * diff.y
+			if dist < best_dist:
+				best_dist = dist
+				best_pos = p
+	return best_pos
+
+
+func forge_upgrade_distance_for_upper(ut: Block.UpperType, from_pos: Vector2i) -> int:
+	var target: Vector2i = find_forge_upgrade_target(ut, from_pos)
+	if target.x < 0:
+		return 2147483647
+	var diff: Vector2i = target - from_pos
+	return diff.x * diff.x + diff.y * diff.y
+
+
+func upgrade_forge_upper_at(pos: Vector2i) -> bool:
+	if not _is_valid(pos):
+		return false
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.can_forge_upgrade():
+		return false
+	block.upgrade_forge_level()
+	play_fuse_animation(block)
+	return true
+
+
 func debug_spawn_firebombs(count: int) -> void:
 	var candidates: Array = []
 	for x in columns:
@@ -3127,6 +3179,8 @@ func _handle_upper_click(pos: Vector2i) -> void:
 		return
 
 	# 根據高階類型決定爆炸位置（使用共用函式）
+	var previous_destroy_rock_flag: bool = _upper_blast_can_destroy_rock
+	_upper_blast_can_destroy_rock = ut == Block.UpperType.FIRE_HAMMER and block.forge_level >= 3
 	var positions: Array[Vector2i] = _get_blast_positions_for_upper(pos, ut)
 
 	# 執行帶連鏈遞迴的爆炸
@@ -3158,6 +3212,7 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	if positions.size() > 0:
 		await _execute_upper_blast_chain(positions, chain_data, total_blasted_by_type)
 
+	_upper_blast_can_destroy_rock = previous_destroy_rock_flag
 	upper_blast_completed.emit(chain_data[0], total_blasted_by_type, ut)
 
 
@@ -3179,6 +3234,8 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			_unlock_puzzle_key_at(p)
 			continue
 		if b.is_rock():
+			if _upper_blast_can_destroy_rock:
+				planks_in_blast.append(p)
 			continue
 		# 如果這個寶石是高階寶石，加入連鏈爆炸佇列（暫不消除）
 		if b.is_upper_gem():
@@ -3285,6 +3342,8 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 
 		# 播放連鏈爆炸 VFX
 		_play_blast_vfx_for(cp, cut, ub.global_position)
+		var chained_destroy_rock_flag: bool = _upper_blast_can_destroy_rock
+		_upper_blast_can_destroy_rock = _upper_blast_can_destroy_rock or (cut == Block.UpperType.FIRE_HAMMER and ub.forge_level >= 3)
 		var ub_type: Block.Type = ub.block_type as Block.Type
 		var ub_bv: int = ub.get_blast_value()
 		total_blasted_by_type[ub_type] = total_blasted_by_type.get(ub_type, 0) + ub_bv
@@ -3313,6 +3372,7 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 		chain_data[0] += 1
 		if valid_positions.size() > 0:
 			await _execute_upper_blast_chain(valid_positions, chain_data, total_blasted_by_type)
+		_upper_blast_can_destroy_rock = chained_destroy_rock_flag
 
 
 ## ── 水劍專用連鎖序列 ───────────────────────────────────────────
@@ -3479,6 +3539,8 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 		chain_data[0] += 1
 		upper_gem_chain_triggered.emit(dut)
 		_play_blast_vfx_for(dp, dut, dub.global_position)
+		var deferred_destroy_rock_flag: bool = _upper_blast_can_destroy_rock
+		_upper_blast_can_destroy_rock = _upper_blast_can_destroy_rock or (dut == Block.UpperType.FIRE_HAMMER and dub.forge_level >= 3)
 
 		var dub_type: Block.Type = dub.block_type as Block.Type
 		var dub_bv: int = dub.get_blast_value()
@@ -3505,6 +3567,7 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 				d_valid.append(pp)
 		if d_valid.size() > 0:
 			await _execute_upper_blast_chain(d_valid, chain_data, total_blasted_by_type)
+		_upper_blast_can_destroy_rock = deferred_destroy_rock_flag
 
 	if is_initial:
 		upper_blast_completed.emit(chain_data[0], total_blasted_by_type, ut)
@@ -3624,6 +3687,10 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return _get_wood_spear_positions(pos, -1)
 		Block.UpperType.WOOD_SPEAR_DOWN:
 			return _get_wood_spear_positions(pos, 1)
+		Block.UpperType.FIRE_GREATSWORD:
+			return _get_fire_greatsword_positions(pos)
+		Block.UpperType.FIRE_HAMMER:
+			return _get_fire_hammer_positions(pos)
 	return [pos]
 
 
@@ -3665,6 +3732,56 @@ func _get_wood_spear_positions(origin: Vector2i, direction_y: int) -> Array[Vect
 
 
 ## 取得火球爆炸位置：中心 3×3 + 四個方向各延伸1格
+func _current_upper_forge_level(pos: Vector2i) -> int:
+	if not _is_valid(pos):
+		return 1
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.has_forge_attribute():
+		return 1
+	return maxi(1, block.forge_level)
+
+
+func _get_fire_greatsword_positions(origin: Vector2i) -> Array[Vector2i]:
+	var level: int = _current_upper_forge_level(origin)
+	var half_width: int = clampi(level - 1, 0, 2)
+	var result: Array[Vector2i] = []
+	var diagonal_sum: int = origin.x + origin.y
+	for x in columns:
+		for y in rows:
+			if absi((x + y) - diagonal_sum) <= half_width:
+				_append_unique_valid_position(result, Vector2i(x, y))
+	return result
+
+
+func _get_fire_hammer_positions(origin: Vector2i) -> Array[Vector2i]:
+	var level: int = _current_upper_forge_level(origin)
+	if level <= 1:
+		return _get_square_positions(origin, 1)
+	if level == 2:
+		return _get_area_positions(origin)
+	return _get_large_fire_area_positions(origin)
+
+
+func _get_square_positions(center: Vector2i, radius: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for dx in range(-radius, radius + 1):
+		for dy in range(-radius, radius + 1):
+			var p := center + Vector2i(dx, dy)
+			if _cell_accepts_block(p):
+				result.append(p)
+	return result
+
+
+func _get_large_fire_area_positions(center: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = _get_square_positions(center, 2)
+	for sx in [-1, 1]:
+		for sy in [-1, 1]:
+			for dx in [2, 3]:
+				for dy in [2, 3]:
+					_append_unique_valid_position(result, center + Vector2i(sx * dx, sy * dy))
+	return result
+
+
 func _get_area_positions(center: Vector2i, _size: int = 0) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	# 3×3 核心範圍

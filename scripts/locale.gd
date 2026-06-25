@@ -233,6 +233,34 @@ func _ginger_translations(key: String) -> String:
 			return "啊橘" if zh else "Ginger"
 		"DIALOG_ginger":
 			return "啊橘" if zh else "Ginger"
+		"Mini":
+			return "米尼" if zh else "Mini"
+		"DIALOG_mini":
+			return "米尼" if zh else "Mini"
+		"Boarz":
+			return "Boarz" if zh else "Boarz"
+		"DIALOG_boarz":
+			return "Boarz" if zh else "Boarz"
+		"Green to Fire":
+			return "燃薪猛火" if zh else "Green to Fire"
+		"Green to Fire DESC":
+			return "將棋盤上所有木珠轉成火珠。CD: 5 回合。" if zh else "Convert all leaf gems on the board into fire gems. CD: 5 turns."
+		"燃薪猛火":
+			return "燃薪猛火" if zh else "Kindling Blaze"
+		"燃薪猛火 DESC":
+			return "將棋盤上所有木珠轉成火珠。CD: 5 回合。" if zh else "Convert all leaf gems on the board into fire gems. CD: 5 turns."
+		"Forge":
+			return "鑄造" if zh else "Forge"
+		"Forge DESC":
+			return "點擊任一可鑄造上珠，使其直接升 1 Lv；或點擊普通寶石，使它變成 x3 狀態。CD: 4 回合。" if zh else "Select a forge upper gem to upgrade it by 1 level, or select a normal gem to grant x3. CD: 4 turns."
+		"Fire Greatsword":
+			return "鑄造: 火焰巨劍" if zh else "Fire Greatsword"
+		"Fire Greatsword DESC":
+			return "6+ 火珠鑄造成火焰巨劍。再次融合時會升級最近的 Lv1/Lv2 火焰巨劍，最高 Lv3。" if zh else "6+ fire gems forge a Fire Greatsword. Re-fusing upgrades the nearest existing Lv1/Lv2 Fire Greatsword up to Lv3."
+		"Fire Hammer":
+			return "火焰巨鎔" if zh else "Fire Hammer"
+		"Fire Hammer DESC":
+			return "5+ 火珠鑄造成火焰巨鎔。Lv1 爆自身九宮格，Lv2 使用米洛火球範圍，Lv3 使用更大的火球範圍。" if zh else "5+ fire gems forge a Fire Hammer. Lv1 blasts its 3x3 area, Lv2 uses Milo's fireball area, and Lv3 uses the larger fireball area."
 		"Holy Triangle Seal":
 			return "咒印: 聖光三角之印" if zh else "Holy Triangle Seal"
 		"Holy Triangle Seal DESC":

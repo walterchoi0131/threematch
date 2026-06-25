@@ -133,7 +133,7 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
 const LEAF_RAY_MAGIC_MULT := 3.5
@@ -270,6 +270,8 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.LIGHT_SHIELD: "res://assets/gems/gem_light_shield.png",
 	Block.UpperType.LEAF_RAY: "res://assets/gems/gem_leaf_ray.png",
 	Block.UpperType.LIGHT_TRIANGLE: "res://assets/gems/gem_light_triangle.png",
+	Block.UpperType.FIRE_GREATSWORD: "res://assets/gems/gem_fire_greatsword_1.png",
+	Block.UpperType.FIRE_HAMMER: "res://assets/gems/gem_fire_hammer_1.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -6021,6 +6023,44 @@ func _is_instant_response(resp: Dictionary) -> bool:
 	return Block.upper_type_has_instant(_upper_type_for_response(resp))
 
 
+func _try_apply_forge_response(resp: Dictionary, upper_type: Block.UpperType, fuse_gem_type: Block.Type) -> bool:
+	if not Block.upper_type_has_forge(upper_type):
+		return false
+	var tapped_pos: Vector2i = board.last_tapped_pos
+	var upgrade_target: Vector2i = board.find_forge_upgrade_target(upper_type, tapped_pos)
+	var char_index: int = int(resp.get("char_index", -1))
+	var character: CharacterData = party[char_index] if char_index >= 0 and char_index < party.size() else null
+	var fuse_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+	if upgrade_target.x >= 0:
+		await _play_transmute_spiral_vfx_for_cells([upgrade_target], Block.COLORS.get(fuse_gem_type, Color(1.0, 0.45, 0.15)), 0.26)
+		if not board.upgrade_forge_upper_at(upgrade_target):
+			return false
+		var upgraded_block: Block = board.grid[upgrade_target.x][upgrade_target.y]
+		var new_level: int = upgraded_block.forge_level if upgraded_block != null else 0
+		_play_sfx(_se_freeze)
+		_add_log_entry("%s%d → %s Lv%d" % [_gem_bbcode(fuse_gem_type), fuse_count, _upper_gem_bbcode(upper_type), new_level], fuse_gem_type, character)
+		await get_tree().create_timer(0.15).timeout
+		return true
+	if not board.place_upper_gem(tapped_pos, upper_type, fuse_gem_type):
+		return false
+	_play_sfx(_se_freeze)
+	_add_log_entry(_format_fuse_bbcode(fuse_gem_type, fuse_count, upper_type), fuse_gem_type, character)
+	await get_tree().create_timer(0.15).timeout
+	return true
+
+
+func _forge_upgrade_target_for_responses(responses: Array, tapped_pos: Vector2i) -> Vector2i:
+	for resp_value in responses:
+		var resp: Dictionary = resp_value as Dictionary
+		var upper_type: Block.UpperType = _upper_type_for_response(resp)
+		if not Block.upper_type_has_forge(upper_type):
+			continue
+		var target: Vector2i = board.find_forge_upgrade_target(upper_type, tapped_pos)
+		if target.x >= 0:
+			return target
+	return Vector2i(-1, -1)
+
+
 func _has_living_battle_enemy() -> bool:
 	return _living_battle_enemy_count() > 0
 
@@ -7019,7 +7059,9 @@ func _execute_instant_fuse_pipeline(gem_type: Block.Type, count: int, global_pos
 
 	var first_tapped_pos: Vector2i = board.last_tapped_pos
 	var first_tapped_local_pos: Vector2 = board.last_tapped_local_pos
-	var fuse_target: Vector2 = board.to_global(board.grid_to_world(first_tapped_pos))
+	var first_forge_target: Vector2i = _forge_upgrade_target_for_responses(responses, first_tapped_pos)
+	var first_particle_target: Vector2i = first_forge_target if first_forge_target.x >= 0 else first_tapped_pos
+	var fuse_target: Vector2 = board.to_global(board.grid_to_world(first_particle_target))
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
 	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
@@ -7102,7 +7144,9 @@ func _execute_fuse_pipeline(gem_type: Block.Type, count: int, global_positions: 
 
 	var first_tapped_pos: Vector2i = board.last_tapped_pos
 	var first_tapped_local_pos: Vector2 = board.last_tapped_local_pos
-	var fuse_target: Vector2 = board.to_global(board.grid_to_world(first_tapped_pos))
+	var first_forge_target: Vector2i = _forge_upgrade_target_for_responses(responses, first_tapped_pos)
+	var first_particle_target: Vector2i = first_forge_target if first_forge_target.x >= 0 else first_tapped_pos
+	var fuse_target: Vector2 = board.to_global(board.grid_to_world(first_particle_target))
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
 	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
@@ -7236,7 +7280,9 @@ func _handle_concurrent_fuse_blast(gem_type: Block.Type, count: int, grid_positi
 	var tapped_pos: Vector2i = board._concurrent_fuse_tapped_pos
 	var tapped_local_pos: Vector2 = board.get_concurrent_fuse_tapped_local_pos()
 	board.clear_concurrent_fuse_tap()
-	var fuse_target: Vector2 = board.to_global(board.grid_to_world(tapped_pos))
+	var forge_target: Vector2i = _forge_upgrade_target_for_responses(responses, tapped_pos)
+	var particle_target: Vector2i = forge_target if forge_target.x >= 0 else tapped_pos
+	var fuse_target: Vector2 = board.to_global(board.grid_to_world(particle_target))
 	var color: Color = Block.COLORS[gem_type]
 	var particle_duration := 1.05
 	var fuse_total: int = mini(global_positions.size(), MAX_VFX_PARTICLES)
@@ -7863,6 +7909,9 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 		return
 	if upper_type != Block.UpperType.NONE and not _is_instant_response(resp):
 		_reset_spell_chain()
+	if upper_type != Block.UpperType.NONE and Block.upper_type_has_forge(upper_type):
+		await _try_apply_forge_response(resp, upper_type, fuse_gem_type)
+		return
 	var response_key: Variant = skill_name if upper_type == Block.UpperType.NONE else upper_type
 	match response_key:
 		"Leaf Storm":
@@ -8836,6 +8885,48 @@ func _handle_active_skill(char_index: int) -> void:
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Attack Form"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
+		"Green to Fire":
+			_use_active_skill_and_show_loot_toast(char_index)
+			board.convert_all_of_type(Block.Type.GREEN, Block.Type.RED)
+			_add_log_entry("%s：%s→%s" % [Locale.tr_ui(c.active_skill_name), _gem_bbcode(Block.Type.GREEN), _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
+			await get_tree().create_timer(0.4).timeout
+			_update_skill_ui()
+		"燃薪猛火":
+			_use_active_skill_and_show_loot_toast(char_index)
+			board.convert_all_of_type(Block.Type.GREEN, Block.Type.RED)
+			_add_log_entry("%s：%s→%s" % [Locale.tr_ui(c.active_skill_name), _gem_bbcode(Block.Type.GREEN), _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
+			await get_tree().create_timer(0.4).timeout
+			_update_skill_ui()
+		"Forge":
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "single")
+			if bool(selection.get("cancelled", false)):
+				return
+			var positions: Array = selection.get("positions", [])
+			if positions.is_empty():
+				return
+			var forge_pos: Vector2i = positions[0] as Vector2i
+			if not board._is_valid(forge_pos):
+				return
+			var forge_block: Block = board.grid[forge_pos.x][forge_pos.y]
+			if forge_block == null or forge_block.is_obstacle():
+				return
+			var can_upgrade_forge: bool = forge_block.is_upper_gem() and forge_block.can_forge_upgrade()
+			var can_mark_x3: bool = not forge_block.is_upper_gem()
+			if not can_upgrade_forge and not can_mark_x3:
+				return
+			_use_active_skill_and_show_loot_toast(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			if can_upgrade_forge:
+				await _play_transmute_spiral_vfx_for_cells([forge_pos], Block.COLORS.get(forge_block.block_type, Color(1.0, 0.45, 0.15)), 0.24)
+				board.upgrade_forge_upper_at(forge_pos)
+				_add_log_entry("%s：%s Lv%d" % [Locale.tr_ui("Forge"), _upper_gem_bbcode(forge_block.upper_type), forge_block.forge_level], Block.Type.RED, c)
+			elif can_mark_x3:
+				forge_block.add_extra(Block.ExtraEffect.X3)
+				_add_log_entry("%s：%s x3" % [Locale.tr_ui("Forge"), _gem_bbcode(forge_block.block_type)], forge_block.block_type, c)
+			_play_sfx(_se_freeze)
+			await get_tree().create_timer(0.25).timeout
+			board.is_busy = false
 		"Tranquil Mirror":
 			# 止水明鏡：將棋盤上所有火寶石轉換為水寶石
 			_use_active_skill_and_show_loot_toast(char_index)

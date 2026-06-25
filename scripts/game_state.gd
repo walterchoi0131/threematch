@@ -49,6 +49,8 @@ const DEFAULT_CHARACTER_PATHS := [
 	"res://characters/char_owen.tres",
 	"res://characters/char_duan.tres",
 	"res://characters/char_ginger.tres",
+	"res://characters/char_mini.tres",
+	"res://characters/char_boarz.tres",
 ]
 const STARTING_CHARACTER_PATHS := [
 	"res://characters/char_dragon.tres",

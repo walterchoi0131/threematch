@@ -494,10 +494,27 @@ func check_responding_skills(board_ref: Node2D = null) -> Array:
 		return []
 
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_upper: Block.UpperType = a.get("upper_type", Block.UpperType.NONE) as Block.UpperType
+		var b_upper: Block.UpperType = b.get("upper_type", Block.UpperType.NONE) as Block.UpperType
+		var a_forge_dist: int = 2147483647
+		var b_forge_dist: int = 2147483647
+		if board_ref != null and int(a.get("gem_type", -1)) == int(b.get("gem_type", -2)):
+			if Block.upper_type_has_forge(a_upper) and Block.upper_type_has_forge(b_upper) and board_ref.has_method("forge_upgrade_distance_for_upper"):
+				var tapped_value: Variant = board_ref.get("last_tapped_pos")
+				if tapped_value is Vector2i:
+					var tapped_pos: Vector2i = tapped_value
+					a_forge_dist = int(board_ref.call("forge_upgrade_distance_for_upper", a_upper, tapped_pos))
+					b_forge_dist = int(board_ref.call("forge_upgrade_distance_for_upper", b_upper, tapped_pos))
+					var a_can_upgrade: bool = a_forge_dist < 2147483647
+					var b_can_upgrade: bool = b_forge_dist < 2147483647
+					if a_can_upgrade != b_can_upgrade:
+						return a_can_upgrade
 		var a_threshold: int = int(a.get("threshold", 0))
 		var b_threshold: int = int(b.get("threshold", 0))
 		if a_threshold != b_threshold:
 			return a_threshold > b_threshold
+		if a_forge_dist != b_forge_dist and a_forge_dist < 2147483647 and b_forge_dist < 2147483647:
+			return a_forge_dist < b_forge_dist
 		var a_char_index: int = int(a.get("char_index", 999))
 		var b_char_index: int = int(b.get("char_index", 999))
 		if a_char_index != b_char_index:

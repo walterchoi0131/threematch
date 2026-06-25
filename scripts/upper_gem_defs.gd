@@ -65,6 +65,8 @@ const DEFAULT_FUSE_THRESHOLD: Dictionary = {
 	Block.UpperType.LIGHT_SHIELD: 6,
 	Block.UpperType.LEAF_RAY: 6,
 	Block.UpperType.LIGHT_TRIANGLE: 6,
+	Block.UpperType.FIRE_GREATSWORD: 6,
+	Block.UpperType.FIRE_HAMMER: 5,
 }
 
 const UPGRADE_EFFECTS: Dictionary = {
@@ -185,6 +187,17 @@ static func _ensure_init() -> void:
 		Block.Type.LIGHT,
 		Color(1.0, 0.92, 0.23),
 		"Light Triangle",
+	)
+	_defs[Block.UpperType.FIRE_GREATSWORD] = Def.new(
+		Block.Type.RED,
+		Color(1.0, 0.38, 0.12),
+		"Fire Greatsword",
+	)
+	_defs[Block.UpperType.FIRE_HAMMER] = Def.new(
+		Block.Type.RED,
+		Color(1.0, 0.30, 0.10),
+		"Fire Hammer",
+		"res://assets/vfx/explosionbig.png", 10, 2, 11, 3.0, 0.03,
 	)
 	_defs[Block.UpperType.WATER_SLASH] = Def.new(
 		Block.Type.BLUE,
