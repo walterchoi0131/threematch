@@ -214,6 +214,7 @@ var forge_level: int = 0
 var wood_spear_pierce_breakable: bool = false
 var puzzle_key_unlocked: bool = false
 var _x5_badge: Label = null            # X5 標記（右上角紅色 "x5"）
+var _forge_level_badge: Label = null   # Forge 等級標記（左下角 "Lv.1"）
 var _burn_anim: AnimatedSprite2D = null  # BURNING 火焰動畫覆蓋層
 
 @onready var visual: ColorRect = $Visual        # 背景色塊
@@ -500,6 +501,28 @@ func _refresh_extra_visuals() -> void:
 		_burn_anim.visible = false
 
 
+func _refresh_forge_level_badge() -> void:
+	if not has_forge_attribute():
+		if _forge_level_badge != null:
+			_forge_level_badge.visible = false
+		return
+	if _forge_level_badge == null:
+		_forge_level_badge = Label.new()
+		_forge_level_badge.add_theme_font_size_override("font_size", 14)
+		_forge_level_badge.add_theme_color_override("font_color", Color(1.0, 0.96, 0.72, 1.0))
+		_forge_level_badge.add_theme_color_override("font_outline_color", Color(0.24, 0.08, 0.02, 1.0))
+		_forge_level_badge.add_theme_constant_override("outline_size", 4)
+		_forge_level_badge.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.70))
+		_forge_level_badge.add_theme_constant_override("shadow_offset_x", 1)
+		_forge_level_badge.add_theme_constant_override("shadow_offset_y", 2)
+		_forge_level_badge.position = Vector2(-28, 10)
+		_forge_level_badge.z_index = 21
+		_forge_level_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_forge_level_badge)
+	_forge_level_badge.text = "Lv.%d" % maxi(1, forge_level)
+	_forge_level_badge.visible = true
+
+
 func _clear_upper_pulse_particles() -> void:
 	if _upper_pulse_particles != null:
 		_upper_pulse_particles.queue_free()
@@ -636,6 +659,8 @@ func _update_upper_overlay() -> void:
 		# 非高階寶石 — 隱藏覆蓋層，恢復正常顯示
 		if _upper_sprite != null:
 			_upper_sprite.visible = false
+		if _forge_level_badge != null:
+			_forge_level_badge.visible = false
 		if is_puzzle_key() and puzzle_key_unlocked:
 			_ensure_ray_burst(PUZZLE_KEY_AURA_COLOR)
 		else:
@@ -716,6 +741,7 @@ func _update_upper_overlay() -> void:
 		_upper_sprite.rotation = deg_to_rad(90)
 	else:
 		_upper_sprite.rotation = 0.0
+	_refresh_forge_level_badge()
 	_update_upper_owner_border()
 
 

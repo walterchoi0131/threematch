@@ -4556,6 +4556,11 @@ func _get_selection_positions(center: Vector2i) -> Array[Vector2i]:
 		if _cell_accepts_block(center):
 			result.append(center)
 		return result
+	if _selection_pattern == "forge_single":
+		var result: Array[Vector2i] = []
+		if _cell_accepts_block(center):
+			result.append(center)
+		return result
 	if _selection_pattern == "single_top_bottom":
 		var result: Array[Vector2i] = []
 		if _cell_accepts_block(center) and (center.y == 0 or center.y == rows - 1):
@@ -4573,6 +4578,13 @@ func _is_selection_center_viable(center: Vector2i) -> bool:
 		"single":
 			var block: Block = grid[center.x][center.y]
 			return block != null and not _is_static_obstacle(block)
+		"forge_single":
+			var block: Block = grid[center.x][center.y]
+			if block == null or _is_static_obstacle(block):
+				return false
+			if block.is_upper_gem():
+				return block.can_forge_upgrade()
+			return true
 		"single_top_bottom":
 			if center.y != 0 and center.y != rows - 1:
 				return false
@@ -4583,7 +4595,7 @@ func _is_selection_center_viable(center: Vector2i) -> bool:
 
 
 func _selection_color_for_center(center: Vector2i) -> Color:
-	if _selection_pattern == "single" and _is_valid(center):
+	if (_selection_pattern == "single" or _selection_pattern == "forge_single") and _is_valid(center):
 		var block: Block = grid[center.x][center.y]
 		if block != null:
 			return Block.COLORS.get(block.block_type, Color(1.0, 0.92, 0.23))

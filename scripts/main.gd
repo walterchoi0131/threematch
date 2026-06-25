@@ -8898,7 +8898,7 @@ func _handle_active_skill(char_index: int) -> void:
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
 		"Forge":
-			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "single")
+			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "forge_single")
 			if bool(selection.get("cancelled", false)):
 				return
 			var positions: Array = selection.get("positions", [])
