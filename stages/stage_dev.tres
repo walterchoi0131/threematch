@@ -1,26 +1,28 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://cqjqomp1x1x8l"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="AudioStream" uid="uid://dee447dk6xl0b" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Texture2D" uid="uid://c1p5d48fcifmf" path="res://assets/dialog_background/dialog_bg_bedroom.png" id="2_fsca4"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
-[ext_resource type="Texture2D" uid="uid://ymyevh3ljyhl" path="res://assets/slime.png" id="3_slimetex"]
-[ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="4_blueslime"]
-[ext_resource type="AudioStream" uid="uid://b7tkdkwi2o6gj" path="res://assets/music/Wild Arms 2 - The Town to the Western Winds.mp3" id="4_tq0q5"]
-[ext_resource type="Texture2D" uid="uid://bi2seucruxr6u" path="res://assets/dialog_background/dialog_bg_classroom.png" id="5_fjo77"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_jsm3v"]
+[ext_resource type="AudioStream" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_bedroom.png" id="2_fsca4"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
+[ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
+[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="3_vmepe"]
+[ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
+[ext_resource type="AudioStream" path="res://assets/music/Wild Arms 2 - The Town to the Western Winds.mp3" id="4_tq0q5"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_classroom.png" id="5_fjo77"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="7_jsm3v"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="11_o6cdy"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="13_7x61u"]
-[ext_resource type="Resource" uid="uid://7kwe3q1qbp3y" path="res://characters/char_shark.tres" id="14_epvkr"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="14_epvkr"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="18_7x61u"]
 
 [sub_resource type="Resource" id="Resource_stage1_intro_morning"]
 script = ExtResource("3_6yv1j")
 text_zh = "清晨的陽光溜進宿舍臥室。阿潘還整隻埋在棉被裡。"
 text_en = "Morning light slips into the dorm bedroom. Pan is still buried under his blanket."
-music = ExtResource("4_tq0q5")
 
 [sub_resource type="Resource" id="Resource_stage1_intro_dragon_wakeup"]
 script = ExtResource("3_6yv1j")
@@ -181,13 +183,9 @@ script = ExtResource("5_vmepe")
 lines = Array[ExtResource("3_6yv1j")]([SubResource("Resource_stage1_intro_morning"), SubResource("Resource_stage1_intro_dragon_wakeup"), SubResource("Resource_stage1_intro_panda_waking"), SubResource("Resource_stage1_intro_dragon_graduate"), SubResource("Resource_stage1_intro_panda_sleepy"), SubResource("Resource_stage1_intro_dragon_shark_up"), SubResource("Resource_stage1_intro_pullup_narration"), SubResource("Resource_stage1_intro_shark_pullup"), SubResource("Resource_stage1_intro_panda_ed_too"), SubResource("Resource_stage1_intro_shark_morning"), SubResource("Resource_stage1_intro_panda_outvoted"), SubResource("Resource_stage1_intro_dragon_go"), SubResource("Resource_stage1_intro_panda_breakfast"), SubResource("Resource_fsca4"), SubResource("Resource_fjo77"), SubResource("Resource_6yv1j"), SubResource("Resource_tq0q5"), SubResource("Resource_vmepe"), SubResource("Resource_o6cdy"), SubResource("Resource_7x61u"), SubResource("Resource_epvkr"), SubResource("Resource_wrajf"), SubResource("Resource_smhwd"), SubResource("Resource_jg7yr"), SubResource("Resource_lyr6i")])
 cast = Array[String](["dragon", "shark", "panda", "husky"])
 background = ExtResource("2_fsca4")
+initial_music = ExtResource("3_vmepe")
 
-[sub_resource type="Resource" id="gold_loot_shared"]
-script = ExtResource("5_loot")
-amount_min = 10
-amount_max = 20
-
-[sub_resource type="Resource" id="slime_1"]
+[sub_resource type="Resource" id="Resource_piard"]
 script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 800
@@ -195,9 +193,15 @@ attack_damage = 12
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_1"
 
-[sub_resource type="Resource" id="slime_2"]
+[sub_resource type="Resource" id="Resource_5oni6"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_piard")
+level = 3
+hp_percent = 800
+
+[sub_resource type="Resource" id="Resource_et6yt"]
 script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 900
@@ -205,9 +209,15 @@ attack_damage = 14
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_2"
 
-[sub_resource type="Resource" id="slime_3"]
+[sub_resource type="Resource" id="Resource_f0mht"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_et6yt")
+level = 3
+hp_percent = 900
+
+[sub_resource type="Resource" id="Resource_4g8bb"]
 script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 900
@@ -215,9 +225,15 @@ attack_damage = 14
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_3"
 
-[sub_resource type="Resource" id="slime_4"]
+[sub_resource type="Resource" id="Resource_pqxqm"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_4g8bb")
+level = 3
+hp_percent = 900
+
+[sub_resource type="Resource" id="Resource_fitqk"]
 script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 1000
@@ -225,9 +241,16 @@ attack_damage = 14
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_4"
 
-[sub_resource type="Resource" id="slime_5"]
+[sub_resource type="Resource" id="Resource_yi8km"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_fitqk")
+level = 3
+hp_percent = 1000
+init_cd = 2
+
+[sub_resource type="Resource" id="Resource_qfcwp"]
 script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 1000
@@ -235,9 +258,16 @@ attack_damage = 14
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_5"
 
-[sub_resource type="Resource" id="slime_6"]
+[sub_resource type="Resource" id="Resource_xmigc"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_qfcwp")
+level = 3
+hp_percent = 1000
+init_cd = 3
+
+[sub_resource type="Resource" id="Resource_yj5ux"]
 script = ExtResource("2_enemy")
 enemy_level = 3
 max_hp = 1000
@@ -245,14 +275,16 @@ attack_damage = 14
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
 portrait_texture = ExtResource("3_slimetex")
-loot_table = Array[ExtResource("5_loot")]([SubResource("gold_loot_shared")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_6"
 
-[sub_resource type="Resource" id="sapphire_loot"]
-script = ExtResource("5_loot")
-item_type = 1
-drop_chance = 0.7
+[sub_resource type="Resource" id="Resource_033xj"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_yj5ux")
+level = 3
+hp_percent = 1000
+init_cd = 1
 
-[sub_resource type="Resource" id="slime_boss"]
+[sub_resource type="Resource" id="Resource_6if1r"]
 script = ExtResource("2_enemy")
 enemy_name = "Slime Boss"
 enemy_level = 4
@@ -263,22 +295,33 @@ portrait_color = Color(0.25, 0.47, 0.85, 1)
 portrait_texture = ExtResource("4_blueslime")
 element = 1
 is_main_boss = true
-loot_table = Array[ExtResource("5_loot")]([SubResource("sapphire_loot")])
+metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_boss"
+
+[sub_resource type="Resource" id="Resource_ubk7d"]
+script = ExtResource("11_o6cdy")
+enemy = SubResource("Resource_6if1r")
+level = 4
+hp_percent = 4000
+main_boss = true
+
+[sub_resource type="Resource" id="Resource_k41va"]
+script = ExtResource("5_vmepe")
 
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-1"
 connects_to = Array[String](["1-2"])
+map_position = Vector2(222, 512)
 stage_name = "1-1 畢業測驗"
+element_weights = Array[int]([1, 1, 1, 1])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "school"
-rounds = Array[Array]([[SubResource("slime_1")], [SubResource("slime_2"), SubResource("slime_3")], [SubResource("slime_4"), SubResource("slime_5"), SubResource("slime_6")], [SubResource("slime_boss")]])
-rounds_init_cd = Array[Array]([[0], [0, 0], [2, 3, 1], [0]])
-rounds_enemy_levels = Array[Array]([[3], [3, 3], [3, 3, 3], [4]])
-rounds_main_bosses = Array[Array]([[false], [false, false], [false, false, false], [true]])
+rounds = Array[Array]([[SubResource("Resource_5oni6")], [SubResource("Resource_f0mht"), SubResource("Resource_pqxqm")], [SubResource("Resource_yi8km"), SubResource("Resource_xmigc"), SubResource("Resource_033xj")], [SubResource("Resource_ubk7d")]])
 background = 1
 bgm = ExtResource("1_lvgyu")
 pre_dialog = SubResource("Resource_stage1_intro_new")
+start_stage_dialog = SubResource("Resource_k41va")
 is_tutorial = true
 set_party = Array[ExtResource("7_jsm3v")]([ExtResource("13_7x61u"), ExtResource("14_epvkr"), ExtResource("15_wrajf")])
 fixed_layout = [[0, 0, 0, 0, 0, 0, 0, 6], [1, 1, 6, 6, 6, 6, 0, 6], [1, 1, 6, 6, 2, 0, 0, 6], [1, 6, 1, 6, 0, 0, 1, 0], [2, 1, 1, 1, 2, 2, 6, 1], [2, 1, 1, 6, 2, 1, 6, 6], [6, 1, 6, 6, 0, 0, 6, 6], [6, 2, 2, 6, 6, 6, 6, 2]]
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

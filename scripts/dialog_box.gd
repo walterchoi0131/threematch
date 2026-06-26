@@ -47,10 +47,12 @@ const BG_SWITCH_FADE_DUR := 0.18
 
 # Skip 自動推進
 const SKIP_INTERVAL := 0.1
-const SKIP_HOLD_START_DELAY := 1.0
+const SKIP_HOLD_START_DELAY := 0.4
 const SKIP_HOLD_DURATION := 0.85
 const SKIP_ARROW_OFFSET := 10.0
 const SKIP_ARROW_Y_NUDGE := 3.0
+const SKIP_FADE_OUT_DURATION := 0.16
+const SKIP_PROGRESS_INSET := 4.0
 const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 
 # 角色名稱顏色
@@ -82,7 +84,7 @@ var _tap_zone: Button
 var _dialog_panel: PanelContainer
 var _bgm_player: AudioStreamPlayer
 var _skip_control: Control
-var _skip_progress_rect: ColorRect
+var _skip_progress_rect: Panel
 var _skip_btn: Button
 var _skip_arrow_label: Label
 
@@ -159,6 +161,7 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 	_event_transitioning = false
 	_dialog_finishing = false
 	_reset_skip_hold()
+	_restore_skip_control()
 	_line_index = -1
 	_left_char_id = ""
 	_right_char_id = ""
@@ -344,8 +347,8 @@ func _build_ui() -> void:
 	_skip_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	name_row.add_child(_skip_control)
 
-	_skip_progress_rect = ColorRect.new()
-	_skip_progress_rect.color = Color(0.65, 0.65, 0.7, 0.35)
+	_skip_progress_rect = Panel.new()
+	_skip_progress_rect.add_theme_stylebox_override("panel", _make_skip_progress_style())
 	_skip_progress_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_skip_control.add_child(_skip_progress_rect)
 
@@ -370,15 +373,16 @@ func _build_ui() -> void:
 		_skip_btn.add_theme_font_override("font", dialog_font)
 	_skip_btn.add_theme_font_size_override("font_size", SKIP_FONT_SIZE)
 	_skip_btn.add_theme_color_override("font_color", Color.WHITE)
-	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 1.0, 1.0, 0.7))
-	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 1.0, 1.0, 0.5))
-	var skip_empty := StyleBoxEmpty.new()
-	_skip_btn.add_theme_stylebox_override("normal", skip_empty)
-	_skip_btn.add_theme_stylebox_override("hover", skip_empty)
-	_skip_btn.add_theme_stylebox_override("pressed", skip_empty)
-	_skip_btn.add_theme_stylebox_override("focus", skip_empty)
+	_skip_btn.add_theme_color_override("font_color_hover", Color(1.0, 0.96, 0.66, 1.0))
+	_skip_btn.add_theme_color_override("font_color_pressed", Color(1.0, 0.86, 0.35, 1.0))
+	_skip_btn.add_theme_stylebox_override("normal", _make_skip_button_style(false, false))
+	_skip_btn.add_theme_stylebox_override("hover", _make_skip_button_style(false, true))
+	_skip_btn.add_theme_stylebox_override("pressed", _make_skip_button_style(true, false))
+	_skip_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_skip_btn.gui_input.connect(_on_skip_button_gui_input)
 	_skip_control.add_child(_skip_btn)
+	_skip_progress_rect.move_to_front()
+	_skip_arrow_label.move_to_front()
 	_reset_skip_hold()
 
 	# 間隔
@@ -431,6 +435,36 @@ func _build_ui() -> void:
 
 
 # ── 對話推進 ─────────────────────────────────────────────────
+
+func _make_skip_button_style(pressed: bool, hover: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.18, 0.16, 0.11, 0.96)
+	if hover:
+		style.bg_color = Color(0.28, 0.23, 0.12, 0.98)
+	if pressed:
+		style.bg_color = Color(0.10, 0.09, 0.07, 0.98)
+	style.border_color = Color(0.03, 0.025, 0.018, 1.0)
+	style.set_border_width(SIDE_LEFT, 2)
+	style.set_border_width(SIDE_RIGHT, 2)
+	style.set_border_width(SIDE_TOP, 2 if pressed else 1)
+	style.set_border_width(SIDE_BOTTOM, 2 if pressed else 5)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6 if pressed else 3
+	style.content_margin_bottom = 2 if pressed else 5
+	style.shadow_color = Color(0, 0, 0, 0.45 if pressed else 0.72)
+	style.shadow_size = 2 if pressed else 4
+	style.shadow_offset = Vector2(0, 1 if pressed else 3)
+	return style
+
+
+func _make_skip_progress_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.65, 0.65, 0.7, 0.35)
+	style.set_corner_radius_all(4)
+	return style
+
 
 func _advance() -> void:
 	if _dialog_finishing:
@@ -559,9 +593,12 @@ func _update_skip_button_text() -> void:
 func _update_skip_hold_fill() -> void:
 	if _skip_progress_rect == null or _skip_control == null:
 		return
-	var fill_width: float = maxf(_skip_control.size.x, SKIP_BUTTON_SIZE.x) * _skip_hold_progress
-	var fill_height: float = maxf(_skip_control.size.y, SKIP_BUTTON_SIZE.y)
-	_skip_progress_rect.position = Vector2.ZERO
+	var control_width: float = maxf(_skip_control.size.x, SKIP_BUTTON_SIZE.x)
+	var control_height: float = maxf(_skip_control.size.y, SKIP_BUTTON_SIZE.y)
+	var available_width: float = maxf(0.0, control_width - SKIP_PROGRESS_INSET * 2.0)
+	var fill_width: float = available_width * _skip_hold_progress
+	var fill_height: float = maxf(0.0, control_height - SKIP_PROGRESS_INSET * 2.0)
+	_skip_progress_rect.position = Vector2(SKIP_PROGRESS_INSET, SKIP_PROGRESS_INSET)
 	_skip_progress_rect.size = Vector2(fill_width, fill_height)
 	_skip_progress_rect.visible = _skip_hold_progress > 0.0
 
@@ -621,6 +658,28 @@ func _skip_dialog_phase() -> void:
 	_typing = false
 	_event_transitioning = false
 	_finish_dialog()
+
+
+func _restore_skip_control() -> void:
+	if _skip_control == null:
+		return
+	_skip_control.visible = true
+	_skip_control.modulate.a = 1.0
+	if _skip_btn != null:
+		_skip_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _fade_out_skip_control(duration: float = SKIP_FADE_OUT_DURATION) -> void:
+	if _skip_control == null or not _skip_control.visible:
+		return
+	if _skip_btn != null:
+		_skip_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tw := create_tween()
+	tw.tween_property(_skip_control, "modulate:a", 0.0, duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(_skip_control):
+			_skip_control.visible = false
+	)
 
 
 func _show_line(line: _DialogLine) -> void:
@@ -745,12 +804,17 @@ func _finish_dialog() -> void:
 	_dialog_finishing = true
 	_set_auto_skip(false)
 	_reset_skip_hold()
+	_fade_out_skip_control()
 	if _preview_mode:
 		if _finish_with_fade:
 			_finish_preview_with_fade()
 		else:
-			dialog_finished.emit()
-			queue_free()
+			var skip_fade_wait := create_tween()
+			skip_fade_wait.tween_interval(SKIP_FADE_OUT_DURATION)
+			skip_fade_wait.tween_callback(func() -> void:
+				dialog_finished.emit()
+				queue_free()
+			)
 		return
 
 	# 淡出音樂

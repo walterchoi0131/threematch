@@ -14,6 +14,12 @@ const NON_BOSS_PORTRAIT_DISPLAY_SCALE := 1.5
 const LOOT_DROP_FLOOR_OFFSET_Y := 46.0
 const CLICK_RECT_PADDING := 4.0
 const LONG_PRESS_SECONDS := 0.45
+const INTENT_CD_ICON_TEXT := "⏱︎"
+const INTENT_CD_BADGE_SIZE := Vector2(34.0, 24.0)
+const INTENT_CD_DIGIT_FONT_SIZE := 18
+const INTENT_CD_ICON_FONT_SIZE := 23
+const INTENT_CD_ICON_OFFSET := Vector2(-1.5, -0.5)
+const INTENT_CD_DIGIT_OFFSET := Vector2(-1.5, -2.0)
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
@@ -50,7 +56,8 @@ var _lightbreak_intent_row: HBoxContainer = null
 var _lightbreak_attack_label: Label = null
 var _lightbreak_drop_label: Label = null
 var _lightbreak_gem_icon: TextureRect = null
-var _lightbreak_cd_label: Label = null
+var _lightbreak_cd_badge: Control = null
+var _intent_cd_badge: Control = null
 
 
 func _process(_delta: float) -> void:
@@ -258,14 +265,19 @@ func _refresh_intent() -> void:
 	match action_type:
 		EnemyData.ActionType.AUTO:
 			intent_label.text = Locale.tr_ui("ENEMY_INTENT_DUEL")
+			_set_intent_cd_badge_value(-1)
 		EnemyData.ActionType.STONE_MAGIC:
-			intent_label.text = "ROCK  CD %d" % [turns_until_attack]
+			intent_label.text = "ROCK"
+			_set_intent_cd_badge_value(turns_until_attack)
 		EnemyData.ActionType.REST:
-			intent_label.text = "REST  CD %d" % [turns_until_attack]
+			intent_label.text = "REST"
+			_set_intent_cd_badge_value(turns_until_attack)
 		EnemyData.ActionType.BREAK_LIGHT_ATTACK:
+			_set_intent_cd_badge_value(-1)
 			_update_lightbreak_intent(get_current_attack_damage(), get_current_action_count(), turns_until_attack)
 		_:
-			intent_label.text = "⚔ %d  CD %d" % [get_current_attack_damage(), turns_until_attack]
+			intent_label.text = "⚔ %d" % [get_current_attack_damage()]
+			_set_intent_cd_badge_value(turns_until_attack)
 	intent_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 	intent_label.add_theme_constant_override("shadow_offset_x", 2)
 	intent_label.add_theme_constant_override("shadow_offset_y", 2)
@@ -276,6 +288,8 @@ func _refresh_intent() -> void:
 		intent_label.modulate = Color(1.0, 0.35, 0.35)
 	else:
 		intent_label.modulate = Color(1.0, 1.0, 1.0)
+	if _intent_cd_badge != null:
+		_intent_cd_badge.modulate = intent_label.modulate
 	if _lightbreak_intent_row != null:
 		_lightbreak_intent_row.modulate = intent_label.modulate
 
@@ -305,7 +319,6 @@ func _ensure_lightbreak_intent_row() -> void:
 
 	_lightbreak_attack_label = _make_intent_row_label()
 	_lightbreak_drop_label = _make_intent_row_label()
-	_lightbreak_cd_label = _make_intent_row_label()
 	_lightbreak_gem_icon = TextureRect.new()
 	_lightbreak_gem_icon.texture = Block.GEM_TEXTURES.get(Block.Type.LIGHT, null)
 	_lightbreak_gem_icon.custom_minimum_size = Vector2(15.0, 15.0)
@@ -316,7 +329,8 @@ func _ensure_lightbreak_intent_row() -> void:
 	_lightbreak_intent_row.add_child(_lightbreak_attack_label)
 	_lightbreak_intent_row.add_child(_lightbreak_drop_label)
 	_lightbreak_intent_row.add_child(_lightbreak_gem_icon)
-	_lightbreak_intent_row.add_child(_lightbreak_cd_label)
+	_lightbreak_cd_badge = _make_intent_cd_badge()
+	_lightbreak_intent_row.add_child(_lightbreak_cd_badge)
 
 
 func _make_intent_row_label() -> Label:
@@ -333,16 +347,79 @@ func _make_intent_row_label() -> Label:
 	return label
 
 
+func _ensure_intent_cd_badge() -> void:
+	if _intent_cd_badge != null:
+		return
+	if _intent_bg == null:
+		return
+	_intent_cd_badge = _make_intent_cd_badge()
+	_intent_cd_badge.name = "IntentCDBadge"
+	_intent_cd_badge.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_intent_cd_badge.offset_left = -INTENT_CD_BADGE_SIZE.x - 2.0
+	_intent_cd_badge.offset_right = -2.0
+	_intent_cd_badge.offset_top = 0.0
+	_intent_cd_badge.offset_bottom = 0.0
+	_intent_bg.add_child(_intent_cd_badge)
+
+
+func _make_intent_cd_badge() -> Control:
+	var badge := Control.new()
+	badge.custom_minimum_size = INTENT_CD_BADGE_SIZE
+	badge.size = INTENT_CD_BADGE_SIZE
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var icon := Label.new()
+	icon.name = "Icon"
+	icon.text = INTENT_CD_ICON_TEXT
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.position = INTENT_CD_ICON_OFFSET
+	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	icon.add_theme_font_size_override("font_size", INTENT_CD_ICON_FONT_SIZE)
+	icon.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0, 0.72))
+	icon.add_theme_color_override("font_outline_color", Color.BLACK)
+	icon.add_theme_constant_override("outline_size", 3)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(icon)
+
+	var digit := Label.new()
+	digit.name = "Digit"
+	digit.set_anchors_preset(Control.PRESET_FULL_RECT)
+	digit.position = INTENT_CD_DIGIT_OFFSET
+	digit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	digit.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	digit.add_theme_font_size_override("font_size", INTENT_CD_DIGIT_FONT_SIZE)
+	digit.add_theme_color_override("font_color", Color.WHITE)
+	digit.add_theme_color_override("font_outline_color", Color.BLACK)
+	digit.add_theme_constant_override("outline_size", 4)
+	digit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(digit)
+	return badge
+
+
+func _set_intent_cd_badge_value(cd: int) -> void:
+	_ensure_intent_cd_badge()
+	_set_cd_badge_value(_intent_cd_badge, cd)
+	if intent_label != null:
+		intent_label.offset_right = -INTENT_CD_BADGE_SIZE.x if cd >= 0 else 0.0
+
+
+func _set_cd_badge_value(badge: Control, cd: int) -> void:
+	if badge == null:
+		return
+	badge.visible = cd >= 0
+	var digit: Label = badge.get_node_or_null("Digit") as Label
+	if digit != null:
+		digit.text = "%d" % maxi(0, cd)
+
+
 func _update_lightbreak_intent(damage: int, light_count: int, cd: int) -> void:
 	_ensure_lightbreak_intent_row()
 	if _lightbreak_intent_row == null:
 		return
 	_lightbreak_attack_label.text = "⚔ %d" % damage
 	_lightbreak_drop_label.text = " -%d" % light_count
-	if cd >= 0:
-		_lightbreak_cd_label.text = " CD %d" % cd
-	else:
-		_lightbreak_cd_label.text = ""
+	_set_cd_badge_value(_lightbreak_cd_badge, cd)
 
 
 func update_cd(turns_left: int) -> void:
@@ -361,6 +438,7 @@ func flash_action(action_type: int, attack_percent: int = -1, action_count: int 
 	if not intent_label:
 		return
 	_set_lightbreak_intent_visible(action_type == EnemyData.ActionType.BREAK_LIGHT_ATTACK)
+	_set_intent_cd_badge_value(-1)
 	match action_type:
 		EnemyData.ActionType.AUTO:
 			intent_label.text = Locale.tr_ui("ENEMY_INTENT_DUEL")

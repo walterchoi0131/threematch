@@ -7,6 +7,7 @@ var chain_blast_interval := 0.2  # 連鎖爆炸之間的間隔（秒）
 
 const BlockScene := preload("res://scenes/block.tscn")  # 寶石場景預載
 const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
+const SwordSwingVfxScript := preload("res://scripts/sword_swing_vfx.gd")
 const PLANK_DEBRIS_TEXTURE := preload("res://assets/blocks/wood.png")
 const WOOD_SPEAR_THRUST_TEXTURE := preload("res://assets/leafspear.png")
 const GEM_DEBRIS_Z_INDEX := 90
@@ -207,6 +208,7 @@ var pre_refill_hook: Callable = Callable()
 ## 技能等非拆除回合觸發的準苯類型不會設定此標記，從而跟燃燒正常點擊區隔。
 var _blast_refill_armed: bool = false
 var _upper_blast_can_destroy_rock: bool = false
+var _fire_greatsword_vfx_seen: Dictionary = {}
 
 signal score_changed(new_score: int)      # 分數變更時發出
 signal gems_blasted(gem_type: Block.Type, count: int, global_positions: Array)  # 寶石消除時發出
@@ -3192,6 +3194,8 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	# 觸發被點擊高階寶石的獨有效果（與連鏈統一處理）
 	upper_gem_chain_triggered.emit(ut)
 
+	await _play_pre_blast_animation_for(pos, ut, positions)
+
 	# 播放爆炸 VFX（fire-and-forget）
 	_play_blast_vfx_for(pos, ut, block.global_position)
 
@@ -3340,6 +3344,10 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 			await _handle_wood_spear_sequence(cp, chain_data, total_blasted_by_type, false)
 			continue
 
+		var chain_positions: Array[Vector2i] = _get_blast_positions_for_upper(cp, cut)
+		chain_positions.erase(cp)  # 排除自身（已被消除）
+		await _play_pre_blast_animation_for(cp, cut, chain_positions)
+
 		# 播放連鏈爆炸 VFX
 		_play_blast_vfx_for(cp, cut, ub.global_position)
 		var chained_destroy_rock_flag: bool = _upper_blast_can_destroy_rock
@@ -3357,10 +3365,6 @@ func _execute_upper_blast_chain(positions: Array[Vector2i], chain_data: Array, t
 
 		# 發出信號讓 main.gd 處理此類型的獨有效果
 		upper_gem_chain_triggered.emit(cut)
-
-		# 取得爆炸範圍（與點擊行為一致，使用共用函式）
-		var chain_positions: Array[Vector2i] = _get_blast_positions_for_upper(cp, cut)
-		chain_positions.erase(cp)  # 排除自身（已被消除）
 
 		# 過濾已被消除的位置
 		var valid_positions: Array[Vector2i] = []
@@ -3656,6 +3660,109 @@ func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_globa
 			BlastVfx.play(self, gp, ut, 0.0)
 		return
 	BlastVfx.play(self, center_global, ut)
+
+
+func _play_pre_blast_animation_for(center_pos: Vector2i, ut: Block.UpperType, positions: Array[Vector2i]) -> void:
+	if ut != Block.UpperType.FIRE_GREATSWORD:
+		return
+	var vfx_key: int = center_pos.x * 1000 + center_pos.y
+	if _fire_greatsword_vfx_seen.has(vfx_key):
+		return
+	_fire_greatsword_vfx_seen[vfx_key] = true
+	get_tree().create_timer(1.0).timeout.connect(func() -> void:
+		_fire_greatsword_vfx_seen.erase(vfx_key)
+	, CONNECT_ONE_SHOT)
+	var swing_positions: Array[Vector2i] = positions.duplicate()
+	if not swing_positions.has(center_pos):
+		swing_positions.append(center_pos)
+	await _play_fire_greatsword_swing_vfx(center_pos, swing_positions)
+
+
+func _play_fire_greatsword_swing_vfx(center_pos: Vector2i, positions: Array[Vector2i]) -> void:
+	if positions.is_empty():
+		return
+	var endpoints: Array[Vector2] = _fire_greatsword_swing_screen_endpoints(positions)
+	if endpoints.size() < 2:
+		return
+	var host: Node = get_tree().current_scene
+	if host == null:
+		host = self
+	var vfx := SwordSwingVfxScript.new() as SwordSwingVfx
+	if vfx == null:
+		return
+	if host.has_method("_get_battle_vfx_3d_layer"):
+		var shared_layer := host.call("_get_battle_vfx_3d_layer") as BattleVfx3DLayer
+		if shared_layer != null:
+			vfx.set_shared_vfx_layer(shared_layer)
+	vfx.z_index = WOOD_SPEAR_THRUST_Z_INDEX + 8
+	host.add_child(vfx)
+	var level: int = _current_upper_forge_level(center_pos)
+	var width_px: float = float(CELL_SIZE) * float(clampi(level, 1, 3))
+	var anchor_cell: Vector2i = _fire_greatsword_left_diagonal_anchor_cell(center_pos, positions)
+	var anchor_screen: Vector2 = to_global(grid_to_world(anchor_cell))
+	await vfx.play(endpoints[0], endpoints[1], width_px, anchor_screen)
+
+
+func _fire_greatsword_left_diagonal_anchor_cell(center_pos: Vector2i, positions: Array[Vector2i]) -> Vector2i:
+	if positions.is_empty():
+		return center_pos
+	var anchor: Vector2i = center_pos
+	var best_projection: int = -1
+	var best_diagonal_offset: int = 999999
+	var center_diagonal: int = center_pos.x + center_pos.y
+	for pos in positions:
+		var delta: Vector2i = pos - center_pos
+		var projection: int = -delta.x + delta.y
+		if projection <= 0:
+			continue
+		var diagonal_offset: int = absi((pos.x + pos.y) - center_diagonal)
+		if projection > best_projection:
+			best_projection = projection
+			best_diagonal_offset = diagonal_offset
+			anchor = pos
+		elif projection == best_projection:
+			if diagonal_offset < best_diagonal_offset:
+				best_diagonal_offset = diagonal_offset
+				anchor = pos
+			elif diagonal_offset == best_diagonal_offset and (pos.y > anchor.y or (pos.y == anchor.y and pos.x < anchor.x)):
+				anchor = pos
+	if best_projection < 0:
+		return _fire_greatsword_bottom_left_cell(positions)
+	return anchor
+
+
+func _fire_greatsword_bottom_left_cell(positions: Array[Vector2i]) -> Vector2i:
+	if positions.is_empty():
+		return Vector2i.ZERO
+	var bottom_left: Vector2i = positions[0]
+	var bottom_left_score: int = bottom_left.x - bottom_left.y
+	for pos in positions:
+		var score_value: int = pos.x - pos.y
+		if score_value < bottom_left_score:
+			bottom_left_score = score_value
+			bottom_left = pos
+		elif score_value == bottom_left_score and (pos.y > bottom_left.y or (pos.y == bottom_left.y and pos.x < bottom_left.x)):
+			bottom_left = pos
+	return bottom_left
+
+
+func _fire_greatsword_swing_screen_endpoints(positions: Array[Vector2i]) -> Array[Vector2]:
+	var top_right: Vector2i = positions[0]
+	var bottom_left: Vector2i = _fire_greatsword_bottom_left_cell(positions)
+	var top_right_score: int = top_right.x - top_right.y
+	for pos in positions:
+		var score_value: int = pos.x - pos.y
+		if score_value > top_right_score:
+			top_right_score = score_value
+			top_right = pos
+	var start_screen: Vector2 = to_global(grid_to_world(top_right))
+	var end_screen: Vector2 = to_global(grid_to_world(bottom_left))
+	var direction: Vector2 = (end_screen - start_screen).normalized()
+	if direction.length() <= 0.001:
+		direction = Vector2(-1.0, 1.0).normalized()
+	start_screen -= direction * float(CELL_SIZE) * 0.75
+	end_screen += direction * float(CELL_SIZE) * 0.75
+	return [start_screen, end_screen]
 
 
 ## 根據高階寶石類型取得爆炸範圍（點擊與連鏈共用）

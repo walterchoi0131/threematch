@@ -3,6 +3,7 @@
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const GemParticleScript := preload("res://scripts/gem_particle.gd")
 const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
+const HammerKnockVfxScript := preload("res://scripts/hammer_knock_vfx.gd")
 const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const LeafRayLaserVfxScript := preload("res://scripts/leaf_ray_laser_vfx.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
@@ -8200,8 +8201,8 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	fly_tw.tween_property(block, "global_position", target_pos, 0.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	fly_tw.tween_property(block, "scale", Vector2(1.62, 1.62), 0.4)
 	fly_tw.tween_property(block, "rotation", block.rotation + TAU, 0.4)
-	fly_tw.tween_property(block, "modulate:a", 0.55, 0.28).set_delay(0.12)
 	await fly_tw.finished
+	block.modulate.a = 1.0
 
 	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
 		var applied_damage: int = target.take_damage(final_damage)
@@ -8270,14 +8271,17 @@ func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult
 	await float_tw.finished
 
 	var target_pos: Vector2 = _get_enemy_image_center(target) if is_instance_valid(target) else start_global
-	var target_scale: Vector2 = Vector2(3.0, 3.0) if combo_bonus > 1.0 else Vector2(1.50, 1.50)
-	var rotation_amount: float = TAU * (4.0 if combo_bonus > 1.0 else 1.25)
+	var combo_boosted: bool = combo_bonus > 1.0
+	var fly_duration: float = 1.0 if combo_boosted else 0.6
+	var base_scale: Vector2 = Vector2(1.50, 1.50)
+	var target_scale: Vector2 = base_scale * 1.5 if combo_boosted else base_scale
 	var fly_tw := create_tween().set_parallel(true)
-	fly_tw.tween_property(block, "global_position", target_pos, 0.38).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	fly_tw.tween_property(block, "scale", target_scale, 0.38)
-	fly_tw.tween_property(block, "rotation", block.rotation + rotation_amount, 0.38).set_trans(Tween.TRANS_LINEAR)
-	fly_tw.tween_property(block, "modulate:a", 0.58, 0.26).set_delay(0.12)
+	fly_tw.tween_property(block, "global_position", target_pos, fly_duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	fly_tw.tween_property(block, "scale", target_scale, fly_duration)
+	if combo_boosted:
+		fly_tw.tween_property(block, "rotation", block.rotation + TAU * 4.0, fly_duration).set_trans(Tween.TRANS_LINEAR)
 	await fly_tw.finished
+	block.modulate.a = 1.0
 
 	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
 		var applied_damage: int = target.take_damage(final_damage)
@@ -8844,6 +8848,18 @@ func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type
 	return result
 
 
+func _play_hammer_knock_vfx_at_cell(pos: Vector2i) -> void:
+	if board == null or not board._is_valid(pos):
+		return
+	var hammer_vfx := HammerKnockVfxScript.new() as HammerKnockVfx
+	if hammer_vfx == null:
+		return
+	hammer_vfx.z_index = 180
+	fx_layer.add_child(hammer_vfx)
+	var target_global: Vector2 = board.to_global(board.grid_to_world(pos))
+	await hammer_vfx.play_at(target_global, float(board.CELL_SIZE))
+
+
 func _get_random_convertible_cells(to_type: Block.Type, max_count: int) -> Array[Vector2i]:
 	var candidates: Array[Vector2i] = []
 	for x in board.columns:
@@ -8917,6 +8933,8 @@ func _handle_active_skill(char_index: int) -> void:
 			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			board.is_busy = true
+			await _play_hammer_knock_vfx_at_cell(forge_pos)
+			_play_sfx(_se_impact)
 			if can_upgrade_forge:
 				await _play_transmute_spiral_vfx_for_cells([forge_pos], Block.COLORS.get(forge_block.block_type, Color(1.0, 0.45, 0.15)), 0.24)
 				board.upgrade_forge_upper_at(forge_pos)

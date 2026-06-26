@@ -126,6 +126,7 @@ initial_music = ExtResource("9_music")
 [sub_resource type="Resource" id="Resource_57o8d"]
 script = ExtResource("7_y33w2")
 enemy = ExtResource("6_57o8d")
+level = 30
 hp_percent = 1475
 
 [sub_resource type="Resource" id="Resource_y33w2"]
