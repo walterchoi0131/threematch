@@ -3690,10 +3690,6 @@ func _play_fire_greatsword_swing_vfx(center_pos: Vector2i, positions: Array[Vect
 	var vfx := SwordSwingVfxScript.new() as SwordSwingVfx
 	if vfx == null:
 		return
-	if host.has_method("_get_battle_vfx_3d_layer"):
-		var shared_layer := host.call("_get_battle_vfx_3d_layer") as BattleVfx3DLayer
-		if shared_layer != null:
-			vfx.set_shared_vfx_layer(shared_layer)
 	vfx.z_index = WOOD_SPEAR_THRUST_Z_INDEX + 8
 	host.add_child(vfx)
 	var level: int = _current_upper_forge_level(center_pos)

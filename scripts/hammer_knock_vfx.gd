@@ -33,6 +33,7 @@ func _setup() -> void:
 	_viewport = SubViewport.new()
 	_viewport.size = Vector2i(rect_size)
 	_viewport.transparent_bg = true
+	_viewport.own_world_3d = true
 	_viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_container.add_child(_viewport)
@@ -124,6 +125,15 @@ func play_at(target_screen: Vector2, cell_size_px: float = 64.0) -> void:
 		fade_tw.tween_property(_pivot, "scale", _pivot.scale * 0.94, 0.10)
 	await fade_tw.finished
 	queue_free()
+
+
+func _exit_tree() -> void:
+	if is_instance_valid(_pivot):
+		_pivot.queue_free()
+	_pivot = null
+	_model = null
+	if _viewport != null:
+		_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 
 func _play_impact_2d(target_screen: Vector2, cell_size_px: float) -> void:

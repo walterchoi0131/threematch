@@ -7,6 +7,7 @@ const SWORD_SCENE_PATH := "res://assets/kaykit_vfx/sword_1handed.gltf"
 const KNIGHT_TEXTURE_PATH := "res://assets/kaykit_vfx/knight_texture.png"
 const WINDUP_DURATION := 0.18
 const SMASH_DURATION := 0.16
+const FADE_OUT_DURATION := 0.16
 const HILT_TO_RIGHT_UP_Z_ANGLE := deg_to_rad(-52.0)
 
 var _container: SubViewportContainer = null
@@ -14,11 +15,6 @@ var _viewport: SubViewport = null
 var _camera: Camera3D = null
 var _pivot: Node3D = null
 var _model: Node3D = null
-var _shared_vfx_layer: BattleVfx3DLayer = null
-
-
-func set_shared_vfx_layer(layer: BattleVfx3DLayer) -> void:
-	_shared_vfx_layer = layer
 
 
 func _setup() -> void:
@@ -35,6 +31,7 @@ func _setup() -> void:
 	_viewport = SubViewport.new()
 	_viewport.size = Vector2i(rect_size)
 	_viewport.transparent_bg = true
+	_viewport.own_world_3d = true
 	_viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_container.add_child(_viewport)
@@ -66,19 +63,12 @@ func _setup() -> void:
 
 
 func play(start_screen: Vector2, end_screen: Vector2, blast_width_px: float = 96.0, anchor_screen: Vector2 = Vector2.INF) -> void:
-	if is_instance_valid(_shared_vfx_layer):
-		_shared_vfx_layer.call("_ensure_viewport")
-		_viewport = _shared_vfx_layer.viewport
-		_camera = _shared_vfx_layer.camera
-	elif _viewport == null:
+	if _viewport == null:
 		_setup()
 	_pivot = Node3D.new()
 	_model = _create_model()
 	_pivot.add_child(_model)
-	if is_instance_valid(_shared_vfx_layer):
-		_shared_vfx_layer.add_world_node(_pivot)
-	else:
-		_viewport.add_child(_pivot)
+	_viewport.add_child(_pivot)
 
 	var start_world: Vector3 = _screen_to_world(start_screen)
 	var end_world: Vector3 = _screen_to_world(end_screen)
@@ -140,14 +130,19 @@ func play(start_screen: Vector2, end_screen: Vector2, blast_width_px: float = 96
 	await smash_tw.finished
 
 	finished.emit()
+	var fade_tw := create_tween().set_parallel(true)
+	if _container != null:
+		fade_tw.tween_property(_container, "modulate:a", 0.0, FADE_OUT_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	if is_instance_valid(_pivot):
+		fade_tw.tween_property(_pivot, "scale", Vector3.ONE * 0.86, FADE_OUT_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	fade_tw.tween_property(flash, "color:a", 0.0, FADE_OUT_DURATION).set_ease(Tween.EASE_IN)
+	await fade_tw.finished
 	_release_pivot()
 	if not is_queued_for_deletion():
 		queue_free()
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector3:
-	if is_instance_valid(_shared_vfx_layer):
-		return _shared_vfx_layer.screen_to_world(screen_pos)
 	var screen: Vector2 = ViewportUtils.get_size()
 	var cam_distance: float = 3.0
 	var fov_rad: float = deg_to_rad(_camera.fov)
@@ -162,8 +157,6 @@ func _screen_to_world(screen_pos: Vector2) -> Vector3:
 
 
 func _world_units_per_pixel() -> float:
-	if is_instance_valid(_shared_vfx_layer):
-		return _shared_vfx_layer.world_units_per_pixel()
 	var screen: Vector2 = ViewportUtils.get_size()
 	var cam_distance: float = 3.0
 	var fov_rad: float = deg_to_rad(_camera.fov)
@@ -239,11 +232,8 @@ func _exit_tree() -> void:
 
 func _release_pivot() -> void:
 	if is_instance_valid(_pivot):
-		if is_instance_valid(_shared_vfx_layer):
-			_shared_vfx_layer.remove_world_node(_pivot)
-		else:
-			_pivot.queue_free()
+		_pivot.queue_free()
 	_pivot = null
 	_model = null
-	if _viewport != null and _shared_vfx_layer == null:
+	if _viewport != null:
 		_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED

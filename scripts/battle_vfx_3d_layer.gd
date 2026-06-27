@@ -35,6 +35,8 @@ func remove_world_node(node: Node3D) -> void:
 		return
 	_active_nodes.erase(node.get_instance_id())
 	if is_instance_valid(node):
+		if node.get_parent() == viewport:
+			viewport.remove_child(node)
 		node.queue_free()
 	_update_render_mode()
 
@@ -79,6 +81,7 @@ func _ensure_viewport() -> void:
 	viewport = SubViewport.new()
 	viewport.size = Vector2i(container.size)
 	viewport.transparent_bg = true
+	viewport.own_world_3d = true
 	viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	container.add_child(viewport)
@@ -118,9 +121,22 @@ func _sync_viewport_size() -> void:
 func _update_render_mode() -> void:
 	if viewport == null:
 		return
+	var invalid_keys: Array = []
 	for key in _active_nodes.keys():
 		var node: Variant = _active_nodes[key]
 		if not is_instance_valid(node):
-			_active_nodes.erase(key)
-	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if not _active_nodes.is_empty() else SubViewport.UPDATE_DISABLED
+			invalid_keys.append(key)
+	for key in invalid_keys:
+		_active_nodes.erase(key)
+	if not _active_nodes.is_empty():
+		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	else:
+		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		call_deferred("_disable_render_if_idle")
 
+
+func _disable_render_if_idle() -> void:
+	if viewport == null:
+		return
+	if _active_nodes.is_empty():
+		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED

@@ -31,6 +31,7 @@ func _setup() -> void:
 	_viewport = SubViewport.new()
 	_viewport.size = Vector2i(rect_size)
 	_viewport.transparent_bg = true
+	_viewport.own_world_3d = true
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_container.add_child(_viewport)
 
