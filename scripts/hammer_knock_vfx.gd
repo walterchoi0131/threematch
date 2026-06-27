@@ -2,14 +2,15 @@ class_name HammerKnockVfx
 extends Node2D
 
 signal finished
+signal heavy_impact
 
 const HAMMER_SCENE_PATH := "res://assets/kaykit_vfx/hammer_A.gltf"
 const WEAPON_TEXTURE_PATH := "res://assets/kaykit_vfx/weapons_bits_texture.png"
-const LIGHT_RAISE_DURATION := 0.08
-const LIGHT_KNOCK_DURATION := 0.13
-const HEAVY_RAISE_DURATION := 0.12
-const HEAVY_KNOCK_DURATION := 0.22
-const IMPACT_HOLD := 0.08
+const LIGHT_RAISE_DURATION := 0.16
+const LIGHT_KNOCK_DURATION := 0.26
+const HEAVY_RAISE_DURATION := 0.24
+const HEAVY_KNOCK_DURATION := 0.30
+const IMPACT_HOLD := 0.16
 
 var _container: SubViewportContainer = null
 var _viewport: SubViewport = null
@@ -73,45 +74,47 @@ func play_at(target_screen: Vector2, cell_size_px: float = 64.0) -> void:
 	var target_world: Vector3 = _screen_to_world(target_screen)
 	var unit_px: float = _world_units_per_pixel()
 	var cell_world: float = maxf(0.24, cell_size_px * unit_px)
-	var windup_pos := target_world + Vector3(-cell_world * 0.82, cell_world * 0.86, 0.10)
-	var light_raised_pos := target_world + Vector3(-cell_world * 0.62, cell_world * 0.82, 0.12)
-	var light_impact_pos := target_world + Vector3(-cell_world * 0.05, cell_world * 0.12, 0.0)
-	var heavy_raised_pos := target_world + Vector3(-cell_world * 0.72, cell_world * 1.14, 0.14)
-	var impact_pos := target_world + Vector3(0.0, cell_world * 0.02, 0.0)
+	var handle_pivot_pos := target_world + Vector3(cell_world * 1.28, cell_world * 0.24, 0.0)
+	var windup_pos := handle_pivot_pos + Vector3(cell_world * 0.04, cell_world * 0.04, 0.10)
+	var light_raised_pos := handle_pivot_pos + Vector3(cell_world * 0.02, cell_world * 0.03, 0.12)
+	var light_impact_pos := handle_pivot_pos
+	var heavy_raised_pos := handle_pivot_pos + Vector3(cell_world * 0.03, cell_world * 0.05, 0.14)
+	var impact_pos := handle_pivot_pos
 	var hammer_scale: float = maxf(0.30, cell_world * 1.15)
 
 	_pivot.position = windup_pos
-	_pivot.rotation = Vector3(0.0, 0.0, deg_to_rad(102.0))
-	_model.position = Vector3(0.0, -0.56 * hammer_scale, 0.0)
+	_pivot.rotation = Vector3(0.0, 0.0, deg_to_rad(8.0))
+	_model.position = Vector3(0.0, 0.40 * hammer_scale, 0.0)
 	_model.rotation = Vector3.ZERO
 	_model.scale = Vector3.ONE * hammer_scale
 
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(_pivot, "position", light_raised_pos, LIGHT_RAISE_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(86.0)), LIGHT_RAISE_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(-4.0)), LIGHT_RAISE_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 	await tw.finished
 
 	var light_knock_tw := create_tween().set_parallel(true)
 	light_knock_tw.tween_property(_pivot, "position", light_impact_pos, LIGHT_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	light_knock_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(118.0)), LIGHT_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+	light_knock_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(70.0)), LIGHT_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
 	await light_knock_tw.finished
 	_play_impact_2d(target_screen, cell_size_px * 0.62)
 
 	var heavy_raise_tw := create_tween().set_parallel(true)
 	heavy_raise_tw.tween_property(_pivot, "position", heavy_raised_pos, HEAVY_RAISE_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	heavy_raise_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(72.0)), HEAVY_RAISE_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	heavy_raise_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(-10.0)), HEAVY_RAISE_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 	await heavy_raise_tw.finished
 
 	var heavy_knock_tw := create_tween().set_parallel(true)
-	heavy_knock_tw.tween_property(_pivot, "position", impact_pos, HEAVY_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-	heavy_knock_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(142.0)), HEAVY_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
+	heavy_knock_tw.tween_property(_pivot, "position", impact_pos, HEAVY_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUINT)
+	heavy_knock_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(92.0)), HEAVY_KNOCK_DURATION).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUINT)
 	await heavy_knock_tw.finished
 
+	heavy_impact.emit()
 	_play_impact_2d(target_screen, cell_size_px)
 
 	var recoil_tw := create_tween().set_parallel(true)
-	recoil_tw.tween_property(_pivot, "position", impact_pos + Vector3(cell_world * 0.03, cell_world * 0.08, 0.0), IMPACT_HOLD).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-	recoil_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(130.0)), IMPACT_HOLD).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	recoil_tw.tween_property(_pivot, "position", handle_pivot_pos + Vector3(cell_world * 0.01, cell_world * 0.04, 0.0), IMPACT_HOLD).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	recoil_tw.tween_property(_pivot, "rotation", Vector3(0.0, 0.0, deg_to_rad(84.0)), IMPACT_HOLD).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 	await recoil_tw.finished
 
 	finished.emit()
@@ -125,8 +128,8 @@ func play_at(target_screen: Vector2, cell_size_px: float = 64.0) -> void:
 
 func _play_impact_2d(target_screen: Vector2, cell_size_px: float) -> void:
 	var flash := ColorRect.new()
-	flash.color = Color(1.0, 0.78, 0.22, 0.24)
-	flash.size = Vector2.ONE * cell_size_px * 1.08
+	flash.color = Color(1.0, 0.78, 0.22, 0.48)
+	flash.size = Vector2.ONE * cell_size_px * 1.32
 	flash.position = target_screen - flash.size * 0.5
 	flash.pivot_offset = flash.size * 0.5
 	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -134,29 +137,29 @@ func _play_impact_2d(target_screen: Vector2, cell_size_px: float) -> void:
 	add_child(flash)
 
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(flash, "scale", Vector2.ONE * 1.45, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	tw.tween_property(flash, "color:a", 0.0, 0.16).set_ease(Tween.EASE_IN)
+	tw.tween_property(flash, "scale", Vector2.ONE * 1.85, 0.22).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(flash, "color:a", 0.0, 0.22).set_ease(Tween.EASE_IN)
 
 	var shard_colors: Array[Color] = [
-		Color(1.0, 0.64, 0.18, 0.75),
-		Color(1.0, 0.92, 0.38, 0.72),
-		Color(0.78, 0.42, 0.13, 0.72)
+		Color(1.0, 0.64, 0.18, 0.95),
+		Color(1.0, 0.92, 0.38, 0.95),
+		Color(0.78, 0.42, 0.13, 0.92)
 	]
-	for i in range(8):
+	for i in range(16):
 		var shard := ColorRect.new()
 		shard.color = shard_colors[i % shard_colors.size()]
-		shard.size = Vector2(cell_size_px * 0.10, cell_size_px * 0.035)
+		shard.size = Vector2(cell_size_px * 0.16, cell_size_px * 0.055)
 		shard.position = target_screen - shard.size * 0.5
 		shard.pivot_offset = shard.size * 0.5
-		shard.rotation = TAU * float(i) / 8.0
+		shard.rotation = TAU * float(i) / 16.0
 		shard.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(shard)
 
-		var dir := Vector2.RIGHT.rotated(TAU * float(i) / 8.0)
-		tw.tween_property(shard, "position", shard.position + dir * cell_size_px * 0.46, 0.18).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(shard, "color:a", 0.0, 0.18).set_ease(Tween.EASE_IN)
-		tw.tween_callback(shard.queue_free).set_delay(0.18)
-	tw.tween_callback(flash.queue_free).set_delay(0.16)
+		var dir := Vector2.RIGHT.rotated(TAU * float(i) / 16.0)
+		tw.tween_property(shard, "position", shard.position + dir * cell_size_px * 0.78, 0.24).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(shard, "color:a", 0.0, 0.24).set_ease(Tween.EASE_IN)
+		tw.tween_callback(shard.queue_free).set_delay(0.24)
+	tw.tween_callback(flash.queue_free).set_delay(0.22)
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector3:

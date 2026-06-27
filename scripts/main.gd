@@ -8848,7 +8848,7 @@ func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type
 	return result
 
 
-func _play_hammer_knock_vfx_at_cell(pos: Vector2i) -> void:
+func _play_hammer_knock_vfx_at_cell(pos: Vector2i, impact_callback: Callable = Callable()) -> void:
 	if board == null or not board._is_valid(pos):
 		return
 	var hammer_vfx := HammerKnockVfxScript.new() as HammerKnockVfx
@@ -8856,8 +8856,20 @@ func _play_hammer_knock_vfx_at_cell(pos: Vector2i) -> void:
 		return
 	hammer_vfx.z_index = 180
 	fx_layer.add_child(hammer_vfx)
+	var play_hammer_impact := func() -> void:
+		_play_sfx(_se_impact)
+		if impact_callback.is_valid():
+			impact_callback.call()
+	hammer_vfx.heavy_impact.connect(play_hammer_impact, CONNECT_ONE_SHOT)
 	var target_global: Vector2 = board.to_global(board.grid_to_world(pos))
 	await hammer_vfx.play_at(target_global, float(board.CELL_SIZE))
+
+
+func _play_boarz_forge_impact_transmute(pos: Vector2i, color: Color, state: Dictionary) -> void:
+	state["transmute_running"] = true
+	await _play_transmute_spiral_vfx_for_cells([pos], color, 0.24)
+	state["transmute_running"] = false
+	state["transmute_done"] = true
 
 
 func _get_random_convertible_cells(to_type: Block.Type, max_count: int) -> Array[Vector2i]:
@@ -8933,17 +8945,37 @@ func _handle_active_skill(char_index: int) -> void:
 			_use_active_skill_and_show_loot_toast(char_index)
 			_update_skill_ui()
 			board.is_busy = true
-			await _play_hammer_knock_vfx_at_cell(forge_pos)
-			_play_sfx(_se_impact)
-			if can_upgrade_forge:
-				await _play_transmute_spiral_vfx_for_cells([forge_pos], Block.COLORS.get(forge_block.block_type, Color(1.0, 0.45, 0.15)), 0.24)
-				board.upgrade_forge_upper_at(forge_pos)
-				_add_log_entry("%s：%s Lv%d" % [Locale.tr_ui("Forge"), _upper_gem_bbcode(forge_block.upper_type), forge_block.forge_level], Block.Type.RED, c)
-			elif can_mark_x3:
-				forge_block.add_extra(Block.ExtraEffect.X3)
-				_add_log_entry("%s：%s x3" % [Locale.tr_ui("Forge"), _gem_bbcode(forge_block.block_type)], forge_block.block_type, c)
-			_play_sfx(_se_freeze)
+			board.set_input_queue_locked(true)
+			board.clear_deferred_clicks()
+			var impact_state := {"applied": false, "transmute_running": false, "transmute_done": false}
+			var apply_forge_impact := func() -> void:
+				if bool(impact_state.get("applied", false)) or board == null or not board._is_valid(forge_pos):
+					return
+				var impact_block: Block = board.grid[forge_pos.x][forge_pos.y]
+				if impact_block == null or impact_block.is_obstacle():
+					return
+				var impact_color: Color = Block.COLORS.get(impact_block.block_type, Color(1.0, 0.45, 0.15))
+				if can_upgrade_forge:
+					if not impact_block.is_upper_gem() or not impact_block.can_forge_upgrade():
+						return
+					if not board.upgrade_forge_upper_at(forge_pos):
+						return
+					impact_state["applied"] = true
+					_add_log_entry("%s：%s Lv%d" % [Locale.tr_ui("Forge"), _upper_gem_bbcode(impact_block.upper_type), impact_block.forge_level], Block.Type.RED, c)
+				elif can_mark_x3:
+					if impact_block.is_upper_gem():
+						return
+					impact_block.add_extra(Block.ExtraEffect.X3)
+					impact_state["applied"] = true
+					_add_log_entry("%s：%s x3" % [Locale.tr_ui("Forge"), _gem_bbcode(impact_block.block_type)], impact_block.block_type, c)
+				if bool(impact_state.get("applied", false)):
+					_play_boarz_forge_impact_transmute(forge_pos, impact_color, impact_state)
+			await _play_hammer_knock_vfx_at_cell(forge_pos, apply_forge_impact)
+			while bool(impact_state.get("transmute_running", false)):
+				await get_tree().process_frame
 			await get_tree().create_timer(0.25).timeout
+			board.clear_deferred_clicks()
+			board.set_input_queue_locked(false)
 			board.is_busy = false
 		"Tranquil Mirror":
 			# 止水明鏡：將棋盤上所有火寶石轉換為水寶石
