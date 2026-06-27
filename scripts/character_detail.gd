@@ -485,6 +485,8 @@ func _resolve_responding_upper(skill: Dictionary) -> int:
 
 ## 回傳 5x5 預覽格中要點亮的格子座標（中心為 (2,2)）。
 func _blast_pattern_for(upper_type: int) -> Array:
+	if Block.upper_type_has_building(upper_type):
+		return [Vector2i(2, 2)]
 	match upper_type:
 		Block.UpperType.FIREBALL:
 			# 十字（中心 + 上下左右各延 1 格）
@@ -518,8 +520,6 @@ func _blast_pattern_for(upper_type: int) -> Array:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
-		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
-			return [Vector2i(2, 2)]
 		Block.UpperType.BAMBOO_SUPPLY:
 			# 環形（3x3 外圈）
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),

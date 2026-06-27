@@ -157,7 +157,7 @@ var _selection_selected_positions: Array[Vector2i] = []
 
 # ── 長按預覽系統（長按高階寶石顯示爆炸範圍）──
 const LONGPRESS_THRESHOLD := 0.35         # 長按觸發閾值（秒）
-const BUILDING_DISMANTLE_HOLD_DURATION := 2.0
+const BUILDING_DISMANTLE_HOLD_DURATION := 1.5
 const PREVIEW_FADE_DUR := 0.18            # 預覽進出漸變時間（秒）
 const CircleProgressRingScript := preload("res://scripts/circle_progress_ring.gd")
 var _longpress_pos: Vector2i = Vector2i(-1, -1)  # 長按追蹤的網格位置
@@ -3997,6 +3997,23 @@ func find_owned_upper_gems(owner_id: int, ut: Block.UpperType = Block.UpperType.
 	return result
 
 
+func find_player_owned_upper_gems(owner_id: int, ut: Block.UpperType = Block.UpperType.NONE) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null or not block.is_upper_gem():
+				continue
+			if block.upper_owner_team != Block.UpperOwnerTeam.PLAYER:
+				continue
+			if block.upper_owner_id != owner_id:
+				continue
+			if ut != Block.UpperType.NONE and block.upper_type != ut:
+				continue
+			result.append(Vector2i(x, y))
+	return result
+
+
 func _auto_is_normal_gem(block: Block) -> bool:
 	return block != null and not block.is_obstacle() and not block.is_upper_gem()
 
@@ -5482,10 +5499,11 @@ func _show_building_dismantle_preview(pos: Vector2i, block: Block) -> void:
 
 	var ring: CircleProgressRing = CircleProgressRingScript.new()
 	ring.name = "BuildingDismantleProgress"
-	ring.size = Vector2(CELL_SIZE, CELL_SIZE)
+	ring.size = Vector2(CELL_SIZE, CELL_SIZE) * 0.8
 	ring.position = grid_to_world(pos) - ring.size * 0.5
 	ring.z_index = PREVIEW_BORDER_Z + 3
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ring.line_width = 5.6
 	ring.progress = 0.0
 	add_child(ring)
 	_building_dismantle_progress = ring

@@ -207,6 +207,8 @@ static func responding_upper_type_from_name(skill_name: String) -> Block.UpperTy
 			return Block.UpperType.FIRE_GREATSWORD
 		"Fire Hammer":
 			return Block.UpperType.FIRE_HAMMER
+		"Emerald Tower", "Wood Spirit", "Summon: Wood Spirit":
+			return Block.UpperType.EMERALD_TOWER
 		"光之盾":
 			return Block.UpperType.LIGHT_SHIELD
 	return Block.UpperType.NONE

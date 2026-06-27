@@ -134,13 +134,15 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer", "Emerald Tower"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
 const LEAF_RAY_MAGIC_MULT := 3.5
 const LEAF_RAY_LASER_DURATION := 1.0
 const LEAF_RAY_DAMAGE_TICK_INTERVAL := 0.2
 const LEAF_RAY_DEBRIS_SHARDS := 9
+const EMERALD_TOWER_MAGIC_MULT := 7
+const EMERALD_TOWER_CONVERT_COUNT := 3
 const LIGHT_TRIANGLE_MAGIC_MULT := 6
 const LIGHT_TRIANGLE_DEBRIS_SHARDS := 9
 const COMBO_UI_MARGIN := Vector2(28.0, 92.0)
@@ -275,6 +277,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.LIGHT_TRIANGLE: "res://assets/gems/gem_light_triangle.png",
 	Block.UpperType.FIRE_GREATSWORD: "res://assets/gems/gem_fire_greatsword_1.png",
 	Block.UpperType.FIRE_HAMMER: "res://assets/gems/gem_fire_hammer_1.png",
+	Block.UpperType.EMERALD_TOWER: "res://assets/gems/gem_emerald_tower.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -6136,6 +6139,7 @@ func _register_building_upper_resolvers() -> void:
 	_building_upper_resolver_order.clear()
 	_register_building_upper_resolver(Block.UpperType.PORCUPINE, Callable(self, "_resolve_porcupine_building_turn"))
 	_register_building_upper_resolver(Block.UpperType.TURTLE, Callable(self, "_resolve_turtle_building_turn"))
+	_register_building_upper_resolver(Block.UpperType.EMERALD_TOWER, Callable(self, "_resolve_emerald_tower_building_turn"))
 
 
 func _register_building_upper_resolver(upper_type: Block.UpperType, resolver: Callable) -> void:
@@ -7526,6 +7530,225 @@ func _resolve_turtle_building_turn(positions: Array) -> void:
 			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
 
 
+func _resolve_emerald_tower_building_turn(positions: Array) -> void:
+	var shots: Array[Dictionary] = _collect_emerald_tower_shots(positions)
+	if shots.is_empty():
+		return
+	for shot in shots:
+		_bounce_block_at(shot["pos"] as Vector2i)
+	await get_tree().create_timer(0.12).timeout
+	await _fire_emerald_tower_lasers(shots)
+
+	for i in shots.size():
+		var shot: Dictionary = shots[i]
+		var pos: Vector2i = shot["pos"] as Vector2i
+		var caster: CharacterData = shot["caster"] as CharacterData
+		var converted: int = await _convert_emerald_tower_nearby_cells(pos)
+		_add_log_entry("[b]%s[/b] %s MAG%d ×%d / %d→%s" % [
+			Locale.tr_ui("Emerald Tower"),
+			_gem_bbcode(Block.Type.GREEN),
+			caster.get_magic(),
+			EMERALD_TOWER_MAGIC_MULT,
+			converted,
+			_gem_bbcode(Block.Type.GREEN),
+		], Block.Type.GREEN, caster)
+		if i < shots.size() - 1:
+			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
+
+
+func _collect_emerald_tower_shots(positions: Array, owner_id_filter: int = -1) -> Array[Dictionary]:
+	var shots: Array[Dictionary] = []
+	for pos_value in positions:
+		var pos: Vector2i = pos_value as Vector2i
+		if not board._is_valid(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if block == null or block.upper_type != Block.UpperType.EMERALD_TOWER:
+			continue
+		var owner_id: int = int(block.upper_owner_id)
+		if owner_id_filter >= 0 and owner_id != owner_id_filter:
+			continue
+		var caster: CharacterData = party[owner_id] if owner_id >= 0 and owner_id < party.size() else null
+		if caster == null:
+			continue
+		shots.append({"pos": pos, "block": block, "caster": caster})
+	return shots
+
+
+func _fire_emerald_tower_lasers(shots: Array[Dictionary]) -> Dictionary:
+	var active_shots: Array[Dictionary] = []
+	var leaf_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.30, 0.69, 0.31))
+
+	for shot in shots:
+		var block: Block = shot.get("block", null) as Block
+		var caster: CharacterData = shot.get("caster", null) as CharacterData
+		if block == null or caster == null or not is_instance_valid(block):
+			continue
+		var base_damage: int = maxi(1, int(round(float(caster.get_magic()) * EMERALD_TOWER_MAGIC_MULT)))
+		var target: Enemy = _get_current_living_target(Block.Type.GREEN, base_damage, 1.0)
+		if target == null:
+			continue
+		active_shots.append({
+			"block": block,
+			"caster": caster,
+			"target": target,
+			"base_damage": base_damage,
+			"applied_damage": 0,
+		})
+	if active_shots.is_empty():
+		return {"fired": 0, "applied_damage": 0}
+
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			enemy.defer_death = true
+
+	for shot in active_shots:
+		var block: Block = shot["block"] as Block
+		var target: Enemy = shot["target"] as Enemy
+		var target_pos: Vector2 = _get_enemy_image_center(target) if is_instance_valid(target) else block.global_position
+		var laser := Node2D.new()
+		laser.set_script(LeafRayLaserVfxScript)
+		if laser.has_method("set_shared_vfx_layer"):
+			laser.call("set_shared_vfx_layer", _get_battle_vfx_3d_layer())
+		fx_layer.add_child(laser)
+		laser.start_following(block, target_pos, LEAF_RAY_LASER_DURATION)
+	_play_sfx(_se_solar_beam_shining)
+
+	var leaf_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.EMERALD_TOWER, null) as Texture2D
+	var total_applied := 0
+	var tick_count: int = maxi(1, ceili(LEAF_RAY_LASER_DURATION / LEAF_RAY_DAMAGE_TICK_INTERVAL))
+	for shot in active_shots:
+		var target: Enemy = shot["target"] as Enemy
+		var base_damage: int = int(shot["base_damage"])
+		var applied_total: int = target.get_damage_after_passives(base_damage) if is_instance_valid(target) else 0
+		shot["tick_base"] = floori(float(applied_total) / float(tick_count))
+		shot["tick_remainder"] = applied_total % tick_count
+	for tick_index in range(tick_count):
+		await get_tree().create_timer(LEAF_RAY_DAMAGE_TICK_INTERVAL).timeout
+		var played_impact := false
+		for shot in active_shots:
+			var target: Enemy = shot["target"] as Enemy
+			if not is_instance_valid(target) or not (target.current_hp > 0 or target.defer_death):
+				continue
+			var tick_damage: int = int(shot["tick_base"]) + (1 if tick_index < int(shot["tick_remainder"]) else 0)
+			if tick_damage <= 0:
+				continue
+			var actual_tick_damage: int = target.take_applied_damage_tick(tick_damage)
+			if actual_tick_damage <= 0:
+				continue
+			shot["applied_damage"] = int(shot.get("applied_damage", 0)) + actual_tick_damage
+			total_applied += actual_tick_damage
+			var tick_pos: Vector2 = _get_enemy_image_center(target)
+			_spawn_damage_number(tick_pos, actual_tick_damage, leaf_color, true, false)
+			DebrisVfx.play(fx_layer, leaf_texture, tick_pos, 4, Vector2(0.42, 0.78), Vector2(0.32, 0.52), 118, leaf_color)
+			played_impact = true
+		if played_impact:
+			_play_sfx(_se_impact)
+
+	for enemy in battle_manager.active_enemies.duplicate():
+		if is_instance_valid(enemy):
+			enemy.defer_death = false
+			if enemy.current_hp <= 0:
+				enemy.finalize_death()
+	return {"fired": active_shots.size(), "applied_damage": total_applied}
+
+
+func _convert_emerald_tower_nearby_cells(origin: Vector2i) -> int:
+	var targets: Array[Vector2i] = _emerald_tower_conversion_targets(origin, EMERALD_TOWER_CONVERT_COUNT)
+	var converted := 0
+	if targets.is_empty() or not board._is_valid(origin):
+		return 0
+	var from_block: Block = board.grid[origin.x][origin.y]
+	var from_pos: Vector2 = from_block.global_position if from_block != null else board.to_global(board.grid_to_world(origin))
+	var leaf_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.3, 0.85, 0.35))
+	for i in targets.size():
+		var pos: Vector2i = targets[i]
+		if not board._is_valid(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if not _can_emerald_tower_convert_block(block):
+			continue
+		var trail := Node2D.new()
+		trail.set_script(TrailProjectileScript)
+		trail.z_index = 100
+		fx_layer.add_child(trail)
+		var captured_pos: Vector2i = pos
+		trail.deduct_hp.connect(func() -> void:
+			if board._is_valid(captured_pos):
+				var target_block: Block = board.grid[captured_pos.x][captured_pos.y]
+				if _can_emerald_tower_convert_block(target_block):
+					board._animate_gem_morph(target_block, Block.Type.GREEN)
+			_play_sfx(_se_impact, 0.65)
+		, CONNECT_ONE_SHOT)
+		var spread: float = (float(i) / maxf(float(targets.size() - 1), 1.0)) * 1.2 - 0.6 if targets.size() > 1 else 0.0
+		trail.launch(from_pos, block.global_position, leaf_color, 0.5, spread)
+		converted += 1
+		if i < targets.size() - 1:
+			await get_tree().create_timer(0.06).timeout
+	if converted > 0:
+		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.18).timeout
+		board.resync_logic_from_visual()
+	return converted
+
+
+func _emerald_tower_conversion_targets(origin: Vector2i, limit: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	var selected: Dictionary = {}
+	for offset in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0)]:
+		var pos: Vector2i = origin + offset
+		if _can_emerald_tower_convert_pos(pos):
+			result.append(pos)
+			selected[pos] = true
+			if result.size() >= limit:
+				return result
+
+	var candidates: Array[Dictionary] = []
+	for x in board.columns:
+		for y in board.rows:
+			var pos := Vector2i(x, y)
+			if selected.has(pos) or pos == origin:
+				continue
+			if not _can_emerald_tower_convert_pos(pos):
+				continue
+			var dx: int = pos.x - origin.x
+			var dy: int = pos.y - origin.y
+			candidates.append({"pos": pos, "dist": dx * dx + dy * dy, "manhattan": abs(dx) + abs(dy), "y": y, "x": x})
+	candidates.sort_custom(Callable(self, "_sort_emerald_tower_candidate"))
+	for entry: Dictionary in candidates:
+		result.append(entry["pos"] as Vector2i)
+		if result.size() >= limit:
+			break
+	return result
+
+
+func _sort_emerald_tower_candidate(a: Dictionary, b: Dictionary) -> bool:
+	var ad: int = int(a.get("dist", 0))
+	var bd: int = int(b.get("dist", 0))
+	if ad != bd:
+		return ad < bd
+	var am: int = int(a.get("manhattan", 0))
+	var bm: int = int(b.get("manhattan", 0))
+	if am != bm:
+		return am < bm
+	var ay: int = int(a.get("y", 0))
+	var by: int = int(b.get("y", 0))
+	if ay != by:
+		return ay < by
+	return int(a.get("x", 0)) < int(b.get("x", 0))
+
+
+func _can_emerald_tower_convert_pos(pos: Vector2i) -> bool:
+	if not board._is_valid(pos) or board.is_escape_marker_pos(pos):
+		return false
+	return _can_emerald_tower_convert_block(board.grid[pos.x][pos.y])
+
+
+func _can_emerald_tower_convert_block(block: Block) -> bool:
+	if block == null or block.is_obstacle() or block.is_upper_gem():
+		return false
+	return block.block_type != Block.Type.GREEN
+
+
 ## 將棋盤上不在 keep_set（Vector2i → bool）內的寶石變暗。
 func _dim_board_except(keep_set: Dictionary) -> void:
 	for x in board.columns:
@@ -8056,6 +8279,16 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _tc: CharacterData = party[resp.char_index]
 			var _tc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _tc_count, Block.UpperType.TURTLE), fuse_gem_type, _tc)
+			await get_tree().create_timer(0.15).timeout
+		Block.UpperType.EMERALD_TOWER:
+			var pos: Vector2i = board.last_tapped_pos
+			var char_index: int = int(resp.get("char_index", -1))
+			if not board.place_upper_gem(pos, Block.UpperType.EMERALD_TOWER, Block.Type.GREEN, Block.UpperOwnerTeam.PLAYER, char_index):
+				return
+			_play_sfx(_se_freeze)
+			var _etc: CharacterData = party[char_index] if char_index >= 0 and char_index < party.size() else null
+			var _etc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _etc_count, Block.UpperType.EMERALD_TOWER), fuse_gem_type, _etc)
 			await get_tree().create_timer(0.15).timeout
 		Block.UpperType.BAMBOO_SUPPLY:
 			# 竹葉補給：在點擊處生成竹葉補給寶石；爆破時消除周圍 8 格並回復觸發者 HP
@@ -8972,6 +9205,27 @@ func _handle_active_skill(char_index: int) -> void:
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui(c.active_skill_name), _gem_bbcode(Block.Type.GREEN), _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
+		"Wood Spirit Attack":
+			var tower_positions: Array[Vector2i] = board.find_player_owned_upper_gems(char_index, Block.UpperType.EMERALD_TOWER)
+			if tower_positions.is_empty():
+				return
+			var tower_shots: Array[Dictionary] = _collect_emerald_tower_shots(tower_positions, char_index)
+			if tower_shots.is_empty():
+				return
+			_use_active_skill_and_show_loot_toast(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			board.set_input_queue_locked(true)
+			board.clear_deferred_clicks()
+			for shot in tower_shots:
+				_bounce_block_at(shot["pos"] as Vector2i)
+			await get_tree().create_timer(0.10).timeout
+			var fire_result: Dictionary = await _fire_emerald_tower_lasers(tower_shots)
+			var fired: int = int(fire_result.get("fired", 0))
+			_add_log_entry("%s：%s ×%d" % [Locale.tr_ui("Wood Spirit Attack"), _upper_gem_bbcode(Block.UpperType.EMERALD_TOWER), fired], Block.Type.GREEN, c)
+			board.clear_deferred_clicks()
+			board.set_input_queue_locked(false)
+			board.is_busy = false
 		"Forge":
 			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "forge_single")
 			if bool(selection.get("cancelled", false)):

@@ -409,6 +409,8 @@ func _make_blast_grid(pattern: Array, upper_type: int) -> GridContainer:
 
 
 func _blast_pattern_for(upper_type: int) -> Array:
+	if Block.upper_type_has_building(upper_type):
+		return [Vector2i(2, 2)]
 	match upper_type:
 		Block.UpperType.FIREBALL:
 			return [Vector2i(2, 2), Vector2i(2, 1), Vector2i(2, 3), Vector2i(1, 2), Vector2i(3, 2)]
@@ -435,8 +437,6 @@ func _blast_pattern_for(upper_type: int) -> Array:
 			return [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1),
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
-		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
-			return [Vector2i(2, 2)]
 		Block.UpperType.WOOD_SPEAR_UP:
 			return [Vector2i(2, 2), Vector2i(2, 1), Vector2i(2, 0), Vector2i(1, 0), Vector2i(3, 0)]
 		Block.UpperType.WOOD_SPEAR_DOWN:
@@ -570,6 +570,7 @@ func _upper_gem_templates() -> Array[Dictionary]:
 		_skill_template("Water Slash", "Water Slash", "Slash", Block.UpperType.WATER_SLASH, "count", "create a Water Slash gem at tapped cell."),
 		_skill_template("Porcupine", "Porcupine", "Spike", Block.UpperType.PORCUPINE, "count", "summon a Porcupine gem at tapped cell."),
 		_skill_template("Turtle", "Turtle", "Turtle", Block.UpperType.TURTLE, "count", "summon a Turtle gem at tapped cell."),
+		_skill_template("Emerald Tower", "Emerald Tower", "Tower", Block.UpperType.EMERALD_TOWER, "count", "summon an Emerald Tower building gem at tapped cell."),
 		_skill_template("Bamboo Supply", "Bamboo", "Bamboo", Block.UpperType.BAMBOO_SUPPLY, "count", "create a Bamboo Supply gem at tapped cell."),
 		_skill_template("Wood Spear", "Wood Spear", "Spear", Block.UpperType.WOOD_SPEAR_UP, "count", "create a Wood Spear gem at tapped cell."),
 		_skill_template("Leaf Ray", "Leaf Ray", "Ray", Block.UpperType.LEAF_RAY, "count", "create an instant Leaf Ray gem at tapped cell."),
@@ -579,6 +580,9 @@ func _upper_gem_templates() -> Array[Dictionary]:
 
 func _skill_template(skill_name: String, display_name: String, short_name: String, upper_type: Block.UpperType, trigger_type: String, desc: String) -> Dictionary:
 	var threshold: int = SkillUpgradeUtils.default_fuse_threshold_for_upper(upper_type)
+	var requirement_type: Block.Type = Block.UPPER_ELEMENT.get(upper_type, Block.Type.RED) as Block.Type
+	if upper_type == Block.UpperType.EMERALD_TOWER:
+		requirement_type = Block.Type.LIGHT
 	return {
 		"name": skill_name,
 		"display_name": display_name,
@@ -589,7 +593,7 @@ func _skill_template(skill_name: String, display_name: String, short_name: Strin
 		"trigger_type": trigger_type,
 		"priority": 1,
 		"upper_type": upper_type,
-		"gem_type": int(Block.UPPER_ELEMENT.get(upper_type, Block.Type.RED)),
+		"gem_type": int(requirement_type),
 		"icon": Block.UPPER_GEM_TEXTURES.get(upper_type, null),
 	}
 
