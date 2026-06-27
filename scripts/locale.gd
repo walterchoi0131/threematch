@@ -265,6 +265,10 @@ func _ginger_translations(key: String) -> String:
 			return "燃薪猛火" if zh else "Kindling Blaze"
 		"燃薪猛火 DESC":
 			return "將棋盤上所有木珠轉成火珠。CD: 5 回合。" if zh else "Convert all leaf gems on the board into fire gems. CD: 5 turns."
+		"Kindling Blaze":
+			return "燃薪猛火" if zh else "Kindling Blaze"
+		"Kindling Blaze DESC":
+			return "將棋盤上的所有木寶石轉為火寶石。CD: 5 回合。" if zh else "Convert all leaf gems on the board into fire gems. CD: 5 turns."
 		"Forge":
 			return "鑄造" if zh else "Forge"
 		"Forge DESC":

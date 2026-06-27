@@ -13,6 +13,9 @@ const PuzzleGoalPulseParticlesScript := preload("res://scripts/upper_gem_pulse_p
 const PuzzleGoalRayBurstScript := preload("res://scripts/ray_burst.gd")
 const GoldCoin3DProxyScript := preload("res://scripts/gold_coin_3d_proxy.gd")
 const BattleVfx3DLayerScript := preload("res://scripts/battle_vfx_3d_layer.gd")
+const ActiveSkillResolverRegistryScript := preload("res://scripts/active_skill_resolver_registry.gd")
+const SimpleConversionActiveSkillsScript := preload("res://scripts/active_skills/simple_conversion_active_skills.gd")
+const EmeraldTowerActiveSkillsScript := preload("res://scripts/active_skills/emerald_tower_active_skills.gd")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -210,6 +213,8 @@ var _instant_upper_predictors: Dictionary = {}
 var _instant_upper_effect_worker_running: bool = false
 var _building_upper_resolvers: Dictionary = {}
 var _building_upper_resolver_order: Array[Block.UpperType] = []
+var _active_skill_registry: ActiveSkillResolverRegistry = null
+var _active_skill_modules: Array[RefCounted] = []
 var _next_instant_upper_follow_trail: Node2D = null
 const INSTANT_UPPER_TRANSFER_METHOD_FLY := 0
 const INSTANT_UPPER_TRANSFER_METHOD_VOID := 1
@@ -495,6 +500,7 @@ func _ready() -> void:
 	battle_manager.round_transition_wait_handler = Callable(self, "_wait_for_loot_flights_finished")
 	_register_instant_upper_resolvers()
 	_register_building_upper_resolvers()
+	_register_active_skill_resolvers()
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
 	battle_manager.player_shield_changed.connect(_on_player_shield_changed)
 	battle_manager.player_defeated.connect(_on_player_defeated)
@@ -6152,6 +6158,25 @@ func _register_building_upper_resolver(upper_type: Block.UpperType, resolver: Ca
 		_building_upper_resolver_order.append(upper_type)
 
 
+func _register_active_skill_resolvers() -> void:
+	# Active skill behavior belongs in scripts/active_skills/*.gd modules.
+	# main.gd owns orchestration only: create registry, load modules, then dispatch by skill id.
+	_active_skill_registry = ActiveSkillResolverRegistryScript.new()
+	_active_skill_modules.clear()
+	var simple_conversion: SimpleConversionActiveSkills = SimpleConversionActiveSkillsScript.new(self)
+	simple_conversion.register(_active_skill_registry)
+	_active_skill_modules.append(simple_conversion)
+	var emerald_tower: EmeraldTowerActiveSkills = EmeraldTowerActiveSkillsScript.new(self)
+	emerald_tower.register(_active_skill_registry)
+	_active_skill_modules.append(emerald_tower)
+
+
+func _try_resolve_registered_active_skill(char_index: int, character: CharacterData) -> bool:
+	if character == null or _active_skill_registry == null:
+		return false
+	return await _active_skill_registry.try_resolve(char_index, character)
+
+
 func _has_instant_upper_resolver(upper_type: Block.UpperType) -> bool:
 	var resolver: Callable = _instant_upper_resolvers.get(upper_type, Callable()) as Callable
 	return resolver.is_valid()
@@ -9206,65 +9231,10 @@ func _handle_active_skill(char_index: int) -> void:
 		return
 
 	var c: CharacterData = party[char_index]
+	var handled_by_resolver: bool = await _try_resolve_registered_active_skill(char_index, c)
+	if handled_by_resolver:
+		return
 	match c.active_skill_name:
-		"Attack Form":
-			# 攻擊形態：將所有火寶石轉為水寶石
-			_use_active_skill_and_show_loot_toast(char_index)
-			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
-			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Attack Form"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
-			await get_tree().create_timer(0.4).timeout
-			_update_skill_ui()
-		"Green to Fire":
-			_use_active_skill_and_show_loot_toast(char_index)
-			board.convert_all_of_type(Block.Type.GREEN, Block.Type.RED)
-			_add_log_entry("%s：%s→%s" % [Locale.tr_ui(c.active_skill_name), _gem_bbcode(Block.Type.GREEN), _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
-			await get_tree().create_timer(0.4).timeout
-			_update_skill_ui()
-		"燃薪猛火":
-			_use_active_skill_and_show_loot_toast(char_index)
-			board.convert_all_of_type(Block.Type.GREEN, Block.Type.RED)
-			_add_log_entry("%s：%s→%s" % [Locale.tr_ui(c.active_skill_name), _gem_bbcode(Block.Type.GREEN), _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
-			await get_tree().create_timer(0.4).timeout
-			_update_skill_ui()
-		"Light Energy Transfer":
-			_use_active_skill_and_show_loot_toast(char_index)
-			_update_skill_ui()
-			board.is_busy = true
-			var converted := 0
-			for x in board.columns:
-				for y in board.rows:
-					var block: Block = board.grid[x][y]
-					if block == null or block.is_obstacle() or block.is_upper_gem():
-						continue
-					if block.block_type != Block.Type.LIGHT:
-						continue
-					board._animate_gem_morph(block, Block.Type.GREEN)
-					converted += 1
-			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("Light Energy Transfer"), converted, _gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, c)
-			await get_tree().create_timer(0.4).timeout
-			board.resync_logic_from_visual()
-			board.is_busy = false
-		"Wood Spirit Attack":
-			var tower_positions: Array[Vector2i] = board.find_player_owned_upper_gems(char_index, Block.UpperType.EMERALD_TOWER)
-			if tower_positions.is_empty():
-				return
-			var tower_shots: Array[Dictionary] = _collect_emerald_tower_shots(tower_positions, char_index)
-			if tower_shots.is_empty():
-				return
-			_use_active_skill_and_show_loot_toast(char_index)
-			_update_skill_ui()
-			board.is_busy = true
-			board.set_input_queue_locked(true)
-			board.clear_deferred_clicks()
-			for shot in tower_shots:
-				_bounce_block_at(shot["pos"] as Vector2i)
-			await get_tree().create_timer(0.10).timeout
-			var fire_result: Dictionary = await _fire_emerald_tower_lasers(tower_shots)
-			var fired: int = int(fire_result.get("fired", 0))
-			_add_log_entry("%s：%s ×%d" % [Locale.tr_ui("Wood Spirit Attack"), _upper_gem_bbcode(Block.UpperType.EMERALD_TOWER), fired], Block.Type.GREEN, c)
-			board.clear_deferred_clicks()
-			board.set_input_queue_locked(false)
-			board.is_busy = false
 		"Forge":
 			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "forge_single")
 			if bool(selection.get("cancelled", false)):
@@ -9317,13 +9287,6 @@ func _handle_active_skill(char_index: int) -> void:
 			board.clear_deferred_clicks()
 			board.set_input_queue_locked(false)
 			board.is_busy = false
-		"Tranquil Mirror":
-			# 止水明鏡：將棋盤上所有火寶石轉換為水寶石
-			_use_active_skill_and_show_loot_toast(char_index)
-			board.convert_all_of_type(Block.Type.RED, Block.Type.BLUE)
-			_add_log_entry("%s：%s→%s" % [Locale.tr_ui("Tranquil Mirror"), _gem_bbcode(Block.Type.RED), _gem_bbcode(Block.Type.BLUE)], Block.Type.BLUE, c)
-			await get_tree().create_timer(0.4).timeout
-			_update_skill_ui()
 		"冰球法印":
 			_use_active_skill_and_show_loot_toast(char_index)
 			_play_sfx(_se_water_bubble)
