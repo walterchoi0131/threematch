@@ -257,6 +257,10 @@ func _ginger_translations(key: String) -> String:
 			return "召喚: 木靈" if zh else "Emerald Tower"
 		"Emerald Tower DESC":
 			return "6+ 光寶石召喚木屬性的綠寶石之塔[建築物]。爆炸時提供 6 木元素攻擊；玩家回合結束時依召喚者魔力發射 7 倍攻擊，並將附近 3 格轉為木寶石。" if zh else "Fuse 6+ light gems to summon a leaf-element Emerald Tower building. Its blast contributes 6 leaf attack; at player turn end it fires magic x7 and converts 3 nearby cells to leaf."
+		"Dark Emerald Tower":
+			return "召喚: 暗靈之塔" if zh else "Dark Emerald Tower"
+		"Dark Emerald Tower DESC":
+			return "6+ 暗寶石召喚暗屬性的暗靈之塔[建築物]。爆炸時提供 6 暗元素攻擊；玩家回合結束時依召喚者魔力發射 7 倍攻擊，並將附近 3 格轉為暗寶石。" if zh else "Fuse 6+ dark gems to summon a dark-element Dark Emerald Tower building. Its blast contributes 6 dark attack; at player turn end it fires magic x7 and converts 3 nearby cells to dark."
 		"Green to Fire":
 			return "燃薪猛火" if zh else "Green to Fire"
 		"Green to Fire DESC":

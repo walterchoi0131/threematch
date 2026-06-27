@@ -33,6 +33,14 @@ after the skill has finished enough for the battle flow to continue.
 - `scripts/main.gd`: battle orchestration and shared battle helpers.
 - `scripts/board.gd`: reusable board primitives only. Avoid character-specific logic here.
 
+## Building Upper Gem Turn Resolvers
+
+Building-type upper gems resolve at player turn end through `_register_building_upper_resolvers()`
+in `scripts/main.gd`. Add the upper type to `Block.UPPER_BUILDING`, register a resolver with
+`_register_building_upper_resolver()`, and keep repeated behavior in shared helpers. For example,
+Emerald Tower and Dark Emerald Tower both use the spirit tower flow; only the upper type and target
+element differ.
+
 ## Adding A New Active Skill
 
 1. Pick a stable English skill id, for example `"Light Energy Transfer"`.

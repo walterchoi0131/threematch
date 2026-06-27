@@ -36,4 +36,13 @@ responding_skills = Array[Dictionary]([{
 "threshold": 6,
 "trigger_type": "count",
 "upper_type": 19
+}, {
+"desc": "summon a Dark Emerald Tower building gem at tapped cell.",
+"fuse_label": "6",
+"gem_type": 7,
+"name": "Dark Emerald Tower",
+"priority": 1,
+"threshold": 6,
+"trigger_type": "count",
+"upper_type": 20
 }])

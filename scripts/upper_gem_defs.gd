@@ -68,6 +68,7 @@ const DEFAULT_FUSE_THRESHOLD: Dictionary = {
 	Block.UpperType.FIRE_GREATSWORD: 6,
 	Block.UpperType.FIRE_HAMMER: 5,
 	Block.UpperType.EMERALD_TOWER: 6,
+	Block.UpperType.DARK_EMERALD_TOWER: 6,
 }
 
 const UPGRADE_EFFECTS: Dictionary = {
@@ -151,6 +152,11 @@ static func _ensure_init() -> void:
 		Block.Type.GREEN,
 		Color(0.28, 0.95, 0.45),
 		"Emerald Tower",
+	)
+	_defs[Block.UpperType.DARK_EMERALD_TOWER] = Def.new(
+		Block.Type.DARK,
+		Color(0.55, 0.32, 0.85),
+		"Dark Emerald Tower",
 	)
 	_defs[Block.UpperType.BAMBOO_SUPPLY] = Def.new(
 		Block.Type.GREEN,
