@@ -249,6 +249,10 @@ func _ginger_translations(key: String) -> String:
 			return "木靈攻撃" if zh else "Wood Spirit Attack"
 		"Wood Spirit Attack DESC":
 			return "呼叫場上屬於自己的綠寶石之塔發射葉光射線，造成自身魔力 7 倍木元素攻擊。CD: 4 回合。" if zh else "Call your Emerald Towers on the board to fire leaf rays, dealing caster magic x7 leaf damage. CD: 4 turns."
+		"Light Energy Transfer":
+			return "光能轉移" if zh else "Light Energy Transfer"
+		"Light Energy Transfer DESC":
+			return "將棋盤上的普通光寶石轉為木寶石。CD: 5 回合。" if zh else "Convert normal light gems on the board into leaf gems. CD: 5 turns."
 		"Emerald Tower":
 			return "召喚: 木靈" if zh else "Emerald Tower"
 		"Emerald Tower DESC":

@@ -7538,12 +7538,12 @@ func _resolve_emerald_tower_building_turn(positions: Array) -> void:
 		_bounce_block_at(shot["pos"] as Vector2i)
 	await get_tree().create_timer(0.12).timeout
 	await _fire_emerald_tower_lasers(shots)
+	var converted_by_pos: Dictionary = await _convert_emerald_towers_nearby_cells(shots)
 
-	for i in shots.size():
-		var shot: Dictionary = shots[i]
+	for shot in shots:
 		var pos: Vector2i = shot["pos"] as Vector2i
 		var caster: CharacterData = shot["caster"] as CharacterData
-		var converted: int = await _convert_emerald_tower_nearby_cells(pos)
+		var converted: int = int(converted_by_pos.get(pos, 0))
 		_add_log_entry("[b]%s[/b] %s MAG%d ×%d / %d→%s" % [
 			Locale.tr_ui("Emerald Tower"),
 			_gem_bbcode(Block.Type.GREEN),
@@ -7552,8 +7552,6 @@ func _resolve_emerald_tower_building_turn(positions: Array) -> void:
 			converted,
 			_gem_bbcode(Block.Type.GREEN),
 		], Block.Type.GREEN, caster)
-		if i < shots.size() - 1:
-			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
 
 
 func _collect_emerald_tower_shots(positions: Array, owner_id_filter: int = -1) -> Array[Dictionary]:
@@ -7653,26 +7651,50 @@ func _fire_emerald_tower_lasers(shots: Array[Dictionary]) -> Dictionary:
 	return {"fired": active_shots.size(), "applied_damage": total_applied}
 
 
-func _convert_emerald_tower_nearby_cells(origin: Vector2i) -> int:
-	var targets: Array[Vector2i] = _emerald_tower_conversion_targets(origin, EMERALD_TOWER_CONVERT_COUNT)
-	var converted := 0
-	if targets.is_empty() or not board._is_valid(origin):
-		return 0
-	var from_block: Block = board.grid[origin.x][origin.y]
-	var from_pos: Vector2 = from_block.global_position if from_block != null else board.to_global(board.grid_to_world(origin))
+func _convert_emerald_towers_nearby_cells(shots: Array[Dictionary]) -> Dictionary:
 	var leaf_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.3, 0.85, 0.35))
-	for i in targets.size():
-		var pos: Vector2i = targets[i]
-		if not board._is_valid(pos):
+	var reserved: Dictionary = {}
+	var converted_by_pos: Dictionary = {}
+	var entries: Array[Dictionary] = []
+
+	for shot in shots:
+		var origin: Vector2i = shot["pos"] as Vector2i
+		if not board._is_valid(origin):
 			continue
-		var block: Block = board.grid[pos.x][pos.y]
-		if not _can_emerald_tower_convert_block(block):
+		var from_block: Block = board.grid[origin.x][origin.y]
+		if from_block == null:
 			continue
+		var from_pos: Vector2 = from_block.global_position
+		var targets: Array[Vector2i] = _emerald_tower_conversion_targets(origin, EMERALD_TOWER_CONVERT_COUNT, reserved)
+		var count_for_tower := 0
+		for i in targets.size():
+			var target_pos: Vector2i = targets[i]
+			if not board._is_valid(target_pos) or reserved.has(target_pos):
+				continue
+			var block: Block = board.grid[target_pos.x][target_pos.y]
+			if not _can_emerald_tower_convert_block(block):
+				continue
+			reserved[target_pos] = true
+			count_for_tower += 1
+			entries.append({
+				"origin": origin,
+				"target": target_pos,
+				"from_pos": from_pos,
+				"to_pos": block.global_position,
+				"index": i,
+				"total": targets.size(),
+			})
+		converted_by_pos[origin] = count_for_tower
+
+	if entries.is_empty():
+		return converted_by_pos
+
+	for entry in entries:
 		var trail := Node2D.new()
 		trail.set_script(TrailProjectileScript)
 		trail.z_index = 100
 		fx_layer.add_child(trail)
-		var captured_pos: Vector2i = pos
+		var captured_pos: Vector2i = entry["target"] as Vector2i
 		trail.deduct_hp.connect(func() -> void:
 			if board._is_valid(captured_pos):
 				var target_block: Block = board.grid[captured_pos.x][captured_pos.y]
@@ -7680,23 +7702,22 @@ func _convert_emerald_tower_nearby_cells(origin: Vector2i) -> int:
 					board._animate_gem_morph(target_block, Block.Type.GREEN)
 			_play_sfx(_se_impact, 0.65)
 		, CONNECT_ONE_SHOT)
-		var spread: float = (float(i) / maxf(float(targets.size() - 1), 1.0)) * 1.2 - 0.6 if targets.size() > 1 else 0.0
-		trail.launch(from_pos, block.global_position, leaf_color, 0.5, spread)
-		converted += 1
-		if i < targets.size() - 1:
-			await get_tree().create_timer(0.06).timeout
-	if converted > 0:
-		await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.18).timeout
-		board.resync_logic_from_visual()
-	return converted
+		var total: int = int(entry.get("total", 1))
+		var index: int = int(entry.get("index", 0))
+		var spread: float = (float(index) / maxf(float(total - 1), 1.0)) * 1.2 - 0.6 if total > 1 else 0.0
+		trail.launch(entry["from_pos"] as Vector2, entry["to_pos"] as Vector2, leaf_color, 0.5, spread)
+
+	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.18).timeout
+	board.resync_logic_from_visual()
+	return converted_by_pos
 
 
-func _emerald_tower_conversion_targets(origin: Vector2i, limit: int) -> Array[Vector2i]:
+func _emerald_tower_conversion_targets(origin: Vector2i, limit: int, reserved: Dictionary) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	var selected: Dictionary = {}
 	for offset in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0)]:
 		var pos: Vector2i = origin + offset
-		if _can_emerald_tower_convert_pos(pos):
+		if not reserved.has(pos) and _can_emerald_tower_convert_pos(pos):
 			result.append(pos)
 			selected[pos] = true
 			if result.size() >= limit:
@@ -7706,7 +7727,7 @@ func _emerald_tower_conversion_targets(origin: Vector2i, limit: int) -> Array[Ve
 	for x in board.columns:
 		for y in board.rows:
 			var pos := Vector2i(x, y)
-			if selected.has(pos) or pos == origin:
+			if selected.has(pos) or reserved.has(pos) or pos == origin:
 				continue
 			if not _can_emerald_tower_convert_pos(pos):
 				continue
@@ -9205,6 +9226,24 @@ func _handle_active_skill(char_index: int) -> void:
 			_add_log_entry("%s：%s→%s" % [Locale.tr_ui(c.active_skill_name), _gem_bbcode(Block.Type.GREEN), _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
 			await get_tree().create_timer(0.4).timeout
 			_update_skill_ui()
+		"Light Energy Transfer":
+			_use_active_skill_and_show_loot_toast(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			var converted := 0
+			for x in board.columns:
+				for y in board.rows:
+					var block: Block = board.grid[x][y]
+					if block == null or block.is_obstacle() or block.is_upper_gem():
+						continue
+					if block.block_type != Block.Type.LIGHT:
+						continue
+					board._animate_gem_morph(block, Block.Type.GREEN)
+					converted += 1
+			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("Light Energy Transfer"), converted, _gem_bbcode(Block.Type.GREEN)], Block.Type.GREEN, c)
+			await get_tree().create_timer(0.4).timeout
+			board.resync_logic_from_visual()
+			board.is_busy = false
 		"Wood Spirit Attack":
 			var tower_positions: Array[Vector2i] = board.find_player_owned_upper_gems(char_index, Block.UpperType.EMERALD_TOWER)
 			if tower_positions.is_empty():

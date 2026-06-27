@@ -24,9 +24,9 @@ dialog_phase_offset = Vector2(-6, -24)
 square_offset = Vector2(-75, -9)
 rectangular_scale = 0.3
 rectangular_offset = Vector2(-5, 235)
-active_skill_name = "Wood Spirit Attack"
-active_skill_desc = "Call your Emerald Towers on the board to fire leaf rays, dealing Giz MAGIC x7 leaf damage. CD: 4 turns."
-active_skill_cd = 4
+active_skill_name = "Light Energy Transfer"
+active_skill_desc = "Convert normal light gems on the board into leaf gems. CD: 5 turns."
+active_skill_cd = 5
 responding_skills = Array[Dictionary]([{
 "desc": "6+ light gems summon an Emerald Tower building. It is leaf-element with intrinsic value 6. At player turn end it fires MAGIC x7 and converts 3 nearby valid cells into leaf gems.",
 "fuse_label": "6",
