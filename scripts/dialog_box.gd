@@ -50,7 +50,7 @@ const SKIP_INTERVAL := 0.1
 const SKIP_HOLD_START_DELAY := 0.4
 const SKIP_HOLD_DURATION := 0.85
 const SKIP_ARROW_OFFSET := 10.0
-const SKIP_ARROW_Y_NUDGE := 3.0
+const SKIP_ARROW_Y_NUDGE := 0.0
 const SKIP_FADE_OUT_DURATION := 0.16
 const SKIP_PROGRESS_INSET := 4.0
 const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
@@ -478,7 +478,6 @@ func _advance() -> void:
 
 	_line_index += 1
 	if _line_index >= _sequence.lines.size():
-		_set_auto_skip(false)
 		_finish_dialog()
 		return
 
@@ -584,6 +583,8 @@ func _update_skip_button_text() -> void:
 		return
 	if _skip_hold_active:
 		_skip_btn.text = Locale.tr_ui("SKIP")
+	elif _skip_should_keep_arrow_during_finish():
+		_skip_btn.text = ""
 	elif _auto_skipping:
 		_skip_btn.text = ""
 	else:
@@ -606,12 +607,20 @@ func _update_skip_hold_fill() -> void:
 func _update_skip_active_visual() -> void:
 	if _skip_arrow_label == null:
 		return
+	if _skip_should_keep_arrow_during_finish():
+		_skip_arrow_label.visible = true
+		_skip_arrow_label.modulate = Color(1.0, 0.85, 0.18)
+		return
 	if _auto_skipping and not _skip_hold_active:
 		_skip_arrow_label.visible = true
 		_skip_arrow_label.modulate = Color(1.0, 0.85, 0.18)
 		_start_skip_arrow_tween()
 	else:
 		_stop_skip_arrow_tween()
+
+
+func _skip_should_keep_arrow_during_finish() -> bool:
+	return _dialog_finishing and _skip_arrow_label != null and _skip_arrow_label.visible
 
 
 func _start_skip_arrow_tween() -> void:
@@ -622,6 +631,8 @@ func _start_skip_arrow_tween() -> void:
 	var base_x: float = _skip_arrow_base_x()
 	_skip_arrow_label.position = Vector2(base_x, SKIP_ARROW_Y_NUDGE)
 	_skip_arrow_label.size = _skip_arrow_size()
+	if not _auto_skipping:
+		return
 	_skip_arrow_tween = create_tween().set_loops()
 	_skip_arrow_tween.tween_property(_skip_arrow_label, "position:x", base_x + SKIP_ARROW_OFFSET, 0.42) \
 		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
@@ -650,7 +661,6 @@ func _skip_arrow_size() -> Vector2:
 
 
 func _skip_dialog_phase() -> void:
-	_set_auto_skip(false)
 	if _type_tween != null and _type_tween.is_valid():
 		_type_tween.kill()
 	if _bg_switch_tween != null and _bg_switch_tween.is_valid():
