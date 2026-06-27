@@ -157,10 +157,14 @@ var _selection_selected_positions: Array[Vector2i] = []
 
 # ── 長按預覽系統（長按高階寶石顯示爆炸範圍）──
 const LONGPRESS_THRESHOLD := 0.35         # 長按觸發閾值（秒）
+const BUILDING_DISMANTLE_HOLD_DURATION := 2.0
 const PREVIEW_FADE_DUR := 0.18            # 預覽進出漸變時間（秒）
+const CircleProgressRingScript := preload("res://scripts/circle_progress_ring.gd")
 var _longpress_pos: Vector2i = Vector2i(-1, -1)  # 長按追蹤的網格位置
 var _longpress_timer: float = 0.0          # 已按住時間
 var _longpress_active: bool = false        # 長按預覽是否已顯示
+var _building_dismantle_progress: CircleProgressRing = null
+var _building_dismantle_completed: bool = false
 var _longpress_overlays: Array[Node] = []  # 爆炸範圍高亮覆蓋層
 var _longpress_dim_tween: Tween = null     # 暗化/還原動畫 tween
 var _longpress_preview_tweens: Array[Tween] = [] # 初始爆炸色層錯峰循環 tween
@@ -319,9 +323,12 @@ func _is_hole_or_outside(pos: Vector2i) -> bool:
 
 func _process(delta: float) -> void:
 	_update_escape_marker_vfx(delta)
-	if _longpress_pos == Vector2i(-1, -1) or _longpress_active:
+	if _longpress_pos == Vector2i(-1, -1):
 		return
 	_longpress_timer += delta
+	if _longpress_active:
+		_update_building_dismantle_progress()
+		return
 	if _longpress_timer >= LONGPRESS_THRESHOLD:
 		_show_blast_preview(_longpress_pos)
 
@@ -3179,7 +3186,6 @@ func _handle_upper_click(pos: Vector2i) -> void:
 	if _is_wood_spear_type(ut):
 		await _handle_wood_spear_sequence(pos)
 		return
-
 	# 根據高階類型決定爆炸位置（使用共用函式）
 	var previous_destroy_rock_flag: bool = _upper_blast_can_destroy_rock
 	_upper_blast_can_destroy_rock = ut == Block.UpperType.FIRE_HAMMER and block.forge_level >= 3
@@ -3763,6 +3769,8 @@ func _fire_greatsword_swing_screen_endpoints(positions: Array[Vector2i]) -> Arra
 
 ## 根據高階寶石類型取得爆炸範圍（點擊與連鏈共用）
 func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array[Vector2i]:
+	if Block.upper_type_has_building(ut):
+		return [pos]
 	match ut:
 		Block.UpperType.FIREBALL:
 			return _get_area_positions(pos, 4)
@@ -3925,6 +3933,24 @@ func find_upper_gems(ut: Block.UpperType) -> Array[Vector2i]:
 					and block.upper_type == ut \
 					and block.upper_owner_team == Block.UpperOwnerTeam.PLAYER:
 				result.append(Vector2i(x, y))
+	return result
+
+
+func collect_building_upper_groups() -> Dictionary:
+	var result: Dictionary = {}
+	for x in columns:
+		for y in rows:
+			var block: Block = grid[x][y]
+			if block == null:
+				continue
+			if not block.is_upper_gem() or block.upper_owner_team != Block.UpperOwnerTeam.PLAYER:
+				continue
+			if not block.has_building_attribute():
+				continue
+			if not result.has(block.upper_type):
+				result[block.upper_type] = []
+			var group: Array = result[block.upper_type] as Array
+			group.append(Vector2i(x, y))
 	return result
 
 
@@ -5377,6 +5403,9 @@ func _show_blast_preview(pos: Vector2i) -> void:
 	var block: Block = grid[pos.x][pos.y]
 	if not _is_player_upper_gem(block):
 		return
+	if block.has_building_attribute():
+		_show_building_dismantle_preview(pos, block)
+		return
 	_longpress_active = true
 	_play_longpress_press_down(block)
 
@@ -5428,6 +5457,89 @@ func _show_blast_preview(pos: Vector2i) -> void:
 			_longpress_raised_blocks.append(rb)
 
 	blast_preview_entered.emit()
+
+
+func _show_building_dismantle_preview(pos: Vector2i, block: Block) -> void:
+	_longpress_active = true
+	_building_dismantle_completed = false
+	_play_longpress_press_down(block)
+
+	if _longpress_dim_tween != null and _longpress_dim_tween.is_valid():
+		_longpress_dim_tween.kill()
+	var dim_color := Color(0.28, 0.28, 0.32, 1.0)
+	_longpress_dim_tween = create_tween().set_parallel(true)
+	for x in columns:
+		for y in rows:
+			var b: Block = grid[x][y]
+			if b == null:
+				continue
+			var target := Color.WHITE if Vector2i(x, y) == pos else dim_color
+			_longpress_dim_tween.tween_property(b, "modulate", target, PREVIEW_FADE_DUR) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	block.z_index = PREVIEW_BLOCK_Z
+	_longpress_raised_blocks.append(block)
+
+	var ring: CircleProgressRing = CircleProgressRingScript.new()
+	ring.name = "BuildingDismantleProgress"
+	ring.size = Vector2(CELL_SIZE, CELL_SIZE)
+	ring.position = grid_to_world(pos) - ring.size * 0.5
+	ring.z_index = PREVIEW_BORDER_Z + 3
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ring.progress = 0.0
+	add_child(ring)
+	_building_dismantle_progress = ring
+	_longpress_overlays.append(ring)
+	blast_preview_entered.emit()
+
+
+func _update_building_dismantle_progress() -> void:
+	if _building_dismantle_progress == null or not is_instance_valid(_building_dismantle_progress):
+		return
+	if _building_dismantle_completed:
+		return
+	var block: Block = grid[_longpress_pos.x][_longpress_pos.y] if _is_valid(_longpress_pos) else null
+	if block == null or not block.has_building_attribute():
+		_hide_blast_preview()
+		_longpress_pos = Vector2i(-1, -1)
+		_longpress_timer = 0.0
+		return
+	var held_after_preview: float = maxf(_longpress_timer - LONGPRESS_THRESHOLD, 0.0)
+	var ratio: float = held_after_preview / BUILDING_DISMANTLE_HOLD_DURATION
+	_building_dismantle_progress.progress = ratio
+	if ratio >= 1.0:
+		_building_dismantle_completed = true
+		var dismantle_pos: Vector2i = _longpress_pos
+		_longpress_pos = Vector2i(-1, -1)
+		_longpress_timer = 0.0
+		call_deferred("_complete_building_dismantle", dismantle_pos)
+
+
+func _complete_building_dismantle(pos: Vector2i) -> void:
+	if not _is_valid(pos):
+		_hide_blast_preview()
+		return
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.has_building_attribute() or block.is_enemy_upper_gem():
+		_hide_blast_preview()
+		return
+
+	var previous_queue_locked := _input_queue_locked
+	_input_queue_locked = true
+	clear_deferred_clicks()
+	_hide_blast_preview()
+	is_busy = true
+
+	grid[pos.x][pos.y] = null
+	if pos.x < logic_grid.size() and logic_grid[pos.x] is Array and pos.y < (logic_grid[pos.x] as Array).size():
+		logic_grid[pos.x][pos.y] = LOGIC_UNKNOWN
+	_play_gem_break_debris(block, true)
+	_queue_free_blocks_after_debris([block])
+	await _collapse_and_fill()
+
+	clear_deferred_clicks()
+	is_busy = false
+	_input_queue_locked = previous_queue_locked
 
 
 func _play_longpress_press_down(block: Block) -> void:
@@ -5894,6 +6006,8 @@ func _create_border_overlay(gp: Vector2i, color: Color) -> Node:
 ## 隱藏長按爆炸預覽：漸變還原暗化 + 漸變移除覆蓋層
 func _hide_blast_preview() -> void:
 	_longpress_active = false
+	_building_dismantle_completed = false
+	_building_dismantle_progress = null
 	_kill_longpress_preview_tweens()
 	_play_longpress_release_bounce()
 
@@ -5925,6 +6039,8 @@ func _hide_blast_preview() -> void:
 			continue
 		if overlay is ColorRect:
 			_longpress_dim_tween.tween_property(overlay, "color:a", 0.0, PREVIEW_FADE_DUR)
+		elif overlay is Control:
+			_longpress_dim_tween.tween_property(overlay, "modulate:a", 0.0, PREVIEW_FADE_DUR)
 		else:
 			# Node2D 邊框容器 — 對所有子節點淡出
 			for child in overlay.get_children():

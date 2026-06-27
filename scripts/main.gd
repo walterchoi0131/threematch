@@ -206,6 +206,8 @@ var _reserved_instant_upper_tasks: Array[Dictionary] = []
 var _instant_upper_resolvers: Dictionary = {}
 var _instant_upper_predictors: Dictionary = {}
 var _instant_upper_effect_worker_running: bool = false
+var _building_upper_resolvers: Dictionary = {}
+var _building_upper_resolver_order: Array[Block.UpperType] = []
 var _next_instant_upper_follow_trail: Node2D = null
 const INSTANT_UPPER_TRANSFER_METHOD_FLY := 0
 const INSTANT_UPPER_TRANSFER_METHOD_VOID := 1
@@ -489,6 +491,7 @@ func _ready() -> void:
 	battle_manager.auto_enemy_action_handler = Callable(self, "_handle_auto_enemy_action")
 	battle_manager.round_transition_wait_handler = Callable(self, "_wait_for_loot_flights_finished")
 	_register_instant_upper_resolvers()
+	_register_building_upper_resolvers()
 	battle_manager.player_hp_changed.connect(_on_player_hp_changed)
 	battle_manager.player_shield_changed.connect(_on_player_shield_changed)
 	battle_manager.player_defeated.connect(_on_player_defeated)
@@ -6128,6 +6131,23 @@ func _register_instant_upper_resolvers() -> void:
 	_instant_upper_predictors[Block.UpperType.LIGHT_TRIANGLE] = Callable(self, "_predict_light_triangle_instant")
 
 
+func _register_building_upper_resolvers() -> void:
+	_building_upper_resolvers.clear()
+	_building_upper_resolver_order.clear()
+	_register_building_upper_resolver(Block.UpperType.PORCUPINE, Callable(self, "_resolve_porcupine_building_turn"))
+	_register_building_upper_resolver(Block.UpperType.TURTLE, Callable(self, "_resolve_turtle_building_turn"))
+
+
+func _register_building_upper_resolver(upper_type: Block.UpperType, resolver: Callable) -> void:
+	if upper_type == Block.UpperType.NONE or not resolver.is_valid():
+		return
+	if not Block.upper_type_has_building(upper_type):
+		push_warning("Building resolver registered for non-building upper gem: %s" % str(upper_type))
+	_building_upper_resolvers[upper_type] = resolver
+	if not _building_upper_resolver_order.has(upper_type):
+		_building_upper_resolver_order.append(upper_type)
+
+
 func _has_instant_upper_resolver(upper_type: Block.UpperType) -> bool:
 	var resolver: Callable = _instant_upper_resolvers.get(upper_type, Callable()) as Callable
 	return resolver.is_valid()
@@ -7374,109 +7394,136 @@ const TURTLE_POWER: float = 0.8     # 烏龜回血：全隊魔力 × 0.8
 const BAMBOO_SUPPLY_HEAL_MULT: float = 4.8  # 竹葉補給回血：Pan 魔力 × 4.8
 
 
-## 在玩家回合結束、敵人行動之前：讓所有場上的召喚物（豪豬/烏龜）行動一次。
-## 計算階段：board.is_busy=true（已由呼叫端保證）；棋盤其他寶石變暗，僅豪豬/烏龜保持亮度。
-## 然後依序對每隻召喚物播放 bounce 動畫並執行其攻擊/回血。
+## 在玩家回合結束、敵人行動之前：讓所有「建築」upper gem 分組進入各自 resolver。
 func _resolve_persistent_upper_gems() -> void:
-	var porcupines: Array[Vector2i] = board.find_upper_gems(Block.UpperType.PORCUPINE)
-	var turtles: Array[Vector2i] = board.find_upper_gems(Block.UpperType.TURTLE)
-	if porcupines.is_empty() and turtles.is_empty():
+	await _resolve_building_upper_gems()
+
+
+func _resolve_building_upper_gems() -> void:
+	if board == null or not board.has_method("collect_building_upper_groups"):
+		return
+	var groups: Dictionary = board.collect_building_upper_groups()
+	if groups.is_empty():
 		return
 
+	var all_positions: Dictionary = {}
+	for positions_value in groups.values():
+		var positions: Array = positions_value as Array
+		for pos_value in positions:
+			all_positions[pos_value] = true
+	_dim_board_except(all_positions)
+
+	var resolved_any := false
+	for upper_type in _building_upper_resolver_order:
+		if not groups.has(upper_type):
+			continue
+		var resolver: Callable = _building_upper_resolvers.get(upper_type, Callable()) as Callable
+		if not resolver.is_valid():
+			continue
+		var positions_for_type: Array = groups[upper_type] as Array
+		if positions_for_type.is_empty():
+			continue
+		resolved_any = true
+		await resolver.call(positions_for_type)
+
+	for key in groups.keys():
+		var upper_type: Block.UpperType = key
+		if _building_upper_resolver_order.has(upper_type):
+			continue
+		var resolver: Callable = _building_upper_resolvers.get(upper_type, Callable()) as Callable
+		if not resolver.is_valid():
+			continue
+		var positions_for_type: Array = groups[upper_type] as Array
+		if positions_for_type.is_empty():
+			continue
+		resolved_any = true
+		await resolver.call(positions_for_type)
+
+	if resolved_any:
+		_undim_board()
+	else:
+		_undim_board()
+
+
+func _party_magic_sum() -> int:
 	# 計算全隊魔力總和
 	var party_magic_sum: int = 0
 	for c: CharacterData in party:
 		if c != null:
 			party_magic_sum += c.get_magic()
+	return party_magic_sum
+
+
+func _resolve_porcupine_building_turn(positions: Array) -> void:
+	var party_magic_sum: int = _party_magic_sum()
 	if party_magic_sum <= 0:
 		return
-
-	# 找出綠屬性角色（僅用於記錄；豪豬/烏龜的 VFX 直接從寶石位置出發，不經過角色卡）
-	var green_idx: int = -1
-	for i in party.size():
-		var cd: CharacterData = party[i]
-		if cd != null and cd.gem_type == Block.Type.GREEN:
-			green_idx = i
-			break
+	var dmg: int = int(party_magic_sum * PORCUPINE_POWER)
+	if dmg <= 0:
+		return
 	var green_color: Color = Block.COLORS[Block.Type.GREEN]
 
-	# ── 計算階段：將其他寶石變暗，凸顯豪豬/烏龜 ──
-	var summon_set: Dictionary = {}
-	for p: Vector2i in porcupines:
-		summon_set[p] = true
-	for p: Vector2i in turtles:
-		summon_set[p] = true
-	_dim_board_except(summon_set)
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			enemy.defer_death = true
 
-	# ── 豪豬：每隻 bounce 後直接從寶石位置 → 敵人 ──
-	if not porcupines.is_empty():
-		var dmg: int = int(party_magic_sum * PORCUPINE_POWER)
-		if dmg > 0:
-			# 啟用延遲死亡（過殺機制）
-			for enemy in battle_manager.active_enemies:
-				if is_instance_valid(enemy):
-					enemy.defer_death = true
+	for i in positions.size():
+		var pos: Vector2i = positions[i]
+		var target: Enemy = null
+		for e: Enemy in battle_manager.active_enemies:
+			if is_instance_valid(e) and e.current_hp > 0:
+				target = e
+				break
+		if target == null:
+			break
+		_bounce_block_at(pos)
+		await get_tree().create_timer(0.18).timeout
 
-			for i in porcupines.size():
-				var pos: Vector2i = porcupines[i]
-				var target: Enemy = null
-				for e: Enemy in battle_manager.active_enemies:
-					if is_instance_valid(e) and e.current_hp > 0:
-						target = e
-						break
-				if target == null:
-					break
-				# Bounce 動畫
-				_bounce_block_at(pos)
-				await get_tree().create_timer(0.18).timeout
+		var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
+		var target_pos: Vector2 = _get_enemy_image_center(target)
+		var trail := Node2D.new()
+		trail.set_script(TrailProjectileScript)
+		fx_layer.add_child(trail)
+		var captured_target: Enemy = target
+		var captured_dmg: int = dmg
+		trail.deduct_hp.connect(func():
+			if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
+				var applied_dmg: int = captured_target.take_damage(captured_dmg)
+				_spawn_damage_number(_get_enemy_image_center(captured_target), applied_dmg, green_color, true, false)
+			_play_sfx(_se_impact)
+		, CONNECT_ONE_SHOT)
+		trail.launch(from_pos, target_pos, green_color, 0.5)
+		_add_log_entry("[b]%s[/b] %s ⚔ %d" % [Locale.tr_ui("Porcupine"), _gem_bbcode(Block.Type.GREEN), dmg], Block.Type.GREEN, null)
+		if i < positions.size() - 1:
+			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
 
-				var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
-				var target_pos: Vector2 = _get_enemy_image_center(target)
-				var trail := Node2D.new()
-				trail.set_script(TrailProjectileScript)
-				fx_layer.add_child(trail)
-				var captured_target: Enemy = target
-				var captured_dmg: int = dmg
-				trail.deduct_hp.connect(func():
-					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
-						var applied_dmg: int = captured_target.take_damage(captured_dmg)
-						_spawn_damage_number(_get_enemy_image_center(captured_target), applied_dmg, green_color, true, false)
-					_play_sfx(_se_impact)
-				, CONNECT_ONE_SHOT)
-				trail.launch(from_pos, target_pos, green_color, 0.5)
-				_add_log_entry("[b]%s[/b] %s ⚔ %d" % [Locale.tr_ui("Porcupine"), _gem_bbcode(Block.Type.GREEN), dmg], Block.Type.GREEN, null)
-				if i < porcupines.size() - 1:
-					await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
+	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
 
-			# 等待最後一發投射物落地
-			await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.15).timeout
+	for enemy in battle_manager.active_enemies.duplicate():
+		if is_instance_valid(enemy):
+			enemy.defer_death = false
+			if enemy.current_hp <= 0:
+				enemy.finalize_death()
 
-			# 結算延遲死亡
-			for enemy in battle_manager.active_enemies.duplicate():
-				if is_instance_valid(enemy):
-					enemy.defer_death = false
-					if enemy.current_hp <= 0:
-						enemy.finalize_death()
 
-	# ── 烏龜：bounce + 從烏龜寶石彈出 +HP 數字 + 直接回血 ──
-	if not turtles.is_empty():
-		var heal: int = int(party_magic_sum * TURTLE_POWER)
-		if heal > 0:
-			for i in turtles.size():
-				var pos: Vector2i = turtles[i]
-				_bounce_block_at(pos)
-				await get_tree().create_timer(0.18).timeout
+func _resolve_turtle_building_turn(positions: Array) -> void:
+	var party_magic_sum: int = _party_magic_sum()
+	if party_magic_sum <= 0:
+		return
+	var heal: int = int(party_magic_sum * TURTLE_POWER)
+	if heal <= 0:
+		return
+	for i in positions.size():
+		var pos: Vector2i = positions[i]
+		_bounce_block_at(pos)
+		await get_tree().create_timer(0.18).timeout
 
-				battle_manager.apply_heal(heal)
-				# 從烏龜寶石位置彈出 +HP 數字
-				var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
-				_spawn_damage_number(from_pos, heal, Color(0.5, 1.0, 0.5), true, false)
-				_add_log_entry("[b]%s[/b] %s +%d HP" % [Locale.tr_ui("Turtle"), _gem_bbcode(Block.Type.GREEN), heal], Block.Type.GREEN, null)
-				if i < turtles.size() - 1:
-					await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
-
-	# ── 計算階段結束：恢復棋盤亮度 ──
-	_undim_board()
+		battle_manager.apply_heal(heal)
+		var from_pos: Vector2 = board.to_global(board.grid_to_world(pos))
+		_spawn_damage_number(from_pos, heal, Color(0.5, 1.0, 0.5), true, false)
+		_add_log_entry("[b]%s[/b] %s +%d HP" % [Locale.tr_ui("Turtle"), _gem_bbcode(Block.Type.GREEN), heal], Block.Type.GREEN, null)
+		if i < positions.size() - 1:
+			await get_tree().create_timer(ATTACK_STAGGER_SEC).timeout
 
 
 ## 將棋盤上不在 keep_set（Vector2i → bool）內的寶石變暗。

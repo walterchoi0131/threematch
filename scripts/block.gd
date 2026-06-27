@@ -187,6 +187,11 @@ const UPPER_INSTANT: Dictionary = {
 	UpperType.LIGHT_TRIANGLE: true,
 }
 
+const UPPER_BUILDING: Dictionary = {
+	UpperType.PORCUPINE: true,
+	UpperType.TURTLE: true,
+}
+
 # 融合提示描邊色（較深色，避免與白色文字混淆）
 const FUSE_HINT_OUTLINE_COLORS = {
 	Type.RED: Color(0.85, 0.45, 0.0),     # 橙色
@@ -265,6 +270,10 @@ static func upper_type_has_forge(ut: UpperType) -> bool:
 	return UPPER_FORGE_INTRINSIC_VALUE.has(ut)
 
 
+static func upper_type_has_building(ut: UpperType) -> bool:
+	return bool(UPPER_BUILDING.get(ut, false))
+
+
 static func forge_max_level(ut: UpperType) -> int:
 	if not upper_type_has_forge(ut):
 		return 0
@@ -287,6 +296,10 @@ func has_instant_upper_attribute() -> bool:
 
 func has_forge_attribute() -> bool:
 	return upper_type_has_forge(upper_type)
+
+
+func has_building_attribute() -> bool:
+	return upper_type_has_building(upper_type)
 
 
 ## 是否為 block（無屬性方塊）— 不參與 BFS / 連鎖 / 融合

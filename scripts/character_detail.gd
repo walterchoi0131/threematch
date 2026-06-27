@@ -519,7 +519,6 @@ func _blast_pattern_for(upper_type: int) -> Array:
 					Vector2i(1, 2),                  Vector2i(3, 2),
 					Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)]
 		Block.UpperType.PORCUPINE, Block.UpperType.TURTLE:
-			# 只爆自身（中心格）
 			return [Vector2i(2, 2)]
 		Block.UpperType.BAMBOO_SUPPLY:
 			# 環形（3x3 外圈）
