@@ -7714,6 +7714,7 @@ func _convert_emerald_towers_nearby_cells(shots: Array[Dictionary]) -> Dictionar
 	if entries.is_empty():
 		return converted_by_pos
 
+	var conversion_trail_duration := 1.0
 	for entry in entries:
 		var trail := Node2D.new()
 		trail.set_script(TrailProjectileScript)
@@ -7725,14 +7726,14 @@ func _convert_emerald_towers_nearby_cells(shots: Array[Dictionary]) -> Dictionar
 				var target_block: Block = board.grid[captured_pos.x][captured_pos.y]
 				if _can_emerald_tower_convert_block(target_block):
 					board._animate_gem_morph(target_block, Block.Type.GREEN)
-			_play_sfx(_se_impact, 0.65)
+					_play_sfx(_se_freeze, 0.65)
 		, CONNECT_ONE_SHOT)
 		var total: int = int(entry.get("total", 1))
 		var index: int = int(entry.get("index", 0))
 		var spread: float = (float(index) / maxf(float(total - 1), 1.0)) * 1.2 - 0.6 if total > 1 else 0.0
-		trail.launch(entry["from_pos"] as Vector2, entry["to_pos"] as Vector2, leaf_color, 0.5, spread)
+		trail.launch(entry["from_pos"] as Vector2, entry["to_pos"] as Vector2, leaf_color, conversion_trail_duration, spread)
 
-	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.18).timeout
+	await get_tree().create_timer(conversion_trail_duration / TrailProjectileScript.speed_divisor + 0.18).timeout
 	board.resync_logic_from_visual()
 	return converted_by_pos
 
