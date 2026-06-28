@@ -4,10 +4,7 @@
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
 [ext_resource type="Resource" path="res://enemies/amon.tres" id="3_amon"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_x7c17"]
-[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="4_dragon"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="5_qtc86"]
-[ext_resource type="Resource" path="res://characters/char_shark.tres" id="5_shark"]
-[ext_resource type="Resource" path="res://characters/char_panda.tres" id="6_panda"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="9_h4yfs"]
 
 [sub_resource type="Resource" id="s2s1_amon"]
@@ -21,7 +18,7 @@ init_cd = 2
 script = ExtResource("1_stage")
 stage_id = "2-S1"
 prerequisite_stage_id = "2-5"
-map_position = Vector2(0, 788)
+map_position = Vector2(4, 821)
 stage_name = "Stage 2-S1 Shark 的水心"
 element_weights = Array[int]([10, 8, 12, 70])
 allowed_types = Array[int]([0, 1, 2, 6])
@@ -35,6 +32,4 @@ mode = 2
 puzzle_goal_target_type = 1
 puzzle_goal_required_count = 18
 puzzle_turn_limit = 12
-start_stage_tutorial_page_ids = Array[String](["2_s1_shark_active"])
-set_party = Array[ExtResource("5_qtc86")]([ExtResource("4_dragon"), ExtResource("5_shark"), ExtResource("6_panda")])
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

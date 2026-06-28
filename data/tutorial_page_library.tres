@@ -53,50 +53,6 @@ ch_info = "敵人也會使用棋盤!
 意圖不明, 危險!
 破壞對方的寶石吧!"
 
-[sub_resource type="Resource" id="chap2_light_overload"]
-script = ExtResource("1_njwqn")
-page_id = "2_1_light_overload"
-image_path = "res://assets/tutor/duel.png"
-chi_title = "光元素超載"
-eng_title = "Light Overload"
-ch_info = "第二章森林的光寶石會偏多，木元素偏少。
-留意可以把光轉成木、或補回木元素的技能。"
-eng_info = "Light gems appear more often in Chapter 2, while leaf gems are scarce.
-Watch for skills that convert light into leaf energy."
-
-[sub_resource type="Resource" id="chap2_giz_transfer"]
-script = ExtResource("1_njwqn")
-page_id = "2_7_giz_light_to_leaf"
-image_path = "res://assets/tutor/forge.png"
-chi_title = "光能轉移"
-eng_title = "Light Energy Transfer"
-ch_info = "Giz 可以把過剩光元素轉為木元素。
-木靈塔與暗靈塔都屬於建築物，回合結束時會各自 Resolve。"
-eng_info = "Giz turns overloaded light into leaf energy.
-Spirit towers are building upper gems and resolve at the end of the player turn."
-
-[sub_resource type="Resource" id="chap2_shark_active"]
-script = ExtResource("1_njwqn")
-page_id = "2_s1_shark_active"
-image_path = "res://assets/tutor/duel.png"
-chi_title = "Shark 主動技"
-eng_title = "Shark Active Skill"
-ch_info = "水元素被石頭困住時，使用 Shark 的主動技爆破水寶石。
-這關通關後會永久解鎖 Shark 主動技。"
-eng_info = "When water is trapped by rocks, use Shark's Active Skill to blast water gems.
-Clear this stage to unlock it permanently."
-
-[sub_resource type="Resource" id="chap2_panda_active"]
-script = ExtResource("1_njwqn")
-page_id = "2_s2_panda_active"
-image_path = "res://assets/tutor/forge.png"
-chi_title = "Panda 主動技"
-eng_title = "Panda Active Skill"
-ch_info = "木寶石很少時，Panda 可以為隊伍製造更多木元素。
-這關通關後會永久解鎖 Panda 主動技。"
-eng_info = "When leaf gems are scarce, Panda can restore leaf energy for the team.
-Clear this stage to unlock it permanently."
-
 [resource]
 script = ExtResource("2_3xdmc")
-pages = Array[ExtResource("1_njwqn")]([SubResource("Resource_kwxrb"), SubResource("Resource_u2u03"), SubResource("Resource_m8yhu"), SubResource("Resource_6w8pe"), SubResource("Resource_56w1v"), SubResource("chap2_light_overload"), SubResource("chap2_giz_transfer"), SubResource("chap2_shark_active"), SubResource("chap2_panda_active")])
+pages = Array[ExtResource("1_njwqn")]([SubResource("Resource_kwxrb"), SubResource("Resource_u2u03"), SubResource("Resource_m8yhu"), SubResource("Resource_6w8pe"), SubResource("Resource_56w1v")])

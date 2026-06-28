@@ -7,11 +7,7 @@
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_clhj2"]
 [ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
 [ext_resource type="Resource" path="res://enemies/tree_man.tres" id="6_tree"]
-[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="7_dragon"]
-[ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="8_xm87u"]
-[ext_resource type="Resource" path="res://characters/char_panda.tres" id="9_panda"]
-[ext_resource type="Resource" path="res://characters/char_gory.tres" id="10_gory"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="13_l75rd"]
 
 [sub_resource type="Resource" id="s27_pre_1"]
@@ -66,6 +62,4 @@ rounds = Array[Array]([[SubResource("s27_e1"), SubResource("s27_e2")]])
 rounds_init_cd = Array[Array]([[0, 1]])
 rounds_enemy_levels = Array[Array]([[24, 24]])
 pre_dialog = SubResource("s27_pre")
-start_stage_tutorial_page_ids = Array[String](["2_7_giz_light_to_leaf"])
-set_party = Array[ExtResource("8_xm87u")]([ExtResource("7_dragon"), ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_gory")])
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

@@ -78,5 +78,5 @@ puzzle_goal_required_count = 4
 puzzle_turn_limit = 18
 pre_dialog = SubResource("s29_pre")
 post_dialog = SubResource("s29_post")
-set_party = Array[ExtResource("8_eas7a")]([ExtResource("7_dragon"), ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_gory")])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -11, -1, -1, -1, -1, -11, -1], [-1, -1, 11, -11, -11, 11, -1, -1], [-1, -1, -11, -1, -1, -11, -1, -1], [-1, -1, -11, -1, -1, -11, -1, -1], [-1, -1, 11, -11, -11, 11, -1, -1], [-1, -11, -1, -1, -1, -1, -11, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

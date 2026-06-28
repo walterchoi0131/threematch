@@ -19,16 +19,17 @@ signal stage_link_drag_finished(button: StageButton, global_position: Vector2)
 const RAY_BURST_SCRIPT := preload("res://scripts/ray_burst.gd")
 ## Spot 圖佔總高度的比例（其餘空間留給下方關卡名稱）
 const SPOT_HEIGHT_RATIO: float = 0.62
-const SPOT_DISPLAY_SCALE: float = 1.5
-const SPOT_BACKDROP_PAD: float = 12.0
+const SPOT_DISPLAY_SCALE: float = 0.9
+const SPOT_BACKDROP_PAD: float = 6.0
 const SPOT_GLOW_PAD: float = 8.0
 const SPOT_LOCKED_TINT: Color = Color(0.42, 0.42, 0.46, 0.68)
 const SPOT_GLOW_TINT: Color = Color(1.0, 0.92, 0.25, 0.0)
 const LATEST_RAY_COLOR: Color = Color(1.0, 0.93, 0.22, 0.76)
 const CAPTION_BG_HEIGHT_RATIO: float = 0.4
-const DEV_BUTTON_SIZE: Vector2 = Vector2(54, 28)
+const DEV_BUTTON_SIZE: Vector2 = Vector2(26, 26)
+const DEV_BUTTON_GAP: float = 3.0
 const DEV_DRAG_THRESHOLD: float = 6.0
-const SPOT_HIT_PADDING: float = 4.0
+const SPOT_HIT_PADDING: float = 2.4
 
 ## 綁定的關卡資料（必填）
 @export var stage: StageData = null:
@@ -54,7 +55,6 @@ const SPOT_HIT_PADDING: float = 4.0
 var _btn: Button = null
 var _add_btn: Button = null
 var _remove_btn: Button = null
-var _link_btn: Button = null
 var _label: Label = null
 var _label_bg: TextureRect = null
 var _is_latest: bool = false
@@ -68,6 +68,8 @@ var _dev_drag_active: bool = false
 var _dev_press_global: Vector2 = Vector2.ZERO
 var _dev_press_offset: Vector2 = Vector2.ZERO
 var _dev_link_pointer_down: bool = false
+var _dev_link_drag_active: bool = false
+var _dev_link_press_global: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -139,34 +141,25 @@ func _build() -> void:
 	_add_btn.name = "AddStageBtn"
 	_add_btn.text = "+"
 	_add_btn.focus_mode = Control.FOCUS_NONE
-	_add_btn.tooltip_text = "Create a child stage"
+	_add_btn.tooltip_text = "拖到其他關卡：新增前置線；拖到空地：新增關卡"
 	_add_btn.custom_minimum_size = DEV_BUTTON_SIZE
-	_add_btn.add_theme_font_size_override("font_size", 16)
+	_add_btn.add_theme_font_size_override("font_size", 18)
+	_apply_dev_button_style(_add_btn, Color(0.05, 0.62, 0.20, 0.92), Color(0.65, 1.0, 0.72, 1.0))
 	add_child(_add_btn)
 	if not Engine.is_editor_hint():
-		_add_btn.pressed.connect(_on_dev_add_pressed)
+		_add_btn.gui_input.connect(_on_dev_link_gui_input)
 
 	_remove_btn = Button.new()
 	_remove_btn.name = "RemoveStageBtn"
-	_remove_btn.text = "Remove"
+	_remove_btn.text = "X"
 	_remove_btn.focus_mode = Control.FOCUS_NONE
-	_remove_btn.tooltip_text = "Remove this stage from the map"
+	_remove_btn.tooltip_text = "刪除此關卡"
 	_remove_btn.custom_minimum_size = DEV_BUTTON_SIZE
-	_remove_btn.add_theme_font_size_override("font_size", 10)
+	_remove_btn.add_theme_font_size_override("font_size", 12)
+	_apply_dev_button_style(_remove_btn, Color(0.74, 0.08, 0.08, 0.94), Color(1.0, 0.78, 0.78, 1.0))
 	add_child(_remove_btn)
 	if not Engine.is_editor_hint():
 		_remove_btn.pressed.connect(_on_dev_remove_pressed)
-
-	_link_btn = Button.new()
-	_link_btn.name = "LinkStageBtn"
-	_link_btn.text = "Trail"
-	_link_btn.focus_mode = Control.FOCUS_NONE
-	_link_btn.tooltip_text = "Drag to another stage to create a prerequisite trail"
-	_link_btn.custom_minimum_size = DEV_BUTTON_SIZE
-	_link_btn.add_theme_font_size_override("font_size", 10)
-	add_child(_link_btn)
-	if not Engine.is_editor_hint():
-		_link_btn.gui_input.connect(_on_dev_link_gui_input)
 
 	# 關卡名稱標籤背景（仿戰鬥場景敵人意圖：黑色漸層 0→0.5→0）
 	_label_bg = TextureRect.new()
@@ -234,6 +227,7 @@ func _layout() -> void:
 		(spot_h - spot_display_size.y) * 0.5
 	)
 	var spot_hit_rect: Rect2 = _spot_content_rect(spot_display_pos, spot_display_size).grow(SPOT_HIT_PADDING)
+	var caption_y: float = minf(button_size.y -70.0, spot_display_pos.y + spot_display_size.y - 4.0)
 	if _spot_backdrop != null:
 		var backdrop_pad: Vector2 = Vector2(SPOT_BACKDROP_PAD, SPOT_BACKDROP_PAD)
 		_spot_backdrop.position = spot_display_pos - backdrop_pad
@@ -248,22 +242,19 @@ func _layout() -> void:
 		_btn.position = spot_hit_rect.position
 		_btn.size = spot_hit_rect.size
 	if _add_btn != null:
-		_add_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, 0.0)
+		_add_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x - 2.0, 0.0)
 		_add_btn.size = DEV_BUTTON_SIZE
 	if _remove_btn != null:
-		_remove_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, DEV_BUTTON_SIZE.y + 4.0)
+		_remove_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x - 2.0, DEV_BUTTON_SIZE.y + DEV_BUTTON_GAP)
 		_remove_btn.size = DEV_BUTTON_SIZE
-	if _link_btn != null:
-		_link_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, DEV_BUTTON_SIZE.y * 2.0 + 8.0)
-		_link_btn.size = DEV_BUTTON_SIZE
 	if _label_bg != null:
-		var caption_h: float = button_size.y - spot_h
+		var caption_h: float = button_size.y - caption_y
 		var bg_h: float = caption_h * CAPTION_BG_HEIGHT_RATIO
-		_label_bg.position = Vector2(0, spot_h + (caption_h - bg_h) * 0.5)
+		_label_bg.position = Vector2(0, caption_y + (caption_h - bg_h) * 0.5)
 		_label_bg.size = Vector2(button_size.x, bg_h)
 	if _label != null:
-		_label.position = Vector2(0, spot_h + 2.0)
-		_label.size = Vector2(button_size.x, button_size.y - spot_h - 2.0)
+		_label.position = Vector2(0, caption_y)
+		_label.size = Vector2(button_size.x, button_size.y - caption_y)
 		_label.add_theme_font_size_override("font_size", 18)
 	if _rays != null:
 		_rays.position = Vector2(button_size.x * 0.5, spot_h * 0.5)
@@ -434,15 +425,32 @@ func _set_dev_buttons_visible(show: bool) -> void:
 	if _remove_btn != null:
 		_remove_btn.visible = show
 		_remove_btn.disabled = not show
-	if _link_btn != null:
-		_link_btn.visible = show
-		_link_btn.disabled = not show
 
 
 func _on_dev_add_pressed() -> void:
 	if stage == null:
 		return
 	stage_add_pressed.emit(stage)
+
+
+func _apply_dev_button_style(button: Button, bg_color: Color, font_color: Color) -> void:
+	if button == null:
+		return
+	button.add_theme_color_override("font_color", font_color)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = bg_color
+	normal.border_color = Color(0.0, 0.0, 0.0, 0.72)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(6)
+	var hover: StyleBoxFlat = normal.duplicate() as StyleBoxFlat
+	hover.bg_color = bg_color.lightened(0.14)
+	var pressed: StyleBoxFlat = normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = bg_color.darkened(0.18)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
 
 
 func _on_dev_remove_pressed() -> void:
@@ -460,15 +468,23 @@ func _on_dev_link_gui_input(event: InputEvent) -> void:
 			return
 		if mb.pressed:
 			_dev_link_pointer_down = true
-			stage_link_drag_started.emit(self, get_global_mouse_position())
+			_dev_link_drag_active = false
+			_dev_link_press_global = get_global_mouse_position()
 			accept_event()
 		elif _dev_link_pointer_down:
-			stage_link_drag_finished.emit(self, get_global_mouse_position())
+			if _dev_link_drag_active:
+				stage_link_drag_finished.emit(self, get_global_mouse_position())
 			_dev_link_pointer_down = false
+			_dev_link_drag_active = false
 			accept_event()
 	elif event is InputEventMouseMotion and _dev_link_pointer_down:
-		stage_link_dragged.emit(self, get_global_mouse_position())
-		accept_event()
+		var current_global: Vector2 = get_global_mouse_position()
+		if not _dev_link_drag_active and current_global.distance_to(_dev_link_press_global) >= DEV_DRAG_THRESHOLD:
+			_dev_link_drag_active = true
+			stage_link_drag_started.emit(self, current_global)
+		if _dev_link_drag_active:
+			stage_link_dragged.emit(self, current_global)
+			accept_event()
 
 
 func _on_button_gui_input(event: InputEvent) -> void:

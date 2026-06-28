@@ -28,6 +28,11 @@ var _dev_mode_label: Label = null
 var _dev_mode_back_button: Button = null
 var _link_drag_source: StageButton = null
 var _link_drag_active: bool = false
+var _dev_drag_hint_layer: CanvasLayer = null
+var _dev_drag_hint_panel: PanelContainer = null
+var _dev_drag_hint_label: Label = null
+var _remove_confirm_dialog: ConfirmationDialog = null
+var _pending_remove_stage: StageData = null
 var _portrait_debug_layer: CanvasLayer = null
 var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
 var _tutorial_editor_layer: CanvasLayer = null
@@ -337,6 +342,12 @@ func _open_stage_editor(stage: StageData) -> void:
 func _on_stage_button_add_pressed(parent_stage: StageData) -> void:
 	if parent_stage == null or not GameState.dev_mode:
 		return
+	_create_child_stage(parent_stage, parent_stage.map_position + NEW_STAGE_OFFSET)
+
+
+func _create_child_stage(parent_stage: StageData, map_position: Vector2) -> StageButton:
+	if parent_stage == null or not GameState.dev_mode:
+		return null
 	var all_stages: Array[StageData] = _load_all_stage_resources()
 	var child_id: String = _make_unique_child_stage_id(parent_stage, all_stages)
 	var child_path: String = _stage_resource_path_for_id(child_id)
@@ -346,15 +357,15 @@ func _on_stage_button_add_pressed(parent_stage: StageData) -> void:
 	child_stage.prerequisite_stage_id = parent_stage.stage_id
 	child_stage.connects_to = []
 	child_stage.map_hidden = false
-	child_stage.map_position = parent_stage.map_position + NEW_STAGE_OFFSET
+	child_stage.map_position = map_position
 	var err: int = ResourceSaver.save(child_stage, child_path)
 	if err != OK:
 		push_warning("Map: failed to create stage %s (%d)" % [child_path, err])
-		return
+		return null
 	child_stage = load(child_path) as StageData
 	if child_stage == null:
 		push_warning("Map: created stage could not be loaded: %s" % child_path)
-		return
+		return null
 	if not parent_stage.connects_to.has(child_id):
 		parent_stage.connects_to.append(child_id)
 		_save_stage(parent_stage)
@@ -365,12 +376,40 @@ func _on_stage_button_add_pressed(parent_stage: StageData) -> void:
 	_stage_buttons.append(sb)
 	_connect_stage_button(sb)
 	_set_stage_button_position(sb, child_stage.map_position)
+	_save_stage(child_stage)
 	if _path_layer != null:
 		_path_layer.set("stage_buttons", _stage_buttons)
 	_refresh_stage_buttons()
+	return sb
 
 
 func _on_stage_button_remove_pressed(stage: StageData) -> void:
+	if stage == null or not GameState.dev_mode:
+		return
+	_confirm_remove_stage(stage)
+
+
+func _confirm_remove_stage(stage: StageData) -> void:
+	_pending_remove_stage = stage
+	if _remove_confirm_dialog == null or not is_instance_valid(_remove_confirm_dialog):
+		_remove_confirm_dialog = ConfirmationDialog.new()
+		_remove_confirm_dialog.name = "RemoveStageConfirmDialog"
+		_remove_confirm_dialog.title = "確認刪除關卡"
+		_remove_confirm_dialog.confirmed.connect(_on_remove_stage_confirmed)
+		add_child(_remove_confirm_dialog)
+		_remove_confirm_dialog.get_ok_button().text = "刪除"
+		_remove_confirm_dialog.get_cancel_button().text = "取消"
+	_remove_confirm_dialog.dialog_text = "確定要刪除「%s」嗎？\n這會移除相關路線；若此關卡是場景內建節點，會改為隱藏。" % stage.stage_id
+	_remove_confirm_dialog.popup_centered(Vector2(420, 170))
+
+
+func _on_remove_stage_confirmed() -> void:
+	var stage: StageData = _pending_remove_stage
+	_pending_remove_stage = null
+	_remove_stage_now(stage)
+
+
+func _remove_stage_now(stage: StageData) -> void:
 	if stage == null or not GameState.dev_mode:
 		return
 	var removed_id: String = stage.stage_id
@@ -452,12 +491,14 @@ func _on_stage_link_drag_started(sb: StageButton, global_pos: Vector2) -> void:
 	_link_drag_source = sb
 	_link_drag_active = true
 	_update_stage_link_draft(global_pos)
+	_update_dev_drag_hint(global_pos)
 
 
 func _on_stage_link_dragged(sb: StageButton, global_pos: Vector2) -> void:
 	if sb == null or sb != _link_drag_source or not _link_drag_active or not GameState.dev_mode:
 		return
 	_update_stage_link_draft(global_pos)
+	_update_dev_drag_hint(global_pos)
 
 
 func _on_stage_link_drag_finished(sb: StageButton, global_pos: Vector2) -> void:
@@ -465,11 +506,18 @@ func _on_stage_link_drag_finished(sb: StageButton, global_pos: Vector2) -> void:
 		_clear_stage_link_draft()
 		return
 	var source_stage: StageData = sb.stage
+	var cancel_on_source: bool = _stage_button_contains_global_pos(sb, global_pos)
 	var target_button: StageButton = _stage_button_at_global_pos(global_pos, sb)
 	_clear_stage_link_draft()
-	if source_stage == null or target_button == null or target_button.stage == null:
+	_hide_dev_drag_hint()
+	if source_stage == null:
 		return
-	_create_prerequisite_relation(source_stage, target_button.stage)
+	if cancel_on_source:
+		return
+	if target_button != null and target_button.stage != null:
+		_create_prerequisite_relation(source_stage, target_button.stage)
+		return
+	_create_child_stage(source_stage, _map_position_for_new_stage_at_global_pos(global_pos, sb))
 
 
 func _update_stage_link_draft(global_pos: Vector2) -> void:
@@ -483,16 +531,79 @@ func _update_stage_link_draft(global_pos: Vector2) -> void:
 func _clear_stage_link_draft() -> void:
 	_link_drag_source = null
 	_link_drag_active = false
+	_hide_dev_drag_hint()
 	if _path_layer != null and _path_layer.has_method("clear_draft_path"):
 		_path_layer.call("clear_draft_path")
+
+
+func _map_position_for_new_stage_at_global_pos(global_pos: Vector2, source_button: StageButton = null) -> Vector2:
+	var local_pos: Vector2 = _map_page.get_global_transform_with_canvas().affine_inverse() * global_pos
+	var button_size: Vector2 = source_button.button_size if source_button != null else Vector2(140, 110)
+	return local_pos - button_size * 0.5
+
+
+func _ensure_dev_drag_hint() -> void:
+	if _dev_drag_hint_panel != null and is_instance_valid(_dev_drag_hint_panel):
+		return
+	_dev_drag_hint_layer = CanvasLayer.new()
+	_dev_drag_hint_layer.layer = 80
+	add_child(_dev_drag_hint_layer)
+	_dev_drag_hint_panel = PanelContainer.new()
+	_dev_drag_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.02, 0.08, 0.06, 0.9)
+	style.border_color = Color(0.35, 1.0, 0.54, 0.95)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(8)
+	_dev_drag_hint_panel.add_theme_stylebox_override("panel", style)
+	_dev_drag_hint_layer.add_child(_dev_drag_hint_panel)
+	_dev_drag_hint_label = Label.new()
+	_dev_drag_hint_label.add_theme_font_size_override("font_size", 15)
+	_dev_drag_hint_label.add_theme_color_override("font_color", Color(0.78, 1.0, 0.82, 1.0))
+	_dev_drag_hint_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
+	_dev_drag_hint_label.add_theme_constant_override("outline_size", 3)
+	_dev_drag_hint_panel.add_child(_dev_drag_hint_label)
+
+
+func _update_dev_drag_hint(global_pos: Vector2) -> void:
+	_ensure_dev_drag_hint()
+	if _dev_drag_hint_panel == null or _dev_drag_hint_label == null:
+		return
+	if _stage_button_contains_global_pos(_link_drag_source, global_pos):
+		_dev_drag_hint_label.text = "放開：取消"
+		_dev_drag_hint_panel.self_modulate = Color(1.0, 0.9, 0.65, 1.0)
+		_dev_drag_hint_panel.visible = true
+		_dev_drag_hint_panel.position = global_pos + Vector2(16, -48)
+		return
+	var target_button: StageButton = _stage_button_at_global_pos(global_pos, _link_drag_source)
+	if target_button != null and target_button.stage != null:
+		_dev_drag_hint_label.text = "放開：新增前置線 -> %s" % target_button.stage.stage_id
+		_dev_drag_hint_panel.self_modulate = Color(0.72, 0.9, 1.0, 1.0)
+	else:
+		_dev_drag_hint_label.text = "放開：新增關卡"
+		_dev_drag_hint_panel.self_modulate = Color(0.72, 1.0, 0.72, 1.0)
+	_dev_drag_hint_panel.visible = true
+	_dev_drag_hint_panel.position = global_pos + Vector2(16, -48)
+
+
+func _hide_dev_drag_hint() -> void:
+	if _dev_drag_hint_panel != null and is_instance_valid(_dev_drag_hint_panel):
+		_dev_drag_hint_panel.visible = false
+
+
+func _stage_button_contains_global_pos(sb: StageButton, global_pos: Vector2) -> bool:
+	if sb == null or sb.stage == null or not sb.visible:
+		return false
+	var hit_rect: Rect2 = sb.get_spot_hit_global_rect() if sb.has_method("get_spot_hit_global_rect") else sb.get_global_rect()
+	return hit_rect.grow(6.0).has_point(global_pos)
 
 
 func _stage_button_at_global_pos(global_pos: Vector2, except_button: StageButton = null) -> StageButton:
 	for sb in _stage_buttons:
 		if sb == null or sb == except_button or sb.stage == null or not sb.visible:
 			continue
-		var hit_rect: Rect2 = sb.get_spot_hit_global_rect() if sb.has_method("get_spot_hit_global_rect") else sb.get_global_rect()
-		if hit_rect.grow(6.0).has_point(global_pos):
+		if _stage_button_contains_global_pos(sb, global_pos):
 			return sb
 	return null
 

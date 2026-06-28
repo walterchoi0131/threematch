@@ -60,5 +60,4 @@ rounds = Array[Array]([[SubResource("s23_e1")], [SubResource("s23_e1"), SubResou
 rounds_init_cd = Array[Array]([[0], [0, 1]])
 rounds_enemy_levels = Array[Array]([[20], [20, 20]])
 start_stage_dialog = SubResource("s23_start")
-set_party = Array[ExtResource("6_jya1o")]([ExtResource("7_dragon"), ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_gory")])
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

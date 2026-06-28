@@ -389,6 +389,9 @@ var _stage_editor_boss_bgm_option: OptionButton = null
 var _stage_editor_stretch_bg_check: CheckButton = null
 var _stage_editor_area_spot_preview: TextureRect = null
 var _stage_editor_distribution_spins: Dictionary = {}
+var _stage_editor_distribution_value_labels: Dictionary = {}
+var _stage_editor_distribution_preview_bar: HBoxContainer = null
+var _stage_editor_distribution_percent_label: Label = null
 var _stage_editor_drop_start_spins: Dictionary = {}
 var _stage_editor_reward_item_option: OptionButton = null
 var _stage_editor_reward_amount_edit: LineEdit = null
@@ -687,7 +690,7 @@ func _setup_stage_edit_mode() -> void:
 	_build_stage_editor_enemy_area()
 	_build_stage_editor_ui()
 	_stage_editor_select_tab(STAGE_EDITOR_TAB_BOARD)
-	_set_stage_editor_status("Ready")
+	_set_stage_editor_status("已準備")
 
 
 func _hide_battle_ui_for_stage_editor() -> void:
@@ -798,18 +801,21 @@ func _build_stage_editor_area_panel() -> void:
 	if _stage_editor_area_panel != null:
 		return
 	_stage_editor_distribution_spins.clear()
+	_stage_editor_distribution_value_labels.clear()
+	_stage_editor_distribution_preview_bar = null
+	_stage_editor_distribution_percent_label = null
 	_stage_editor_area_panel = PanelContainer.new()
 	_stage_editor_area_panel.name = "StageEditorAreaPanel"
 	_stage_editor_area_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_stage_editor_area_panel.custom_minimum_size = Vector2(420, 108)
+	_stage_editor_area_panel.custom_minimum_size = Vector2(700, 92)
 	_stage_editor_area_panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.05, 0.06, 0.09, 0.95)))
 	$UILayer.add_child(_stage_editor_area_panel)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_top", 3)
 	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_bottom", 4)
+	margin.add_theme_constant_override("margin_bottom", 3)
 	_stage_editor_area_panel.add_child(margin)
 
 	var row := HBoxContainer.new()
@@ -822,7 +828,7 @@ func _build_stage_editor_area_panel() -> void:
 	row.add_child(selector_box)
 
 	var title := Label.new()
-	title.text = "Map Area"
+	title.text = "地圖區域"
 	title.add_theme_font_size_override("font_size", 9)
 	title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	selector_box.add_child(title)
@@ -830,8 +836,8 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_option = OptionButton.new()
 	_stage_editor_area_option.focus_mode = Control.FOCUS_NONE
 	_stage_editor_area_option.fit_to_longest_item = false
-	_stage_editor_area_option.custom_minimum_size = Vector2(112, 28)
-	_stage_editor_area_option.add_theme_font_size_override("font_size", 11)
+	_stage_editor_area_option.custom_minimum_size = Vector2(112, 24)
+	_stage_editor_area_option.add_theme_font_size_override("font_size", 10)
 	for area_key: String in StageData.AREA_KEYS:
 		var item_index: int = _stage_editor_area_option.item_count
 		_stage_editor_area_option.add_item(area_key)
@@ -840,15 +846,15 @@ func _build_stage_editor_area_panel() -> void:
 	selector_box.add_child(_stage_editor_area_option)
 
 	var override_label := Label.new()
-	override_label.text = "BG Override"
+	override_label.text = "背景覆蓋"
 	override_label.add_theme_font_size_override("font_size", 8)
 	override_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	selector_box.add_child(override_label)
 
 	_stage_editor_bg_override_option = OptionButton.new()
 	_stage_editor_bg_override_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_bg_override_option.custom_minimum_size = Vector2(112, 24)
-	_stage_editor_bg_override_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_bg_override_option.custom_minimum_size = Vector2(112, 20)
+	_stage_editor_bg_override_option.add_theme_font_size_override("font_size", 9)
 	_stage_editor_make_compact_option_button(_stage_editor_bg_override_option)
 	_stage_editor_bg_override_option.item_selected.connect(_on_stage_editor_bg_override_selected)
 	selector_box.add_child(_stage_editor_bg_override_option)
@@ -863,19 +869,19 @@ func _build_stage_editor_area_panel() -> void:
 
 	_stage_editor_area_spot_preview = TextureRect.new()
 	_stage_editor_area_spot_preview.name = "SpotPreview"
-	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(48, 44)
+	_stage_editor_area_spot_preview.custom_minimum_size = Vector2(40, 34)
 	_stage_editor_area_spot_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_stage_editor_area_spot_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_stage_editor_area_spot_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stage_editor_area_spot_preview.tooltip_text = "Spot"
+	_stage_editor_area_spot_preview.tooltip_text = "關卡圖示"
 	spot_top_row.add_child(_stage_editor_area_spot_preview)
 
 	_stage_editor_stretch_bg_check = CheckButton.new()
-	_stage_editor_stretch_bg_check.text = "Full BG"
+	_stage_editor_stretch_bg_check.text = "全屏"
 	_stage_editor_stretch_bg_check.focus_mode = Control.FOCUS_NONE
-	_stage_editor_stretch_bg_check.custom_minimum_size = Vector2(66, 20)
+	_stage_editor_stretch_bg_check.custom_minimum_size = Vector2(56, 18)
 	_stage_editor_stretch_bg_check.add_theme_font_size_override("font_size", 8)
-	_stage_editor_stretch_bg_check.tooltip_text = "Stretch battle background to the full screen."
+	_stage_editor_stretch_bg_check.tooltip_text = "戰鬥背景拉伸至全螢幕。"
 	_stage_editor_stretch_bg_check.toggled.connect(_on_stage_editor_stretch_bg_toggled)
 	spot_top_row.add_child(_stage_editor_stretch_bg_check)
 
@@ -885,54 +891,71 @@ func _build_stage_editor_area_panel() -> void:
 	spot_box.add_child(music_box)
 
 	var music_override_label := Label.new()
-	music_override_label.text = "Music Override"
+	music_override_label.text = "戰鬥BGM"
 	music_override_label.add_theme_font_size_override("font_size", 8)
 	music_override_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	music_box.add_child(music_override_label)
 
 	_stage_editor_music_override_option = OptionButton.new()
 	_stage_editor_music_override_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_music_override_option.custom_minimum_size = Vector2(104, 22)
-	_stage_editor_music_override_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_music_override_option.custom_minimum_size = Vector2(104, 18)
+	_stage_editor_music_override_option.add_theme_font_size_override("font_size", 9)
 	_stage_editor_make_compact_option_button(_stage_editor_music_override_option)
 	_stage_editor_music_override_option.item_selected.connect(_on_stage_editor_music_override_selected)
 	music_box.add_child(_stage_editor_music_override_option)
 
 	var boss_bgm_label := Label.new()
-	boss_bgm_label.text = "Boss BGM"
+	boss_bgm_label.text = "首領音樂"
 	boss_bgm_label.add_theme_font_size_override("font_size", 8)
 	boss_bgm_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 	music_box.add_child(boss_bgm_label)
 
 	_stage_editor_boss_bgm_option = OptionButton.new()
 	_stage_editor_boss_bgm_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_boss_bgm_option.custom_minimum_size = Vector2(104, 22)
-	_stage_editor_boss_bgm_option.add_theme_font_size_override("font_size", 10)
+	_stage_editor_boss_bgm_option.custom_minimum_size = Vector2(104, 18)
+	_stage_editor_boss_bgm_option.add_theme_font_size_override("font_size", 9)
 	_stage_editor_make_compact_option_button(_stage_editor_boss_bgm_option)
 	_stage_editor_boss_bgm_option.item_selected.connect(_on_stage_editor_boss_bgm_selected)
 	music_box.add_child(_stage_editor_boss_bgm_option)
 
 	var distribution_box := VBoxContainer.new()
-	distribution_box.add_theme_constant_override("separation", 2)
+	distribution_box.add_theme_constant_override("separation", 1)
 	distribution_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(distribution_box)
 
 	var action_row := HBoxContainer.new()
-	action_row.add_theme_constant_override("separation", 4)
+	action_row.add_theme_constant_override("separation", 3)
 	distribution_box.add_child(action_row)
 
-	action_row.add_child(_make_stage_editor_mode_button("Normal", StageData.Mode.NORMAL))
-	action_row.add_child(_make_stage_editor_mode_button("Escape", StageData.Mode.ESCAPE))
-	action_row.add_child(_make_stage_editor_mode_button("Puzzle", StageData.Mode.PUZZLE))
-	action_row.add_child(_make_stage_editor_command_button("Clear", _on_stage_editor_clear_pressed))
-	action_row.add_child(_make_stage_editor_command_button("Save", _on_stage_editor_save_pressed))
-	action_row.add_child(_make_stage_editor_command_button("Back", _on_stage_editor_back_pressed))
+	action_row.add_child(_make_stage_editor_mode_button("普通", StageData.Mode.NORMAL))
+	action_row.add_child(_make_stage_editor_mode_button("逃脫", StageData.Mode.ESCAPE))
+	action_row.add_child(_make_stage_editor_mode_button("解謎", StageData.Mode.PUZZLE))
+	action_row.add_child(_make_stage_editor_command_button("清空", _on_stage_editor_clear_pressed))
+	action_row.add_child(_make_stage_editor_command_button("保存", _on_stage_editor_save_pressed))
+	action_row.add_child(_make_stage_editor_command_button("返回", _on_stage_editor_back_pressed))
+
+	var dist_title_row := HBoxContainer.new()
+	dist_title_row.add_theme_constant_override("separation", 6)
+	distribution_box.add_child(dist_title_row)
 
 	var dist_title := Label.new()
-	dist_title.text = Locale.tr_ui("ELEMENT_DISTRIBUTION")
-	dist_title.add_theme_font_size_override("font_size", 11)
+	dist_title.text = "元素分布"
+	dist_title.add_theme_font_size_override("font_size", 10)
 	dist_title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
-	distribution_box.add_child(dist_title)
+	dist_title_row.add_child(dist_title)
+
+	_stage_editor_distribution_preview_bar = HBoxContainer.new()
+	_stage_editor_distribution_preview_bar.custom_minimum_size = Vector2(180, 12)
+	_stage_editor_distribution_preview_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_distribution_preview_bar.add_theme_constant_override("separation", 1)
+	dist_title_row.add_child(_stage_editor_distribution_preview_bar)
+
+	_stage_editor_distribution_percent_label = Label.new()
+	_stage_editor_distribution_percent_label.text = ""
+	_stage_editor_distribution_percent_label.custom_minimum_size = Vector2(150, 14)
+	_stage_editor_distribution_percent_label.add_theme_font_size_override("font_size", 9)
+	_stage_editor_distribution_percent_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
+	dist_title_row.add_child(_stage_editor_distribution_percent_label)
 
 	var dist_row := HBoxContainer.new()
 	dist_row.add_theme_constant_override("separation", 2)
@@ -941,32 +964,44 @@ func _build_stage_editor_area_panel() -> void:
 	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
 		dist_row.add_child(_make_stage_editor_distribution_spin(type_value))
 	_refresh_stage_editor_mode_buttons()
+	_refresh_stage_editor_distribution_preview()
 
 
 func _make_stage_editor_distribution_spin(type_value: int) -> Control:
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(40, 0)
-	box.add_theme_constant_override("separation", 1)
+	box.custom_minimum_size = Vector2(92, 34)
+	box.add_theme_constant_override("separation", 0)
+
+	var label_row := HBoxContainer.new()
+	label_row.add_theme_constant_override("separation", 2)
+	box.add_child(label_row)
 
 	var label := Label.new()
 	label.text = _stage_editor_distribution_label(type_value)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 10)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Block.COLORS.get(type_value, Color.WHITE).lightened(0.2))
-	box.add_child(label)
+	label_row.add_child(label)
 
-	var spin := SpinBox.new()
-	spin.min_value = 0
-	spin.max_value = 100
-	spin.step = 1
-	spin.value = current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1
-	spin.custom_minimum_size = Vector2(40, 24)
-	spin.get_line_edit().custom_minimum_size = Vector2(18, 0)
-	spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
-	spin.tooltip_text = "Random board generation weight."
-	spin.value_changed.connect(_on_stage_editor_distribution_changed.bind(type_value))
-	box.add_child(spin)
-	_stage_editor_distribution_spins[type_value] = spin
+	var value_label := Label.new()
+	value_label.text = str(current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.custom_minimum_size = Vector2(24, 0)
+	value_label.add_theme_font_size_override("font_size", 9)
+	value_label.add_theme_color_override("font_color", Color.WHITE)
+	label_row.add_child(value_label)
+
+	var slider := HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 100
+	slider.step = 1
+	slider.value = current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1
+	slider.custom_minimum_size = Vector2(88, 14)
+	slider.tooltip_text = "隨機生成權重。0 = 不會掉落。"
+	slider.value_changed.connect(_on_stage_editor_distribution_changed.bind(type_value))
+	box.add_child(slider)
+	_stage_editor_distribution_spins[type_value] = slider
+	_stage_editor_distribution_value_labels[type_value] = value_label
 	return box
 
 
@@ -977,7 +1012,7 @@ func _make_stage_editor_drop_start_spin(column_index: int) -> Control:
 	box.add_theme_constant_override("separation", 1)
 
 	var label := Label.new()
-	label.text = "C%d" % (column_index + 1)
+	label.text = "欄%d" % (column_index + 1)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 9)
 	label.add_theme_color_override("font_color", Color(0.72, 0.86, 1.0, 1.0))
@@ -993,7 +1028,7 @@ func _make_stage_editor_drop_start_spin(column_index: int) -> Control:
 	minus_button.focus_mode = Control.FOCUS_NONE
 	minus_button.custom_minimum_size = Vector2(14, 22)
 	minus_button.add_theme_font_size_override("font_size", 10)
-	minus_button.tooltip_text = "Move drop start up."
+	minus_button.tooltip_text = "掉落起點上移。"
 	minus_button.pressed.connect(_on_stage_editor_drop_start_step.bind(column_index, -1))
 	stepper.add_child(minus_button)
 
@@ -1003,7 +1038,7 @@ func _make_stage_editor_drop_start_spin(column_index: int) -> Control:
 	value_edit.custom_minimum_size = Vector2(20, 22)
 	value_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	value_edit.add_theme_font_size_override("font_size", 12)
-	value_edit.tooltip_text = "Gem drop start row for this column."
+	value_edit.tooltip_text = "這一欄的寶石掉落起點列。"
 	value_edit.text_submitted.connect(_on_stage_editor_drop_start_text_submitted.bind(column_index))
 	value_edit.focus_exited.connect(_on_stage_editor_drop_start_focus_exited.bind(column_index))
 	stepper.add_child(value_edit)
@@ -1013,7 +1048,7 @@ func _make_stage_editor_drop_start_spin(column_index: int) -> Control:
 	plus_button.focus_mode = Control.FOCUS_NONE
 	plus_button.custom_minimum_size = Vector2(14, 22)
 	plus_button.add_theme_font_size_override("font_size", 10)
-	plus_button.tooltip_text = "Move drop start down."
+	plus_button.tooltip_text = "掉落起點下移。"
 	plus_button.pressed.connect(_on_stage_editor_drop_start_step.bind(column_index, 1))
 	stepper.add_child(plus_button)
 
@@ -1027,7 +1062,7 @@ func _make_stage_editor_reward_row() -> Control:
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var reward_label := Label.new()
-	reward_label.text = "Clear Reward"
+	reward_label.text = "通關獎勵"
 	reward_label.custom_minimum_size = Vector2(82, 22)
 	reward_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	reward_label.add_theme_font_size_override("font_size", 10)
@@ -1038,7 +1073,7 @@ func _make_stage_editor_reward_row() -> Control:
 	_stage_editor_reward_item_option.focus_mode = Control.FOCUS_NONE
 	_stage_editor_reward_item_option.custom_minimum_size = Vector2(92, 24)
 	_stage_editor_reward_item_option.add_theme_font_size_override("font_size", 10)
-	_stage_editor_reward_item_option.tooltip_text = "Stage clear reward item. Enemy loot is edited on each enemy card."
+	_stage_editor_reward_item_option.tooltip_text = "關卡通關獎勵道具。敵人掉落請在每張敵人卡編輯。"
 	_stage_editor_make_compact_option_button(_stage_editor_reward_item_option)
 	_stage_editor_reward_item_option.item_selected.connect(_on_stage_editor_reward_changed)
 	row.add_child(_stage_editor_reward_item_option)
@@ -1047,7 +1082,7 @@ func _make_stage_editor_reward_row() -> Control:
 	_stage_editor_reward_amount_edit.custom_minimum_size = Vector2(48, 24)
 	_stage_editor_reward_amount_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stage_editor_reward_amount_edit.add_theme_font_size_override("font_size", 11)
-	_stage_editor_reward_amount_edit.tooltip_text = "Stage clear reward item amount."
+	_stage_editor_reward_amount_edit.tooltip_text = "通關獎勵道具數量。"
 	_stage_editor_reward_amount_edit.text_submitted.connect(func(_text: String) -> void: _on_stage_editor_reward_changed(0))
 	_stage_editor_reward_amount_edit.focus_exited.connect(func() -> void: _on_stage_editor_reward_changed(0))
 	row.add_child(_stage_editor_reward_amount_edit)
@@ -1057,7 +1092,7 @@ func _make_stage_editor_reward_row() -> Control:
 	_stage_editor_reward_character_option.custom_minimum_size = Vector2(150, 24)
 	_stage_editor_reward_character_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stage_editor_reward_character_option.add_theme_font_size_override("font_size", 10)
-	_stage_editor_reward_character_option.tooltip_text = "Stage clear reward character. Enemy loot is edited on each enemy card."
+	_stage_editor_reward_character_option.tooltip_text = "通關後加入的角色。敵人掉落請在每張敵人卡編輯。"
 	_stage_editor_make_compact_option_button(_stage_editor_reward_character_option)
 	_stage_editor_reward_character_option.item_selected.connect(_on_stage_editor_reward_changed)
 	row.add_child(_stage_editor_reward_character_option)
@@ -1085,11 +1120,11 @@ func _build_stage_editor_tab_panel() -> void:
 	row.add_theme_constant_override("separation", 6)
 	margin.add_child(row)
 
-	row.add_child(_make_stage_editor_tab_button("Before", STAGE_EDITOR_TAB_BEFORE))
-	row.add_child(_make_stage_editor_tab_button("Start Dialog", STAGE_EDITOR_TAB_START_DIALOG))
-	row.add_child(_make_stage_editor_tab_button("Start Tutorial", STAGE_EDITOR_TAB_START_TUTORIAL))
-	row.add_child(_make_stage_editor_tab_button("Board", STAGE_EDITOR_TAB_BOARD))
-	row.add_child(_make_stage_editor_tab_button("After", STAGE_EDITOR_TAB_AFTER))
+	row.add_child(_make_stage_editor_tab_button("戰前", STAGE_EDITOR_TAB_BEFORE))
+	row.add_child(_make_stage_editor_tab_button("開場對話", STAGE_EDITOR_TAB_START_DIALOG))
+	row.add_child(_make_stage_editor_tab_button("開場教學", STAGE_EDITOR_TAB_START_TUTORIAL))
+	row.add_child(_make_stage_editor_tab_button("棋盤", STAGE_EDITOR_TAB_BOARD))
+	row.add_child(_make_stage_editor_tab_button("戰後", STAGE_EDITOR_TAB_AFTER))
 
 
 func _make_stage_editor_tab_button(label_text: String, tab_id: String) -> Button:
@@ -1130,14 +1165,14 @@ func _build_stage_editor_dialog_panel() -> void:
 	root.add_child(header_row)
 
 	_stage_editor_dialog_title_label = Label.new()
-	_stage_editor_dialog_title_label.text = "Dialog"
+	_stage_editor_dialog_title_label.text = "對話"
 	_stage_editor_dialog_title_label.add_theme_font_size_override("font_size", 16)
 	_stage_editor_dialog_title_label.add_theme_color_override("font_color", Color.WHITE)
 	_stage_editor_dialog_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(_stage_editor_dialog_title_label)
 
 	var bg_label := Label.new()
-	bg_label.text = "BG"
+	bg_label.text = "背景"
 	bg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	bg_label.add_theme_font_size_override("font_size", 12)
 	bg_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
@@ -1152,7 +1187,7 @@ func _build_stage_editor_dialog_panel() -> void:
 	header_row.add_child(_stage_editor_dialog_background_option)
 
 	var music_label := Label.new()
-	music_label.text = "Init BGM"
+	music_label.text = "開場BGM"
 	music_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	music_label.add_theme_font_size_override("font_size", 12)
 	music_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
@@ -1172,16 +1207,16 @@ func _build_stage_editor_dialog_panel() -> void:
 	var dialog_action_spacer := Control.new()
 	dialog_action_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dialog_action_row.add_child(dialog_action_spacer)
-	dialog_action_row.add_child(_make_stage_editor_small_button("Test Play", _on_stage_editor_dialog_test_play_pressed, Vector2(76, 30)))
-	dialog_action_row.add_child(_make_stage_editor_small_button("Save", _on_stage_editor_save_pressed, Vector2(58, 30)))
-	dialog_action_row.add_child(_make_stage_editor_small_button("Back", _on_stage_editor_back_pressed, Vector2(58, 30)))
+	dialog_action_row.add_child(_make_stage_editor_small_button("試播", _on_stage_editor_dialog_test_play_pressed, Vector2(58, 30)))
+	dialog_action_row.add_child(_make_stage_editor_small_button("保存", _on_stage_editor_save_pressed, Vector2(58, 30)))
+	dialog_action_row.add_child(_make_stage_editor_small_button("返回", _on_stage_editor_back_pressed, Vector2(58, 30)))
 
 	var cast_row := HBoxContainer.new()
 	cast_row.add_theme_constant_override("separation", 6)
 	root.add_child(cast_row)
 
 	var cast_label := Label.new()
-	cast_label.text = "Cast"
+	cast_label.text = "角色"
 	cast_label.custom_minimum_size = Vector2(44, 0)
 	cast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cast_label.add_theme_font_size_override("font_size", 12)
@@ -1205,14 +1240,14 @@ func _build_stage_editor_dialog_panel() -> void:
 	_stage_editor_dialog_add_cast_option.custom_minimum_size = Vector2(104, 30)
 	_stage_editor_make_compact_option_button(_stage_editor_dialog_add_cast_option)
 	cast_row.add_child(_stage_editor_dialog_add_cast_option)
-	cast_row.add_child(_make_stage_editor_small_button("Add", _on_stage_editor_dialog_add_cast_pressed, Vector2(46, 30)))
+	cast_row.add_child(_make_stage_editor_small_button("加入", _on_stage_editor_dialog_add_cast_pressed, Vector2(46, 30)))
 
 	var enemy_cast_row := HBoxContainer.new()
 	enemy_cast_row.add_theme_constant_override("separation", 6)
 	root.add_child(enemy_cast_row)
 
 	var enemy_cast_label := Label.new()
-	enemy_cast_label.text = "Enemy Cast"
+	enemy_cast_label.text = "敵人角色"
 	enemy_cast_label.custom_minimum_size = Vector2(72, 0)
 	enemy_cast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	enemy_cast_label.add_theme_font_size_override("font_size", 12)
@@ -1232,7 +1267,7 @@ func _build_stage_editor_dialog_panel() -> void:
 	root.add_child(enemy_name_row)
 
 	var enemy_name_label := Label.new()
-	enemy_name_label.text = "Names"
+	enemy_name_label.text = "名稱"
 	enemy_name_label.custom_minimum_size = Vector2(72, 0)
 	enemy_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	enemy_name_label.add_theme_font_size_override("font_size", 12)
@@ -1246,19 +1281,19 @@ func _build_stage_editor_dialog_panel() -> void:
 	enemy_name_row.add_child(_stage_editor_dialog_enemy_cast_zh_edit)
 
 	_stage_editor_dialog_enemy_cast_en_edit = LineEdit.new()
-	_stage_editor_dialog_enemy_cast_en_edit.placeholder_text = "English name"
+	_stage_editor_dialog_enemy_cast_en_edit.placeholder_text = "英文名"
 	_stage_editor_dialog_enemy_cast_en_edit.custom_minimum_size = Vector2(110, 30)
 	_stage_editor_dialog_enemy_cast_en_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	enemy_name_row.add_child(_stage_editor_dialog_enemy_cast_en_edit)
 
-	enemy_name_row.add_child(_make_stage_editor_small_button("Add Enemy", _on_stage_editor_dialog_add_enemy_cast_pressed, Vector2(86, 30)))
+	enemy_name_row.add_child(_make_stage_editor_small_button("加入敵人", _on_stage_editor_dialog_add_enemy_cast_pressed, Vector2(86, 30)))
 
 	var exit_row := HBoxContainer.new()
 	exit_row.add_theme_constant_override("separation", 6)
 	root.add_child(exit_row)
 
 	var exit_label := Label.new()
-	exit_label.text = "Exit"
+	exit_label.text = "退場"
 	exit_label.custom_minimum_size = Vector2(44, 0)
 	exit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	exit_label.add_theme_font_size_override("font_size", 12)
@@ -1273,10 +1308,10 @@ func _build_stage_editor_dialog_panel() -> void:
 	_stage_editor_dialog_exit_side_option = CheckButton.new()
 	_stage_editor_dialog_exit_side_option.focus_mode = Control.FOCUS_NONE
 	_stage_editor_dialog_exit_side_option.custom_minimum_size = Vector2(92, 30)
-	_stage_editor_dialog_exit_side_option.text = "Left"
+	_stage_editor_dialog_exit_side_option.text = "左側"
 	_stage_editor_dialog_exit_side_option.toggled.connect(_on_stage_editor_dialog_exit_side_toggled)
 	exit_row.add_child(_stage_editor_dialog_exit_side_option)
-	exit_row.add_child(_make_stage_editor_small_button("Add Exit", _on_stage_editor_dialog_add_exit_pressed, Vector2(78, 30)))
+	exit_row.add_child(_make_stage_editor_small_button("加入退場", _on_stage_editor_dialog_add_exit_pressed, Vector2(86, 30)))
 
 	var line_scroll := ScrollContainer.new()
 	line_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1317,14 +1352,14 @@ func _build_stage_editor_tutorial_panel() -> void:
 	root.add_child(header_row)
 
 	var title := Label.new()
-	title.text = "Start Stage Tutorial"
+	title.text = "開場教學"
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(title)
-	header_row.add_child(_make_stage_editor_small_button("Add Ref", _on_stage_editor_tutorial_add_page_pressed, Vector2(76, 30)))
-	header_row.add_child(_make_stage_editor_small_button("Save", _on_stage_editor_save_pressed, Vector2(58, 30)))
-	header_row.add_child(_make_stage_editor_small_button("Back", _on_stage_editor_back_pressed, Vector2(58, 30)))
+	header_row.add_child(_make_stage_editor_small_button("新增頁", _on_stage_editor_tutorial_add_page_pressed, Vector2(76, 30)))
+	header_row.add_child(_make_stage_editor_small_button("保存", _on_stage_editor_save_pressed, Vector2(58, 30)))
+	header_row.add_child(_make_stage_editor_small_button("返回", _on_stage_editor_back_pressed, Vector2(58, 30)))
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1363,7 +1398,7 @@ func _refresh_stage_editor_tutorial_editor() -> void:
 	_stage_editor_ensure_start_tutorial_pages()
 	if current_stage.start_stage_tutorial_page_ids.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No tutorial pages selected."
+		empty_label.text = "未選擇教學頁。"
 		empty_label.add_theme_font_size_override("font_size", 14)
 		empty_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 0.85))
 		_stage_editor_tutorial_page_list.add_child(empty_label)
@@ -1397,7 +1432,7 @@ func _stage_editor_make_tutorial_page_row(page_index: int, page_id: String, page
 	root.add_child(top_row)
 
 	var label := Label.new()
-	label.text = "Page %d" % (page_index + 1)
+	label.text = "第 %d 頁" % (page_index + 1)
 	label.custom_minimum_size = Vector2(64, 0)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 13)
@@ -1420,9 +1455,9 @@ func _stage_editor_make_tutorial_page_row(page_index: int, page_id: String, page
 	top_row.add_child(image_preview)
 	page_option.item_selected.connect(_on_stage_editor_tutorial_page_selected.bind(page_option, page_index))
 
-	top_row.add_child(_make_stage_editor_small_button("Up", _on_stage_editor_tutorial_page_move_up_pressed.bind(page_index), Vector2(42, 28)))
-	top_row.add_child(_make_stage_editor_small_button("Down", _on_stage_editor_tutorial_page_move_down_pressed.bind(page_index), Vector2(54, 28)))
-	top_row.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_tutorial_page_delete_pressed.bind(page_index), Vector2(42, 28)))
+	top_row.add_child(_make_stage_editor_small_button("上移", _on_stage_editor_tutorial_page_move_up_pressed.bind(page_index), Vector2(46, 28)))
+	top_row.add_child(_make_stage_editor_small_button("下移", _on_stage_editor_tutorial_page_move_down_pressed.bind(page_index), Vector2(46, 28)))
+	top_row.add_child(_make_stage_editor_small_button("刪除", _on_stage_editor_tutorial_page_delete_pressed.bind(page_index), Vector2(46, 28)))
 
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 6)
@@ -1502,17 +1537,17 @@ func _stage_editor_populate_tutorial_page_selector(option: OptionButton, selecte
 			continue
 		_stage_editor_add_option_item(option, _tutorial_page_library.display_name(page), page.page_id)
 	if not selected_page_id.is_empty() and _tutorial_page_library.get_page(selected_page_id) == null:
-		_stage_editor_add_option_item(option, "Missing: %s" % selected_page_id, selected_page_id)
+		_stage_editor_add_option_item(option, "遺失：%s" % selected_page_id, selected_page_id)
 	_stage_editor_select_option_value(option, selected_page_id)
 
 
 func _tutorial_page_title_for_editor(page: _StartStageTutorialPage) -> String:
 	if page == null:
-		return "Missing tutorial page"
+		return "遺失教學頁"
 	var ch_title: String = page.chi_title.strip_edges()
 	var en_title: String = page.eng_title.strip_edges()
 	if ch_title.is_empty() and en_title.is_empty():
-		return "(Untitled page)"
+		return "（未命名頁）"
 	if ch_title.is_empty():
 		return en_title
 	if en_title.is_empty():
@@ -1522,11 +1557,11 @@ func _tutorial_page_title_for_editor(page: _StartStageTutorialPage) -> String:
 
 func _tutorial_page_body_for_editor(page: _StartStageTutorialPage) -> String:
 	if page == null:
-		return "This stage references a page id that is not in the global library."
+		return "此關卡引用了不存在於全域教學庫的頁面 id。"
 	var ch_text: String = page.ch_info.strip_edges()
 	var en_text: String = page.eng_info.strip_edges()
 	if ch_text.is_empty() and en_text.is_empty():
-		return "(No body text)"
+		return "（沒有內文）"
 	if ch_text.is_empty():
 		return en_text
 	if en_text.is_empty():
@@ -1537,7 +1572,7 @@ func _tutorial_page_body_for_editor(page: _StartStageTutorialPage) -> String:
 func _stage_editor_populate_tutorial_image_selector(option: OptionButton, selected_path: String) -> void:
 	_stage_editor_make_compact_option_button(option)
 	option.clear()
-	_stage_editor_add_option_item(option, "No Image", "")
+	_stage_editor_add_option_item(option, "無圖片", "")
 	for entry: Dictionary in _stage_editor_tutorial_image_catalog:
 		_stage_editor_add_option_item(option, String(entry.get("name", "Image")), String(entry.get("resource_path", "")))
 	if not selected_path.is_empty():
@@ -1975,13 +2010,13 @@ func _stage_editor_get_selected_dialog_line() -> DialogLine:
 func _refresh_stage_editor_dialog_editor() -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
 	if _stage_editor_dialog_title_label != null:
-		var title: String = "Board"
+		var title: String = "棋盤"
 		if _stage_editor_dialog_target == STAGE_EDITOR_TAB_BEFORE:
-			title = "Before Dialog"
+			title = "戰前對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG:
-			title = "Start Stage Dialog"
+			title = "開場對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_AFTER:
-			title = "After Dialog"
+			title = "戰後對話"
 		_stage_editor_dialog_title_label.text = title
 	_stage_editor_ensure_dialog_cast(sequence)
 	_refresh_stage_editor_dialog_background_option(sequence)
@@ -1995,7 +2030,7 @@ func _refresh_stage_editor_dialog_background_option(sequence: DialogSequence) ->
 		return
 	_stage_editor_dialog_refreshing = true
 	_stage_editor_dialog_background_option.clear()
-	_stage_editor_add_option_item(_stage_editor_dialog_background_option, "None", "")
+	_stage_editor_add_option_item(_stage_editor_dialog_background_option, "無", "")
 	for entry: Dictionary in _stage_editor_dialog_background_catalog:
 		_stage_editor_add_option_item(_stage_editor_dialog_background_option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
 	var selected_path: String = ""
@@ -2013,7 +2048,7 @@ func _refresh_stage_editor_dialog_music_option(sequence: DialogSequence) -> void
 	_stage_editor_populate_dialog_music_selector(
 		_stage_editor_dialog_music_option,
 		_stage_editor_dialog_audio_path(sequence.initial_music) if sequence != null else "",
-		"None",
+		"無",
 		false)
 	_stage_editor_dialog_music_option.disabled = sequence == null
 	_stage_editor_dialog_refreshing = false
@@ -2034,7 +2069,7 @@ func _refresh_stage_editor_dialog_cast_controls(sequence: DialogSequence) -> voi
 		button.custom_minimum_size = Vector2(82, 28)
 		button.add_theme_font_size_override("font_size", 11)
 		var is_referenced: bool = _stage_editor_dialog_line_references_cast(sequence, char_id)
-		button.tooltip_text = "Drag to row" if is_referenced else "Drag to row / click to remove"
+		button.tooltip_text = "拖到對話列" if is_referenced else "拖到對話列／點撃移除"
 		button.set_drag_forwarding(
 			Callable(self, "_stage_editor_get_cast_drag_data").bind(button, char_id),
 			Callable(self, "_stage_editor_no_drop_data"),
@@ -2096,7 +2131,7 @@ func _refresh_stage_editor_dialog_line_list() -> void:
 	if sequence.lines.is_empty():
 		_stage_editor_dialog_selected_index = -1
 		var empty_label := Label.new()
-		empty_label.text = "No rows yet. Use + to add the first line."
+		empty_label.text = "尚未有對話列。按 + 加入第一句。"
 		empty_label.add_theme_color_override("font_color", Color(0.78, 0.84, 0.92, 1.0))
 		_stage_editor_dialog_line_list.add_child(empty_label)
 		_stage_editor_dialog_line_list.add_child(_stage_editor_make_dialog_add_row())
@@ -2195,7 +2230,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	if _stage_editor_dialog_line_is_switch_bg(line):
 		var event_label := Label.new()
-		event_label.text = "Switch BG"
+		event_label.text = "切換背景"
 		event_label.custom_minimum_size = Vector2(86, 30)
 		event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		event_label.add_theme_font_size_override("font_size", 13)
@@ -2216,7 +2251,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		bgm_option.custom_minimum_size = Vector2(108, 30)
 		bgm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var selected_bgm_path: String = "__stop__" if line.stop_music else _stage_editor_dialog_audio_path(line.music)
-		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_path, "BGM no change", true)
+		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_path, "BGM不變", true)
 		bgm_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bgm_selected.bind(line_index, bgm_option))
 		_stage_editor_forward_dialog_row_drop(bgm_option, line_index)
 		controls.add_child(bgm_option)
@@ -2225,8 +2260,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		event_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		controls.add_child(event_spacer)
 
-		controls.add_child(_make_stage_editor_small_button("Dup", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(44, 30)))
-		controls.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(42, 30)))
+		controls.add_child(_make_stage_editor_small_button("複製", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(50, 30)))
+		controls.add_child(_make_stage_editor_small_button("刪除", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(46, 30)))
 
 		var event_row := HBoxContainer.new()
 		event_row.add_theme_constant_override("separation", 6)
@@ -2243,8 +2278,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 		var description := Label.new()
 		var bg_path: String = _stage_editor_dialog_line_background_path(line)
-		description.text = "Fade switch to %s%s" % [
-			_stage_editor_dialog_background_display_name(bg_path) if not bg_path.is_empty() else "None",
+		description.text = "淡入切換至 %s%s" % [
+			_stage_editor_dialog_background_display_name(bg_path) if not bg_path.is_empty() else "無",
 			_stage_editor_dialog_line_music_summary(line),
 		]
 		description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2258,7 +2293,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 
 	if _stage_editor_dialog_line_is_switch_bgm(line):
 		var event_label := Label.new()
-		event_label.text = "Switch BGM"
+		event_label.text = "切換BGM"
 		event_label.custom_minimum_size = Vector2(92, 30)
 		event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		event_label.add_theme_font_size_override("font_size", 13)
@@ -2270,7 +2305,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		bgm_option.custom_minimum_size = Vector2(126, 30)
 		bgm_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var selected_bgm_event_path: String = "__stop__" if line.stop_music else _stage_editor_dialog_audio_path(line.music)
-		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_event_path, "BGM no change", true)
+		_stage_editor_populate_dialog_music_selector(bgm_option, selected_bgm_event_path, "BGM不變", true)
 		bgm_option.item_selected.connect(_on_stage_editor_dialog_row_switch_bgm_selected.bind(line_index, bgm_option))
 		_stage_editor_forward_dialog_row_drop(bgm_option, line_index)
 		controls.add_child(bgm_option)
@@ -2279,8 +2314,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 		event_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		controls.add_child(event_spacer)
 
-		controls.add_child(_make_stage_editor_small_button("Dup", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(44, 30)))
-		controls.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(42, 30)))
+		controls.add_child(_make_stage_editor_small_button("複製", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(50, 30)))
+		controls.add_child(_make_stage_editor_small_button("刪除", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(46, 30)))
 
 		var event_row := HBoxContainer.new()
 		event_row.add_theme_constant_override("separation", 6)
@@ -2320,7 +2355,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	side_switch.focus_mode = Control.FOCUS_NONE
 	side_switch.custom_minimum_size = Vector2(76, 30)
 	side_switch.button_pressed = line.position == "right"
-	side_switch.text = "Right" if side_switch.button_pressed else "Left"
+	side_switch.text = "右側" if side_switch.button_pressed else "左側"
 	side_switch.toggled.connect(_on_stage_editor_dialog_row_side_toggled.bind(line_index, side_switch))
 	_stage_editor_forward_dialog_row_drop(side_switch, line_index)
 	controls.add_child(side_switch)
@@ -2329,16 +2364,16 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	action_option.focus_mode = Control.FOCUS_NONE
 	action_option.custom_minimum_size = Vector2(76, 30)
 	_stage_editor_make_compact_option_button(action_option)
-	_stage_editor_add_option_item(action_option, "none", "none")
-	_stage_editor_add_option_item(action_option, "enter", "enter")
-	_stage_editor_add_option_item(action_option, "exit", "exit")
+	_stage_editor_add_option_item(action_option, "無", "none")
+	_stage_editor_add_option_item(action_option, "登場", "enter")
+	_stage_editor_add_option_item(action_option, "退場", "exit")
 	_stage_editor_select_option_value(action_option, line.action)
 	action_option.item_selected.connect(_on_stage_editor_dialog_row_action_selected.bind(line_index, action_option))
 	_stage_editor_forward_dialog_row_drop(action_option, line_index)
 	controls.add_child(action_option)
 
 	var shake_check := CheckBox.new()
-	shake_check.text = "Shake"
+	shake_check.text = "震動"
 	shake_check.focus_mode = Control.FOCUS_NONE
 	shake_check.button_pressed = line.shake
 	shake_check.custom_minimum_size = Vector2(70, 30)
@@ -2349,8 +2384,8 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls.add_child(spacer)
 
-	controls.add_child(_make_stage_editor_small_button("Dup", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(44, 30)))
-	controls.add_child(_make_stage_editor_small_button("Del", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(42, 30)))
+	controls.add_child(_make_stage_editor_small_button("複製", _on_stage_editor_dialog_row_duplicate_pressed.bind(line_index), Vector2(50, 30)))
+	controls.add_child(_make_stage_editor_small_button("刪除", _on_stage_editor_dialog_row_delete_pressed.bind(line_index), Vector2(46, 30)))
 
 	var text_row := HBoxContainer.new()
 	text_row.add_theme_constant_override("separation", 6)
@@ -2360,19 +2395,19 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	text_row.add_child(_stage_editor_make_character_indicator(line.character_id))
 	if _stage_editor_dialog_line_is_exit(line):
 		var exit_label := Label.new()
-		exit_label.text = "Exit animation only"
+		exit_label.text = "只播放退場動畫"
 		exit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		exit_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		exit_label.add_theme_font_size_override("font_size", 13)
 		exit_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
 		text_row.add_child(exit_label)
 	else:
-		var zh_edit: TextEdit = _stage_editor_make_row_text_edit(line.text_zh, "zh")
+		var zh_edit: TextEdit = _stage_editor_make_row_text_edit(line.text_zh, "中文")
 		zh_edit.text_changed.connect(_on_stage_editor_dialog_row_text_zh_changed.bind(zh_edit, line_index))
 		_stage_editor_forward_dialog_row_drop(zh_edit, line_index)
 		text_row.add_child(zh_edit)
 
-		var en_edit: TextEdit = _stage_editor_make_row_text_edit(line.text_en, "en")
+		var en_edit: TextEdit = _stage_editor_make_row_text_edit(line.text_en, "英文")
 		en_edit.text_changed.connect(_on_stage_editor_dialog_row_text_en_changed.bind(en_edit, line_index))
 		_stage_editor_forward_dialog_row_drop(en_edit, line_index)
 		text_row.add_child(en_edit)
@@ -2445,11 +2480,11 @@ func _stage_editor_dialog_line_music_summary(line: DialogLine) -> String:
 	if line == null:
 		return ""
 	if line.stop_music:
-		return " / Fade out BGM"
+		return " / 淡出BGM"
 	var music_path: String = _stage_editor_dialog_audio_path(line.music)
 	if music_path.is_empty():
-		return " / BGM no change"
-	return " / BGM: %s" % _stage_editor_dialog_music_display_name(music_path)
+		return " / BGM不變"
+	return " / BGM：%s" % _stage_editor_dialog_music_display_name(music_path)
 
 
 func _stage_editor_make_row_text_edit(text_value: String, placeholder: String) -> TextEdit:
@@ -2493,13 +2528,13 @@ func _refresh_stage_editor_dialog_form() -> void:
 	var line: DialogLine = _stage_editor_get_selected_dialog_line()
 	var has_line: bool = line != null
 	if _stage_editor_dialog_title_label != null:
-		var title: String = "Board"
+		var title: String = "棋盤"
 		if _stage_editor_dialog_target == STAGE_EDITOR_TAB_BEFORE:
-			title = "Before Dialog"
+			title = "戰前對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG:
-			title = "Start Stage Dialog"
+			title = "開場對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_AFTER:
-			title = "After Dialog"
+			title = "戰後對話"
 		_stage_editor_dialog_title_label.text = title
 	_stage_editor_set_dialog_form_enabled(has_line)
 	if not has_line:
@@ -2581,9 +2616,9 @@ func _stage_editor_get_row_drag_data(_at_position: Vector2, source_control: Cont
 		return null
 	var label_text: String = "%02d %s" % [line_index + 1, _stage_editor_character_display_name(line.character_id)]
 	if _stage_editor_dialog_line_is_switch_bg(line):
-		label_text = "%02d Switch BG" % [line_index + 1]
+		label_text = "%02d 切換背景" % [line_index + 1]
 	elif _stage_editor_dialog_line_is_switch_bgm(line):
-		label_text = "%02d Switch BGM" % [line_index + 1]
+		label_text = "%02d 切換BGM" % [line_index + 1]
 	source_control.set_drag_preview(_stage_editor_make_drag_preview(label_text, _stage_editor_character_portrait_texture(line.character_id)))
 	return {"type": "dialog_row", "line_index": line_index}
 
@@ -2798,7 +2833,7 @@ func _on_stage_editor_dialog_add_enemy_cast_pressed() -> void:
 	var enemy_path: String = _stage_editor_get_option_value(_stage_editor_dialog_enemy_cast_option)
 	var enemy_data: EnemyData = _stage_editor_enemy_data_for_path(enemy_path)
 	if enemy_data == null:
-		_set_stage_editor_status("Enemy cast load failed", false)
+		_set_stage_editor_status("敵人角色載入失敗", false)
 		return
 	var name_zh: String = _stage_editor_dialog_enemy_cast_zh_edit.text.strip_edges() if _stage_editor_dialog_enemy_cast_zh_edit != null else ""
 	var name_en: String = _stage_editor_dialog_enemy_cast_en_edit.text.strip_edges() if _stage_editor_dialog_enemy_cast_en_edit != null else ""
@@ -2808,7 +2843,7 @@ func _on_stage_editor_dialog_add_enemy_cast_pressed() -> void:
 		name_en = enemy_data.get_display_name("en")
 	var cast_id: String = _stage_editor_make_enemy_cast_id(sequence, enemy_path, name_en if not name_en.is_empty() else name_zh)
 	if cast_id.is_empty():
-		_set_stage_editor_status("Enemy cast id failed", false)
+		_set_stage_editor_status("敵人角色 ID 建立失敗", false)
 		return
 	if sequence.has_method("set_enemy_cast_profile"):
 		sequence.set_enemy_cast_profile(cast_id, enemy_path, name_zh, name_en)
@@ -2822,7 +2857,7 @@ func _on_stage_editor_dialog_add_enemy_cast_pressed() -> void:
 	sequence.cast.append(cast_id)
 	_refresh_stage_editor_dialog_editor()
 	_stage_editor_apply_enemy_cast_name_defaults(true)
-	_set_stage_editor_status("Enemy cast added: %s / %s" % [name_zh, name_en])
+	_set_stage_editor_status("已加入敵人角色：%s / %s" % [name_zh, name_en])
 
 
 func _stage_editor_enemy_data_for_path(enemy_path: String) -> EnemyData:
@@ -2957,7 +2992,7 @@ func _on_stage_editor_dialog_row_switch_bgm_selected(_item_index: int, line_inde
 
 func _on_stage_editor_dialog_exit_side_toggled(button_pressed: bool) -> void:
 	if _stage_editor_dialog_exit_side_option != null:
-		_stage_editor_dialog_exit_side_option.text = "Right" if button_pressed else "Left"
+		_stage_editor_dialog_exit_side_option.text = "右側" if button_pressed else "左側"
 
 
 func _on_stage_editor_dialog_add_exit_pressed() -> void:
@@ -3020,7 +3055,7 @@ func _on_stage_editor_dialog_row_side_toggled(button_pressed: bool, line_index: 
 	if line == null:
 		return
 	line.position = "right" if button_pressed else "left"
-	switch_button.text = "Right" if button_pressed else "Left"
+	switch_button.text = "右側" if button_pressed else "左側"
 
 
 func _on_stage_editor_dialog_row_action_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
@@ -3352,7 +3387,7 @@ func _make_stage_editor_mode_button(label_text: String, mode_value: int) -> Butt
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(62, 24)
 	button.add_theme_font_size_override("font_size", 11)
-	button.tooltip_text = "Stage mode: %s" % label_text
+	button.tooltip_text = "關卡模式：%s" % label_text
 	button.pressed.connect(_on_stage_editor_mode_button_pressed.bind(mode_value))
 	_stage_editor_mode_buttons[mode_value] = button
 	return button
@@ -3595,21 +3630,21 @@ func _build_stage_editor_enemy_area() -> void:
 	(_stage_editor_enemy_area_panel as ColorRect).color = Color(0.02, 0.025, 0.04, 0.82)
 	$UILayer.add_child(_stage_editor_enemy_area_panel)
 
-	_stage_editor_prev_round_button = _make_stage_editor_small_button("<-", _on_stage_editor_prev_round_pressed, Vector2(42, 30))
+	_stage_editor_prev_round_button = _make_stage_editor_small_button("上一波", _on_stage_editor_prev_round_pressed, Vector2(58, 30))
 	_stage_editor_enemy_area_panel.add_child(_stage_editor_prev_round_button)
 
 	_stage_editor_enemy_area_round_label = Label.new()
-	_stage_editor_enemy_area_round_label.text = "Round"
+	_stage_editor_enemy_area_round_label.text = "波次"
 	_stage_editor_enemy_area_round_label.add_theme_font_size_override("font_size", 13)
 	_stage_editor_enemy_area_round_label.add_theme_color_override("font_color", Color.WHITE)
 	_stage_editor_enemy_area_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_stage_editor_enemy_area_panel.add_child(_stage_editor_enemy_area_round_label)
 
-	_stage_editor_next_round_button = _make_stage_editor_small_button("->", _on_stage_editor_next_round_pressed, Vector2(42, 30))
+	_stage_editor_next_round_button = _make_stage_editor_small_button("下一波", _on_stage_editor_next_round_pressed, Vector2(58, 30))
 	_stage_editor_enemy_area_panel.add_child(_stage_editor_next_round_button)
-	_stage_editor_add_round_button = _make_stage_editor_small_button("+", _on_stage_editor_add_round_from_area_pressed, Vector2(32, 30))
+	_stage_editor_add_round_button = _make_stage_editor_small_button("新增波", _on_stage_editor_add_round_from_area_pressed, Vector2(62, 30))
 	_stage_editor_enemy_area_panel.add_child(_stage_editor_add_round_button)
-	_stage_editor_remove_round_button = _make_stage_editor_small_button("-", _on_stage_editor_remove_current_round_pressed, Vector2(32, 30))
+	_stage_editor_remove_round_button = _make_stage_editor_small_button("刪除波", _on_stage_editor_remove_current_round_pressed, Vector2(62, 30))
 	_stage_editor_enemy_area_panel.add_child(_stage_editor_remove_round_button)
 
 	_stage_editor_enemy_area_slots = Control.new()
@@ -3628,14 +3663,17 @@ func _layout_stage_editor_enemy_area() -> void:
 	var viewport_size: Vector2 = ViewportUtils.get_size()
 	var insets: Vector4 = ViewportUtils.get_safe_insets()
 	var panel_height := 184.0
-	var panel_top: float = maxf(44.0 + insets.x, board.position.y - panel_height - 6.0)
+	var min_panel_top: float = 44.0 + insets.x
+	if _stage_editor_area_panel != null and _stage_editor_area_panel.visible:
+		min_panel_top = maxf(min_panel_top, _stage_editor_area_panel.offset_bottom + 6.0)
+	var panel_top: float = maxf(min_panel_top, board.position.y - panel_height - 6.0)
 	var panel_width: float = maxf(120.0, viewport_size.x - 24.0)
 	_stage_editor_set_control_rect(_stage_editor_enemy_area_panel, Rect2(12.0, panel_top, panel_width, panel_height))
-	_stage_editor_set_control_rect(_stage_editor_prev_round_button, Rect2(8.0, 8.0, 38.0, 28.0))
-	_stage_editor_set_control_rect(_stage_editor_remove_round_button, Rect2(panel_width - 40.0, 8.0, 32.0, 28.0))
-	_stage_editor_set_control_rect(_stage_editor_add_round_button, Rect2(panel_width - 76.0, 8.0, 32.0, 28.0))
-	_stage_editor_set_control_rect(_stage_editor_next_round_button, Rect2(panel_width - 120.0, 8.0, 38.0, 28.0))
-	_stage_editor_set_control_rect(_stage_editor_enemy_area_round_label, Rect2(50.0, 8.0, maxf(80.0, panel_width - 176.0), 28.0))
+	_stage_editor_set_control_rect(_stage_editor_prev_round_button, Rect2(8.0, 8.0, 58.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_remove_round_button, Rect2(panel_width - 68.0, 8.0, 62.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_add_round_button, Rect2(panel_width - 136.0, 8.0, 62.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_next_round_button, Rect2(panel_width - 202.0, 8.0, 58.0, 28.0))
+	_stage_editor_set_control_rect(_stage_editor_enemy_area_round_label, Rect2(72.0, 8.0, maxf(80.0, panel_width - 282.0), 28.0))
 	_stage_editor_set_control_rect(_stage_editor_enemy_area_slots, Rect2(8.0, 42.0, panel_width - 16.0, 136.0))
 
 
@@ -3696,7 +3734,7 @@ func _refresh_stage_editor_goal_area() -> void:
 	if not _stage_editor_is_valid_goal_target(int(current_stage.puzzle_goal_target_type)):
 		current_stage.puzzle_goal_target_type = Block.Type.RED
 	if _stage_editor_enemy_area_round_label != null:
-		_stage_editor_enemy_area_round_label.text = "Puzzle Goal"
+		_stage_editor_enemy_area_round_label.text = "解謎目標"
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _make_stage_editor_panel_style(Color(0.11, 0.12, 0.18, 0.94)))
@@ -3726,7 +3764,7 @@ func _refresh_stage_editor_goal_area() -> void:
 	row.add_child(target_box)
 
 	var target_label := Label.new()
-	target_label.text = "Target"
+	target_label.text = "目標"
 	target_label.add_theme_font_size_override("font_size", 11)
 	target_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
 	target_box.add_child(target_label)
@@ -3751,7 +3789,7 @@ func _refresh_stage_editor_goal_area() -> void:
 	row.add_child(count_box)
 
 	var count_label := Label.new()
-	count_label.text = "Required"
+	count_label.text = "數量"
 	count_label.add_theme_font_size_override("font_size", 11)
 	count_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
 	count_box.add_child(count_label)
@@ -3772,7 +3810,7 @@ func _refresh_stage_editor_goal_area() -> void:
 	row.add_child(turn_box)
 
 	var turn_label := Label.new()
-	turn_label.text = "Turn Left"
+	turn_label.text = "回合"
 	turn_label.add_theme_font_size_override("font_size", 11)
 	turn_label.add_theme_color_override("font_color", Color(0.76, 0.84, 0.95, 1.0))
 	turn_box.add_child(turn_label)
@@ -3788,7 +3826,7 @@ func _refresh_stage_editor_goal_area() -> void:
 	turn_box.add_child(_stage_editor_goal_turn_spin)
 
 	var hint := Label.new()
-	hint.text = "Break Count"
+	hint.text = "爆破數量"
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.95, 0.82, 0.42, 1.0))
 	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -3812,7 +3850,7 @@ func _refresh_stage_editor_enemy_area() -> void:
 		return
 
 	if current_stage != null and current_stage.mode == StageData.Mode.ESCAPE:
-		_refresh_stage_editor_no_enemy_area("Escape Mode", "No monster waves. Escape distance decides victory.")
+		_refresh_stage_editor_no_enemy_area("逃脫模式", "沒有怪物波次。勝利條件由逃脫距離決定。")
 		return
 
 	_stage_editor_normalize_cd_lists()
@@ -3820,7 +3858,7 @@ func _refresh_stage_editor_enemy_area() -> void:
 
 	if _stage_editor_rounds.is_empty():
 		if _stage_editor_enemy_area_round_label != null:
-			_stage_editor_enemy_area_round_label.text = "No rounds"
+			_stage_editor_enemy_area_round_label.text = "尚未建立波次"
 		var add_round_slot: Control = _make_stage_editor_add_round_slot()
 		_stage_editor_enemy_area_slots.add_child(add_round_slot)
 		_stage_editor_set_control_rect(add_round_slot, Rect2(0.0, 0.0, 116.0, 78.0))
@@ -3829,7 +3867,7 @@ func _refresh_stage_editor_enemy_area() -> void:
 	var round_index: int = _stage_editor_current_round_index
 	var round_list: Array = _stage_editor_rounds[round_index]
 	if _stage_editor_enemy_area_round_label != null:
-		_stage_editor_enemy_area_round_label.text = "Round %d / %d  (%d enemies)" % [round_index + 1, _stage_editor_rounds.size(), round_list.size()]
+		_stage_editor_enemy_area_round_label.text = "第 %d / %d 波（%d 隻怪物）" % [round_index + 1, _stage_editor_rounds.size(), round_list.size()]
 	var card_width := 180.0
 	var card_height := 132.0
 	var gap := 8.0
@@ -3846,7 +3884,7 @@ func _refresh_stage_editor_enemy_area() -> void:
 
 func _make_stage_editor_add_round_slot() -> Control:
 	var button := Button.new()
-	button.text = "+ Round"
+	button.text = "+ 新增波"
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(116, 84)
 	button.add_theme_font_size_override("font_size", 14)
@@ -3860,7 +3898,7 @@ func _make_stage_editor_add_enemy_slot(round_index: int) -> Control:
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(78, 78)
 	button.add_theme_font_size_override("font_size", 30)
-	button.tooltip_text = "Add enemy"
+	button.tooltip_text = "新增怪物"
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.0, 0.0, 0.46)
 	style.border_width_top = 2
@@ -3922,13 +3960,14 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	level_spin.prefix = "Lv "
 	level_spin.add_theme_font_size_override("font_size", 9)
 	level_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
-	level_spin.tooltip_text = "Enemy spawn level"
+	level_spin.tooltip_text = "怪物出場等級"
 	level_spin.value_changed.connect(_on_stage_editor_level_value_changed.bind(round_index, enemy_index))
 	card.add_child(level_spin)
 	_stage_editor_set_control_rect(level_spin, Rect2(50.0, 28.0, 70.0, 22.0))
 
 	var boss_button: Button = _make_stage_editor_small_button("B", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(22, 22))
-	boss_button.tooltip_text = "Main boss spawn"
+	boss_button.text = "主"
+	boss_button.tooltip_text = "設為主怪出場"
 	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
 	card.add_child(boss_button)
 	_stage_editor_set_control_rect(boss_button, Rect2(154.0, 28.0, 22.0, 22.0))
@@ -3937,7 +3976,7 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	card.add_child(minus_button)
 	_stage_editor_set_control_rect(minus_button, Rect2(4.0, 52.0, 22.0, 22.0))
 	var cd_label := Label.new()
-	cd_label.text = "CD %s" % ("Auto" if cd_value <= 0 else str(cd_value))
+	cd_label.text = "CD %s" % ("自動" if cd_value <= 0 else str(cd_value))
 	cd_label.add_theme_font_size_override("font_size", 10)
 	cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add_child(cd_label)
@@ -3946,13 +3985,13 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	card.add_child(plus_button)
 	_stage_editor_set_control_rect(plus_button, Rect2(76.0, 52.0, 22.0, 22.0))
 	var auto_button: Button = _make_stage_editor_small_button("A", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(22, 22))
-	auto_button.tooltip_text = "Auto initial CD"
+	auto_button.tooltip_text = "自動初始 CD"
 	card.add_child(auto_button)
 	_stage_editor_set_control_rect(auto_button, Rect2(100.0, 52.0, 22.0, 22.0))
 
 	var loot_entry: LootItem = _stage_editor_get_primary_loot(enemy_data)
 	var loot_caption := Label.new()
-	loot_caption.text = "Loot"
+	loot_caption.text = "掉落"
 	loot_caption.add_theme_font_size_override("font_size", 9)
 	loot_caption.add_theme_color_override("font_color", Color(0.78, 0.86, 0.95, 1.0))
 	card.add_child(loot_caption)
@@ -3994,7 +4033,7 @@ func _make_stage_editor_enemy_area_card(round_index: int, enemy_index: int) -> C
 	_stage_editor_set_control_rect(count_spin, Rect2(116.0, 102.0, 60.0, 24.0))
 
 	var count_caption := Label.new()
-	count_caption.text = "Count"
+	count_caption.text = "數量"
 	count_caption.add_theme_font_size_override("font_size", 9)
 	count_caption.add_theme_color_override("font_color", Color(0.78, 0.86, 0.95, 1.0))
 	card.add_child(count_caption)
@@ -4020,13 +4059,13 @@ func _build_stage_editor_rounds_panel() -> void:
 	_stage_editor_rounds_container.add_child(header_row)
 
 	var title := Label.new()
-	title.text = "Rounds"
+	title.text = "波次"
 	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(title)
 
-	header_row.add_child(_make_stage_editor_small_button("Add Round", _on_stage_editor_add_round_pressed, Vector2(78, 28)))
+	header_row.add_child(_make_stage_editor_small_button("新增波", _on_stage_editor_add_round_pressed, Vector2(78, 28)))
 
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 142)
@@ -4070,7 +4109,7 @@ func _build_stage_editor_enemy_picker_panel() -> void:
 	root_box.add_child(header_row)
 
 	var title := Label.new()
-	title.text = "Add Enemy"
+	title.text = "新增怪物"
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4090,10 +4129,10 @@ func _build_stage_editor_enemy_picker_panel() -> void:
 	_stage_editor_enemy_picker_level_spin.value = 1
 	_stage_editor_enemy_picker_level_spin.custom_minimum_size = Vector2(82, 32)
 	_stage_editor_enemy_picker_level_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_stage_editor_enemy_picker_level_spin.tooltip_text = "Spawn level for the enemy you add."
+	_stage_editor_enemy_picker_level_spin.tooltip_text = "新增怪物的出場等級。"
 	header_row.add_child(_stage_editor_enemy_picker_level_spin)
 
-	header_row.add_child(_make_stage_editor_small_button("Close", _on_stage_editor_enemy_picker_close_pressed, Vector2(64, 32)))
+	header_row.add_child(_make_stage_editor_small_button("關閉", _on_stage_editor_enemy_picker_close_pressed, Vector2(64, 32)))
 
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -4123,7 +4162,7 @@ func _refresh_stage_editor_rounds_panel() -> void:
 
 	if _stage_editor_rounds.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No rounds yet. Add a round to begin."
+		empty_label.text = "尚未有波次。新增一波開始編輯。"
 		empty_label.add_theme_color_override("font_color", Color(0.8, 0.86, 0.95, 1.0))
 		_stage_editor_rounds_list.add_child(empty_label)
 		return
@@ -4156,7 +4195,7 @@ func _make_stage_editor_round_section(round_index: int) -> Control:
 	box.add_child(header)
 
 	var title := Label.new()
-	title.text = "Round %d  (%d enemies)" % [round_index + 1, round_list.size()]
+	title.text = "第 %d 波（%d 隻怪物）" % [round_index + 1, round_list.size()]
 	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4165,12 +4204,12 @@ func _make_stage_editor_round_section(round_index: int) -> Control:
 	var round_buttons := HBoxContainer.new()
 	round_buttons.add_theme_constant_override("separation", 6)
 	header.add_child(round_buttons)
-	round_buttons.add_child(_make_stage_editor_small_button("Add Enemy", _on_stage_editor_add_enemy_pressed.bind(round_index), Vector2(92, 28)))
-	round_buttons.add_child(_make_stage_editor_small_button("Remove Round", _on_stage_editor_remove_round_pressed.bind(round_index), Vector2(102, 28)))
+	round_buttons.add_child(_make_stage_editor_small_button("新增怪物", _on_stage_editor_add_enemy_pressed.bind(round_index), Vector2(92, 28)))
+	round_buttons.add_child(_make_stage_editor_small_button("刪除波", _on_stage_editor_remove_round_pressed.bind(round_index), Vector2(82, 28)))
 
 	if round_list.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "Empty round (add at least one enemy before saving)."
+		empty_label.text = "空波次（保存前至少加入一隻怪物）。"
 		empty_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.55, 1.0))
 		box.add_child(empty_label)
 		return section
@@ -4243,15 +4282,15 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	row_box.add_child(control_row)
 
 	var cd_label := Label.new()
-	cd_label.text = "CD %s" % ("Auto" if cd_value <= 0 else str(cd_value))
+	cd_label.text = "CD %s" % ("自動" if cd_value <= 0 else str(cd_value))
 	cd_label.custom_minimum_size = Vector2(58, 0)
 	cd_label.add_theme_font_size_override("font_size", 11)
 	cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	control_row.add_child(cd_label)
 	control_row.add_child(_make_stage_editor_small_button("-", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, -1), Vector2(34, 30)))
 	control_row.add_child(_make_stage_editor_small_button("+", _on_stage_editor_cd_delta_pressed.bind(round_index, enemy_index, 1), Vector2(34, 30)))
-	var auto_button: Button = _make_stage_editor_small_button("Auto", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(54, 30))
-	auto_button.tooltip_text = "Auto initial CD"
+	var auto_button: Button = _make_stage_editor_small_button("自動", _on_stage_editor_cd_auto_pressed.bind(round_index, enemy_index), Vector2(54, 30))
+	auto_button.tooltip_text = "自動初始 CD"
 	control_row.add_child(auto_button)
 	var level_label := Label.new()
 	level_label.text = "Lv"
@@ -4266,11 +4305,11 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	level_spin.value = level_value
 	level_spin.custom_minimum_size = Vector2(76, 28)
 	level_spin.get_line_edit().alignment = HORIZONTAL_ALIGNMENT_CENTER
-	level_spin.tooltip_text = "Enemy spawn level"
+	level_spin.tooltip_text = "怪物出場等級"
 	level_spin.value_changed.connect(_on_stage_editor_level_value_changed.bind(round_index, enemy_index))
 	control_row.add_child(level_spin)
-	var boss_button: Button = _make_stage_editor_small_button("Boss", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(58, 30))
-	boss_button.tooltip_text = "Use this spawn as the main boss"
+	var boss_button: Button = _make_stage_editor_small_button("主怪", _on_stage_editor_boss_toggle_pressed.bind(round_index, enemy_index), Vector2(58, 30))
+	boss_button.tooltip_text = "使用這個出場怪物作為主怪"
 	boss_button.modulate = Color(1.0, 0.86, 0.32) if is_boss_spawn else Color(0.72, 0.76, 0.86)
 	control_row.add_child(boss_button)
 
@@ -4281,7 +4320,7 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	row_box.add_child(loot_row)
 
 	var loot_label := Label.new()
-	loot_label.text = "Loot"
+	loot_label.text = "掉落"
 	loot_label.custom_minimum_size = Vector2(42, 0)
 	loot_label.add_theme_font_size_override("font_size", 11)
 	loot_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -4312,7 +4351,7 @@ func _make_stage_editor_enemy_row(round_index: int, enemy_index: int) -> Control
 	loot_row.add_child(chance_spin)
 
 	var count_label := Label.new()
-	count_label.text = "Count"
+	count_label.text = "數量"
 	count_label.add_theme_font_size_override("font_size", 11)
 	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	loot_row.add_child(count_label)
@@ -4334,7 +4373,7 @@ func _stage_editor_populate_item_option(option: OptionButton, selected_type: Var
 		return
 	option.clear()
 	if include_none:
-		_stage_editor_add_option_item(option, "None", "")
+		_stage_editor_add_option_item(option, "無", "")
 	if include_gold:
 		_stage_editor_add_option_item(option, ItemDefs.get_display_name(ItemDefs.Type.GOLD), str(int(ItemDefs.Type.GOLD)))
 	_stage_editor_add_option_item(option, ItemDefs.get_display_name(ItemDefs.Type.SAPPHIRE), str(int(ItemDefs.Type.SAPPHIRE)))
@@ -4398,7 +4437,7 @@ func _on_stage_editor_enemy_loot_item_selected(_item_index: int, round_index: in
 	_stage_editor_rounds[round_index] = enemy_list
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Enemy loot updated")
+	_set_stage_editor_status("怪物掉落已更新")
 
 
 func _on_stage_editor_enemy_loot_chance_changed(value: float, round_index: int, enemy_index: int) -> void:
@@ -4413,7 +4452,7 @@ func _on_stage_editor_enemy_loot_chance_changed(value: float, round_index: int, 
 	if not had_loot:
 		_refresh_stage_editor_rounds_panel()
 		_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Enemy loot chance: %d%%" % int(round(value)))
+	_set_stage_editor_status("怪物掉落率：%d%%" % int(round(value)))
 
 
 func _on_stage_editor_enemy_loot_count_changed(value: float, round_index: int, enemy_index: int) -> void:
@@ -4430,7 +4469,7 @@ func _on_stage_editor_enemy_loot_count_changed(value: float, round_index: int, e
 	if not had_loot:
 		_refresh_stage_editor_rounds_panel()
 		_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Enemy loot count: %d" % count)
+	_set_stage_editor_status("怪物掉落數量：%d" % count)
 
 
 func _layout_stage_editor_enemy_picker_panel() -> void:
@@ -4455,7 +4494,7 @@ func _layout_stage_editor_enemy_picker_panel() -> void:
 
 func _on_stage_editor_rounds_pressed() -> void:
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Enemy area refreshed")
+	_set_stage_editor_status("怪物區域已更新")
 	_layout_stage_editor_ui()
 
 
@@ -4481,7 +4520,7 @@ func _on_stage_editor_add_round_from_area_pressed() -> void:
 	_stage_editor_rounds_main_bosses.insert(insert_index, [])
 	_stage_editor_current_round_index = insert_index
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Round added")
+	_set_stage_editor_status("已新增波次")
 
 
 func _on_stage_editor_remove_current_round_pressed() -> void:
@@ -4493,7 +4532,7 @@ func _on_stage_editor_remove_current_round_pressed() -> void:
 	_stage_editor_rounds_main_bosses.remove_at(_stage_editor_current_round_index)
 	_stage_editor_clamp_current_round_index()
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Round removed")
+	_set_stage_editor_status("已刪除波次")
 
 
 func _on_stage_editor_rounds_close_pressed() -> void:
@@ -4521,7 +4560,7 @@ func _on_stage_editor_add_round_pressed() -> void:
 	_stage_editor_current_round_index = _stage_editor_rounds.size() - 1
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Round added")
+	_set_stage_editor_status("已新增波次")
 	_layout_stage_editor_ui()
 
 
@@ -4535,7 +4574,7 @@ func _on_stage_editor_remove_round_pressed(round_index: int) -> void:
 	_stage_editor_clamp_current_round_index()
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Round removed")
+	_set_stage_editor_status("已刪除波次")
 	_layout_stage_editor_ui()
 
 
@@ -4551,7 +4590,7 @@ func _on_stage_editor_add_enemy_pressed(round_index: int) -> void:
 	_refresh_stage_editor_enemy_picker()
 	if _stage_editor_enemy_picker_panel != null:
 		_stage_editor_enemy_picker_panel.visible = true
-	_set_stage_editor_status("Pick an enemy")
+	_set_stage_editor_status("選擇怪物")
 
 
 func _on_stage_editor_remove_enemy_pressed(round_index: int, enemy_index: int) -> void:
@@ -4571,7 +4610,7 @@ func _on_stage_editor_remove_enemy_pressed(round_index: int, enemy_index: int) -
 	_stage_editor_rounds_main_bosses[round_index] = boss_list
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Enemy removed")
+	_set_stage_editor_status("已移除怪物")
 	_layout_stage_editor_ui()
 
 
@@ -4615,7 +4654,7 @@ func _on_stage_editor_level_value_changed(value: float, round_index: int, enemy_
 	var level_value: int = clampi(int(round(value)), 1, 99)
 	level_list[enemy_index] = level_value
 	_stage_editor_rounds_enemy_levels[round_index] = level_list
-	_set_stage_editor_status("Enemy Lv: %d" % level_value)
+	_set_stage_editor_status("怪物等級：%d" % level_value)
 
 
 func _on_stage_editor_boss_toggle_pressed(round_index: int, enemy_index: int) -> void:
@@ -4653,7 +4692,7 @@ func _refresh_stage_editor_enemy_picker() -> void:
 		child.queue_free()
 	if _stage_editor_available_enemies.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No EnemyData resources found in res://enemies."
+		empty_label.text = "res://enemies 找不到 EnemyData 資源。"
 		empty_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.55, 1.0))
 		_stage_editor_enemy_picker_grid.add_child(empty_label)
 		return
@@ -4685,7 +4724,7 @@ func _make_stage_editor_enemy_picker_button(entry: Dictionary) -> Button:
 func _on_stage_editor_enemy_entry_picked(entry: Dictionary) -> void:
 	var enemy_data: EnemyData = entry.get("data", null) as EnemyData
 	if enemy_data == null:
-		_set_stage_editor_status("Enemy load failed", false)
+		_set_stage_editor_status("怪物載入失敗", false)
 		return
 	var spawn_level: int = enemy_data.enemy_level
 	if _stage_editor_enemy_picker_level_spin != null:
@@ -4719,7 +4758,7 @@ func _on_stage_editor_enemy_picked(enemy_data: EnemyData, spawn_level: int = -1)
 	_refresh_stage_editor_rounds_panel()
 	_stage_editor_current_round_index = round_index
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Enemy added")
+	_set_stage_editor_status("已新增怪物")
 	_layout_stage_editor_ui()
 
 
@@ -4861,43 +4900,43 @@ func _stage_editor_make_manifest_enemy(entry: Dictionary) -> EnemyData:
 func _stage_editor_type_name(value: int) -> String:
 	match value:
 		Block.Type.RED:
-			return "Red"
+			return "火寶石"
 		Block.Type.BLUE:
-			return "Blue"
+			return "水寶石"
 		Block.Type.GREEN:
-			return "Green"
+			return "木寶石"
 		Block.Type.LIGHT:
-			return "Light"
+			return "光寶石"
 		Block.Type.DARK:
-			return "Dark"
+			return "暗寶石"
 		Block.Type.PLANK:
-			return "Plank"
+			return "木板"
 		Block.Type.ROCK:
-			return "Rock"
+			return "岩石"
 		Block.Type.WOOD_STRUCTURE:
-			return "woodStructure"
+			return "木結構"
 		Block.Type.PUZZLE_KEY:
-			return "Puzzle Key"
+			return "解謎鑰匙"
 		StageData.CELL_WATER_SWORD:
-			return "Water Sword"
+			return "水劍"
 		StageData.CELL_HOLE:
-			return "Hole"
+			return "空洞"
 		_:
-			return "Gem"
+			return "寶石"
 
 
 func _stage_editor_distribution_label(value: int) -> String:
 	match value:
 		Block.Type.RED:
-			return "R"
+			return "火"
 		Block.Type.BLUE:
-			return "B"
+			return "水"
 		Block.Type.GREEN:
-			return "G"
+			return "木"
 		Block.Type.LIGHT:
-			return "L"
+			return "光"
 		Block.Type.DARK:
-			return "D"
+			return "暗"
 		_:
 			return _stage_editor_type_name(value).substr(0, 1)
 
@@ -4932,22 +4971,25 @@ func _refresh_stage_editor_area_panel() -> void:
 		_stage_editor_area_spot_preview.tooltip_text = spot_path
 	if _stage_editor_bg_override_option != null:
 		var selected_override: String = current_stage.battle_background_override_path if current_stage != null else ""
-		_stage_editor_populate_dialog_background_selector(_stage_editor_bg_override_option, selected_override, "NULL")
+		_stage_editor_populate_dialog_background_selector(_stage_editor_bg_override_option, selected_override, "無")
 	if _stage_editor_music_override_option != null:
 		var selected_music_override: String = current_stage.battle_music_override_path if current_stage != null else ""
-		_stage_editor_populate_dialog_music_selector(_stage_editor_music_override_option, selected_music_override, "NULL", false)
+		_stage_editor_populate_dialog_music_selector(_stage_editor_music_override_option, selected_music_override, "無", false)
 	if _stage_editor_boss_bgm_option != null:
 		var selected_boss_bgm: String = _stage_editor_dialog_audio_path(current_stage.boss_bgm) if current_stage != null else ""
-		_stage_editor_populate_dialog_music_selector(_stage_editor_boss_bgm_option, selected_boss_bgm, "NULL", false)
+		_stage_editor_populate_dialog_music_selector(_stage_editor_boss_bgm_option, selected_boss_bgm, "無", false)
 	if _stage_editor_stretch_bg_check != null:
 		_stage_editor_stretch_bg_check.set_pressed_no_signal(current_stage != null and current_stage.stretch_battle_background)
 	if current_stage != null:
 		for key in _stage_editor_distribution_spins.keys():
-			var spin: SpinBox = _stage_editor_distribution_spins[key]
-			spin.set_value_no_signal(current_stage.get_element_weight_for_type(int(key)))
+			var slider: Range = _stage_editor_distribution_spins[key]
+			var weight: int = current_stage.get_element_weight_for_type(int(key))
+			slider.set_value_no_signal(weight)
+			_stage_editor_set_distribution_value_label(int(key), weight)
 		for key in _stage_editor_drop_start_spins.keys():
 			var drop_edit: LineEdit = _stage_editor_drop_start_spins[key]
 			drop_edit.text = str(_stage_editor_get_drop_start_value(int(key)))
+	_refresh_stage_editor_distribution_preview()
 	_refresh_stage_editor_reward_controls()
 
 
@@ -4962,7 +5004,7 @@ func _stage_editor_get_drop_start_value(column_index: int) -> int:
 func _refresh_stage_editor_reward_controls() -> void:
 	if _stage_editor_reward_item_option != null:
 		_stage_editor_reward_item_option.clear()
-		_stage_editor_add_option_item(_stage_editor_reward_item_option, "None", "")
+		_stage_editor_add_option_item(_stage_editor_reward_item_option, "無", "")
 		_stage_editor_add_option_item(_stage_editor_reward_item_option, ItemDefs.get_display_name(ItemDefs.Type.GOLD), str(int(ItemDefs.Type.GOLD)))
 		_stage_editor_add_option_item(_stage_editor_reward_item_option, ItemDefs.get_display_name(ItemDefs.Type.SAPPHIRE), str(int(ItemDefs.Type.SAPPHIRE)))
 		var selected_item: String = ""
@@ -4976,7 +5018,7 @@ func _refresh_stage_editor_reward_controls() -> void:
 
 	if _stage_editor_reward_character_option != null:
 		_stage_editor_reward_character_option.clear()
-		_stage_editor_add_option_item(_stage_editor_reward_character_option, "No Clear Character", "")
+		_stage_editor_add_option_item(_stage_editor_reward_character_option, "無通關角色", "")
 		for entry: Dictionary in _stage_editor_character_catalog:
 			_stage_editor_add_option_item(
 				_stage_editor_reward_character_option,
@@ -4997,7 +5039,7 @@ func _on_stage_editor_reward_changed(_item_index: int) -> void:
 	current_stage.one_time_reward_character = _stage_editor_get_reward_character_from_ui()
 	if _stage_editor_reward_amount_edit != null:
 		_stage_editor_reward_amount_edit.text = str(current_stage.one_time_reward_item_amount)
-	_set_stage_editor_status("Reward updated")
+	_set_stage_editor_status("通關獎勵已更新")
 
 
 func _stage_editor_get_reward_item_type_from_ui() -> ItemDefs.Type:
@@ -5030,10 +5072,71 @@ func _stage_editor_get_reward_character_from_ui() -> CharacterData:
 func _on_stage_editor_distribution_changed(_value: float, _type_value: int) -> void:
 	if current_stage == null:
 		return
+	_stage_editor_set_distribution_value_label(_type_value, maxi(0, int(round(_value))))
 	var distribution_types: Array[Block.Type] = _stage_editor_get_distribution_allowed_types_snapshot()
 	current_stage.allowed_types = distribution_types
 	current_stage.element_weights = _stage_editor_get_element_weights_snapshot(distribution_types)
-	_set_stage_editor_status("Distribution updated")
+	_refresh_stage_editor_distribution_preview()
+	_set_stage_editor_status("元素分布已更新")
+
+
+func _stage_editor_set_distribution_value_label(type_value: int, weight: int) -> void:
+	if not _stage_editor_distribution_value_labels.has(type_value):
+		return
+	var label: Label = _stage_editor_distribution_value_labels[type_value]
+	if label != null:
+		label.text = str(maxi(0, weight))
+
+
+func _stage_editor_get_distribution_weight_from_ui(type_value: int) -> int:
+	if _stage_editor_distribution_spins.has(type_value):
+		var slider: Range = _stage_editor_distribution_spins[type_value]
+		return maxi(0, int(round(slider.value)))
+	if current_stage != null:
+		return current_stage.get_element_weight_for_type(type_value)
+	return 0
+
+
+func _refresh_stage_editor_distribution_preview() -> void:
+	if _stage_editor_distribution_preview_bar == null:
+		return
+	for child in _stage_editor_distribution_preview_bar.get_children():
+		_stage_editor_distribution_preview_bar.remove_child(child)
+		child.queue_free()
+
+	var weights: Dictionary = {}
+	var total := 0
+	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
+		var weight: int = _stage_editor_get_distribution_weight_from_ui(type_value)
+		weights[type_value] = weight
+		total += weight
+
+	var percent_parts: Array[String] = []
+	if total <= 0:
+		var empty_segment := ColorRect.new()
+		empty_segment.color = Color(0.18, 0.19, 0.23, 1.0)
+		empty_segment.custom_minimum_size = Vector2(18, 14)
+		empty_segment.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_stage_editor_distribution_preview_bar.add_child(empty_segment)
+		if _stage_editor_distribution_percent_label != null:
+			_stage_editor_distribution_percent_label.text = "未啟用"
+		return
+
+	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
+		var weight: int = int(weights.get(type_value, 0))
+		if weight <= 0:
+			continue
+		var ratio: float = float(weight) / float(total)
+		var segment := ColorRect.new()
+		segment.color = Block.COLORS.get(type_value, Color.WHITE)
+		segment.custom_minimum_size = Vector2(maxf(8.0, 180.0 * ratio), 14.0)
+		segment.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		segment.size_flags_stretch_ratio = ratio
+		segment.tooltip_text = "%s %d%%" % [_stage_editor_distribution_label(type_value), int(round(ratio * 100.0))]
+		_stage_editor_distribution_preview_bar.add_child(segment)
+		percent_parts.append("%s%d%%" % [_stage_editor_distribution_label(type_value), int(round(ratio * 100.0))])
+	if _stage_editor_distribution_percent_label != null:
+		_stage_editor_distribution_percent_label.text = " ".join(percent_parts)
 
 
 func _on_stage_editor_drop_start_changed(_value: float, _column_index: int) -> void:
@@ -5041,7 +5144,7 @@ func _on_stage_editor_drop_start_changed(_value: float, _column_index: int) -> v
 		current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
 	if board != null:
 		board.queue_redraw()
-	_set_stage_editor_status("Drop start updated")
+	_set_stage_editor_status("掉落起點已更新")
 
 
 func _on_stage_editor_drop_start_step(column_index: int, delta: int) -> void:
@@ -5066,7 +5169,7 @@ func _stage_editor_set_drop_start_value(column_index: int, value: int) -> void:
 	current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
 	if board != null:
 		board.queue_redraw()
-	_set_stage_editor_status("Drop start updated")
+	_set_stage_editor_status("掉落起點已更新")
 
 
 func _on_stage_editor_reset_drop_pressed() -> void:
@@ -5077,7 +5180,7 @@ func _on_stage_editor_reset_drop_pressed() -> void:
 		current_stage.drop_start_rows = _stage_editor_get_drop_start_rows_snapshot()
 	if board != null:
 		board.queue_redraw()
-	_set_stage_editor_status("Drop starts reset")
+	_set_stage_editor_status("掉落起點已重設")
 
 
 func _on_stage_editor_area_selected(item_index: int) -> void:
@@ -5092,7 +5195,7 @@ func _on_stage_editor_area_selected(item_index: int) -> void:
 	_layout_board()
 	_layout_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
-	_set_stage_editor_status("Area: %s" % _stage_editor_selected_area)
+	_set_stage_editor_status("地圖區域：%s" % _stage_editor_selected_area)
 
 
 func _on_stage_editor_bg_override_selected(_item_index: int) -> void:
@@ -5101,9 +5204,9 @@ func _on_stage_editor_bg_override_selected(_item_index: int) -> void:
 	var selected_path: String = _stage_editor_get_option_value(_stage_editor_bg_override_option)
 	if current_stage != null:
 		current_stage.battle_background_override_path = selected_path
-	_apply_stage_background()
-	_layout_board()
-	_set_stage_editor_status("BG Override: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
+		_apply_stage_background()
+		_layout_board()
+		_set_stage_editor_status("背景覆蓋：%s" % ("無" if selected_path.is_empty() else selected_path.get_file()))
 
 
 func _on_stage_editor_music_override_selected(_item_index: int) -> void:
@@ -5114,7 +5217,7 @@ func _on_stage_editor_music_override_selected(_item_index: int) -> void:
 		current_stage.battle_music_override_path = selected_path
 	GameState.fade_out_bgm(0.15)
 	_play_bgm()
-	_set_stage_editor_status("Music Override: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
+	_set_stage_editor_status("戰鬥BGM：%s" % ("無" if selected_path.is_empty() else selected_path.get_file()))
 
 
 func _on_stage_editor_boss_bgm_selected(_item_index: int) -> void:
@@ -5126,7 +5229,7 @@ func _on_stage_editor_boss_bgm_selected(_item_index: int) -> void:
 			current_stage.boss_bgm = null
 		else:
 			current_stage.boss_bgm = load(selected_path) as AudioStream
-	_set_stage_editor_status("Boss BGM: %s" % ("NULL" if selected_path.is_empty() else selected_path.get_file()))
+	_set_stage_editor_status("首領音樂：%s" % ("無" if selected_path.is_empty() else selected_path.get_file()))
 
 
 func _on_stage_editor_stretch_bg_toggled(button_pressed: bool) -> void:
@@ -5135,7 +5238,7 @@ func _on_stage_editor_stretch_bg_toggled(button_pressed: bool) -> void:
 	_layout_board()
 	_layout_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
-	_set_stage_editor_status("Full BG: %s" % ("On" if button_pressed else "Off"))
+	_set_stage_editor_status("全屏背景：%s" % ("開" if button_pressed else "關"))
 
 
 func _on_stage_editor_mode_button_pressed(mode_value: int) -> void:
@@ -5156,12 +5259,12 @@ func _on_stage_editor_mode_button_pressed(mode_value: int) -> void:
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
 	_layout_stage_editor_ui()
-	var mode_name := "Normal"
+	var mode_name := "普通"
 	if current_stage.mode == StageData.Mode.ESCAPE:
-		mode_name = "Escape"
+		mode_name = "逃脫"
 	elif current_stage.mode == StageData.Mode.PUZZLE:
-		mode_name = "Puzzle"
-	_set_stage_editor_status("Mode: %s" % mode_name)
+		mode_name = "解謎"
+	_set_stage_editor_status("模式：%s" % mode_name)
 
 
 func _on_stage_editor_goal_target_selected(item_index: int) -> void:
@@ -5172,26 +5275,26 @@ func _on_stage_editor_goal_target_selected(item_index: int) -> void:
 		return
 	current_stage.puzzle_goal_target_type = type_value
 	_refresh_stage_editor_enemy_area()
-	_set_stage_editor_status("Goal target: %s" % _stage_editor_goal_target_label(type_value))
+	_set_stage_editor_status("解謎目標：%s" % _stage_editor_goal_target_label(type_value))
 
 
 func _on_stage_editor_goal_count_changed(value: float) -> void:
 	if current_stage == null:
 		return
 	current_stage.puzzle_goal_required_count = maxi(0, int(round(value)))
-	_set_stage_editor_status("Goal count: %d" % current_stage.puzzle_goal_required_count)
+	_set_stage_editor_status("目標數量：%d" % current_stage.puzzle_goal_required_count)
 
 
 func _on_stage_editor_goal_turn_changed(value: float) -> void:
 	if current_stage == null:
 		return
 	current_stage.puzzle_turn_limit = maxi(1, int(round(value)))
-	_set_stage_editor_status("Puzzle turns: %d" % current_stage.puzzle_turn_limit)
+	_set_stage_editor_status("解謎回合：%d" % current_stage.puzzle_turn_limit)
 
 
 func _on_stage_editor_clear_pressed() -> void:
 	board.clear_fixed_layout()
-	_set_stage_editor_status("Cleared")
+	_set_stage_editor_status("棋盤已清空")
 
 
 func _stage_editor_get_goal_target_from_ui() -> int:
@@ -5227,7 +5330,7 @@ func _stage_editor_apply_puzzle_goal_from_ui() -> void:
 
 func _on_stage_editor_save_pressed() -> void:
 	if current_stage == null or current_stage.resource_path.is_empty():
-		_set_stage_editor_status("Save failed: no stage resource", false)
+		_set_stage_editor_status("保存失敗：沒有關卡資源", false)
 		return
 	_stage_editor_apply_puzzle_goal_from_ui()
 	var validation_error: String = _stage_editor_validate_rounds_for_save()
@@ -5263,43 +5366,43 @@ func _on_stage_editor_save_pressed() -> void:
 	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
 	if err == OK:
 		var file_name: String = current_stage.resource_path.get_file()
-		_set_stage_editor_status("Saved %s" % file_name)
+		_set_stage_editor_status("已保存 %s" % file_name)
 	else:
-		_set_stage_editor_status("Save failed (%d)" % err, false)
+		_set_stage_editor_status("保存失敗（%d）" % err, false)
 
 
 func _stage_editor_validate_rounds_for_save() -> String:
 	if current_stage == null:
-		return "Save failed: no stage"
+		return "保存失敗：沒有關卡"
 	var layout_snapshot: Array = board.get_fixed_layout_snapshot()
 	for column_index in current_stage.columns:
 		var drop_row: int = _stage_editor_get_drop_start_value_from_ui(column_index)
 		if column_index < layout_snapshot.size() and layout_snapshot[column_index] is Array:
 			var col: Array = layout_snapshot[column_index]
 			if drop_row < col.size() and int(col[drop_row]) == StageData.CELL_HOLE:
-				return "Save failed: C%d drop start is a hole" % (column_index + 1)
+				return "保存失敗：欄%d 的掉落起點是空洞" % (column_index + 1)
 	if current_stage.mode == StageData.Mode.ESCAPE:
 		return ""
 	if current_stage.mode == StageData.Mode.PUZZLE:
 		_stage_editor_apply_puzzle_goal_from_ui()
 		if current_stage.puzzle_goal_kind != StageData.PuzzleGoalKind.BREAK_COUNT:
-			return "Save failed: unsupported puzzle goal"
+			return "保存失敗：不支援的解謎目標"
 		if not _stage_editor_is_valid_goal_target(int(current_stage.puzzle_goal_target_type)):
-			return "Save failed: invalid puzzle goal target"
+			return "保存失敗：解謎目標無效"
 		if current_stage.puzzle_goal_required_count <= 0:
-			return "Save failed: puzzle goal count must be > 0"
+			return "保存失敗：解謎目標數量必須大於 0"
 		if current_stage.puzzle_turn_limit <= 0:
-			return "Save failed: puzzle turns must be > 0"
+			return "保存失敗：解謎回合必須大於 0"
 		return ""
 	if _stage_editor_rounds.is_empty():
-		return "Save failed: add at least one round"
+		return "保存失敗：至少需要一波怪物"
 	for round_index in _stage_editor_rounds.size():
 		var round_list: Array = _stage_editor_rounds[round_index]
 		if round_list.is_empty():
-			return "Save failed: round %d is empty" % (round_index + 1)
+			return "保存失敗：第 %d 波是空的" % (round_index + 1)
 		for enemy_variant in round_list:
 			if not (enemy_variant is EnemyData):
-				return "Save failed: round %d has invalid enemy" % (round_index + 1)
+				return "保存失敗：第 %d 波有無效怪物" % (round_index + 1)
 	return ""
 
 
@@ -5346,8 +5449,8 @@ func _stage_editor_get_distribution_allowed_types_snapshot() -> Array[Block.Type
 	for type_value: int in STAGE_EDITOR_DISTRIBUTION_TYPES:
 		var weight: int = 0
 		if _stage_editor_distribution_spins.has(type_value):
-			var spin: SpinBox = _stage_editor_distribution_spins[type_value]
-			weight = maxi(0, int(round(spin.value)))
+			var slider: Range = _stage_editor_distribution_spins[type_value]
+			weight = maxi(0, int(round(slider.value)))
 		elif current_stage != null:
 			weight = current_stage.get_element_weight_for_type(type_value)
 		if weight > 0:
@@ -5355,8 +5458,9 @@ func _stage_editor_get_distribution_allowed_types_snapshot() -> Array[Block.Type
 	if types.is_empty():
 		types.append(Block.Type.RED)
 		if _stage_editor_distribution_spins.has(Block.Type.RED):
-			var red_spin: SpinBox = _stage_editor_distribution_spins[Block.Type.RED]
-			red_spin.set_value_no_signal(1)
+			var red_slider: Range = _stage_editor_distribution_spins[Block.Type.RED]
+			red_slider.set_value_no_signal(1)
+			_stage_editor_set_distribution_value_label(Block.Type.RED, 1)
 	return types
 
 
@@ -5371,8 +5475,8 @@ func _stage_editor_get_element_weights_snapshot(distribution_types: Array[Block.
 		var normalized: int = int(type_value)
 		var weight: int = 0
 		if _stage_editor_distribution_spins.has(normalized):
-			var spin: SpinBox = _stage_editor_distribution_spins[normalized]
-			weight = maxi(0, int(round(spin.value)))
+			var slider: Range = _stage_editor_distribution_spins[normalized]
+			weight = maxi(0, int(round(slider.value)))
 		elif current_stage.element_weights.size() > weights.size():
 			weight = maxi(0, int(current_stage.element_weights[weights.size()]))
 		else:
@@ -5469,6 +5573,7 @@ func _layout_stage_editor_ui() -> void:
 		var area_width: float = minf(maxf(area_min_size.x, 260.0), maxf(160.0, available_area_width))
 		area_height = maxf(area_min_size.y, 54.0)
 		_stage_editor_set_control_rect(_stage_editor_area_panel, Rect2(left_margin, top_margin, area_width, area_height))
+		_layout_stage_editor_enemy_area()
 
 	if _stage_editor_dialog_panel != null:
 		var dialog_top: float = top_margin + area_height + vertical_gap

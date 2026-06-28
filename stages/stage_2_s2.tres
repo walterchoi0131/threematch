@@ -4,10 +4,7 @@
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
 [ext_resource type="Resource" path="res://enemies/amon.tres" id="3_amon"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_w6jkx"]
-[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="4_dragon"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="5_hh7lg"]
-[ext_resource type="Resource" path="res://characters/char_shark.tres" id="5_shark"]
-[ext_resource type="Resource" path="res://characters/char_panda.tres" id="6_panda"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="9_p0jd2"]
 
 [sub_resource type="Resource" id="s2s2_amon"]
@@ -21,7 +18,7 @@ init_cd = 2
 script = ExtResource("1_stage")
 stage_id = "2-S2"
 prerequisite_stage_id = "2-5"
-map_position = Vector2(4, 925)
+map_position = Vector2(0, 900)
 stage_name = "Stage 2-S2 Panda 的復甦"
 element_weights = Array[int]([18, 18, 4, 60])
 allowed_types = Array[int]([0, 1, 2, 6])
@@ -35,6 +32,4 @@ mode = 2
 puzzle_goal_target_type = 2
 puzzle_goal_required_count = 30
 puzzle_turn_limit = 14
-start_stage_tutorial_page_ids = Array[String](["2_s2_panda_active"])
-set_party = Array[ExtResource("5_hh7lg")]([ExtResource("4_dragon"), ExtResource("5_shark"), ExtResource("6_panda")])
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

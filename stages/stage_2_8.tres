@@ -39,5 +39,4 @@ battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 rounds = Array[Array]([[SubResource("s28_e1"), SubResource("s28_e1")], [SubResource("s28_e2"), SubResource("s28_e1")]])
 rounds_init_cd = Array[Array]([[0, 1], [0, 2]])
 rounds_enemy_levels = Array[Array]([[25, 25], [25, 25]])
-set_party = Array[ExtResource("6_adr31")]([ExtResource("5_dragon"), ExtResource("6_shark"), ExtResource("7_panda"), ExtResource("8_gory")])
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
