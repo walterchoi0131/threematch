@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="TutorialPageLibrary" format=3]
+
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="1_njwqn"]
+[ext_resource type="Script" path="res://scripts/tutorial_page_library.gd" id="2_3xdmc"]
+
+[sub_resource type="Resource" id="Resource_kwxrb"]
+script = ExtResource("1_njwqn")
+page_id = "1_3_tutorial_1"
+image_path = "res://assets/tutor/forge.png"
+chi_title = "鑄造!"
+ch_info = "鑄造特性寶石可以持續合成, 增強力量!
+最高3級, 快來試試吧!"
+
+[sub_resource type="Resource" id="Resource_u2u03"]
+script = ExtResource("1_njwqn")
+page_id = "1_5_tutorial_1"
+image_path = "res://assets/tutor/escape_tutor_1.png"
+chi_title = "逃脫模式"
+eng_title = "Escape Mode"
+ch_info = "消除或合成角色下方的寶石，
+向下逃跑吧!!"
+eng_info = "Clear or fuse gems under the heroes,
+and escape downward!"
+
+[sub_resource type="Resource" id="Resource_m8yhu"]
+script = ExtResource("1_njwqn")
+page_id = "1_5_tutorial_2"
+image_path = "res://assets/tutor/escape_tutor_2.png"
+chi_title = "燒著啦!"
+eng_title = "Burning!"
+ch_info = "燃燒寶石每回合結束時會消耗你的生命，
+消除或融合它們！"
+eng_info = "Burning gems drain your HP at the end of each turn.
+Clear or fuse them!"
+
+[sub_resource type="Resource" id="Resource_6w8pe"]
+script = ExtResource("1_njwqn")
+page_id = "1_5_tutorial_3"
+image_path = "res://assets/tutor/escape_tutor_3.png"
+chi_title = "障礙方塊"
+eng_title = "Obstacle Blocks"
+ch_info = "障礙方塊不能透過普通的點擊消除！
+爆破相鄰的寶石、合成寶石爆風、技能都能對它有效。"
+eng_info = "Obstacle blocks cannot be cleared by normal taps.
+Blast adjacent gems, fused gem bursts, or skills to break them."
+
+[sub_resource type="Resource" id="Resource_56w1v"]
+script = ExtResource("1_njwqn")
+page_id = "1_7_new_tutorial_1"
+image_path = "res://assets/tutor/duel.png"
+chi_title = "決鬥!"
+ch_info = "敵人也會使用棋盤!
+意圖不明, 危險!
+破壞對方的寶石吧!"
+
+[resource]
+script = ExtResource("2_3xdmc")
+pages = Array[ExtResource("1_njwqn")]([SubResource("Resource_kwxrb"), SubResource("Resource_u2u03"), SubResource("Resource_m8yhu"), SubResource("Resource_6w8pe"), SubResource("Resource_56w1v")])

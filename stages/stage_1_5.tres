@@ -10,7 +10,8 @@
 [sub_resource type="Resource" id="stage15_start_line_1"]
 script = ExtResource("4_dline")
 character_id = "panda"
-text_zh = "我們被困住了！\n聖所... 一片火海！"
+text_zh = "我們被困住了！
+聖所... 一片火海！"
 text_en = "We're trapped! A sea of fire!"
 shake = false
 
@@ -26,35 +27,12 @@ script = ExtResource("5_dseq")
 lines = Array[ExtResource("4_dline")]([SubResource("stage15_start_line_1"), SubResource("stage15_start_line_2")])
 cast = Array[String](["panda", "shark"])
 
-[sub_resource type="Resource" id="stage15_tutorial_page_1"]
-script = ExtResource("6_tpage")
-image_path = "res://assets/tutor/escape_tutor_1.png"
-chi_title = "逃脫模式"
-eng_title = "Escape Mode"
-ch_info = "消除或合成角色下方的寶石，\n向下逃跑吧!!"
-eng_info = "Clear or fuse gems under the heroes,\nand escape downward!"
-
-[sub_resource type="Resource" id="stage15_tutorial_page_2"]
-script = ExtResource("6_tpage")
-image_path = "res://assets/tutor/escape_tutor_2.png"
-chi_title = "燒著啦!"
-eng_title = "Burning!"
-ch_info = "燃燒寶石每回合結束時會消耗你的生命，\n消除或融合它們！"
-eng_info = "Burning gems drain your HP at the end of each turn.\nClear or fuse them!"
-
-[sub_resource type="Resource" id="stage15_tutorial_page_3"]
-script = ExtResource("6_tpage")
-image_path = "res://assets/tutor/escape_tutor_3.png"
-chi_title = "障礙方塊"
-eng_title = "Obstacle Blocks"
-ch_info = "障礙方塊不能透過普通的點擊消除！\n爆破相鄰的寶石、合成寶石爆風、技能都能對它有效。"
-eng_info = "Obstacle blocks cannot be cleared by normal taps.\nBlast adjacent gems, fused gem bursts, or skills to break them."
-
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-5"
 prerequisite_stage_id = "1-4"
 connects_to = Array[String](["1-6"])
+map_position = Vector2(385, 714)
 stage_name = "Stage 1-5 (Escape)"
 element_weights = Array[int]([60, 10, 10])
 allowed_types = Array[int]([0, 2, 6])
@@ -66,6 +44,6 @@ bgm = ExtResource("1_lvgyu")
 mode = 1
 escape_refill_target = 400
 start_stage_dialog = SubResource("stage15_start_dialog")
-start_stage_tutorial = Array[ExtResource("6_tpage")]([SubResource("stage15_tutorial_page_1"), SubResource("stage15_tutorial_page_2"), SubResource("stage15_tutorial_page_3")])
+start_stage_tutorial_page_ids = Array[String](["1_5_tutorial_1", "1_5_tutorial_2", "1_5_tutorial_3"])
 fixed_layout = [[-1, -1, -1, 8, 8, -1, -1, -1], [-1, -1, -1, 8, 8, 8, -1, -1], [-1, -1, -1, -1, 8, 8, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, 8, 8, -1, -1, -1], [-1, -1, -1, 8, 8, 8, -1, -1], [-1, -1, -1, -1, 8, 8, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

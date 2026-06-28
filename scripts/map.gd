@@ -8,10 +8,14 @@ const PrepareScene: PackedScene = preload("res://scenes/prepare.tscn")
 const CharactersScene: PackedScene = preload("res://scenes/characters.tscn")
 const InventoryScene: PackedScene = preload("res://scenes/inventory.tscn")
 const StageButtonScene: PackedScene = preload("res://scenes/stage_button.tscn")
+const StartStageTutorialPageScript := preload("res://scripts/start_stage_tutorial_page.gd")
+const TutorialPageLibraryScript := preload("res://scripts/tutorial_page_library.gd")
 
 const OVERLAY_HEIGHT_RATIO: float = 0.8
 const STAGE_DIR: String = "res://stages"
 const NEW_STAGE_OFFSET: Vector2 = Vector2(160.0, 0.0)
+const TUTORIAL_PAGE_LIBRARY_PATH := "res://data/tutorial_page_library.tres"
+const TUTORIAL_IMAGE_ROOT := "res://assets/tutor"
 
 enum Page { CHARACTERS, MAP, INVENTORY }
 
@@ -24,6 +28,20 @@ var _dev_mode_label: Label = null
 var _dev_mode_back_button: Button = null
 var _portrait_debug_layer: CanvasLayer = null
 var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
+var _tutorial_editor_layer: CanvasLayer = null
+var _tutorial_editor_panel: PanelContainer = null
+var _tutorial_page_library: TutorialPageLibrary = null
+var _tutorial_editor_page_list: VBoxContainer = null
+var _tutorial_editor_image_option: OptionButton = null
+var _tutorial_editor_image_preview: TextureRect = null
+var _tutorial_editor_chi_title_edit: LineEdit = null
+var _tutorial_editor_eng_title_edit: LineEdit = null
+var _tutorial_editor_ch_info_edit: TextEdit = null
+var _tutorial_editor_eng_info_edit: TextEdit = null
+var _tutorial_editor_status_label: Label = null
+var _tutorial_editor_selected_index: int = -1
+var _tutorial_editor_refreshing: bool = false
+var _tutorial_image_catalog: Array[Dictionary] = []
 
 @onready var _pages_root: Control = $UILayer/Pages
 @onready var _map_page: Control = $UILayer/Pages/MapPage
@@ -462,11 +480,12 @@ func _open_overlay(scene: PackedScene) -> void:
 
 
 func _on_viewport_resized() -> void:
-	if _overlay_layer == null:
-		return
-	var frame: Node = _overlay_layer.get_node_or_null("OverlayFrame")
-	if frame is Control:
-		_layout_overlay_frame(frame as Control)
+	if _overlay_layer != null:
+		var frame: Node = _overlay_layer.get_node_or_null("OverlayFrame")
+		if frame is Control:
+			_layout_overlay_frame(frame as Control)
+	if _tutorial_editor_panel != null and is_instance_valid(_tutorial_editor_panel):
+		_layout_tutorial_editor_panel(_tutorial_editor_panel)
 
 
 func _layout_overlay_frame(frame: Control) -> void:
@@ -640,6 +659,10 @@ func _build_portrait_debug_btn() -> void:
 	stat_btn.pressed.connect(_open_stat_debug)
 	_portrait_debug_layer.add_child(stat_btn)
 
+	var tutorial_btn: Button = _make_debug_launcher_button("TU", "Tutorial Pages", 16, -310.0, -256.0)
+	tutorial_btn.pressed.connect(_open_tutorial_page_editor)
+	_portrait_debug_layer.add_child(tutorial_btn)
+
 	var portrait_btn: Button = _make_debug_launcher_button("🖼", "Portrait Debug", 26, -190.0, -136.0)
 	portrait_btn.pressed.connect(_open_portrait_debug)
 	_portrait_debug_layer.add_child(portrait_btn)
@@ -735,3 +758,459 @@ func _open_fuse_skill_debug() -> void:
 	var screen: Control = load("res://scripts/fuse_skill_debug_screen.gd").new() as Control
 	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_portrait_debug_layer.add_child(screen)
+
+
+func _open_tutorial_page_editor() -> void:
+	if _tutorial_editor_layer != null and is_instance_valid(_tutorial_editor_layer):
+		return
+	_load_tutorial_page_library()
+	_load_tutorial_image_catalog()
+	_migrate_legacy_stage_tutorial_pages()
+	_tutorial_editor_layer = CanvasLayer.new()
+	_tutorial_editor_layer.layer = 72
+	add_child(_tutorial_editor_layer)
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0, 0, 0, 0.55)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_tutorial_editor_layer.add_child(backdrop)
+
+	var panel := PanelContainer.new()
+	_tutorial_editor_panel = panel
+	_layout_tutorial_editor_panel(panel)
+	panel.add_theme_stylebox_override("panel", _make_tutorial_editor_panel_style(Color(0.06, 0.07, 0.11, 0.98)))
+	_tutorial_editor_layer.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 8)
+	margin.add_child(root)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	root.add_child(header)
+
+	var title := Label.new()
+	title.text = "Tutorial Pages"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	header.add_child(_make_tutorial_editor_button("Add", _on_tutorial_editor_add_pressed, Vector2(62, 30)))
+	header.add_child(_make_tutorial_editor_button("Delete", _on_tutorial_editor_delete_pressed, Vector2(72, 30)))
+	header.add_child(_make_tutorial_editor_button("Save", _on_tutorial_editor_save_pressed, Vector2(62, 30)))
+	header.add_child(_make_tutorial_editor_button("Close", _close_tutorial_page_editor, Vector2(68, 30)))
+
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 10)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(body)
+
+	var list_scroll := ScrollContainer.new()
+	list_scroll.custom_minimum_size = Vector2(190, 0)
+	list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	list_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(list_scroll)
+
+	_tutorial_editor_page_list = VBoxContainer.new()
+	_tutorial_editor_page_list.add_theme_constant_override("separation", 6)
+	_tutorial_editor_page_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_scroll.add_child(_tutorial_editor_page_list)
+
+	var form := VBoxContainer.new()
+	form.add_theme_constant_override("separation", 8)
+	form.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	form.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(form)
+
+	var image_row := HBoxContainer.new()
+	image_row.add_theme_constant_override("separation", 8)
+	form.add_child(image_row)
+
+	_tutorial_editor_image_option = OptionButton.new()
+	_tutorial_editor_image_option.custom_minimum_size = Vector2(220, 30)
+	_tutorial_editor_image_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_populate_tutorial_image_option(_tutorial_editor_image_option, "")
+	_tutorial_editor_image_option.item_selected.connect(_on_tutorial_editor_image_selected)
+	image_row.add_child(_tutorial_editor_image_option)
+
+	_tutorial_editor_image_preview = TextureRect.new()
+	_tutorial_editor_image_preview.custom_minimum_size = Vector2(78, 58)
+	_tutorial_editor_image_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_tutorial_editor_image_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	image_row.add_child(_tutorial_editor_image_preview)
+
+	_tutorial_editor_chi_title_edit = _make_tutorial_editor_line_edit("chi_title")
+	_tutorial_editor_chi_title_edit.text_changed.connect(_on_tutorial_editor_chi_title_changed)
+	form.add_child(_tutorial_editor_chi_title_edit)
+
+	_tutorial_editor_eng_title_edit = _make_tutorial_editor_line_edit("eng_title")
+	_tutorial_editor_eng_title_edit.text_changed.connect(_on_tutorial_editor_eng_title_changed)
+	form.add_child(_tutorial_editor_eng_title_edit)
+
+	_tutorial_editor_ch_info_edit = _make_tutorial_editor_text_edit("ch_info")
+	_tutorial_editor_ch_info_edit.text_changed.connect(_on_tutorial_editor_ch_info_changed)
+	form.add_child(_tutorial_editor_ch_info_edit)
+
+	_tutorial_editor_eng_info_edit = _make_tutorial_editor_text_edit("eng_info")
+	_tutorial_editor_eng_info_edit.text_changed.connect(_on_tutorial_editor_eng_info_changed)
+	form.add_child(_tutorial_editor_eng_info_edit)
+
+	_tutorial_editor_status_label = Label.new()
+	_tutorial_editor_status_label.add_theme_font_size_override("font_size", 12)
+	_tutorial_editor_status_label.add_theme_color_override("font_color", Color(0.78, 0.88, 1.0, 0.9))
+	root.add_child(_tutorial_editor_status_label)
+
+	if _tutorial_page_library.pages.is_empty():
+		_tutorial_page_library.add_page_with_id("tutorial_page")
+	_tutorial_editor_selected_index = clampi(_tutorial_editor_selected_index, 0, maxi(0, _tutorial_page_library.pages.size() - 1))
+	_refresh_tutorial_editor()
+
+
+func _close_tutorial_page_editor() -> void:
+	if _tutorial_editor_layer != null and is_instance_valid(_tutorial_editor_layer):
+		_tutorial_editor_layer.queue_free()
+	_tutorial_editor_layer = null
+	_tutorial_editor_panel = null
+	_tutorial_editor_page_list = null
+	_tutorial_editor_image_option = null
+	_tutorial_editor_image_preview = null
+	_tutorial_editor_chi_title_edit = null
+	_tutorial_editor_eng_title_edit = null
+	_tutorial_editor_ch_info_edit = null
+	_tutorial_editor_eng_info_edit = null
+	_tutorial_editor_status_label = null
+
+
+func _layout_tutorial_editor_panel(panel: Control) -> void:
+	if panel == null:
+		return
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var margin_x: float = 20.0
+	var top_margin: float = 54.0
+	var bottom_margin: float = 34.0
+	if vp.x < 760.0:
+		margin_x = 10.0
+	if vp.y < 760.0:
+		top_margin = 38.0
+		bottom_margin = 22.0
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.offset_left = margin_x
+	panel.offset_right = -margin_x
+	panel.offset_top = top_margin
+	panel.offset_bottom = -bottom_margin
+
+
+func _load_tutorial_page_library() -> void:
+	if _tutorial_page_library != null:
+		return
+	if ResourceLoader.exists(TUTORIAL_PAGE_LIBRARY_PATH):
+		_tutorial_page_library = load(TUTORIAL_PAGE_LIBRARY_PATH) as TutorialPageLibrary
+	if _tutorial_page_library == null:
+		_tutorial_page_library = TutorialPageLibraryScript.new() as TutorialPageLibrary
+	_tutorial_page_library.ensure_page_ids()
+
+
+func _save_tutorial_page_library() -> bool:
+	_load_tutorial_page_library()
+	_tutorial_page_library.ensure_page_ids()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TUTORIAL_PAGE_LIBRARY_PATH.get_base_dir()))
+	var err: int = ResourceSaver.save(_tutorial_page_library, TUTORIAL_PAGE_LIBRARY_PATH)
+	if err != OK:
+		_set_tutorial_editor_status("Save failed (%d)" % err, false)
+		return false
+	_set_tutorial_editor_status("Saved tutorial pages")
+	return true
+
+
+func _migrate_legacy_stage_tutorial_pages() -> void:
+	_load_tutorial_page_library()
+	var library_changed := false
+	for stage: StageData in _load_all_stage_resources():
+		if stage == null or stage.start_stage_tutorial.is_empty():
+			continue
+		var stage_changed := false
+		var had_legacy_pages := false
+		for index in stage.start_stage_tutorial.size():
+			var legacy_page: StartStageTutorialPage = stage.start_stage_tutorial[index]
+			if legacy_page == null or legacy_page.is_blank():
+				continue
+			had_legacy_pages = true
+			var page_id: String = legacy_page.page_id.strip_edges()
+			if page_id.is_empty():
+				page_id = _tutorial_page_library.make_unique_page_id("%s_tutorial_%d" % [stage.stage_id, index + 1])
+			var page: StartStageTutorialPage = _tutorial_page_library.get_page(page_id)
+			if page == null:
+				page = StartStageTutorialPageScript.new() as StartStageTutorialPage
+				page.page_id = page_id
+				page.copy_content_from(legacy_page)
+				_tutorial_page_library.pages.append(page)
+				library_changed = true
+			if not stage.start_stage_tutorial_page_ids.has(page_id):
+				stage.start_stage_tutorial_page_ids.append(page_id)
+				stage_changed = true
+		if had_legacy_pages:
+			stage.start_stage_tutorial.clear()
+			stage_changed = true
+		if stage_changed:
+			_save_stage(stage)
+	if library_changed:
+		_save_tutorial_page_library()
+
+
+func _refresh_tutorial_editor() -> void:
+	if _tutorial_editor_page_list == null:
+		return
+	_tutorial_editor_refreshing = true
+	for child in _tutorial_editor_page_list.get_children():
+		_tutorial_editor_page_list.remove_child(child)
+		child.queue_free()
+	_load_tutorial_page_library()
+	for index in _tutorial_page_library.pages.size():
+		var page: StartStageTutorialPage = _tutorial_page_library.pages[index]
+		var btn := Button.new()
+		btn.text = _tutorial_page_library.display_name(page)
+		btn.toggle_mode = true
+		btn.button_pressed = index == _tutorial_editor_selected_index
+		btn.custom_minimum_size = Vector2(0, 34)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_tutorial_editor_page_selected.bind(index))
+		_tutorial_editor_page_list.add_child(btn)
+	_refresh_tutorial_editor_form()
+	_tutorial_editor_refreshing = false
+
+
+func _refresh_tutorial_editor_form() -> void:
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	var has_page: bool = page != null
+	_tutorial_editor_refreshing = true
+	if _tutorial_editor_image_option != null:
+		_populate_tutorial_image_option(_tutorial_editor_image_option, page.image_path if has_page else "")
+	if _tutorial_editor_image_preview != null:
+		_set_tutorial_image_preview(_tutorial_editor_image_preview, page.image_path if has_page else "")
+	if _tutorial_editor_chi_title_edit != null:
+		_tutorial_editor_chi_title_edit.editable = has_page
+		_tutorial_editor_chi_title_edit.text = page.chi_title if has_page else ""
+	if _tutorial_editor_eng_title_edit != null:
+		_tutorial_editor_eng_title_edit.editable = has_page
+		_tutorial_editor_eng_title_edit.text = page.eng_title if has_page else ""
+	if _tutorial_editor_ch_info_edit != null:
+		_tutorial_editor_ch_info_edit.editable = has_page
+		_tutorial_editor_ch_info_edit.text = page.ch_info if has_page else ""
+	if _tutorial_editor_eng_info_edit != null:
+		_tutorial_editor_eng_info_edit.editable = has_page
+		_tutorial_editor_eng_info_edit.text = page.eng_info if has_page else ""
+	_tutorial_editor_refreshing = false
+
+
+func _get_selected_tutorial_page() -> StartStageTutorialPage:
+	_load_tutorial_page_library()
+	if _tutorial_editor_selected_index < 0 or _tutorial_editor_selected_index >= _tutorial_page_library.pages.size():
+		return null
+	return _tutorial_page_library.pages[_tutorial_editor_selected_index]
+
+
+func _on_tutorial_editor_page_selected(index: int) -> void:
+	_tutorial_editor_selected_index = index
+	_refresh_tutorial_editor()
+
+
+func _on_tutorial_editor_add_pressed() -> void:
+	_load_tutorial_page_library()
+	var page: StartStageTutorialPage = _tutorial_page_library.add_page_with_id("tutorial_page")
+	if not _tutorial_image_catalog.is_empty():
+		page.image_path = String(_tutorial_image_catalog[0].get("resource_path", ""))
+	_tutorial_editor_selected_index = _tutorial_page_library.pages.size() - 1
+	_refresh_tutorial_editor()
+
+
+func _on_tutorial_editor_delete_pressed() -> void:
+	_load_tutorial_page_library()
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	if page == null:
+		return
+	var page_id: String = page.page_id
+	_tutorial_page_library.pages.remove_at(_tutorial_editor_selected_index)
+	for stage: StageData in _load_all_stage_resources():
+		if stage == null:
+			continue
+		var changed := false
+		for index in range(stage.start_stage_tutorial_page_ids.size() - 1, -1, -1):
+			if stage.start_stage_tutorial_page_ids[index] == page_id:
+				stage.start_stage_tutorial_page_ids.remove_at(index)
+				changed = true
+		if changed:
+			_save_stage(stage)
+	_tutorial_editor_selected_index = mini(_tutorial_editor_selected_index, _tutorial_page_library.pages.size() - 1)
+	_save_tutorial_page_library()
+	_refresh_tutorial_editor()
+
+
+func _on_tutorial_editor_save_pressed() -> void:
+	if _save_tutorial_page_library():
+		_refresh_tutorial_editor()
+
+
+func _on_tutorial_editor_image_selected(_item_index: int) -> void:
+	if _tutorial_editor_refreshing:
+		return
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	if page == null or _tutorial_editor_image_option == null:
+		return
+	page.image_path = String(_tutorial_editor_image_option.get_selected_metadata())
+	_set_tutorial_image_preview(_tutorial_editor_image_preview, page.image_path)
+
+
+func _on_tutorial_editor_chi_title_changed(new_text: String) -> void:
+	if _tutorial_editor_refreshing:
+		return
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	if page != null:
+		page.chi_title = new_text
+
+
+func _on_tutorial_editor_eng_title_changed(new_text: String) -> void:
+	if _tutorial_editor_refreshing:
+		return
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	if page != null:
+		page.eng_title = new_text
+
+
+func _on_tutorial_editor_ch_info_changed() -> void:
+	if _tutorial_editor_refreshing:
+		return
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	if page != null and _tutorial_editor_ch_info_edit != null:
+		page.ch_info = _tutorial_editor_ch_info_edit.text
+
+
+func _on_tutorial_editor_eng_info_changed() -> void:
+	if _tutorial_editor_refreshing:
+		return
+	var page: StartStageTutorialPage = _get_selected_tutorial_page()
+	if page != null and _tutorial_editor_eng_info_edit != null:
+		page.eng_info = _tutorial_editor_eng_info_edit.text
+
+
+func _load_tutorial_image_catalog() -> void:
+	if not _tutorial_image_catalog.is_empty():
+		return
+	_tutorial_image_catalog.clear()
+	_collect_tutorial_images(TUTORIAL_IMAGE_ROOT)
+	_tutorial_image_catalog.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return String(a.get("name", "")) < String(b.get("name", ""))
+	)
+
+
+func _collect_tutorial_images(dir_path: String) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var subdirs: Array[String] = []
+	while true:
+		var file_name: String = dir.get_next()
+		if file_name == "":
+			break
+		if file_name.begins_with("."):
+			continue
+		if dir.current_is_dir():
+			subdirs.append(file_name)
+			continue
+		var lower: String = file_name.to_lower()
+		if not (lower.ends_with(".png") or lower.ends_with(".jpg") or lower.ends_with(".jpeg") or lower.ends_with(".webp")):
+			continue
+		var resource_path := "%s/%s" % [dir_path, file_name]
+		_tutorial_image_catalog.append({
+			"name": resource_path.trim_prefix(TUTORIAL_IMAGE_ROOT + "/"),
+			"resource_path": resource_path,
+		})
+	dir.list_dir_end()
+	for subdir_name in subdirs:
+		_collect_tutorial_images(dir_path + "/" + subdir_name)
+
+
+func _populate_tutorial_image_option(option: OptionButton, selected_path: String) -> void:
+	if option == null:
+		return
+	option.clear()
+	option.add_item("No Image")
+	option.set_item_metadata(0, "")
+	for entry: Dictionary in _tutorial_image_catalog:
+		option.add_item(String(entry.get("name", "Image")))
+		option.set_item_metadata(option.item_count - 1, String(entry.get("resource_path", "")))
+	if not selected_path.is_empty():
+		var found := false
+		for index in option.item_count:
+			if String(option.get_item_metadata(index)) == selected_path:
+				found = true
+				option.select(index)
+				break
+		if not found:
+			option.add_item(selected_path.get_file())
+			option.set_item_metadata(option.item_count - 1, selected_path)
+			option.select(option.item_count - 1)
+	else:
+		option.select(0)
+
+
+func _set_tutorial_image_preview(preview: TextureRect, image_path: String) -> void:
+	if preview == null:
+		return
+	var path: String = image_path.strip_edges()
+	if path.is_empty() or not (ResourceLoader.exists(path) or FileAccess.file_exists(path)):
+		preview.texture = null
+		return
+	preview.texture = load(path) as Texture2D
+
+
+func _make_tutorial_editor_button(label_text: String, callback: Callable, minimum_size: Vector2) -> Button:
+	var btn := Button.new()
+	btn.text = label_text
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.custom_minimum_size = minimum_size
+	btn.pressed.connect(callback)
+	return btn
+
+
+func _make_tutorial_editor_line_edit(placeholder: String) -> LineEdit:
+	var edit := LineEdit.new()
+	edit.placeholder_text = placeholder
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return edit
+
+
+func _make_tutorial_editor_text_edit(placeholder: String) -> TextEdit:
+	var edit := TextEdit.new()
+	edit.placeholder_text = placeholder
+	edit.custom_minimum_size = Vector2(0, 120)
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	return edit
+
+
+func _make_tutorial_editor_panel_style(color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.border_color = Color(0.42, 0.52, 0.72, 0.92)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(8)
+	return style
+
+
+func _set_tutorial_editor_status(text: String, ok: bool = true) -> void:
+	if _tutorial_editor_status_label == null:
+		return
+	_tutorial_editor_status_label.text = text
+	_tutorial_editor_status_label.add_theme_color_override("font_color", Color(0.78, 0.95, 0.78, 0.95) if ok else Color(1.0, 0.52, 0.46, 0.95))

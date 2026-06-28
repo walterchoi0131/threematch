@@ -21,6 +21,7 @@ const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
 const _DialogLine := preload("res://scripts/dialog_line.gd")
 const _StartStageTutorialPage := preload("res://scripts/start_stage_tutorial_page.gd")
+const _TutorialPageLibrary := preload("res://scripts/tutorial_page_library.gd")
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
 const PUZZLE_KEY_HUD_BASE_TEXTURE := preload("res://assets/blocks/puzzle_key_unlocked.png")
@@ -358,6 +359,7 @@ const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_man
 const STAGE_EDITOR_DIALOG_BACKGROUND_ROOT := "res://assets/dialog_background"
 const STAGE_EDITOR_DIALOG_MUSIC_ROOT := "res://assets/music"
 const STAGE_EDITOR_TUTOR_ROOT := "res://assets/tutor"
+const TUTORIAL_PAGE_LIBRARY_PATH := "res://data/tutorial_page_library.tres"
 const STAGE_EDITOR_TAB_BEFORE := "before"
 const STAGE_EDITOR_TAB_START_DIALOG := "start_dialog"
 const STAGE_EDITOR_TAB_START_TUTORIAL := "start_tutorial"
@@ -417,6 +419,7 @@ var _stage_editor_character_by_id: Dictionary = {}
 var _stage_editor_dialog_background_catalog: Array[Dictionary] = []
 var _stage_editor_dialog_music_catalog: Array[Dictionary] = []
 var _stage_editor_tutorial_image_catalog: Array[Dictionary] = []
+var _tutorial_page_library: _TutorialPageLibrary = null
 var _stage_editor_test_dialog: Control = null
 var _stage_editor_enemy_area_panel: Control = null
 var _stage_editor_prev_round_button: Button = null
@@ -709,6 +712,7 @@ func _build_stage_editor_ui() -> void:
 	_stage_editor_load_dialog_background_catalog()
 	_stage_editor_load_dialog_music_catalog()
 	_stage_editor_load_tutorial_image_catalog()
+	_stage_editor_load_tutorial_page_library()
 	_build_stage_editor_area_panel()
 	_build_stage_editor_tab_panel()
 	_build_stage_editor_dialog_panel()
@@ -1317,7 +1321,7 @@ func _build_stage_editor_tutorial_panel() -> void:
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_row.add_child(title)
-	header_row.add_child(_make_stage_editor_small_button("Add Page", _on_stage_editor_tutorial_add_page_pressed, Vector2(86, 30)))
+	header_row.add_child(_make_stage_editor_small_button("Add Ref", _on_stage_editor_tutorial_add_page_pressed, Vector2(76, 30)))
 	header_row.add_child(_make_stage_editor_small_button("Save", _on_stage_editor_save_pressed, Vector2(58, 30)))
 	header_row.add_child(_make_stage_editor_small_button("Back", _on_stage_editor_back_pressed, Vector2(58, 30)))
 
@@ -1337,9 +1341,12 @@ func _build_stage_editor_tutorial_panel() -> void:
 func _stage_editor_ensure_start_tutorial_pages() -> void:
 	if current_stage == null:
 		return
-	for page_index in current_stage.start_stage_tutorial.size():
-		if current_stage.start_stage_tutorial[page_index] == null:
-			current_stage.start_stage_tutorial[page_index] = _StartStageTutorialPage.new()
+	_stage_editor_load_tutorial_page_library()
+	_stage_editor_migrate_legacy_start_tutorial_pages(current_stage)
+	for index in range(current_stage.start_stage_tutorial_page_ids.size() - 1, -1, -1):
+		var page_id: String = current_stage.start_stage_tutorial_page_ids[index].strip_edges()
+		if page_id.is_empty() or _tutorial_page_library.get_page(page_id) == null:
+			current_stage.start_stage_tutorial_page_ids.remove_at(index)
 
 
 func _refresh_stage_editor_tutorial_editor() -> void:
@@ -1353,19 +1360,20 @@ func _refresh_stage_editor_tutorial_editor() -> void:
 		_stage_editor_tutorial_refreshing = false
 		return
 	_stage_editor_ensure_start_tutorial_pages()
-	if current_stage.start_stage_tutorial.is_empty():
+	if current_stage.start_stage_tutorial_page_ids.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No start tutorial pages."
+		empty_label.text = "No tutorial pages selected."
 		empty_label.add_theme_font_size_override("font_size", 14)
 		empty_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 0.85))
 		_stage_editor_tutorial_page_list.add_child(empty_label)
-	for page_index in current_stage.start_stage_tutorial.size():
-		var page: _StartStageTutorialPage = current_stage.start_stage_tutorial[page_index]
-		_stage_editor_tutorial_page_list.add_child(_stage_editor_make_tutorial_page_row(page_index, page))
+	for page_index in current_stage.start_stage_tutorial_page_ids.size():
+		var page_id: String = current_stage.start_stage_tutorial_page_ids[page_index]
+		var page: _StartStageTutorialPage = _tutorial_page_library.get_page(page_id)
+		_stage_editor_tutorial_page_list.add_child(_stage_editor_make_tutorial_page_row(page_index, page_id, page))
 	_stage_editor_tutorial_refreshing = false
 
 
-func _stage_editor_make_tutorial_page_row(page_index: int, page: _StartStageTutorialPage) -> Control:
+func _stage_editor_make_tutorial_page_row(page_index: int, page_id: String, page: _StartStageTutorialPage) -> Control:
 	var row := _StageTutorialPageRow.new()
 	row.editor = self
 	row.page_index = page_index
@@ -1395,21 +1403,21 @@ func _stage_editor_make_tutorial_page_row(page_index: int, page: _StartStageTuto
 	label.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
 	top_row.add_child(label)
 
-	var image_option := OptionButton.new()
-	image_option.focus_mode = Control.FOCUS_NONE
-	image_option.custom_minimum_size = Vector2(160, 28)
-	image_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stage_editor_populate_tutorial_image_selector(image_option, page.image_path)
-	top_row.add_child(image_option)
+	var page_option := OptionButton.new()
+	page_option.focus_mode = Control.FOCUS_NONE
+	page_option.custom_minimum_size = Vector2(220, 28)
+	page_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_populate_tutorial_page_selector(page_option, page_id)
+	top_row.add_child(page_option)
 
 	var image_preview := TextureRect.new()
 	image_preview.custom_minimum_size = Vector2(72, 54)
 	image_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	image_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	image_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stage_editor_set_tutorial_image_preview(image_preview, page.image_path)
+	_stage_editor_set_tutorial_image_preview(image_preview, page.image_path if page != null else "")
 	top_row.add_child(image_preview)
-	image_option.item_selected.connect(_on_stage_editor_tutorial_page_image_selected.bind(image_option, image_preview, page_index))
+	page_option.item_selected.connect(_on_stage_editor_tutorial_page_selected.bind(page_option, page_index))
 
 	top_row.add_child(_make_stage_editor_small_button("Up", _on_stage_editor_tutorial_page_move_up_pressed.bind(page_index), Vector2(42, 28)))
 	top_row.add_child(_make_stage_editor_small_button("Down", _on_stage_editor_tutorial_page_move_down_pressed.bind(page_index), Vector2(54, 28)))
@@ -1419,38 +1427,110 @@ func _stage_editor_make_tutorial_page_row(page_index: int, page: _StartStageTuto
 	title_row.add_theme_constant_override("separation", 6)
 	root.add_child(title_row)
 
-	var chi_title_edit := LineEdit.new()
-	chi_title_edit.placeholder_text = "chi_title"
-	chi_title_edit.text = page.chi_title
-	chi_title_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	chi_title_edit.text_changed.connect(_on_stage_editor_tutorial_page_chi_title_changed.bind(page_index))
-	title_row.add_child(chi_title_edit)
+	var title_label := Label.new()
+	title_label.text = _tutorial_page_title_for_editor(page)
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.add_theme_font_size_override("font_size", 13)
+	title_label.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
+	title_row.add_child(title_label)
 
-	var eng_title_edit := LineEdit.new()
-	eng_title_edit.placeholder_text = "eng_title"
-	eng_title_edit.text = page.eng_title
-	eng_title_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	eng_title_edit.text_changed.connect(_on_stage_editor_tutorial_page_eng_title_changed.bind(page_index))
-	title_row.add_child(eng_title_edit)
+	var id_label := Label.new()
+	id_label.text = page_id
+	id_label.add_theme_font_size_override("font_size", 11)
+	id_label.add_theme_color_override("font_color", Color(0.64, 0.72, 0.88, 0.8))
+	title_row.add_child(id_label)
 
-	var ch_edit := TextEdit.new()
-	ch_edit.custom_minimum_size = Vector2(0, 58)
-	ch_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ch_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	ch_edit.placeholder_text = "ch_info"
-	ch_edit.text = page.ch_info
-	ch_edit.text_changed.connect(_on_stage_editor_tutorial_page_ch_changed.bind(ch_edit, page_index))
-	root.add_child(ch_edit)
-
-	var en_edit := TextEdit.new()
-	en_edit.custom_minimum_size = Vector2(0, 58)
-	en_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	en_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	en_edit.placeholder_text = "eng_info"
-	en_edit.text = page.eng_info
-	en_edit.text_changed.connect(_on_stage_editor_tutorial_page_eng_changed.bind(en_edit, page_index))
-	root.add_child(en_edit)
+	var body := Label.new()
+	body.text = _tutorial_page_body_for_editor(page)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.custom_minimum_size = Vector2(0, 44)
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_font_size_override("font_size", 12)
+	body.add_theme_color_override("font_color", Color(0.82, 0.88, 0.98, 0.88))
+	root.add_child(body)
 	return row
+
+
+func _stage_editor_load_tutorial_page_library() -> void:
+	if _tutorial_page_library != null:
+		return
+	if ResourceLoader.exists(TUTORIAL_PAGE_LIBRARY_PATH):
+		_tutorial_page_library = load(TUTORIAL_PAGE_LIBRARY_PATH) as _TutorialPageLibrary
+	if _tutorial_page_library == null:
+		_tutorial_page_library = _TutorialPageLibrary.new()
+	_tutorial_page_library.ensure_page_ids()
+
+
+func _stage_editor_save_tutorial_page_library() -> void:
+	_stage_editor_load_tutorial_page_library()
+	_tutorial_page_library.ensure_page_ids()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TUTORIAL_PAGE_LIBRARY_PATH.get_base_dir()))
+	ResourceSaver.save(_tutorial_page_library, TUTORIAL_PAGE_LIBRARY_PATH)
+
+
+func _stage_editor_migrate_legacy_start_tutorial_pages(stage: StageData) -> void:
+	if stage == null or stage.start_stage_tutorial.is_empty():
+		return
+	_stage_editor_load_tutorial_page_library()
+	for index in stage.start_stage_tutorial.size():
+		var legacy_page: _StartStageTutorialPage = stage.start_stage_tutorial[index]
+		if legacy_page == null or legacy_page.is_blank():
+			continue
+		var page_id: String = legacy_page.page_id.strip_edges()
+		if page_id.is_empty():
+			var base_id := "%s_tutorial_%d" % [stage.stage_id, index + 1]
+			page_id = _tutorial_page_library.make_unique_page_id(base_id)
+		var page: _StartStageTutorialPage = _tutorial_page_library.get_page(page_id)
+		if page == null:
+			page = _StartStageTutorialPage.new()
+			page.page_id = page_id
+			page.copy_content_from(legacy_page)
+			_tutorial_page_library.pages.append(page)
+		if not stage.start_stage_tutorial_page_ids.has(page_id):
+			stage.start_stage_tutorial_page_ids.append(page_id)
+	stage.start_stage_tutorial.clear()
+	_stage_editor_save_tutorial_page_library()
+
+
+func _stage_editor_populate_tutorial_page_selector(option: OptionButton, selected_page_id: String) -> void:
+	_stage_editor_make_compact_option_button(option)
+	option.clear()
+	_stage_editor_load_tutorial_page_library()
+	for page: _StartStageTutorialPage in _tutorial_page_library.pages:
+		if page == null:
+			continue
+		_stage_editor_add_option_item(option, _tutorial_page_library.display_name(page), page.page_id)
+	if not selected_page_id.is_empty() and _tutorial_page_library.get_page(selected_page_id) == null:
+		_stage_editor_add_option_item(option, "Missing: %s" % selected_page_id, selected_page_id)
+	_stage_editor_select_option_value(option, selected_page_id)
+
+
+func _tutorial_page_title_for_editor(page: _StartStageTutorialPage) -> String:
+	if page == null:
+		return "Missing tutorial page"
+	var ch_title: String = page.chi_title.strip_edges()
+	var en_title: String = page.eng_title.strip_edges()
+	if ch_title.is_empty() and en_title.is_empty():
+		return "(Untitled page)"
+	if ch_title.is_empty():
+		return en_title
+	if en_title.is_empty():
+		return ch_title
+	return "%s / %s" % [ch_title, en_title]
+
+
+func _tutorial_page_body_for_editor(page: _StartStageTutorialPage) -> String:
+	if page == null:
+		return "This stage references a page id that is not in the global library."
+	var ch_text: String = page.ch_info.strip_edges()
+	var en_text: String = page.eng_info.strip_edges()
+	if ch_text.is_empty() and en_text.is_empty():
+		return "(No body text)"
+	if ch_text.is_empty():
+		return en_text
+	if en_text.is_empty():
+		return ch_text
+	return "%s\n%s" % [ch_text, en_text]
 
 
 func _stage_editor_populate_tutorial_image_selector(option: OptionButton, selected_path: String) -> void:
@@ -3129,10 +3209,26 @@ func _stage_editor_get_tutorial_page(page_index: int) -> _StartStageTutorialPage
 func _on_stage_editor_tutorial_add_page_pressed() -> void:
 	if current_stage == null:
 		return
-	var page := _StartStageTutorialPage.new()
-	if not _stage_editor_tutorial_image_catalog.is_empty():
-		page.image_path = String(_stage_editor_tutorial_image_catalog[0].get("resource_path", ""))
-	current_stage.start_stage_tutorial.append(page)
+	_stage_editor_load_tutorial_page_library()
+	if _tutorial_page_library.pages.is_empty():
+		var page := _tutorial_page_library.add_page_with_id("tutorial_page")
+		if not _stage_editor_tutorial_image_catalog.is_empty():
+			page.image_path = String(_stage_editor_tutorial_image_catalog[0].get("resource_path", ""))
+		_stage_editor_save_tutorial_page_library()
+	var first_page: _StartStageTutorialPage = _tutorial_page_library.pages[0]
+	if first_page != null:
+		current_stage.start_stage_tutorial_page_ids.append(first_page.page_id)
+	_refresh_stage_editor_tutorial_editor()
+
+
+func _on_stage_editor_tutorial_page_selected(_item_index: int, option: OptionButton, page_index: int) -> void:
+	if _stage_editor_tutorial_refreshing:
+		return
+	if current_stage == null:
+		return
+	if page_index < 0 or page_index >= current_stage.start_stage_tutorial_page_ids.size():
+		return
+	current_stage.start_stage_tutorial_page_ids[page_index] = _stage_editor_get_option_value(option)
 	_refresh_stage_editor_tutorial_editor()
 
 
@@ -3181,9 +3277,9 @@ func _on_stage_editor_tutorial_page_eng_changed(edit: TextEdit, page_index: int)
 func _on_stage_editor_tutorial_page_delete_pressed(page_index: int) -> void:
 	if current_stage == null:
 		return
-	if page_index < 0 or page_index >= current_stage.start_stage_tutorial.size():
+	if page_index < 0 or page_index >= current_stage.start_stage_tutorial_page_ids.size():
 		return
-	current_stage.start_stage_tutorial.remove_at(page_index)
+	current_stage.start_stage_tutorial_page_ids.remove_at(page_index)
 	_refresh_stage_editor_tutorial_editor()
 
 
@@ -3202,15 +3298,15 @@ func _on_stage_editor_tutorial_page_dropped(from_index: int, to_index: int) -> v
 func _stage_editor_move_tutorial_page(from_index: int, to_index: int) -> void:
 	if current_stage == null:
 		return
-	var page_count: int = current_stage.start_stage_tutorial.size()
+	var page_count: int = current_stage.start_stage_tutorial_page_ids.size()
 	if from_index < 0 or from_index >= page_count:
 		return
 	to_index = clampi(to_index, 0, page_count - 1)
 	if from_index == to_index:
 		return
-	var page: _StartStageTutorialPage = current_stage.start_stage_tutorial[from_index]
-	current_stage.start_stage_tutorial.remove_at(from_index)
-	current_stage.start_stage_tutorial.insert(to_index, page)
+	var page_id: String = current_stage.start_stage_tutorial_page_ids[from_index]
+	current_stage.start_stage_tutorial_page_ids.remove_at(from_index)
+	current_stage.start_stage_tutorial_page_ids.insert(to_index, page_id)
 	_refresh_stage_editor_tutorial_editor()
 
 
@@ -5538,7 +5634,7 @@ func _run_start_stage_flow() -> void:
 	if _has_start_stage_dialog():
 		await _play_start_stage_dialog()
 	if _has_start_stage_tutorial():
-		await _show_start_stage_tutorial_canvas(current_stage.start_stage_tutorial)
+		await _show_start_stage_tutorial_canvas(_get_current_stage_start_tutorial_pages())
 
 
 func _has_start_stage_dialog() -> bool:
@@ -5550,16 +5646,28 @@ func _has_start_stage_dialog() -> bool:
 func _has_start_stage_tutorial() -> bool:
 	if current_stage == null:
 		return false
-	for page: _StartStageTutorialPage in current_stage.start_stage_tutorial:
+	for page: _StartStageTutorialPage in _get_current_stage_start_tutorial_pages():
 		if page == null:
 			continue
-		if not page.image_path.strip_edges().is_empty() \
-				or not page.chi_title.strip_edges().is_empty() \
-				or not page.eng_title.strip_edges().is_empty() \
-				or not page.ch_info.strip_edges().is_empty() \
-				or not page.eng_info.strip_edges().is_empty():
+		if not page.is_blank():
 			return true
 	return false
+
+
+func _get_current_stage_start_tutorial_pages() -> Array[_StartStageTutorialPage]:
+	var result: Array[_StartStageTutorialPage] = []
+	if current_stage == null:
+		return result
+	_stage_editor_load_tutorial_page_library()
+	for page_id: String in current_stage.start_stage_tutorial_page_ids:
+		var page: _StartStageTutorialPage = _tutorial_page_library.get_page(page_id)
+		if page != null:
+			result.append(page)
+	if result.is_empty() and not current_stage.start_stage_tutorial.is_empty():
+		for page: _StartStageTutorialPage in current_stage.start_stage_tutorial:
+			if page != null:
+				result.append(page)
+	return result
 
 
 func _play_start_stage_dialog() -> void:
@@ -13034,11 +13142,7 @@ func _show_start_stage_tutorial_canvas(pages: Array[_StartStageTutorialPage]) ->
 	for page: _StartStageTutorialPage in pages:
 		if page == null:
 			continue
-		if page.image_path.strip_edges().is_empty() \
-				and page.chi_title.strip_edges().is_empty() \
-				and page.eng_title.strip_edges().is_empty() \
-				and page.ch_info.strip_edges().is_empty() \
-				and page.eng_info.strip_edges().is_empty():
+		if page.is_blank():
 			continue
 		tutorial_pages.append(page)
 	if tutorial_pages.is_empty():

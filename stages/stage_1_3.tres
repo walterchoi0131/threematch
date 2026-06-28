@@ -156,13 +156,6 @@ enemy = ExtResource("10_enq8n")
 level = 5
 hp_percent = 1500
 
-[sub_resource type="Resource" id="Resource_ssn5h"]
-script = ExtResource("14_57o8d")
-image_path = "res://assets/tutor/forge.png"
-chi_title = "鑄造!"
-ch_info = "鑄造特性寶石可以持續合成, 增強力量!
-最高3級, 快來試試吧!"
-
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-3"
@@ -180,6 +173,6 @@ one_time_reward_character = ExtResource("1_57o8d")
 rounds = Array[Array]([[SubResource("Resource_57o8d"), SubResource("Resource_y33w2"), SubResource("Resource_8idvt")], [SubResource("Resource_w6yip"), SubResource("Resource_kqu2e")]])
 pre_dialog = SubResource("pre_dialog")
 post_dialog = SubResource("post_dialog")
-start_stage_tutorial = Array[ExtResource("14_57o8d")]([SubResource("Resource_ssn5h")])
+start_stage_tutorial_page_ids = Array[String](["1_3_tutorial_1"])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
