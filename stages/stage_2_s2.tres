@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Resource" path="res://enemies/amon.tres" id="3_amon"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_w6jkx"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="4_dragon"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="5_hh7lg"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="5_shark"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="6_panda"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="9_p0jd2"]
+
+[sub_resource type="Resource" id="s2s2_amon"]
+script = ExtResource("2_entry")
+enemy = ExtResource("3_amon")
+level = 22
+hp_percent = 2600
+init_cd = 2
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-S2"
+prerequisite_stage_id = "2-5"
+map_position = Vector2(4, 925)
+stage_name = "Stage 2-S2 Panda 的復甦"
+element_weights = Array[int]([18, 18, 4, 60])
+allowed_types = Array[int]([0, 1, 2, 6])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Puzzles.mp3"
+rounds = Array[Array]([[SubResource("s2s2_amon")]])
+rounds_init_cd = Array[Array]([[2]])
+rounds_enemy_levels = Array[Array]([[22]])
+mode = 2
+puzzle_goal_target_type = 2
+puzzle_goal_required_count = 30
+puzzle_turn_limit = 14
+start_stage_tutorial_page_ids = Array[String](["2_s2_panda_active"])
+set_party = Array[ExtResource("5_hh7lg")]([ExtResource("4_dragon"), ExtResource("5_shark"), ExtResource("6_panda")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

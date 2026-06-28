@@ -1,0 +1,76 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
+[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="6_music"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="7_04jpd"]
+[ext_resource type="Resource" path="res://enemies/amon.tres" id="7_amon"]
+[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="8_guard"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="9_dragon"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="10_o7cwm"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="10_shark"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="11_panda"]
+[ext_resource type="Resource" path="res://characters/char_gory.tres" id="12_gory"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="15_ggcse"]
+
+[sub_resource type="Resource" id="s25_pre_1"]
+script = ExtResource("3_line")
+character_id = "amon"
+position = "right"
+text_zh = "光神庇佑森林。你們不必擔心，衛兵會守住一切。"
+text_en = "The Light God blesses this forest. Do not worry; my guards protect everything."
+
+[sub_resource type="Resource" id="s25_pre_2"]
+script = ExtResource("3_line")
+character_id = "dragon"
+text_zh = "如果真的沒事，為什麼村民看起來都在挨餓？"
+text_en = "If everything is fine, why do the villagers look hungry?"
+
+[sub_resource type="Resource" id="s25_pre"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s25_pre_1"), SubResource("s25_pre_2")])
+cast = Array[String](["amon", "dragon", "panda", "shark", "gory"])
+cast_profiles = {
+"amon": {
+"enemy_path": "res://enemies/amon.tres",
+"kind": "enemy",
+"name_en": "Amon",
+"name_zh": "阿蒙"
+}
+}
+background = ExtResource("5_bg")
+initial_music = ExtResource("6_music")
+
+[sub_resource type="Resource" id="s25_e1"]
+script = ExtResource("2_entry")
+enemy = ExtResource("8_guard")
+level = 22
+hp_percent = 2000
+
+[sub_resource type="Resource" id="s25_e2"]
+script = ExtResource("2_entry")
+enemy = ExtResource("7_amon")
+level = 22
+hp_percent = 3200
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-5"
+prerequisite_stage_id = "2-4"
+connects_to = Array[String](["2-S1", "2-S2", "2-6"])
+map_position = Vector2(77, 877)
+stage_name = "Stage 2-5 長老阿蒙"
+element_weights = Array[int]([12, 12, 12, 64])
+allowed_types = Array[int]([0, 1, 2, 6])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
+rounds = Array[Array]([[SubResource("s25_e1"), SubResource("s25_e1")], [SubResource("s25_e2")]])
+rounds_init_cd = Array[Array]([[0, 1], [0]])
+rounds_enemy_levels = Array[Array]([[22, 22], [22]])
+pre_dialog = SubResource("s25_pre")
+set_party = Array[ExtResource("10_o7cwm")]([ExtResource("9_dragon"), ExtResource("10_shark"), ExtResource("11_panda"), ExtResource("12_gory")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

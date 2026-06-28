@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="EnemyData" format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/enemy/monkey_elder.png" id="2_texture"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
+
+[sub_resource type="Resource" id="gold_drop"]
+script = ExtResource("3_loot_script")
+amount_min = 120
+amount_max = 180
+
+[resource]
+script = ExtResource("1_script")
+enemy_name = "Amon"
+enemy_name_zh = "阿蒙"
+enemy_name_en = "Amon"
+max_hp = 7600
+action_pattern = Array[int]([2, 3, 1, 0])
+action_percents = Array[int]([18, 24, 15, 36])
+action_counts = Array[int]([3, 6, 3, 3])
+portrait_color = Color(0.92, 0.82, 0.28, 1)
+portrait_texture = ExtResource("2_texture")
+info_popup_scale = 0.92
+dialog_phase_scale = 0.82
+element = 6
+is_main_boss = true
+passive_type = 1
+passive_required_gem_type = 6
+passive_required_gem_count = 9
+passive_name = "光神護盾"
+passive_desc = "每回合需要先爆破足夠光寶石，否則受到的傷害會被大幅壓低。"
+monster_gold_multiplier = 1.35
+loot_table = Array[ExtResource("3_loot_script")]([SubResource("gold_drop")])

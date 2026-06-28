@@ -1,0 +1,109 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
+[ext_resource type="Resource" path="res://enemies/amon.tres" id="5_amon"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_cbtps"]
+[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="6_guard"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="7_dragon"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="9_i2l4k"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="9_panda"]
+[ext_resource type="Resource" path="res://characters/char_gory.tres" id="10_gory"]
+[ext_resource type="Resource" path="res://characters/char_giz.tres" id="11_giz"]
+[ext_resource type="AudioStream" path="res://assets/music/fez_boss.mp3" id="12_boss"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="15_16mhg"]
+
+[sub_resource type="Resource" id="s210_post_1"]
+script = ExtResource("3_line")
+character_id = "owen"
+position = "right"
+text_zh = "辛苦了。你們替我把路清得很乾淨。光之水晶，我收下了。"
+text_en = "Well done. You cleared the path for me. I will take the Light Crystal."
+
+[sub_resource type="Resource" id="s210_post_2"]
+script = ExtResource("3_line")
+character_id = "amon"
+text_zh = "看看你們做了什麼！沒有水晶，村子現在怎麼辦？"
+text_en = "Look what you have done! Without the crystal, what happens to the village now?"
+
+[sub_resource type="Resource" id="s210_post_3"]
+script = ExtResource("3_line")
+character_id = "dragon"
+text_zh = "我……不知道。但我一定會把 Owen 追回來。"
+text_en = "I... do not know. But I will chase Owen down."
+
+[sub_resource type="Resource" id="s210_post"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s210_post_1"), SubResource("s210_post_2"), SubResource("s210_post_3")])
+cast = Array[String](["owen", "amon", "dragon", "panda", "shark", "gory", "giz"])
+cast_profiles = {
+"amon": {
+"enemy_path": "res://enemies/amon.tres",
+"kind": "enemy",
+"name_en": "Amon",
+"name_zh": "阿蒙"
+}
+}
+
+[sub_resource type="Resource" id="s210_pre_1"]
+script = ExtResource("3_line")
+character_id = "amon"
+position = "right"
+text_zh = "你們破壞了祭典，還妄想拯救森林？"
+text_en = "You ruined the ritual and still think you can save the forest?"
+
+[sub_resource type="Resource" id="s210_pre_2"]
+script = ExtResource("3_line")
+character_id = "dragon"
+text_zh = "用孩子祭天的人，沒資格說拯救。"
+text_en = "Someone who sacrifices children has no right to speak of salvation."
+
+[sub_resource type="Resource" id="s210_pre"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s210_pre_1"), SubResource("s210_pre_2")])
+cast = Array[String](["amon", "dragon"])
+cast_profiles = {
+"amon": {
+"enemy_path": "res://enemies/amon.tres",
+"kind": "enemy",
+"name_en": "Amon",
+"name_zh": "阿蒙"
+}
+}
+
+[sub_resource type="Resource" id="s210_guard"]
+script = ExtResource("2_entry")
+enemy = ExtResource("6_guard")
+level = 27
+hp_percent = 2400
+
+[sub_resource type="Resource" id="s210_amon"]
+script = ExtResource("2_entry")
+enemy = ExtResource("5_amon")
+level = 28
+hp_percent = 7600
+main_boss = true
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-10"
+prerequisite_stage_id = "2-9"
+map_position = Vector2(295, 1060)
+stage_name = "Stage 2-10 光神長老阿蒙"
+element_weights = Array[int]([10, 10, 16, 54, 10])
+allowed_types = Array[int]([0, 1, 2, 6, 7])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
+boss_bgm = ExtResource("12_boss")
+rounds = Array[Array]([[SubResource("s210_guard"), SubResource("s210_guard")], [SubResource("s210_amon")]])
+rounds_init_cd = Array[Array]([[0, 1], [0]])
+rounds_enemy_levels = Array[Array]([[27, 27], [28]])
+rounds_main_bosses = Array[Array]([[false, false], [true]])
+pre_dialog = SubResource("s210_pre")
+post_dialog = SubResource("s210_post")
+set_party = Array[ExtResource("9_i2l4k")]([ExtResource("7_dragon"), ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_gory"), ExtResource("11_giz")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

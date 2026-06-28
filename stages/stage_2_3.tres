@@ -1,0 +1,64 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_nvbwk"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
+[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="6_jya1o"]
+[ext_resource type="Resource" path="res://enemies/tree_man.tres" id="6_tree"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="7_dragon"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="9_panda"]
+[ext_resource type="Resource" path="res://characters/char_gory.tres" id="10_gory"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="13_736kx"]
+
+[sub_resource type="Resource" id="s23_e1"]
+script = ExtResource("2_entry")
+enemy = ExtResource("5_guard")
+level = 20
+hp_percent = 1800
+
+[sub_resource type="Resource" id="s23_e2"]
+script = ExtResource("2_entry")
+enemy = ExtResource("6_tree")
+level = 20
+hp_percent = 2600
+
+[sub_resource type="Resource" id="s23_start_1"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "前面是村道。大家都很怕外人，別亂衝。"
+text_en = "The village road is ahead. Everyone fears outsiders, so do not rush in."
+
+[sub_resource type="Resource" id="s23_start_2"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "如果有人擋住路，我會先問清楚。大概。"
+text_en = "If someone blocks us, I will ask first. Probably."
+
+[sub_resource type="Resource" id="s23_start"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s23_start_1"), SubResource("s23_start_2")])
+cast = Array[String](["gory", "dragon"])
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-3"
+prerequisite_stage_id = "2-2"
+connects_to = Array[String](["2-4"])
+map_position = Vector2(166, 803)
+stage_name = "Stage 2-3 村道的拒絕"
+element_weights = Array[int]([14, 13, 18, 55])
+allowed_types = Array[int]([0, 1, 2, 6])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
+rounds = Array[Array]([[SubResource("s23_e1")], [SubResource("s23_e1"), SubResource("s23_e2")]])
+rounds_init_cd = Array[Array]([[0], [0, 1]])
+rounds_enemy_levels = Array[Array]([[20], [20, 20]])
+start_stage_dialog = SubResource("s23_start")
+set_party = Array[ExtResource("6_jya1o")]([ExtResource("7_dragon"), ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_gory")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

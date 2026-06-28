@@ -1,0 +1,82 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
+[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_f0apj"]
+[ext_resource type="Resource" path="res://characters/char_giz.tres" id="6_giz_char"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="7_dragon"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="8_eas7a"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="9_panda"]
+[ext_resource type="Resource" path="res://characters/char_gory.tres" id="10_gory"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="13_dkqte"]
+
+[sub_resource type="Resource" id="s29_post_1"]
+script = ExtResource("3_line")
+character_id = "giz"
+text_zh = "謝謝你們……我還可以幫忙，把過剩的光變回森林需要的力量。"
+text_en = "Thank you... I can help turn the excess light back into what the forest needs."
+
+[sub_resource type="Resource" id="s29_post_2"]
+script = ExtResource("3_line")
+character_id = "panda"
+position = "right"
+text_zh = "歡迎加入，Giz。先吃點東西，再拯救世界。順序很重要。"
+text_en = "Welcome, Giz. Eat first, save the world second. Order matters."
+
+[sub_resource type="Resource" id="s29_post"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s29_post_1"), SubResource("s29_post_2")])
+cast = Array[String](["giz", "panda"])
+
+[sub_resource type="Resource" id="s29_pre_1"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "Giz 就在祭壇上！先解開機關，不要傷到他！"
+text_en = "Giz is on the altar! Break the mechanism first, do not hurt him!"
+
+[sub_resource type="Resource" id="s29_pre_2"]
+script = ExtResource("3_line")
+character_id = "shark"
+position = "right"
+text_zh = "目標是鑰匙。用爆破打開束縛，控制連鎖範圍。"
+text_en = "The keys are the objective. Use blasts to release the bindings and control the chain."
+
+[sub_resource type="Resource" id="s29_pre"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s29_pre_1"), SubResource("s29_pre_2")])
+cast = Array[String](["gory", "shark", "giz"])
+
+[sub_resource type="Resource" id="s29_guard"]
+script = ExtResource("2_entry")
+enemy = ExtResource("5_guard")
+level = 26
+hp_percent = 2400
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-9"
+prerequisite_stage_id = "2-8"
+connects_to = Array[String](["2-10"])
+map_position = Vector2(12, 1060)
+stage_name = "Stage 2-9 祭壇救援"
+element_weights = Array[int]([10, 10, 16, 64])
+allowed_types = Array[int]([0, 1, 2, 6])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Puzzles.mp3"
+one_time_reward_character = ExtResource("6_giz_char")
+rounds = Array[Array]([[SubResource("s29_guard")]])
+rounds_init_cd = Array[Array]([[2]])
+rounds_enemy_levels = Array[Array]([[26]])
+mode = 2
+puzzle_goal_target_type = 11
+puzzle_goal_required_count = 4
+puzzle_turn_limit = 18
+pre_dialog = SubResource("s29_pre")
+post_dialog = SubResource("s29_post")
+set_party = Array[ExtResource("8_eas7a")]([ExtResource("7_dragon"), ExtResource("8_shark"), ExtResource("9_panda"), ExtResource("10_gory")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

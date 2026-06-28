@@ -1,0 +1,68 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_iy2s5"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
+[ext_resource type="AudioStream" path="res://assets/music/Rainforest Clash.mp3" id="6_music"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="6_nccdu"]
+[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="7_guard"]
+[ext_resource type="Resource" path="res://enemies/mushroom_man.tres" id="8_mushroom"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="9_dragon"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="10_shark"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="11_panda"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_snknq"]
+
+[sub_resource type="Resource" id="s21_enemy_1"]
+script = ExtResource("2_entry")
+enemy = ExtResource("7_guard")
+level = 18
+hp_percent = 1800
+
+[sub_resource type="Resource" id="s21_enemy_2"]
+script = ExtResource("2_entry")
+enemy = ExtResource("8_mushroom")
+level = 18
+hp_percent = 1500
+
+[sub_resource type="Resource" id="s21_start_1"]
+script = ExtResource("3_line")
+character_id = "dragon"
+text_zh = "這片森林的光元素太重了，連空氣都像在發燙。"
+text_en = "The light energy here is overloaded. Even the air feels hot."
+
+[sub_resource type="Resource" id="s21_start_2"]
+script = ExtResource("3_line")
+character_id = "shark"
+position = "right"
+text_zh = "保持隊形。葉元素很少，別把恢復手段浪費掉。"
+text_en = "Hold formation. Leaf energy is scarce here, so do not waste recovery."
+
+[sub_resource type="Resource" id="s21_start"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s21_start_1"), SubResource("s21_start_2")])
+cast = Array[String](["dragon", "shark", "panda"])
+background = ExtResource("5_bg")
+initial_music = ExtResource("6_music")
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-1"
+prerequisite_stage_id = "1-7-new"
+connects_to = Array[String](["2-2"])
+map_position = Vector2(209, 730)
+stage_name = "Stage 2-1 光溢森林入口"
+element_weights = Array[int]([16, 14, 10, 60])
+allowed_types = Array[int]([0, 1, 2, 6])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
+rounds = Array[Array]([[SubResource("s21_enemy_1"), SubResource("s21_enemy_2")]])
+rounds_init_cd = Array[Array]([[0, 1]])
+rounds_enemy_levels = Array[Array]([[18, 18]])
+start_stage_dialog = SubResource("s21_start")
+start_stage_tutorial_page_ids = Array[String](["2_1_light_overload"])
+set_party = Array[ExtResource("6_nccdu")]([ExtResource("9_dragon"), ExtResource("10_shark"), ExtResource("11_panda")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

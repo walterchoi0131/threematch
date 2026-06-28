@@ -1,0 +1,84 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
+[ext_resource type="AudioStream" path="res://assets/music/Rainforest Clash.mp3" id="6_music"]
+[ext_resource type="Resource" path="res://enemies/gory.tres" id="7_gory_enemy"]
+[ext_resource type="Resource" path="res://characters/char_gory.tres" id="8_gory_char"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="8_jpuby"]
+[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="9_dragon"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="10_juwhm"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="10_shark"]
+[ext_resource type="Resource" path="res://characters/char_panda.tres" id="11_panda"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_0ymui"]
+
+[sub_resource type="Resource" id="s22_post_1"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "你們真的不是來搶森林的？好吧，我帶你們去見長老。"
+text_en = "You really are not here to steal from the forest? Fine. I will take you to the elder."
+
+[sub_resource type="Resource" id="s22_post_2"]
+script = ExtResource("3_line")
+character_id = "shark"
+position = "right"
+text_zh = "合作比互相消耗更有效率。歡迎加入。"
+text_en = "Cooperation is more efficient than wasting strength. Welcome aboard."
+
+[sub_resource type="Resource" id="s22_post"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s22_post_1"), SubResource("s22_post_2")])
+cast = Array[String](["gory", "shark"])
+background = ExtResource("5_bg")
+
+[sub_resource type="Resource" id="s22_pre_1"]
+script = ExtResource("3_line")
+character_id = "gory"
+position = "right"
+text_zh = "闖入者！這裡不是你們可以亂碰的森林。"
+text_en = "Intruders! This forest is not yours to touch."
+
+[sub_resource type="Resource" id="s22_pre_2"]
+script = ExtResource("3_line")
+character_id = "panda"
+text_zh = "我們只是想見長老，順便問問這裡為什麼亮得像午餐盒。"
+text_en = "We only want to see the elder, and maybe ask why everything glows like lunch."
+
+[sub_resource type="Resource" id="s22_pre"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s22_pre_1"), SubResource("s22_pre_2")])
+cast = Array[String](["gory", "panda", "dragon", "shark"])
+background = ExtResource("5_bg")
+initial_music = ExtResource("6_music")
+
+[sub_resource type="Resource" id="s22_gory"]
+script = ExtResource("2_entry")
+enemy = ExtResource("7_gory_enemy")
+level = 19
+hp_percent = 4850
+main_boss = true
+
+[resource]
+script = ExtResource("1_stage")
+stage_id = "2-2"
+prerequisite_stage_id = "2-1"
+connects_to = Array[String](["2-3"])
+map_position = Vector2(36, 737)
+stage_name = "Stage 2-2 Gory 的誤會"
+element_weights = Array[int]([16, 14, 22, 48])
+allowed_types = Array[int]([0, 1, 2, 6])
+area = "forest"
+battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
+battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
+one_time_reward_character = ExtResource("8_gory_char")
+rounds = Array[Array]([[SubResource("s22_gory")]])
+rounds_init_cd = Array[Array]([[0]])
+rounds_enemy_levels = Array[Array]([[19]])
+rounds_main_bosses = Array[Array]([[true]])
+pre_dialog = SubResource("s22_pre")
+post_dialog = SubResource("s22_post")
+set_party = Array[ExtResource("10_juwhm")]([ExtResource("9_dragon"), ExtResource("10_shark"), ExtResource("11_panda")])
+drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
