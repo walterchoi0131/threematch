@@ -8,6 +8,7 @@ var container: SubViewportContainer = null
 var viewport: SubViewport = null
 var camera: Camera3D = null
 var _active_nodes: Dictionary = {}
+var _idle_clear_frames: int = 0
 
 
 func _ready() -> void:
@@ -18,6 +19,10 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_sync_viewport_size()
+	if _idle_clear_frames > 0 and _active_nodes.is_empty() and viewport != null:
+		_idle_clear_frames -= 1
+		if _idle_clear_frames <= 0:
+			viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 
 func add_world_node(node: Node3D) -> void:
@@ -129,14 +134,8 @@ func _update_render_mode() -> void:
 	for key in invalid_keys:
 		_active_nodes.erase(key)
 	if not _active_nodes.is_empty():
+		_idle_clear_frames = 0
 		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	else:
-		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
-		call_deferred("_disable_render_if_idle")
-
-
-func _disable_render_if_idle() -> void:
-	if viewport == null:
-		return
-	if _active_nodes.is_empty():
-		viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		_idle_clear_frames = 3
+		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS

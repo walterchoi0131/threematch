@@ -26,6 +26,7 @@ var _beam: Node3D = null
 var _beam_end_point: Node3D = null
 var _using_beam_scene: bool = false
 var _shared_vfx_layer: BattleVfx3DLayer = null
+var _finishing: bool = false
 
 
 func _init() -> void:
@@ -58,6 +59,8 @@ func set_shared_vfx_layer(layer: BattleVfx3DLayer) -> void:
 func _begin(p_duration: float) -> void:
 	duration = maxf(p_duration, 0.05)
 	elapsed = 0.0
+	_finishing = false
+	visible = true
 	z_index = 96
 	_using_beam_scene = _setup_binbun_beam()
 	set_process(true)
@@ -179,9 +182,7 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 	if elapsed >= duration:
-		set_process(false)
-		finished.emit()
-		queue_free()
+		_finish_and_free()
 
 
 func _update_beam_transform() -> void:
@@ -215,6 +216,34 @@ func _show_end_spray_only(open_value: float = 1.0) -> void:
 		var particles := end_particles as GPUParticles3D
 		particles.visible = open_value > 0.72
 		particles.emitting = open_value > 0.72
+
+
+func _stop_beam_particles(root: Node) -> void:
+	if root == null:
+		return
+	if root is GPUParticles3D:
+		var particles := root as GPUParticles3D
+		particles.emitting = false
+		particles.visible = false
+	for child in root.get_children():
+		_stop_beam_particles(child)
+
+
+func _finish_and_free() -> void:
+	if _finishing:
+		return
+	_finishing = true
+	set_process(false)
+	visible = false
+	if is_instance_valid(_beam):
+		_beam.set("open_amount", 0.0)
+		_beam.set("start_emitting", false)
+		_beam.set("end_emitting", false)
+		_stop_beam_particles(_beam)
+	_clear_beam()
+	queue_redraw()
+	finished.emit()
+	queue_free()
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector3:
