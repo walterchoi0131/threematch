@@ -212,6 +212,7 @@ var _reserved_instant_upper_tasks: Array[Dictionary] = []
 var _instant_upper_resolvers: Dictionary = {}
 var _instant_upper_predictors: Dictionary = {}
 var _instant_upper_effect_worker_running: bool = false
+var _instant_upper_batch_cast_active: bool = false
 var _building_upper_resolvers: Dictionary = {}
 var _building_upper_resolver_order: Array[Block.UpperType] = []
 var _active_skill_registry: ActiveSkillResolverRegistry = null
@@ -6212,11 +6213,6 @@ func _should_abort_pending_instant_flow() -> bool:
 	return _is_battle_stage_mode() and not _has_living_battle_enemy()
 
 
-func _lock_input_for_instant_spell() -> void:
-	board.clear_deferred_clicks()
-	board.set_board_input_paused(true)
-
-
 func _clear_pending_instant_spell_work() -> void:
 	_concurrent_fuses.clear()
 	_instant_fuse_pipeline_active = false
@@ -6228,6 +6224,7 @@ func _clear_pending_instant_spell_work() -> void:
 	_pending_instant_upper_tasks.clear()
 	_reserved_instant_upper_tasks.clear()
 	_attack_queue.clear()
+	_end_instant_upper_batch_damage_window(true)
 	board.clear_deferred_clicks()
 
 
@@ -6361,6 +6358,13 @@ func _apply_instant_prediction_to_sim(prediction: Dictionary, sim_hp: Dictionary
 	sim_hp[target] = int(sim_hp.get(target, target.current_hp)) - predicted_damage
 
 
+func _instant_prediction_target(prediction: Dictionary) -> Enemy:
+	var target_ref: Variant = prediction.get("target", null)
+	if not is_instance_valid(target_ref):
+		return null
+	return target_ref as Enemy
+
+
 func _instant_task_matches_response(task: Dictionary, resp: Dictionary, upper_type: Block.UpperType) -> bool:
 	if (task.get("upper_type", Block.UpperType.NONE) as Block.UpperType) != upper_type:
 		return false
@@ -6396,6 +6400,11 @@ func _consume_instant_upper_reservation(resp: Dictionary, upper_type: Block.Uppe
 
 
 func _predict_instant_upper_task(task: Dictionary, sim_hp: Dictionary, pending_index: int) -> Dictionary:
+	var stored_prediction: Dictionary = task.get("prediction", {}) as Dictionary
+	if not stored_prediction.is_empty():
+		if bool(stored_prediction.get("spent", false)):
+			return {}
+		return stored_prediction
 	var upper_type: Block.UpperType = task.get("upper_type", Block.UpperType.NONE) as Block.UpperType
 	var predictor: Callable = _instant_upper_predictors.get(upper_type, Callable()) as Callable
 	if not predictor.is_valid():
@@ -6403,6 +6412,11 @@ func _predict_instant_upper_task(task: Dictionary, sim_hp: Dictionary, pending_i
 	var resp: Dictionary = task.get("resp", {}) as Dictionary
 	var spell_mult: float = float(task.get("spell_mult", _pending_instant_spell_mult(pending_index)))
 	return predictor.call(resp, spell_mult, sim_hp) as Dictionary
+
+
+func _instant_upper_task_prediction_spent(task: Dictionary) -> bool:
+	var stored_prediction: Dictionary = task.get("prediction", {}) as Dictionary
+	return not stored_prediction.is_empty() and bool(stored_prediction.get("spent", false))
 
 
 func _can_queue_instant_upper_response(resp: Dictionary, upper_type: Block.UpperType, include_reservations: bool = true) -> bool:
@@ -6416,6 +6430,8 @@ func _can_queue_instant_upper_response(resp: Dictionary, upper_type: Block.Upper
 	if include_reservations:
 		simulated_tasks.append_array(_reserved_instant_upper_tasks)
 	for index in simulated_tasks.size():
+		if _instant_upper_task_prediction_spent(simulated_tasks[index]):
+			continue
 		var queued_prediction: Dictionary = _predict_instant_upper_task(simulated_tasks[index], sim_hp, index)
 		if queued_prediction.is_empty():
 			return false
@@ -6781,9 +6797,9 @@ func _instant_upper_fx_z_index(upper_type: Block.UpperType) -> int:
 			return 80
 
 
-func _prepare_pending_instant_upper_tasks_for_effect() -> void:
+func _wait_for_instant_upper_batch_ready(batch: Array[Dictionary]) -> void:
 	var latest_ready_msec := Time.get_ticks_msec()
-	for task in _pending_instant_upper_tasks:
+	for task in batch:
 		latest_ready_msec = maxi(latest_ready_msec, int(task.get("ready_msec", latest_ready_msec)))
 	var now := Time.get_ticks_msec()
 	if now < latest_ready_msec:
@@ -6791,17 +6807,51 @@ func _prepare_pending_instant_upper_tasks_for_effect() -> void:
 	await get_tree().process_frame
 
 
-func _wait_for_instant_upper_task_ready(task: Dictionary) -> void:
-	var ready_msec: int = int(task.get("ready_msec", Time.get_ticks_msec()))
-	var now := Time.get_ticks_msec()
-	if now < ready_msec:
-		await get_tree().create_timer(float(ready_msec - now) / 1000.0).timeout
-	await get_tree().process_frame
+func _assign_instant_upper_batch_predictions(batch: Array[Dictionary]) -> void:
+	var sim_hp: Dictionary = _get_current_enemy_hp_sim()
+	for task in batch:
+		var spell_mult: float = float(task.get("spell_mult", 0.0))
+		if spell_mult <= 0.0:
+			spell_mult = _register_spell_chain()
+			task["spell_mult"] = spell_mult
+		var prediction: Dictionary = _predict_instant_upper_task(task, sim_hp, 0)
+		task["prediction"] = prediction
+		task["skip_effect"] = prediction.is_empty()
+		if not prediction.is_empty():
+			_apply_instant_prediction_to_sim(prediction, sim_hp)
+
+
+func _begin_instant_upper_batch_damage_window() -> void:
+	# Batch instant spells reserve targets up front, then keep enemies alive
+	# visually until every concurrent projectile/beam has finished.
+	_instant_upper_batch_cast_active = true
+	for enemy in battle_manager.active_enemies:
+		if is_instance_valid(enemy):
+			enemy.defer_death = true
+
+
+func _end_instant_upper_batch_damage_window(force: bool = false) -> void:
+	if not force and not _active_instant_upper_tasks.is_empty():
+		return
+	_instant_upper_batch_cast_active = false
+	for enemy in battle_manager.active_enemies.duplicate():
+		if is_instance_valid(enemy):
+			enemy.defer_death = false
+			if enemy.current_hp <= 0:
+				enemy.finalize_death()
+
+
+func _play_pending_instant_upper_task_and_cleanup(task: Dictionary) -> void:
+	await _play_pending_instant_upper_task(task)
+	task["effect_done"] = true
+	_active_instant_upper_tasks.erase(task)
+	_end_instant_upper_batch_damage_window()
 
 
 func _play_pending_instant_upper_task(task: Dictionary) -> void:
 	if battle_manager.is_round_transitioning:
 		return
+	task["effect_done"] = false
 	var pos: Vector2i = _find_pending_instant_task_pos(task)
 	var raw_block: Variant = task.get("block", null)
 	if board == null or not board._is_valid(pos) or (not is_instance_valid(raw_block) and board.grid[pos.x][pos.y] == null):
@@ -6818,17 +6868,14 @@ func _play_pending_instant_upper_task(task: Dictionary) -> void:
 	if spell_mult <= 0.0:
 		spell_mult = _register_spell_chain()
 		task["spell_mult"] = spell_mult
-	await resolver.call(pos, resp, spell_mult, raw_block)
-
-
-func _play_pending_instant_upper_tasks() -> void:
-	if _pending_instant_upper_tasks.is_empty():
+	var prediction: Dictionary = task.get("prediction", {}) as Dictionary
+	if bool(task.get("skip_effect", false)):
+		if is_instance_valid(raw_block):
+			var skipped_block := raw_block as Block
+			if skipped_block != null:
+				skipped_block.queue_free()
 		return
-	_lock_input_for_instant_spell()
-	await _prepare_pending_instant_upper_tasks_for_effect()
-	while not _pending_instant_upper_tasks.is_empty():
-		var task: Dictionary = _pending_instant_upper_tasks.pop_front()
-		await _play_pending_instant_upper_task(task)
+	await resolver.call(pos, resp, spell_mult, raw_block, prediction)
 
 
 func _kick_instant_upper_effect_worker() -> void:
@@ -6840,16 +6887,23 @@ func _kick_instant_upper_effect_worker() -> void:
 func _run_instant_upper_effect_worker() -> void:
 	_instant_upper_effect_worker_running = true
 	while not _pending_instant_upper_tasks.is_empty():
-		var task: Dictionary = _pending_instant_upper_tasks.pop_front()
-		_active_instant_upper_tasks.append(task)
-		await _wait_for_instant_upper_task_ready(task)
-		await _play_pending_instant_upper_task(task)
-		_active_instant_upper_tasks.erase(task)
+		var batch: Array[Dictionary] = []
+		while not _pending_instant_upper_tasks.is_empty():
+			var task: Dictionary = _pending_instant_upper_tasks.pop_front()
+			task["effect_done"] = false
+			batch.append(task)
+			_active_instant_upper_tasks.append(task)
+		await _wait_for_instant_upper_batch_ready(batch)
+		_assign_instant_upper_batch_predictions(batch)
+		_begin_instant_upper_batch_damage_window()
+		for task in batch:
+			_play_pending_instant_upper_task_and_cleanup(task)
 		if _should_abort_pending_instant_flow():
 			_pending_instant_upper_tasks.clear()
 			break
-	_active_instant_upper_tasks.clear()
 	_instant_upper_effect_worker_running = false
+	if not _pending_instant_upper_tasks.is_empty():
+		_kick_instant_upper_effect_worker()
 
 
 func _place_instant_upper_response(resp: Dictionary, upper_type: Block.UpperType, fuse_gem_type: Block.Type) -> bool:
@@ -8623,7 +8677,7 @@ func _move_block_to_fx_layer_preserving_transform(block: Block, z_index: int) ->
 	block.z_index = z_index
 
 
-func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null) -> void:
+func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null, prediction: Dictionary = {}) -> void:
 	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
 		return
 	var block: Block = null
@@ -8645,7 +8699,11 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
 	var magic_value: int = caster.get_magic() if caster != null else 1
 	var base_damage: int = magic_value * ICEBALL_MAGIC_MULT
-	var target: Enemy = _get_current_living_target(Block.Type.BLUE, base_damage, spell_mult)
+	var target: Enemy = _instant_prediction_target(prediction)
+	if target != null and not (target.current_hp > 0 or target.defer_death):
+		target = null
+	if target == null:
+		target = _get_current_living_target(Block.Type.BLUE, base_damage, spell_mult)
 	if target == null:
 		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
 		DebrisVfx.play(fx_layer, fallback_texture, start_global, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
@@ -8656,9 +8714,10 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	var final_damage: int = maxi(1, int(float(base_damage) * element_mult * spell_mult))
 	var is_super: bool = element_mult > 1.0
 
-	for enemy in battle_manager.active_enemies:
-		if is_instance_valid(enemy):
-			enemy.defer_death = true
+	if not _instant_upper_batch_cast_active:
+		for enemy in battle_manager.active_enemies:
+			if is_instance_valid(enemy):
+				enemy.defer_death = true
 
 	var float_tw := create_tween()
 	float_tw.tween_property(block, "global_position:y", start_global.y - 32.0, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
@@ -8673,6 +8732,7 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 	block.modulate.a = 1.0
 
 	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
+		prediction["spent"] = true
 		var applied_damage: int = target.take_damage(final_damage)
 		_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
 	_play_sfx(_se_impact)
@@ -8688,14 +8748,15 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 		mult_text += " ×%.1f%s" % [spell_mult, Locale.tr_ui("SPELL_CHAIN_SHORT")]
 	_add_log_entry("[b]%s[/b] %s MAG%d%s = %d" % [Locale.tr_ui("Iceball"), _gem_bbcode(Block.Type.BLUE), base_damage, mult_text, final_damage], Block.Type.BLUE, caster)
 
-	for enemy in battle_manager.active_enemies.duplicate():
-		if is_instance_valid(enemy):
-			enemy.defer_death = false
-			if enemy.current_hp <= 0:
-				enemy.finalize_death()
+	if not _instant_upper_batch_cast_active:
+		for enemy in battle_manager.active_enemies.duplicate():
+			if is_instance_valid(enemy):
+				enemy.defer_death = false
+				if enemy.current_hp <= 0:
+					enemy.finalize_death()
 
 
-func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null) -> void:
+func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null, prediction: Dictionary = {}) -> void:
 	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
 		return
 	var block: Block = null
@@ -8718,7 +8779,11 @@ func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult
 	var magic_value: int = caster.get_magic() if caster != null else 1
 	var base_damage: int = magic_value * LIGHT_TRIANGLE_MAGIC_MULT
 	var combo_bonus: float = _light_triangle_combo_bonus(spell_mult)
-	var target: Enemy = _get_current_living_target(Block.Type.LIGHT, int(float(base_damage) * combo_bonus), spell_mult)
+	var target: Enemy = _instant_prediction_target(prediction)
+	if target != null and not (target.current_hp > 0 or target.defer_death):
+		target = null
+	if target == null:
+		target = _get_current_living_target(Block.Type.LIGHT, int(float(base_damage) * combo_bonus), spell_mult)
 	var light_color: Color = Block.COLORS.get(Block.Type.LIGHT, Color(1.0, 0.92, 0.23))
 	if target == null:
 		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LIGHT_TRIANGLE, null) as Texture2D
@@ -8730,9 +8795,10 @@ func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult
 	var final_damage: int = maxi(1, int(float(base_damage) * combo_bonus * element_mult * spell_mult))
 	var is_super: bool = element_mult > 1.0 or combo_bonus > 1.0
 
-	for enemy in battle_manager.active_enemies:
-		if is_instance_valid(enemy):
-			enemy.defer_death = true
+	if not _instant_upper_batch_cast_active:
+		for enemy in battle_manager.active_enemies:
+			if is_instance_valid(enemy):
+				enemy.defer_death = true
 
 	var float_tw := create_tween()
 	float_tw.tween_property(block, "global_position:y", start_global.y - 28.0, 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
@@ -8752,6 +8818,7 @@ func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult
 	block.modulate.a = 1.0
 
 	if is_instance_valid(target) and (target.current_hp > 0 or target.defer_death):
+		prediction["spent"] = true
 		var applied_damage: int = target.take_damage(final_damage)
 		_spawn_damage_number(_get_enemy_image_center(target), applied_damage, light_color, true, is_super)
 	_play_sfx(_se_impact)
@@ -8769,14 +8836,15 @@ func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult
 		mult_text += " ×%.1f%s" % [spell_mult, Locale.tr_ui("SPELL_CHAIN_SHORT")]
 	_add_log_entry("[b]%s[/b] %s MAG%d%s = %d" % [Locale.tr_ui("Light Triangle"), _gem_bbcode(Block.Type.LIGHT), base_damage, mult_text, final_damage], Block.Type.LIGHT, caster)
 
-	for enemy in battle_manager.active_enemies.duplicate():
-		if is_instance_valid(enemy):
-			enemy.defer_death = false
-			if enemy.current_hp <= 0:
-				enemy.finalize_death()
+	if not _instant_upper_batch_cast_active:
+		for enemy in battle_manager.active_enemies.duplicate():
+			if is_instance_valid(enemy):
+				enemy.defer_death = false
+				if enemy.current_hp <= 0:
+					enemy.finalize_death()
 
 
-func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null) -> void:
+func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: float, source_block: Variant = null, prediction: Dictionary = {}) -> void:
 	if pos.x < 0 or pos.y < 0 or pos.x >= board.columns or pos.y >= board.rows:
 		return
 	var block: Block = null
@@ -8798,7 +8866,11 @@ func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: floa
 	var caster: CharacterData = party[caster_index] if caster_index >= 0 and caster_index < party.size() else null
 	var magic_value: int = caster.get_magic() if caster != null else 1
 	var base_damage: int = maxi(1, int(round(float(magic_value) * LEAF_RAY_MAGIC_MULT)))
-	var target: Enemy = _get_current_living_target(Block.Type.GREEN, base_damage, spell_mult)
+	var target: Enemy = _instant_prediction_target(prediction)
+	if target != null and not (target.current_hp > 0 or target.defer_death):
+		target = null
+	if target == null:
+		target = _get_current_living_target(Block.Type.GREEN, base_damage, spell_mult)
 	var leaf_color: Color = Block.COLORS.get(Block.Type.GREEN, Color(0.30, 0.69, 0.31))
 	if target == null:
 		var fallback_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LEAF_RAY, null) as Texture2D
@@ -8810,9 +8882,10 @@ func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: floa
 	var final_damage: int = maxi(1, int(float(base_damage) * element_mult * spell_mult))
 	var is_super: bool = element_mult > 1.0
 
-	for enemy in battle_manager.active_enemies:
-		if is_instance_valid(enemy):
-			enemy.defer_death = true
+	if not _instant_upper_batch_cast_active:
+		for enemy in battle_manager.active_enemies:
+			if is_instance_valid(enemy):
+				enemy.defer_death = true
 
 	var leaf_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LEAF_RAY, null) as Texture2D
 	var beam_start: Vector2 = block.global_position
@@ -8852,6 +8925,7 @@ func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: floa
 			var tick_pos: Vector2 = _get_enemy_image_center(target)
 			_spawn_damage_number(tick_pos, actual_tick_damage, leaf_color, true, is_super)
 			DebrisVfx.play(fx_layer, leaf_texture, tick_pos, 4, Vector2(0.42, 0.78), Vector2(0.32, 0.52), 118, leaf_color)
+		prediction["spent"] = true
 	elif is_instance_valid(laser):
 		await laser.finished
 
@@ -8865,11 +8939,12 @@ func _resolve_leaf_ray_instant(pos: Vector2i, resp: Dictionary, spell_mult: floa
 		mult_text += " ×%.1f%s" % [spell_mult, Locale.tr_ui("SPELL_CHAIN_SHORT")]
 	_add_log_entry("[b]%s[/b] %s MAG%d%s = %d" % [Locale.tr_ui("Leaf Ray"), _gem_bbcode(Block.Type.GREEN), base_damage, mult_text, applied_damage], Block.Type.GREEN, caster)
 
-	for enemy in battle_manager.active_enemies.duplicate():
-		if is_instance_valid(enemy):
-			enemy.defer_death = false
-			if enemy.current_hp <= 0:
-				enemy.finalize_death()
+	if not _instant_upper_batch_cast_active:
+		for enemy in battle_manager.active_enemies.duplicate():
+			if is_instance_valid(enemy):
+				enemy.defer_death = false
+				if enemy.current_hp <= 0:
+					enemy.finalize_death()
 
 
 func _play_leaf_ray_gem_falloff(block: Node2D) -> void:
