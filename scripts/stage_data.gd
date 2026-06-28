@@ -31,7 +31,6 @@ const BACKGROUND_PATHS: Dictionary = {
 const DEFAULT_AREA: String = "ruin"
 const CELL_HOLE: int = -10
 const CELL_WATER_SWORD: int = -11
-const FALLBACK_BATTLE_BG_PATH: String = "res://assets/battle_background/battle_bg_forest.png"
 const AREA_KEYS: Array[String] = [
 	"arena",
 	"aurora",
@@ -164,8 +163,7 @@ static func get_stage_spot_path(area_key: String) -> String:
 
 static func get_battle_background_path(area_key: String) -> String:
 	var info: Dictionary = get_area_info(area_key)
-	var path: String = info.get("battle_bg_path", FALLBACK_BATTLE_BG_PATH) as String
-	return FALLBACK_BATTLE_BG_PATH if path.is_empty() else path
+	return info.get("battle_bg_path", "") as String
 
 
 func get_element_distribution() -> Dictionary:
@@ -243,7 +241,7 @@ func _default_element_distribution() -> Dictionary:
 @export var min_match: int = 2   # 最少連接數才可消除
 @export var columns: int = 8     # 棋盤欄位數
 @export var rows: int = 8        # 棋盤行數
-@export_enum("aurora", "church", "dessert", "dungeon", "forest", "heaven", "iceberg", "meadow", "ruin", "school", "swamp", "underwater", "volcano") var area: String = DEFAULT_AREA  # 關卡地區 key
+@export_enum("arena", "aurora", "bamboo", "church", "crystal_mine", "dessert", "dungeon", "fire_mine", "forest", "heaven", "iceberg", "mage", "meadow", "ruin", "school", "swamp", "temple", "underwater", "volcano", "waterfall", "yama") var area: String = DEFAULT_AREA  # 關卡地區 key
 @export var battle_background_override_path: String = ""
 @export var battle_music_override_path: String = ""
 @export var boss_bgm: AudioStream = null

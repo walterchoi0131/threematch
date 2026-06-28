@@ -358,6 +358,7 @@ func _create_child_stage(parent_stage: StageData, map_position: Vector2) -> Stag
 	child_stage.connects_to = []
 	child_stage.map_hidden = false
 	child_stage.map_position = map_position
+	child_stage.battle_background_override_path = ""
 	var err: int = ResourceSaver.save(child_stage, child_path)
 	if err != OK:
 		push_warning("Map: failed to create stage %s (%d)" % [child_path, err])

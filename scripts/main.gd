@@ -48,7 +48,8 @@ const ENEMY_VOICE_VOLUME_SCALE := 2.0
 const ENEMY_VOICE_BGM_DUCK_SCALE := 0.6
 const ENEMY_VOICE_BGM_DUCK_IN_DURATION := 0.08
 const ENEMY_VOICE_BGM_DUCK_OUT_DURATION := 0.16
-const BATTLE_BG_TOP_OVERSCAN := 12.0
+const BATTLE_BG_FRAME_HEIGHT := 320.0
+const BATTLE_BG_VERTICAL_OFFSET := 20.0
 
 signal loot_animations_finished()
 signal loot_flights_finished()
@@ -357,6 +358,7 @@ const STAGE_EDITOR_GOAL_TARGET_TYPES: Array[int] = [
 ]
 const STAGE_EDITOR_ENEMY_ROOT := "res://enemies"
 const STAGE_EDITOR_GENERATED_MANIFEST := "res://assets/enemy/generated/enemy_manifest.json"
+const STAGE_EDITOR_BATTLE_BACKGROUND_ROOT := "res://assets/battle_background"
 const STAGE_EDITOR_DIALOG_BACKGROUND_ROOT := "res://assets/dialog_background"
 const STAGE_EDITOR_DIALOG_MUSIC_ROOT := "res://assets/music"
 const STAGE_EDITOR_TUTOR_ROOT := "res://assets/tutor"
@@ -420,6 +422,7 @@ var _stage_editor_dialog_refreshing: bool = false
 var _stage_editor_tutorial_refreshing: bool = false
 var _stage_editor_character_catalog: Array[Dictionary] = []
 var _stage_editor_character_by_id: Dictionary = {}
+var _stage_editor_battle_background_catalog: Array[Dictionary] = []
 var _stage_editor_dialog_background_catalog: Array[Dictionary] = []
 var _stage_editor_dialog_music_catalog: Array[Dictionary] = []
 var _stage_editor_tutorial_image_catalog: Array[Dictionary] = []
@@ -597,12 +600,12 @@ func _layout_board() -> void:
 	var s: float = max(0.1, max_w / board_w)
 	board.scale = Vector2(s, s)
 	board.position = Vector2((vp.x - board_w * s) * 0.5, vp.y * 0.22)
-	_battle_bg_rect.position = Vector2(0.0, -BATTLE_BG_TOP_OVERSCAN)
+	_battle_bg_rect.position = Vector2(0.0, -BATTLE_BG_VERTICAL_OFFSET)
 	if current_stage != null and current_stage.stretch_battle_background:
-		_battle_bg_rect.size = Vector2(vp.x, vp.y + BATTLE_BG_TOP_OVERSCAN)
+		_battle_bg_rect.size = Vector2(vp.x, vp.y + BATTLE_BG_VERTICAL_OFFSET)
 	else:
-		var battle_bg_height: float = maxf(board.position.y + 16.0, vp.y * 0.34)
-		_battle_bg_rect.size = Vector2(vp.x, battle_bg_height + BATTLE_BG_TOP_OVERSCAN)
+		var battle_bg_height: float = maxf(BATTLE_BG_FRAME_HEIGHT, board.position.y + 16.0)
+		_battle_bg_rect.size = Vector2(vp.x, battle_bg_height + BATTLE_BG_VERTICAL_OFFSET)
 	_position_dev_log()
 
 
@@ -713,6 +716,7 @@ func _build_stage_editor_ui() -> void:
 	_stage_editor_load_character_catalog()
 	if _stage_editor_available_enemies.is_empty():
 		_stage_editor_available_enemies = _stage_editor_load_available_enemies()
+	_stage_editor_load_battle_background_catalog()
 	_stage_editor_load_dialog_background_catalog()
 	_stage_editor_load_dialog_music_catalog()
 	_stage_editor_load_tutorial_image_catalog()
@@ -1771,6 +1775,28 @@ func _stage_editor_load_dialog_background_catalog() -> void:
 		})
 
 
+func _stage_editor_load_battle_background_catalog() -> void:
+	if not _stage_editor_battle_background_catalog.is_empty():
+		return
+	_stage_editor_battle_background_catalog.clear()
+	var dir := DirAccess.open(STAGE_EDITOR_BATTLE_BACKGROUND_ROOT)
+	if dir == null:
+		return
+	var files: PackedStringArray = dir.get_files()
+	files.sort()
+	for file_name: String in files:
+		var extension: String = file_name.get_extension().to_lower()
+		if extension != "png" and extension != "jpg" and extension != "jpeg" and extension != "webp":
+			continue
+		var resource_path: String = STAGE_EDITOR_BATTLE_BACKGROUND_ROOT + "/" + file_name
+		if not ResourceLoader.exists(resource_path) and not FileAccess.file_exists(resource_path):
+			continue
+		_stage_editor_battle_background_catalog.append({
+			"name": _stage_editor_battle_background_display_name(resource_path),
+			"resource_path": resource_path,
+		})
+
+
 func _stage_editor_load_dialog_music_catalog() -> void:
 	if not _stage_editor_dialog_music_catalog.is_empty():
 		return
@@ -1835,6 +1861,13 @@ func _stage_editor_dialog_background_display_name(resource_path: String) -> Stri
 	return file_base.replace("_", " ").capitalize()
 
 
+func _stage_editor_battle_background_display_name(resource_path: String) -> String:
+	var file_base: String = resource_path.get_file().get_basename()
+	if file_base.begins_with("battle_bg_"):
+		file_base = file_base.substr(10)
+	return file_base.replace("_", " ").capitalize()
+
+
 func _stage_editor_dialog_music_display_name(resource_path: String) -> String:
 	return resource_path.get_file().get_basename().replace("_", " ").capitalize()
 
@@ -1851,6 +1884,32 @@ func _stage_editor_populate_dialog_background_selector(option: OptionButton, sel
 	for entry: Dictionary in _stage_editor_dialog_background_catalog:
 		_stage_editor_add_option_item(option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
 	_stage_editor_select_option_value(option, selected_path)
+
+
+func _stage_editor_populate_battle_background_selector(option: OptionButton, selected_path: String, area_key: String) -> void:
+	_stage_editor_make_compact_option_button(option)
+	option.clear()
+	var default_path: String = StageData.get_battle_background_path(area_key)
+	_stage_editor_add_option_item(option, "預設：%s" % default_path.get_file(), "")
+	for entry: Dictionary in _stage_editor_battle_background_catalog:
+		_stage_editor_add_option_item(option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
+	_stage_editor_select_option_value(option, selected_path)
+
+
+func _stage_editor_legacy_dialog_background_path_for_area(area_key: String) -> String:
+	return STAGE_EDITOR_DIALOG_BACKGROUND_ROOT + "/dialog_bg_%s.png" % StageData.normalize_area(area_key)
+
+
+func _stage_editor_is_copied_default_battle_override(override_path: String, _current_area: String) -> bool:
+	var path: String = override_path.strip_edges()
+	if path.is_empty():
+		return false
+	for area_key: String in StageData.AREA_KEYS:
+		if path == StageData.get_battle_background_path(area_key):
+			return true
+		if path == _stage_editor_legacy_dialog_background_path_for_area(area_key):
+			return true
+	return false
 
 
 func _stage_editor_populate_dialog_music_selector(option: OptionButton, selected_path: String, placeholder: String = "switchBGM", include_stop: bool = true) -> void:
@@ -4971,7 +5030,11 @@ func _refresh_stage_editor_area_panel() -> void:
 		_stage_editor_area_spot_preview.tooltip_text = spot_path
 	if _stage_editor_bg_override_option != null:
 		var selected_override: String = current_stage.battle_background_override_path if current_stage != null else ""
-		_stage_editor_populate_dialog_background_selector(_stage_editor_bg_override_option, selected_override, "無")
+		if current_stage != null and _stage_editor_is_copied_default_battle_override(selected_override, _stage_editor_selected_area):
+			current_stage.battle_background_override_path = ""
+			selected_override = ""
+			_apply_stage_background()
+		_stage_editor_populate_battle_background_selector(_stage_editor_bg_override_option, selected_override, _stage_editor_selected_area)
 	if _stage_editor_music_override_option != null:
 		var selected_music_override: String = current_stage.battle_music_override_path if current_stage != null else ""
 		_stage_editor_populate_dialog_music_selector(_stage_editor_music_override_option, selected_music_override, "無", false)
@@ -5189,6 +5252,8 @@ func _on_stage_editor_area_selected(item_index: int) -> void:
 	var item_area: String = String(_stage_editor_area_option.get_item_metadata(item_index))
 	_stage_editor_selected_area = StageData.normalize_area(item_area)
 	if current_stage != null:
+		if _stage_editor_is_copied_default_battle_override(current_stage.battle_background_override_path, _stage_editor_selected_area):
+			current_stage.battle_background_override_path = ""
 		current_stage.area = _stage_editor_selected_area
 	_refresh_stage_editor_area_panel()
 	_apply_stage_background()

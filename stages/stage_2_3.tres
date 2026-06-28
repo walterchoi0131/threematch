@@ -8,23 +8,26 @@
 [ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_jya1o"]
 [ext_resource type="Resource" path="res://enemies/tree_man.tres" id="6_tree"]
-[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="7_dragon"]
-[ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
-[ext_resource type="Resource" path="res://characters/char_panda.tres" id="9_panda"]
-[ext_resource type="Resource" path="res://characters/char_gory.tres" id="10_gory"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="13_736kx"]
 
-[sub_resource type="Resource" id="s23_e1"]
+[sub_resource type="Resource" id="Resource_7ho6q"]
 script = ExtResource("2_entry")
 enemy = ExtResource("5_guard")
 level = 20
 hp_percent = 1800
 
-[sub_resource type="Resource" id="s23_e2"]
+[sub_resource type="Resource" id="Resource_7cvg6"]
+script = ExtResource("2_entry")
+enemy = ExtResource("5_guard")
+level = 20
+hp_percent = 1800
+
+[sub_resource type="Resource" id="Resource_ekprs"]
 script = ExtResource("2_entry")
 enemy = ExtResource("6_tree")
 level = 20
 hp_percent = 2600
+init_cd = 1
 
 [sub_resource type="Resource" id="s23_start_1"]
 script = ExtResource("3_line")
@@ -51,13 +54,11 @@ prerequisite_stage_id = "2-2"
 connects_to = Array[String](["2-4"])
 map_position = Vector2(166, 803)
 stage_name = "Stage 2-3 村道的拒絕"
-element_weights = Array[int]([14, 13, 18, 55])
+element_weights = Array[int]([25, 20, 20, 35])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
-battle_background_override_path = "res://assets/dialog_background/dialog_bg_forest.png"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("s23_e1")], [SubResource("s23_e1"), SubResource("s23_e2")]])
-rounds_init_cd = Array[Array]([[0], [0, 1]])
-rounds_enemy_levels = Array[Array]([[20], [20, 20]])
+rounds = Array[Array]([[SubResource("Resource_7ho6q")], [SubResource("Resource_7cvg6"), SubResource("Resource_ekprs")]])
 start_stage_dialog = SubResource("s23_start")
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
