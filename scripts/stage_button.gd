@@ -12,6 +12,9 @@ signal stage_add_pressed(stage: StageData)
 signal stage_remove_pressed(stage: StageData)
 signal stage_dragged(button: StageButton, target_position: Vector2)
 signal stage_drag_finished(button: StageButton)
+signal stage_link_drag_started(button: StageButton, global_position: Vector2)
+signal stage_link_dragged(button: StageButton, global_position: Vector2)
+signal stage_link_drag_finished(button: StageButton, global_position: Vector2)
 
 const RAY_BURST_SCRIPT := preload("res://scripts/ray_burst.gd")
 ## Spot 圖佔總高度的比例（其餘空間留給下方關卡名稱）
@@ -25,6 +28,7 @@ const LATEST_RAY_COLOR: Color = Color(1.0, 0.93, 0.22, 0.76)
 const CAPTION_BG_HEIGHT_RATIO: float = 0.4
 const DEV_BUTTON_SIZE: Vector2 = Vector2(54, 28)
 const DEV_DRAG_THRESHOLD: float = 6.0
+const SPOT_HIT_PADDING: float = 4.0
 
 ## 綁定的關卡資料（必填）
 @export var stage: StageData = null:
@@ -50,6 +54,7 @@ const DEV_DRAG_THRESHOLD: float = 6.0
 var _btn: Button = null
 var _add_btn: Button = null
 var _remove_btn: Button = null
+var _link_btn: Button = null
 var _label: Label = null
 var _label_bg: TextureRect = null
 var _is_latest: bool = false
@@ -62,6 +67,7 @@ var _dev_pointer_down: bool = false
 var _dev_drag_active: bool = false
 var _dev_press_global: Vector2 = Vector2.ZERO
 var _dev_press_offset: Vector2 = Vector2.ZERO
+var _dev_link_pointer_down: bool = false
 
 
 func _ready() -> void:
@@ -151,6 +157,17 @@ func _build() -> void:
 	if not Engine.is_editor_hint():
 		_remove_btn.pressed.connect(_on_dev_remove_pressed)
 
+	_link_btn = Button.new()
+	_link_btn.name = "LinkStageBtn"
+	_link_btn.text = "Trail"
+	_link_btn.focus_mode = Control.FOCUS_NONE
+	_link_btn.tooltip_text = "Drag to another stage to create a prerequisite trail"
+	_link_btn.custom_minimum_size = DEV_BUTTON_SIZE
+	_link_btn.add_theme_font_size_override("font_size", 10)
+	add_child(_link_btn)
+	if not Engine.is_editor_hint():
+		_link_btn.gui_input.connect(_on_dev_link_gui_input)
+
 	# 關卡名稱標籤背景（仿戰鬥場景敵人意圖：黑色漸層 0→0.5→0）
 	_label_bg = TextureRect.new()
 	_label_bg.name = "CaptionBG"
@@ -216,6 +233,7 @@ func _layout() -> void:
 		(button_size.x - spot_display_size.x) * 0.5,
 		(spot_h - spot_display_size.y) * 0.5
 	)
+	var spot_hit_rect: Rect2 = _spot_content_rect(spot_display_pos, spot_display_size).grow(SPOT_HIT_PADDING)
 	if _spot_backdrop != null:
 		var backdrop_pad: Vector2 = Vector2(SPOT_BACKDROP_PAD, SPOT_BACKDROP_PAD)
 		_spot_backdrop.position = spot_display_pos - backdrop_pad
@@ -227,14 +245,17 @@ func _layout() -> void:
 		_spot_rect.position = spot_display_pos
 		_spot_rect.size = spot_display_size
 	if _btn != null:
-		_btn.position = spot_display_pos
-		_btn.size = spot_display_size
+		_btn.position = spot_hit_rect.position
+		_btn.size = spot_hit_rect.size
 	if _add_btn != null:
 		_add_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, 0.0)
 		_add_btn.size = DEV_BUTTON_SIZE
 	if _remove_btn != null:
 		_remove_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, DEV_BUTTON_SIZE.y + 4.0)
 		_remove_btn.size = DEV_BUTTON_SIZE
+	if _link_btn != null:
+		_link_btn.position = Vector2(button_size.x - DEV_BUTTON_SIZE.x, DEV_BUTTON_SIZE.y * 2.0 + 8.0)
+		_link_btn.size = DEV_BUTTON_SIZE
 	if _label_bg != null:
 		var caption_h: float = button_size.y - spot_h
 		var bg_h: float = caption_h * CAPTION_BG_HEIGHT_RATIO
@@ -255,7 +276,40 @@ func refresh_state() -> void:
 	_refresh()
 
 
-## 回傳 spot 中心在本地座標中的位置（供地圖路徑層對齊用）。
+## Global hit rect that follows the visible stage spot, not the whole StageButton control.
+func get_spot_hit_global_rect() -> Rect2:
+	var spot_h: float = button_size.y * SPOT_HEIGHT_RATIO
+	var spot_display_size: Vector2 = Vector2(button_size.x * SPOT_DISPLAY_SCALE, spot_h * SPOT_DISPLAY_SCALE)
+	var spot_display_pos: Vector2 = Vector2(
+		(button_size.x - spot_display_size.x) * 0.5,
+		(spot_h - spot_display_size.y) * 0.5
+	)
+	var rect: Rect2 = _spot_content_rect(spot_display_pos, spot_display_size).grow(SPOT_HIT_PADDING)
+	var transform: Transform2D = get_global_transform_with_canvas()
+	var top_left: Vector2 = transform * rect.position
+	var bottom_right: Vector2 = transform * (rect.position + rect.size)
+	var rect_pos := Vector2(minf(top_left.x, bottom_right.x), minf(top_left.y, bottom_right.y))
+	var rect_size := Vector2(absf(bottom_right.x - top_left.x), absf(bottom_right.y - top_left.y))
+	return Rect2(rect_pos, rect_size)
+
+
+func _spot_content_rect(display_pos: Vector2, display_size: Vector2) -> Rect2:
+	var texture_size := Vector2.ZERO
+	if _spot_rect != null and _spot_rect.texture != null:
+		texture_size = _spot_rect.texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return Rect2(display_pos, display_size)
+	var texture_aspect: float = texture_size.x / texture_size.y
+	var display_aspect: float = display_size.x / maxf(display_size.y, 1.0)
+	var content_size := display_size
+	if texture_aspect > display_aspect:
+		content_size.y = display_size.x / texture_aspect
+	else:
+		content_size.x = display_size.y * texture_aspect
+	var content_pos: Vector2 = display_pos + (display_size - content_size) * 0.5
+	return Rect2(content_pos, content_size)
+
+
 func get_anchor_center() -> Vector2:
 	var spot_h: float = button_size.y * SPOT_HEIGHT_RATIO
 	return Vector2(button_size.x * 0.5, spot_h * 0.5)
@@ -330,6 +384,7 @@ func _refresh() -> void:
 		_spot_glow.texture = spot_texture
 		var glow_alpha: float = _spot_glow.modulate.a
 		_spot_glow.modulate = Color(SPOT_GLOW_TINT.r, SPOT_GLOW_TINT.g, SPOT_GLOW_TINT.b, glow_alpha)
+	_layout()
 	_set_dev_buttons_visible(not in_editor and GameState.dev_mode)
 	if _label != null:
 		_label.text = sid
@@ -379,6 +434,9 @@ func _set_dev_buttons_visible(show: bool) -> void:
 	if _remove_btn != null:
 		_remove_btn.visible = show
 		_remove_btn.disabled = not show
+	if _link_btn != null:
+		_link_btn.visible = show
+		_link_btn.disabled = not show
 
 
 func _on_dev_add_pressed() -> void:
@@ -391,6 +449,26 @@ func _on_dev_remove_pressed() -> void:
 	if stage == null:
 		return
 	stage_remove_pressed.emit(stage)
+
+
+func _on_dev_link_gui_input(event: InputEvent) -> void:
+	if Engine.is_editor_hint() or not GameState.dev_mode or stage == null:
+		return
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mb.pressed:
+			_dev_link_pointer_down = true
+			stage_link_drag_started.emit(self, get_global_mouse_position())
+			accept_event()
+		elif _dev_link_pointer_down:
+			stage_link_drag_finished.emit(self, get_global_mouse_position())
+			_dev_link_pointer_down = false
+			accept_event()
+	elif event is InputEventMouseMotion and _dev_link_pointer_down:
+		stage_link_dragged.emit(self, get_global_mouse_position())
+		accept_event()
 
 
 func _on_button_gui_input(event: InputEvent) -> void:

@@ -26,6 +26,8 @@ var _path_layer: Control = null
 var _debug_panel: Control = null
 var _dev_mode_label: Label = null
 var _dev_mode_back_button: Button = null
+var _link_drag_source: StageButton = null
+var _link_drag_active: bool = false
 var _portrait_debug_layer: CanvasLayer = null
 var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
 var _tutorial_editor_layer: CanvasLayer = null
@@ -106,6 +108,12 @@ func _connect_stage_button(sb: StageButton) -> void:
 		sb.stage_dragged.connect(_on_stage_button_dragged)
 	if not sb.stage_drag_finished.is_connected(_on_stage_button_drag_finished):
 		sb.stage_drag_finished.connect(_on_stage_button_drag_finished)
+	if not sb.stage_link_drag_started.is_connected(_on_stage_link_drag_started):
+		sb.stage_link_drag_started.connect(_on_stage_link_drag_started)
+	if not sb.stage_link_dragged.is_connected(_on_stage_link_dragged):
+		sb.stage_link_dragged.connect(_on_stage_link_dragged)
+	if not sb.stage_link_drag_finished.is_connected(_on_stage_link_drag_finished):
+		sb.stage_link_drag_finished.connect(_on_stage_link_drag_finished)
 
 
 func _ensure_stage_buttons_for_stage_resources() -> void:
@@ -438,6 +446,140 @@ func _on_stage_button_drag_finished(sb: StageButton) -> void:
 
 # ── 覆蓋層管理（戰前準備）──────────────────────────────────
 
+func _on_stage_link_drag_started(sb: StageButton, global_pos: Vector2) -> void:
+	if sb == null or sb.stage == null or not GameState.dev_mode:
+		return
+	_link_drag_source = sb
+	_link_drag_active = true
+	_update_stage_link_draft(global_pos)
+
+
+func _on_stage_link_dragged(sb: StageButton, global_pos: Vector2) -> void:
+	if sb == null or sb != _link_drag_source or not _link_drag_active or not GameState.dev_mode:
+		return
+	_update_stage_link_draft(global_pos)
+
+
+func _on_stage_link_drag_finished(sb: StageButton, global_pos: Vector2) -> void:
+	if sb == null or sb != _link_drag_source or not _link_drag_active or not GameState.dev_mode:
+		_clear_stage_link_draft()
+		return
+	var source_stage: StageData = sb.stage
+	var target_button: StageButton = _stage_button_at_global_pos(global_pos, sb)
+	_clear_stage_link_draft()
+	if source_stage == null or target_button == null or target_button.stage == null:
+		return
+	_create_prerequisite_relation(source_stage, target_button.stage)
+
+
+func _update_stage_link_draft(global_pos: Vector2) -> void:
+	if _path_layer == null or _link_drag_source == null or _link_drag_source.stage == null:
+		return
+	var local_pos: Vector2 = _map_page.get_global_transform_with_canvas().affine_inverse() * global_pos
+	if _path_layer.has_method("set_draft_path"):
+		_path_layer.call("set_draft_path", _link_drag_source.stage.stage_id, local_pos)
+
+
+func _clear_stage_link_draft() -> void:
+	_link_drag_source = null
+	_link_drag_active = false
+	if _path_layer != null and _path_layer.has_method("clear_draft_path"):
+		_path_layer.call("clear_draft_path")
+
+
+func _stage_button_at_global_pos(global_pos: Vector2, except_button: StageButton = null) -> StageButton:
+	for sb in _stage_buttons:
+		if sb == null or sb == except_button or sb.stage == null or not sb.visible:
+			continue
+		var hit_rect: Rect2 = sb.get_spot_hit_global_rect() if sb.has_method("get_spot_hit_global_rect") else sb.get_global_rect()
+		if hit_rect.grow(6.0).has_point(global_pos):
+			return sb
+	return null
+
+
+func _find_stage_button_by_id(stage_id: String) -> StageButton:
+	for sb in _stage_buttons:
+		if sb != null and sb.stage != null and sb.stage.stage_id == stage_id:
+			return sb
+	return null
+
+
+func _create_prerequisite_relation(parent_stage: StageData, child_stage: StageData) -> void:
+	if parent_stage == null or child_stage == null:
+		return
+	var parent_id: String = parent_stage.stage_id
+	var child_id: String = child_stage.stage_id
+	if parent_id == "" or child_id == "" or parent_id == child_id:
+		return
+	if _would_create_prerequisite_cycle(parent_id, child_id):
+		push_warning("Map: rejected prerequisite cycle %s -> %s" % [parent_id, child_id])
+		return
+
+	var old_parent_id: String = child_stage.prerequisite_stage_id
+	if old_parent_id != "" and old_parent_id != parent_id:
+		var old_parent_button: StageButton = _find_stage_button_by_id(old_parent_id)
+		if old_parent_button != null and old_parent_button.stage != null and old_parent_button.stage.connects_to.has(child_id):
+			old_parent_button.stage.connects_to.erase(child_id)
+			_save_stage(old_parent_button.stage)
+
+	child_stage.prerequisite_stage_id = parent_id
+	_save_stage(child_stage)
+	if not parent_stage.connects_to.has(child_id):
+		parent_stage.connects_to.append(child_id)
+	_save_stage(parent_stage)
+	_refresh_stage_buttons()
+
+
+func _remove_prerequisite_relation(parent_id: String, child_id: String) -> void:
+	if parent_id == "" or child_id == "":
+		return
+	var parent_button: StageButton = _find_stage_button_by_id(parent_id)
+	var child_button: StageButton = _find_stage_button_by_id(child_id)
+	var changed_parent := false
+	var changed_child := false
+	if parent_button != null and parent_button.stage != null and parent_button.stage.connects_to.has(child_id):
+		parent_button.stage.connects_to.erase(child_id)
+		changed_parent = true
+	if child_button != null and child_button.stage != null and child_button.stage.prerequisite_stage_id == parent_id:
+		child_button.stage.prerequisite_stage_id = ""
+		changed_child = true
+	if changed_parent:
+		_save_stage(parent_button.stage)
+	if changed_child:
+		_save_stage(child_button.stage)
+	if changed_parent or changed_child:
+		_refresh_stage_buttons()
+
+
+func _try_remove_relation_at_global_pos(global_pos: Vector2) -> bool:
+	if _path_layer == null or not _path_layer.has_method("find_relation_at_point"):
+		return false
+	var local_pos: Vector2 = _map_page.get_global_transform_with_canvas().affine_inverse() * global_pos
+	var relation: Dictionary = _path_layer.call("find_relation_at_point", local_pos) as Dictionary
+	if relation.is_empty():
+		return false
+	var parent_id: String = String(relation.get("from_id", ""))
+	var child_id: String = String(relation.get("to_id", ""))
+	_remove_prerequisite_relation(parent_id, child_id)
+	return true
+
+
+func _would_create_prerequisite_cycle(parent_id: String, child_id: String) -> bool:
+	var current_id: String = parent_id
+	var seen: Dictionary = {}
+	while current_id != "":
+		if current_id == child_id:
+			return true
+		if seen.has(current_id):
+			return true
+		seen[current_id] = true
+		var current_button: StageButton = _find_stage_button_by_id(current_id)
+		if current_button == null or current_button.stage == null:
+			return false
+		current_id = current_button.stage.prerequisite_stage_id
+	return false
+
+
 func _open_overlay(scene: PackedScene) -> void:
 	_close_overlay()
 	if scene == null:
@@ -556,10 +698,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_F4:
 			_toggle_dev_mode()
 			_set_debug_panel_visible(GameState.dev_mode)
+	elif event is InputEventMouseButton and GameState.dev_mode:
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			if _try_remove_relation_at_global_pos(get_global_mouse_position()):
+				get_viewport().set_input_as_handled()
 
 
 func _toggle_dev_mode() -> void:
 	GameState.dev_mode = not GameState.dev_mode
+	if not GameState.dev_mode:
+		_clear_stage_link_draft()
 	_refresh_dev_mode_ui()
 	_refresh_stage_buttons()
 
@@ -612,6 +761,7 @@ func _refresh_dev_mode_ui() -> void:
 
 func _on_dev_mode_back_pressed() -> void:
 	GameState.dev_mode = false
+	_clear_stage_link_draft()
 	_refresh_dev_mode_ui()
 	_refresh_stage_buttons()
 	_set_debug_panel_visible(false)

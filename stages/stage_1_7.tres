@@ -7,7 +7,6 @@
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-7"
-prerequisite_stage_id = "1-6"
 connects_to = Array[String](["1-7-new"])
 map_position = Vector2(274, 825)
 stage_name = "Stage 1-7"
