@@ -62,6 +62,7 @@ var _spot_backdrop: TextureRect = null
 var _spot_rect: TextureRect = null
 var _spot_glow: TextureRect = null
 var _glow_tween: Tween = null
+var _unlock_pop_tween: Tween = null
 var _rays: Node2D = null
 var _dev_pointer_down: bool = false
 var _dev_drag_active: bool = false
@@ -220,6 +221,7 @@ func _make_spot_backdrop_texture() -> GradientTexture2D:
 
 
 func _layout() -> void:
+	pivot_offset = button_size * 0.5
 	var spot_h: float = button_size.y * SPOT_HEIGHT_RATIO
 	var spot_display_size: Vector2 = Vector2(button_size.x * SPOT_DISPLAY_SCALE, spot_h * SPOT_DISPLAY_SCALE)
 	var spot_display_pos: Vector2 = Vector2(
@@ -265,6 +267,69 @@ func _layout() -> void:
 ## 由父層 (map.gd) 在解鎖狀態變動時呼叫，重新整理可見性與標記
 func refresh_state() -> void:
 	_refresh()
+
+
+func play_unlock_pop() -> void:
+	if not visible:
+		return
+	if _unlock_pop_tween != null and _unlock_pop_tween.is_valid():
+		_unlock_pop_tween.kill()
+	_layout()
+	var base_label_pos: Vector2 = _label.position if _label != null else Vector2.ZERO
+	var base_label_modulate: Color = _label.modulate if _label != null else Color.WHITE
+	var base_label_bg_modulate: Color = _label_bg.modulate if _label_bg != null else Color.WHITE
+	modulate.a = 1.0
+	var spot_nodes: Array = []
+	for node in [_spot_backdrop, _spot_glow, _rays, _spot_rect]:
+		if node != null:
+			spot_nodes.append(node)
+	var base_spot_scales: Dictionary = {}
+	for node in spot_nodes:
+		base_spot_scales[node] = node.scale
+		if node is Control:
+			(node as Control).pivot_offset = (node as Control).size * 0.5
+		node.scale = base_spot_scales[node]
+	if _label != null:
+		_label.position = base_label_pos + Vector2(0.0, 14.0)
+		_label.modulate = Color(base_label_modulate.r, base_label_modulate.g, base_label_modulate.b, 0.0)
+	if _label_bg != null:
+		_label_bg.modulate = Color(base_label_bg_modulate.r, base_label_bg_modulate.g, base_label_bg_modulate.b, 0.0)
+	_unlock_pop_tween = create_tween()
+	_unlock_pop_tween.tween_interval(1.0)
+	var started_pop_group: bool = false
+	for node in spot_nodes:
+		var target_scale: Vector2 = (base_spot_scales[node] as Vector2) * 1.32
+		var tweener = _unlock_pop_tween.tween_property(node, "scale", target_scale, 0.35) if not started_pop_group else _unlock_pop_tween.parallel().tween_property(node, "scale", target_scale, 0.35)
+		tweener.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		started_pop_group = true
+	if _label != null:
+		var label_pos_tweener = _unlock_pop_tween.tween_property(_label, "position", base_label_pos, 0.5) if not started_pop_group else _unlock_pop_tween.parallel().tween_property(_label, "position", base_label_pos, 0.5)
+		label_pos_tweener.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		_unlock_pop_tween.parallel().tween_property(_label, "modulate:a", base_label_modulate.a, 0.5) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		started_pop_group = true
+	if _label_bg != null:
+		var label_bg_tweener = _unlock_pop_tween.tween_property(_label_bg, "modulate:a", base_label_bg_modulate.a, 0.5) if not started_pop_group else _unlock_pop_tween.parallel().tween_property(_label_bg, "modulate:a", base_label_bg_modulate.a, 0.5)
+		label_bg_tweener.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_unlock_pop_tween.tween_interval(0.4)
+	var started_shrink_group: bool = false
+	for node in spot_nodes:
+		var base_spot_scale: Vector2 = base_spot_scales[node] as Vector2
+		var shrink_tweener = _unlock_pop_tween.tween_property(node, "scale", base_spot_scale, 0.6) if not started_shrink_group else _unlock_pop_tween.parallel().tween_property(node, "scale", base_spot_scale, 0.6)
+		shrink_tweener.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		started_shrink_group = true
+	_unlock_pop_tween.tween_callback(func() -> void:
+		modulate.a = 1.0
+		for node in spot_nodes:
+			if is_instance_valid(node):
+				node.scale = base_spot_scales[node] as Vector2
+		if _label != null:
+			_label.position = base_label_pos
+			_label.modulate = base_label_modulate
+		if _label_bg != null:
+			_label_bg.modulate = base_label_bg_modulate
+		_unlock_pop_tween = null
+	)
 
 
 ## Global hit rect that follows the visible stage spot, not the whole StageButton control.

@@ -33,6 +33,17 @@ after the skill has finished enough for the battle flow to continue.
 - `scripts/main.gd`: battle orchestration and shared battle helpers.
 - `scripts/board.gd`: reusable board primitives only. Avoid character-specific logic here.
 
+## Active Skill Attributes
+
+- `CharacterData.active_skill_blast` marks an active skill as `爆破`.
+- `CharacterData.has_active_skill_blast()` is the runtime check and also honors the old
+  `has_break_essence` flag for compatibility.
+- A blast active skill may remove normal breakable structures such as `PLANK` and enemy-owned
+  upper gems inside its affected area. It should not destroy player-owned upper gems unless the
+  skill explicitly says so.
+- Area conversion active skills should use `main.gd`'s `_apply_active_skill_area_convert()` so
+  this behavior stays consistent across characters.
+
 ## Building Upper Gem Turn Resolvers
 
 Building-type upper gems resolve at player turn end through `_register_building_upper_resolvers()`

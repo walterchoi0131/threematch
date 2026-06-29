@@ -64,6 +64,7 @@ var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
 var detail_character: CharacterData = null      # 要查看詳細資訊的角色
 var stage_edit_mode: bool = false               # 以棋盤編輯模式進入 main.tscn（不持久化）
 var dev_mode: bool = false
+var map_unlock_pop_source_stage_id: String = ""
 
 var owned_characters: Array[CharacterData] = []  # 玩家擁有的所有角色
 
@@ -101,8 +102,17 @@ func set_last_used_party(chars: Array[CharacterData]) -> void:
 func mark_stage_cleared(stage_id: String) -> void:
 	if stage_id == "":
 		return
+	var was_already_cleared: bool = cleared_stages.has(stage_id)
 	cleared_stages[stage_id] = true
+	if not was_already_cleared:
+		map_unlock_pop_source_stage_id = stage_id
 	save_game()
+
+
+func consume_map_unlock_pop_source_stage_id() -> String:
+	var stage_id: String = map_unlock_pop_source_stage_id
+	map_unlock_pop_source_stage_id = ""
+	return stage_id
 
 ## 是否已通關
 func is_stage_cleared(stage_id: String) -> bool:

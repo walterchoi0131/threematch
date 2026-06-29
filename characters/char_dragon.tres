@@ -26,6 +26,7 @@ active_skill_name = "Dragon Flame Domain"
 active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
 active_skill_cd = 3
 active_unlock_stage_id = "1-5"
+active_skill_blast = true
 has_break_essence = true
 responding_skills = Array[Dictionary]([{
 "desc": "create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",

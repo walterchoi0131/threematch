@@ -24,16 +24,16 @@ const UPPER_GEM_DEBRIS_SHARDS := 7
 const OBSTACLE_DEBRIS_SHARDS := 8
 const WOOD_SPEAR_THRUST_SCALE := 0.18
 const WOOD_SPEAR_THRUST_TIP_FROM_TOP := 48.0
-const WOOD_SPEAR_WINDUP_PULL_DURATION := 0.1
-const WOOD_SPEAR_WINDUP_HOLD_DURATION := 0.1
-const WOOD_SPEAR_WINDUP_RELEASE_DURATION := 0.1
-const WOOD_SPEAR_DASH_DURATION := 0.2
+const WOOD_SPEAR_WINDUP_PULL_DURATION := 0.10
+const WOOD_SPEAR_WINDUP_HOLD_DURATION := 0.04
+const WOOD_SPEAR_WINDUP_RELEASE_DURATION := 0.04
+const WOOD_SPEAR_DASH_DURATION := 0.16
 const WOOD_SPEAR_WINDUP_PULLBACK_PROGRESS := 0.08
 const WOOD_SPEAR_WINDUP_COMPRESS_SCALE := 0.86
-const WOOD_SPEAR_BOUNCE_DURATION := 0.21
+const WOOD_SPEAR_BOUNCE_DURATION := 0.16
 const WOOD_SPEAR_BOUNCE_ROTATION := 0.16
-const WOOD_SPEAR_DISAPPEAR_HOLD_DURATION := 0.2
-const WOOD_SPEAR_FADE_DURATION := 0.12
+const WOOD_SPEAR_DISAPPEAR_HOLD_DURATION := 0.0
+const WOOD_SPEAR_FADE_DURATION := 0.16
 const FUSE_POP_PEAK_DURATION := 0.2
 const FUSE_POP_SETTLE_DURATION := 0.2
 const FUSE_POP_PEAK_SCALE := Vector2(1.4, 1.4)
@@ -2808,7 +2808,8 @@ func _wood_spear_row_hit_delay(_group_index: int, _group_count: int) -> float:
 	if _group_count <= 0:
 		return _wood_spear_thrust_duration()
 	var progress: float = clampf(float(_group_index + 1) / float(_group_count), 0.0, 1.0)
-	return _wood_spear_windup_duration() + progress * WOOD_SPEAR_DASH_DURATION
+	var dash_t: float = 1.0 - pow(1.0 - progress, 0.2)
+	return _wood_spear_windup_duration() + dash_t * WOOD_SPEAR_DASH_DURATION
 
 
 func _wood_spear_windup_duration() -> float:
@@ -2870,7 +2871,7 @@ func _wood_spear_thrust_progress(elapsed: float) -> float:
 		var release_t: float = (time - pull_duration - hold_duration) / release_duration
 		return lerpf(-pullback_progress, 0.0, 1.0 - cos(release_t * PI * 0.5))
 	var dash_t: float = (time - windup_duration) / dash_duration
-	return dash_t
+	return 1.0 - pow(1.0 - clampf(dash_t, 0.0, 1.0), 5.0)
 
 
 func _wood_spear_windup_compress(elapsed: float) -> float:
@@ -5508,6 +5509,22 @@ func _show_building_dismantle_preview(pos: Vector2i, block: Block) -> void:
 	add_child(ring)
 	_building_dismantle_progress = ring
 	_longpress_overlays.append(ring)
+
+	var label := Label.new()
+	label.name = "BuildingDismantleLabel"
+	label.text = Locale.tr_ui("DISMANTLE")
+	label.size = ring.size
+	label.position = ring.position
+	label.z_index = ring.z_index + 1
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 17)
+	label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.72, 1.0))
+	label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.04, 0.95))
+	label.add_theme_constant_override("outline_size", 4)
+	add_child(label)
+	_longpress_overlays.append(label)
 	blast_preview_entered.emit()
 
 

@@ -69,6 +69,7 @@ var _translations: Dictionary = {
 	"FIXED": {"zh": "固定", "en": "FIXED"},
 	"SKIP": {"zh": "跳過", "en": "Skip"},
 	"FAST_FORWARD": {"zh": "快進", "en": "Fast Forward"},
+	"DISMANTLE": {"zh": "拆除", "en": "Dismantle"},
 	"COOLDOWN": {"zh": "冷卻回合", "en": "Cooldown"},
 	"FUSE_HINT": {"zh": "符石合成", "en": "Gem Fuse"},
 	"BLAST_AREA": {"zh": "爆發範圍", "en": "Blast"},

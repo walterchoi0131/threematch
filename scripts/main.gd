@@ -418,6 +418,8 @@ var _stage_editor_dialog_action_option: OptionButton = null
 var _stage_editor_dialog_shake_check: CheckBox = null
 var _stage_editor_dialog_text_zh_edit: TextEdit = null
 var _stage_editor_dialog_text_en_edit: TextEdit = null
+var _stage_editor_start_round_nav_row: HBoxContainer = null
+var _stage_editor_start_round_label: Label = null
 var _stage_editor_dialog_refreshing: bool = false
 var _stage_editor_tutorial_refreshing: bool = false
 var _stage_editor_character_catalog: Array[Dictionary] = []
@@ -1125,7 +1127,7 @@ func _build_stage_editor_tab_panel() -> void:
 	margin.add_child(row)
 
 	row.add_child(_make_stage_editor_tab_button("戰前", STAGE_EDITOR_TAB_BEFORE))
-	row.add_child(_make_stage_editor_tab_button("開場對話", STAGE_EDITOR_TAB_START_DIALOG))
+	row.add_child(_make_stage_editor_tab_button("波次對話", STAGE_EDITOR_TAB_START_DIALOG))
 	row.add_child(_make_stage_editor_tab_button("開場教學", STAGE_EDITOR_TAB_START_TUTORIAL))
 	row.add_child(_make_stage_editor_tab_button("棋盤", STAGE_EDITOR_TAB_BOARD))
 	row.add_child(_make_stage_editor_tab_button("戰後", STAGE_EDITOR_TAB_AFTER))
@@ -1204,6 +1206,21 @@ func _build_stage_editor_dialog_panel() -> void:
 	_stage_editor_make_compact_option_button(_stage_editor_dialog_music_option)
 	_stage_editor_dialog_music_option.item_selected.connect(_on_stage_editor_dialog_music_selected)
 	header_row.add_child(_stage_editor_dialog_music_option)
+
+	_stage_editor_start_round_nav_row = HBoxContainer.new()
+	_stage_editor_start_round_nav_row.add_theme_constant_override("separation", 6)
+	root.add_child(_stage_editor_start_round_nav_row)
+	_stage_editor_start_round_nav_row.add_child(_make_stage_editor_small_button("上一波", _on_stage_editor_start_round_prev_pressed, Vector2(64, 30)))
+	_stage_editor_start_round_label = Label.new()
+	_stage_editor_start_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_editor_start_round_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_stage_editor_start_round_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stage_editor_start_round_label.add_theme_font_size_override("font_size", 14)
+	_stage_editor_start_round_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.72, 1.0))
+	_stage_editor_start_round_nav_row.add_child(_stage_editor_start_round_label)
+	_stage_editor_start_round_nav_row.add_child(_make_stage_editor_small_button("下一波", _on_stage_editor_start_round_next_pressed, Vector2(64, 30)))
+	_stage_editor_start_round_nav_row.add_child(_make_stage_editor_small_button("新增波", _on_stage_editor_add_round_from_area_pressed, Vector2(64, 30)))
+	_stage_editor_start_round_nav_row.add_child(_make_stage_editor_small_button("刪除波", _on_stage_editor_remove_current_round_pressed, Vector2(64, 30)))
 
 	var dialog_action_row := HBoxContainer.new()
 	dialog_action_row.add_theme_constant_override("separation", 6)
@@ -1704,9 +1721,11 @@ func _stage_editor_get_or_create_dialog_sequence(target: String) -> DialogSequen
 			current_stage.pre_dialog = DialogSequence.new()
 		return current_stage.pre_dialog
 	if target == STAGE_EDITOR_TAB_START_DIALOG:
-		if current_stage.start_stage_dialog == null:
-			current_stage.start_stage_dialog = DialogSequence.new()
-		return current_stage.start_stage_dialog
+		_stage_editor_clamp_current_round_index()
+		_stage_editor_ensure_start_round_dialogs()
+		if current_stage.start_round_dialogs.is_empty():
+			current_stage.start_round_dialogs.append(DialogSequence.new())
+		return current_stage.start_round_dialogs[_stage_editor_current_round_index]
 	if target == STAGE_EDITOR_TAB_AFTER:
 		if current_stage.post_dialog == null:
 			current_stage.post_dialog = DialogSequence.new()
@@ -1718,6 +1737,25 @@ func _stage_editor_active_dialog_sequence() -> DialogSequence:
 	if _stage_editor_dialog_target.is_empty():
 		return null
 	return _stage_editor_get_or_create_dialog_sequence(_stage_editor_dialog_target)
+
+
+func _stage_editor_ensure_start_round_dialogs() -> void:
+	if current_stage == null:
+		return
+	var target_round_count: int = maxi(1, _stage_editor_rounds.size())
+	while current_stage.start_round_dialogs.size() < target_round_count:
+		current_stage.start_round_dialogs.append(DialogSequence.new())
+	while current_stage.start_round_dialogs.size() > target_round_count:
+		current_stage.start_round_dialogs.remove_at(current_stage.start_round_dialogs.size() - 1)
+	if current_stage.start_round_dialogs[0] == null:
+		current_stage.start_round_dialogs[0] = current_stage.start_stage_dialog if current_stage.start_stage_dialog != null else DialogSequence.new()
+	elif current_stage.start_stage_dialog != null \
+			and not current_stage.start_stage_dialog.lines.is_empty() \
+			and current_stage.start_round_dialogs[0].lines.is_empty():
+		current_stage.start_round_dialogs[0] = current_stage.start_stage_dialog
+	for round_index in current_stage.start_round_dialogs.size():
+		if current_stage.start_round_dialogs[round_index] == null:
+			current_stage.start_round_dialogs[round_index] = DialogSequence.new()
 
 
 func _stage_editor_load_character_catalog() -> void:
@@ -2073,10 +2111,17 @@ func _refresh_stage_editor_dialog_editor() -> void:
 		if _stage_editor_dialog_target == STAGE_EDITOR_TAB_BEFORE:
 			title = "戰前對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG:
-			title = "開場對話"
+			title = "波次開始對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_AFTER:
 			title = "戰後對話"
 		_stage_editor_dialog_title_label.text = title
+	if _stage_editor_start_round_nav_row != null:
+		var round_dialog_mode: bool = _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG
+		_stage_editor_start_round_nav_row.visible = round_dialog_mode
+		if round_dialog_mode and _stage_editor_start_round_label != null:
+			_stage_editor_ensure_start_round_dialogs()
+			var total_rounds: int = maxi(1, _stage_editor_rounds.size())
+			_stage_editor_start_round_label.text = "第 %d / %d 波開始時" % [_stage_editor_current_round_index + 1, total_rounds]
 	_stage_editor_ensure_dialog_cast(sequence)
 	_refresh_stage_editor_dialog_background_option(sequence)
 	_refresh_stage_editor_dialog_music_option(sequence)
@@ -2591,7 +2636,7 @@ func _refresh_stage_editor_dialog_form() -> void:
 		if _stage_editor_dialog_target == STAGE_EDITOR_TAB_BEFORE:
 			title = "戰前對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG:
-			title = "開場對話"
+			title = "波次開始對話"
 		elif _stage_editor_dialog_target == STAGE_EDITOR_TAB_AFTER:
 			title = "戰後對話"
 		_stage_editor_dialog_title_label.text = title
@@ -3572,6 +3617,7 @@ func _stage_editor_load_round_state() -> void:
 		_stage_editor_rounds_main_bosses.append(boss_copy)
 	_stage_editor_normalize_cd_lists()
 	_stage_editor_clamp_current_round_index()
+	_stage_editor_ensure_start_round_dialogs()
 
 
 func _stage_editor_make_editable_enemy_copy(source: EnemyData) -> EnemyData:
@@ -4571,26 +4617,55 @@ func _on_stage_editor_next_round_pressed() -> void:
 	_refresh_stage_editor_enemy_area()
 
 
+func _on_stage_editor_start_round_prev_pressed() -> void:
+	if _stage_editor_rounds.is_empty():
+		return
+	_stage_editor_current_round_index = posmod(_stage_editor_current_round_index - 1, _stage_editor_rounds.size())
+	_stage_editor_dialog_selected_index = -1
+	_refresh_stage_editor_dialog_editor()
+
+
+func _on_stage_editor_start_round_next_pressed() -> void:
+	if _stage_editor_rounds.is_empty():
+		return
+	_stage_editor_current_round_index = posmod(_stage_editor_current_round_index + 1, _stage_editor_rounds.size())
+	_stage_editor_dialog_selected_index = -1
+	_refresh_stage_editor_dialog_editor()
+
+
 func _on_stage_editor_add_round_from_area_pressed() -> void:
 	var insert_index: int = _stage_editor_current_round_index + 1 if not _stage_editor_rounds.is_empty() else 0
+	var old_round_count: int = _stage_editor_rounds.size()
+	_stage_editor_ensure_start_round_dialogs()
 	_stage_editor_rounds.insert(insert_index, [])
 	_stage_editor_rounds_init_cd.insert(insert_index, [])
 	_stage_editor_rounds_enemy_levels.insert(insert_index, [])
 	_stage_editor_rounds_main_bosses.insert(insert_index, [])
+	if old_round_count > 0:
+		current_stage.start_round_dialogs.insert(insert_index, DialogSequence.new())
 	_stage_editor_current_round_index = insert_index
 	_refresh_stage_editor_enemy_area()
+	if _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG:
+		_stage_editor_dialog_selected_index = -1
+		_refresh_stage_editor_dialog_editor()
 	_set_stage_editor_status("已新增波次")
 
 
 func _on_stage_editor_remove_current_round_pressed() -> void:
 	if _stage_editor_rounds.is_empty():
 		return
+	_stage_editor_ensure_start_round_dialogs()
+	if _stage_editor_current_round_index < current_stage.start_round_dialogs.size():
+		current_stage.start_round_dialogs.remove_at(_stage_editor_current_round_index)
 	_stage_editor_rounds.remove_at(_stage_editor_current_round_index)
 	_stage_editor_rounds_init_cd.remove_at(_stage_editor_current_round_index)
 	_stage_editor_rounds_enemy_levels.remove_at(_stage_editor_current_round_index)
 	_stage_editor_rounds_main_bosses.remove_at(_stage_editor_current_round_index)
 	_stage_editor_clamp_current_round_index()
 	_refresh_stage_editor_enemy_area()
+	if _stage_editor_dialog_target == STAGE_EDITOR_TAB_START_DIALOG:
+		_stage_editor_dialog_selected_index = -1
+		_refresh_stage_editor_dialog_editor()
 	_set_stage_editor_status("已刪除波次")
 
 
@@ -4612,10 +4687,14 @@ func _stage_editor_default_picker_level(round_index: int) -> int:
 
 
 func _on_stage_editor_add_round_pressed() -> void:
+	var old_round_count: int = _stage_editor_rounds.size()
+	_stage_editor_ensure_start_round_dialogs()
 	_stage_editor_rounds.append([])
 	_stage_editor_rounds_init_cd.append([])
 	_stage_editor_rounds_enemy_levels.append([])
 	_stage_editor_rounds_main_bosses.append([])
+	if old_round_count > 0:
+		current_stage.start_round_dialogs.append(DialogSequence.new())
 	_stage_editor_current_round_index = _stage_editor_rounds.size() - 1
 	_refresh_stage_editor_rounds_panel()
 	_refresh_stage_editor_enemy_area()
@@ -4626,6 +4705,9 @@ func _on_stage_editor_add_round_pressed() -> void:
 func _on_stage_editor_remove_round_pressed(round_index: int) -> void:
 	if round_index < 0 or round_index >= _stage_editor_rounds.size():
 		return
+	_stage_editor_ensure_start_round_dialogs()
+	if round_index < current_stage.start_round_dialogs.size():
+		current_stage.start_round_dialogs.remove_at(round_index)
 	_stage_editor_rounds.remove_at(round_index)
 	_stage_editor_rounds_init_cd.remove_at(round_index)
 	_stage_editor_rounds_enemy_levels.remove_at(round_index)
@@ -5427,6 +5509,9 @@ func _on_stage_editor_save_pressed() -> void:
 	current_stage.rounds_init_cd = []
 	current_stage.rounds_enemy_levels = []
 	current_stage.rounds_main_bosses = []
+	_stage_editor_ensure_start_round_dialogs()
+	current_stage.start_round_dialogs = _stage_editor_get_start_round_dialogs_snapshot()
+	current_stage.start_stage_dialog = current_stage.start_round_dialogs[0] if not current_stage.start_round_dialogs.is_empty() else null
 	_stage_editor_ensure_start_tutorial_pages()
 	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
 	if err == OK:
@@ -5488,6 +5573,21 @@ func _stage_editor_get_rounds_snapshot() -> Array[Array]:
 					round_copy.append(entry)
 		snapshot.append(round_copy)
 	return snapshot
+
+
+func _stage_editor_get_start_round_dialogs_snapshot() -> Array[DialogSequence]:
+	var result: Array[DialogSequence] = []
+	if current_stage == null:
+		return result
+	_stage_editor_ensure_start_round_dialogs()
+	var round_count: int = maxi(1, _stage_editor_rounds.size())
+	for round_index in round_count:
+		var sequence: DialogSequence = current_stage.start_round_dialogs[round_index] if round_index < current_stage.start_round_dialogs.size() else null
+		if sequence != null and sequence.lines.is_empty() and sequence.cast.is_empty():
+			result.append(DialogSequence.new())
+		else:
+			result.append(sequence if sequence != null else DialogSequence.new())
+	return result
 
 
 func _stage_editor_make_stage_enemy_snapshot(enemy_data: EnemyData, init_cd: int, level: int, is_boss: bool) -> StageEnemyEntry:
@@ -5802,16 +5902,27 @@ func _run_start_stage_flow() -> void:
 	_start_stage_flow_done = true
 	if current_stage == null:
 		return
-	if _has_start_stage_dialog():
-		await _play_start_stage_dialog()
+	if _has_start_round_dialog(0):
+		await _play_start_round_dialog(0)
 	if _has_start_stage_tutorial():
 		await _show_start_stage_tutorial_canvas(_get_current_stage_start_tutorial_pages())
 
 
-func _has_start_stage_dialog() -> bool:
-	return current_stage != null \
-		and current_stage.start_stage_dialog != null \
-		and not current_stage.start_stage_dialog.lines.is_empty()
+func _get_start_round_dialog(round_index: int) -> DialogSequence:
+	if current_stage == null or round_index < 0:
+		return null
+	if round_index < current_stage.start_round_dialogs.size():
+		var sequence: DialogSequence = current_stage.start_round_dialogs[round_index]
+		if sequence != null and (round_index != 0 or not sequence.lines.is_empty() or current_stage.start_stage_dialog == null):
+			return sequence
+	if round_index == 0:
+		return current_stage.start_stage_dialog
+	return null
+
+
+func _has_start_round_dialog(round_index: int) -> bool:
+	var sequence: DialogSequence = _get_start_round_dialog(round_index)
+	return sequence != null and not sequence.lines.is_empty()
 
 
 func _has_start_stage_tutorial() -> bool:
@@ -5841,10 +5952,13 @@ func _get_current_stage_start_tutorial_pages() -> Array[_StartStageTutorialPage]
 	return result
 
 
-func _play_start_stage_dialog() -> void:
+func _play_start_round_dialog(round_index: int) -> void:
+	var sequence: DialogSequence = _get_start_round_dialog(round_index)
+	if sequence == null or sequence.lines.is_empty():
+		return
 	var dialog: _BattleDialog = _ensure_battle_dialog()
 	dialog.visible = true
-	dialog.show_lines(current_stage.start_stage_dialog.lines)
+	dialog.show_lines(sequence.lines)
 	await dialog.all_lines_finished
 	dialog.visible = false
 
@@ -9609,6 +9723,37 @@ func _use_active_skill_and_show_loot_toast(char_index: int) -> void:
 	_enqueue_active_skill_loot_toast(c)
 
 
+func _apply_active_skill_area_convert(positions: Array, to_type: Block.Type, character: CharacterData) -> Dictionary:
+	var converted := 0
+	var blast_destroyed := 0
+	var has_blast_attribute: bool = character != null and character.has_active_skill_blast()
+	for pos in positions:
+		var p: Vector2i = pos as Vector2i
+		if not board._is_valid(p):
+			continue
+		var tb: Block = board.grid[p.x][p.y]
+		if tb == null:
+			continue
+		if tb.is_upper_gem():
+			if has_blast_attribute and tb.is_enemy_upper_gem():
+				board._destroy_upper_without_effect(p)
+				blast_destroyed += 1
+			continue
+		if tb.is_breakable_structure():
+			if has_blast_attribute and board.silently_destroy_breakable_structure(p):
+				blast_destroyed += 1
+			continue
+		if tb.is_obstacle():
+			continue
+		if tb.block_type != to_type:
+			board._animate_gem_morph(tb, to_type)
+			converted += 1
+	return {
+		"converted": converted,
+		"blast_destroyed": blast_destroyed,
+	}
+
+
 func _handle_active_skill(char_index: int) -> void:
 	if board.is_busy or _active_board_selection_running:
 		return
@@ -9755,27 +9900,13 @@ func _handle_active_skill(char_index: int) -> void:
 				await meteor.play(landing_global)
 				# 落地打擊音效
 				_play_sfx(load("res://assets/se/skef_atk6.mp3"), 1.2)
-			var converted := 0
-			var planks_broken := 0
-			for pos in positions:
-				var p: Vector2i = pos as Vector2i
-				var tb: Block = board.grid[p.x][p.y]
-				if tb == null:
-					continue
-				if tb.is_breakable_structure():
-					# BREAK 屬性：龍焰領域可連同可破壞障礙一併側除
-					if c.has_break_essence and board.silently_destroy_breakable_structure(p):
-						planks_broken += 1
-					continue
-				if tb.is_obstacle():
-					continue
-				if tb.block_type != Block.Type.RED:
-					board._animate_gem_morph(tb, Block.Type.RED)
-					converted += 1
+			var area_result: Dictionary = _apply_active_skill_area_convert(positions, Block.Type.RED, c)
+			var converted: int = int(area_result.get("converted", 0))
+			var blast_destroyed: int = int(area_result.get("blast_destroyed", 0))
 			_add_log_entry("%s：%d→%s" % [Locale.tr_ui("Dragon Flame Domain"), converted, _gem_bbcode(Block.Type.RED)], Block.Type.RED, c)
 			await get_tree().create_timer(0.4).timeout
-			# 若打破了木板，必須讓上方寶石墜落填補空位
-			if planks_broken > 0:
+			# 若爆破拆出了空格，必須讓上方寶石墜落填補空位。
+			if blast_destroyed > 0:
 				await board._collapse_and_fill()
 				board.is_busy = true
 			await get_tree().create_timer(0.4).timeout
@@ -11433,6 +11564,8 @@ func _on_round_cleared() -> void:
 		await _show_boss_intro()
 	else:
 		await _fade_in_spawned_enemies()
+	if _has_start_round_dialog(battle_manager.current_round):
+		await _play_start_round_dialog(battle_manager.current_round)
 	# State/UI 分離：新一波重置邏輯狀態 + 清空殘留 queue
 	board.clear_deferred_clicks()
 	board.set_board_input_paused(false)

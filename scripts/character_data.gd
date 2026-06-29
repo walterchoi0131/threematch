@@ -44,6 +44,7 @@ var current_exp: int = 0              # 當前累積經驗值（不存入 .tres�
 @export var active_skill_cd: int = 0          # 主動技能冷卻回合數
 @export var active_unlock_stage_id: String = ""  # 主動技能解鎖所需通關 stage_id；空字串 = 無限制
 @export var has_break_essence: bool = false   # 主動技能是否具「BREAK」屬性（可連同 PLANK 一併拆除）
+@export var active_skill_blast: bool = false  # 主動技能是否具「爆破」屬性（可拆可破壞障礙與敵方高階寶石）
 @export var active_skill_upgrades: Array[Dictionary] = []  # 主動技能寶石強化定義（玩家進度存在 GameState）
 
 ## 回應技能陣列。每個項目：
@@ -83,6 +84,10 @@ func get_magic() -> int:
 ## 計算指定等級的魔力（用於部分主動技傷害倍率）
 func get_magic_at_level(level_value: int) -> int:
 	return _calc_stat_at_level(base_magic, magic_growth, magic_growth_mode, level_value)
+
+
+func has_active_skill_blast() -> bool:
+	return active_skill_blast or has_break_essence
 
 
 ## 使用同一套成長曲線計算數值，確保 Debug 預覽與實戰一致。

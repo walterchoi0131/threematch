@@ -143,6 +143,15 @@ const AREA_INFO: Dictionary = {
 	},
 }
 
+const DIALOG_BG_AREA_ALIASES: Dictionary = {
+	"bamboo": "forest",
+	"crystal_mine": "dungeon",
+	"fire_mine": "fire_church",
+	"school": "classroom",
+	"waterfall": "forest",
+	"yama": "forest",
+}
+
 
 static func get_area_info(area_key: String) -> Dictionary:
 	var key: String = normalize_area(area_key)
@@ -164,6 +173,16 @@ static func get_stage_spot_path(area_key: String) -> String:
 static func get_battle_background_path(area_key: String) -> String:
 	var info: Dictionary = get_area_info(area_key)
 	return info.get("battle_bg_path", "") as String
+
+
+static func get_dialog_background_path(area_key: String) -> String:
+	var area: String = normalize_area(area_key)
+	var dialog_key: String = DIALOG_BG_AREA_ALIASES.get(area, area) as String
+	var path: String = "res://assets/dialog_background/dialog_bg_%s.png" % dialog_key
+	if ResourceLoader.exists(path):
+		return path
+	var fallback_path := "res://assets/dialog_background/dialog_bg_forest.png"
+	return fallback_path if ResourceLoader.exists(fallback_path) else ""
 
 
 func get_element_distribution() -> Dictionary:
@@ -287,6 +306,7 @@ const _StartStageTutorialPage := preload("res://scripts/start_stage_tutorial_pag
 @export var pre_dialog: _DialogSequence = null  # 戰鬥前 AVG 對話（可選）
 @export var post_dialog: _DialogSequence = null  # 戰鬥後 AVG 對話（可選）
 @export var start_stage_dialog: _DialogSequence = null
+@export var start_round_dialogs: Array[_DialogSequence] = []
 @export var start_stage_tutorial_page_ids: Array[String] = []
 @export var start_stage_tutorial: Array[_StartStageTutorialPage] = []
 

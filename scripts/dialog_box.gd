@@ -177,8 +177,8 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 	_portrait_left.visible = false
 	_portrait_right.visible = false
 
-	# 設定背景圖
-	_set_background_texture(sequence.background)
+	# Sequence 背景優先；沒有時使用目前 stage spot 所屬 area 的預設劇情背景。
+	_set_background_texture(_resolve_initial_background(sequence))
 	if sequence.initial_music != null:
 		_change_bgm(sequence.initial_music)
 
@@ -207,6 +207,21 @@ func switch_background(texture: Texture2D, animated: bool = true) -> void:
 	_bg_switch_tween.tween_callback(Callable(self, "_set_background_texture").bind(texture))
 	_bg_switch_tween.tween_property(overlay, "color:a", 0.0, BG_SWITCH_FADE_DUR)
 	_bg_switch_tween.tween_callback(overlay.queue_free)
+
+
+func _resolve_initial_background(sequence: _DialogSequence) -> Texture2D:
+	if sequence != null and sequence.background != null:
+		return sequence.background
+	var gs: Node = get_node_or_null("/root/GameState")
+	if gs == null:
+		return null
+	var stage: StageData = gs.get("selected_stage") as StageData
+	if stage == null:
+		return null
+	var bg_path: String = StageData.get_dialog_background_path(stage.area)
+	if bg_path.is_empty():
+		return null
+	return load(bg_path) as Texture2D
 
 
 func _set_background_texture(texture: Texture2D) -> void:

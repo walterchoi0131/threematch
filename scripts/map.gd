@@ -83,7 +83,7 @@ func _ready() -> void:
 	_ensure_subpage(_inventory_page, InventoryScene)
 
 	_show_page(Page.MAP)
-	_refresh_stage_buttons()
+	_refresh_stage_buttons(GameState.consume_map_unlock_pop_source_stage_id())
 
 	GameState.play_bgm(load("res://assets/music/mhr_quest.mp3"), true, "map")
 	get_viewport().size_changed.connect(_on_viewport_resized)
@@ -277,7 +277,7 @@ func _show_page(page: Page) -> void:
 
 
 ## 刷新所有 StageButton 解鎖狀態，並標示「最新可玩」者顯示跳動的「!」
-func _refresh_stage_buttons() -> void:
+func _refresh_stage_buttons(unlock_pop_source_stage_id: String = "") -> void:
 	var sorted: Array[StageButton] = _stage_buttons.duplicate()
 	sorted.sort_custom(func(a: StageButton, b: StageButton) -> bool:
 		var sa: String = a.stage.stage_id if a.stage != null else ""
@@ -293,8 +293,21 @@ func _refresh_stage_buttons() -> void:
 			break
 	for sb in _stage_buttons:
 		sb.set_latest(sb == latest)
+	if not unlock_pop_source_stage_id.is_empty():
+		_play_unlock_pop_for_source(unlock_pop_source_stage_id)
 	if _path_layer != null:
 		_path_layer.queue_redraw()
+
+
+func _play_unlock_pop_for_source(source_stage_id: String) -> void:
+	for sb in _stage_buttons:
+		if sb.stage == null or sb.stage.map_hidden:
+			continue
+		if sb.stage.prerequisite_stage_id != source_stage_id:
+			continue
+		if not sb.is_unlocked_for_play() or GameState.is_stage_cleared(sb.stage.stage_id):
+			continue
+		sb.play_unlock_pop()
 
 
 # ── 世界地圖路徑連線（Stage 之間的道路 UI）────────────────────
