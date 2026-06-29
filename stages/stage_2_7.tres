@@ -5,10 +5,11 @@
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_clhj2"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
 [ext_resource type="Resource" path="res://enemies/tree_man.tres" id="6_tree"]
+[ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="7_archer"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="8_xm87u"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="13_l75rd"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_guz_sharing.png" id="14_bg"]
 
 [sub_resource type="Resource" id="s27_pre_1"]
 script = ExtResource("3_line")
@@ -29,14 +30,96 @@ character_id = "gory"
 text_zh = "神子不是好東西。你不應該被拿去祭天。"
 text_en = "Being chosen is not a blessing. You should not be taken for the sky ritual."
 
+[sub_resource type="Resource" id="s27_pre_gory_request"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "在下有一個不請之求"
+
+[sub_resource type="Resource" id="s27_pre_panda_ask"]
+script = ExtResource("3_line")
+character_id = "panda"
+position = "right"
+text_zh = "怎麼了戈爾"
+action = "enter"
+
+[sub_resource type="Resource" id="s27_pre_gory_giz"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "我想你們幫我救出我的弟弟 Giz"
+
+[sub_resource type="Resource" id="s27_pre_dragon_brother"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "你還有弟弟?"
+action = "enter"
+
+[sub_resource type="Resource" id="s27_pre_gory_follow"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "是的, 跟我來"
+
+[sub_resource type="Resource" id="s27_pre_narration_village"]
+script = ExtResource("3_line")
+text_zh = "[戈爾帶大家走到了一條小村落, 村民們圍著一個年幼的小熊。]"
+
+[sub_resource type="Resource" id="s27_pre_narration_light"]
+script = ExtResource("3_line")
+text_zh = "[小熊雙手散發著淡淡的金光。]"
+
+[sub_resource type="Resource" id="s27_pre_narration_wood"]
+script = ExtResource("3_line")
+text_zh = "[木元素不斷從掌心流出, 流淌到周圍的田地與果樹上, 植物重新煥發生機。]"
+
+[sub_resource type="Resource" id="s27_pre_villager_thanks"]
+script = ExtResource("3_line")
+character_id = "villager"
+text_zh = "謝謝神子!"
+
+[sub_resource type="Resource" id="s27_pre_villager2_thanks"]
+script = ExtResource("3_line")
+character_id = "villager2"
+text_zh = "有賴神子!"
+
+[sub_resource type="Resource" id="s27_pre_giz_help"]
+script = ExtResource("3_line")
+character_id = "giz"
+position = "right"
+text_zh = "能幫到大家就最好了."
+action = "enter"
+
+[sub_resource type="Resource" id="s27_pre_gory_call"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "古茲!"
+
+[sub_resource type="Resource" id="s27_pre_giz_brother"]
+script = ExtResource("3_line")
+character_id = "giz"
+position = "right"
+text_zh = "哥哥!"
+
 [sub_resource type="Resource" id="s27_pre"]
 script = ExtResource("4_seq")
-lines = Array[ExtResource("3_line")]([SubResource("s27_pre_1"), SubResource("s27_pre_2"), SubResource("s27_pre_3")])
-cast = Array[String](["gory", "giz"])
+lines = Array[ExtResource("3_line")]([SubResource("s27_pre_gory_request"), SubResource("s27_pre_panda_ask"), SubResource("s27_pre_gory_giz"), SubResource("s27_pre_dragon_brother"), SubResource("s27_pre_gory_follow"), SubResource("s27_pre_narration_village"), SubResource("s27_pre_narration_light"), SubResource("s27_pre_narration_wood"), SubResource("s27_pre_villager_thanks"), SubResource("s27_pre_villager2_thanks"), SubResource("s27_pre_giz_help"), SubResource("s27_pre_gory_call"), SubResource("s27_pre_giz_brother")])
+cast = Array[String](["gory", "panda", "dragon", "giz", "villager", "villager2"])
+cast_profiles = {
+"villager": {
+"kind": "npc",
+"name_en": "Villager",
+"name_zh": "村"
+},
+"villager2": {
+"kind": "npc",
+"name_en": "Villager",
+"name_zh": "村2"
+}
+}
+background = ExtResource("14_bg")
 
 [sub_resource type="Resource" id="s27_e1"]
 script = ExtResource("2_entry")
-enemy = ExtResource("5_guard")
+enemy = ExtResource("7_archer")
 level = 24
 hp_percent = 2200
 

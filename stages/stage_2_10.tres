@@ -6,7 +6,8 @@
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
 [ext_resource type="Resource" path="res://enemies/amon.tres" id="5_amon"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_cbtps"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="6_guard"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="7_lancer"]
+[ext_resource type="Resource" path="res://enemies/forest_mage.tres" id="8_mage"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="9_i2l4k"]
 [ext_resource type="AudioStream" path="res://assets/music/fez_boss.mp3" id="12_boss"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="15_16mhg"]
@@ -71,9 +72,16 @@ cast_profiles = {
 
 [sub_resource type="Resource" id="s210_guard"]
 script = ExtResource("2_entry")
-enemy = ExtResource("6_guard")
+enemy = ExtResource("7_lancer")
 level = 27
 hp_percent = 2400
+
+[sub_resource type="Resource" id="s210_mage"]
+script = ExtResource("2_entry")
+enemy = ExtResource("8_mage")
+level = 27
+hp_percent = 2400
+init_cd = 1
 
 [sub_resource type="Resource" id="s210_amon"]
 script = ExtResource("2_entry")
@@ -93,7 +101,7 @@ allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 boss_bgm = ExtResource("12_boss")
-rounds = Array[Array]([[SubResource("s210_guard"), SubResource("s210_guard")], [SubResource("s210_amon")]])
+rounds = Array[Array]([[SubResource("s210_guard"), SubResource("s210_mage")], [SubResource("s210_amon")]])
 rounds_init_cd = Array[Array]([[0, 1], [0]])
 rounds_enemy_levels = Array[Array]([[27, 27], [28]])
 rounds_main_bosses = Array[Array]([[false, false], [true]])

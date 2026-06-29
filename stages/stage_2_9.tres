@@ -4,9 +4,9 @@
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_f0apj"]
 [ext_resource type="Resource" path="res://characters/char_giz.tres" id="6_giz_char"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="6_lancer"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="7_dragon"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="8_eas7a"]
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
@@ -52,7 +52,7 @@ cast = Array[String](["gory", "shark", "giz"])
 
 [sub_resource type="Resource" id="s29_guard"]
 script = ExtResource("2_entry")
-enemy = ExtResource("5_guard")
+enemy = ExtResource("6_lancer")
 level = 26
 hp_percent = 2400
 

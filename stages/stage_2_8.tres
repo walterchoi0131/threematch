@@ -2,9 +2,10 @@
 
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="3_guard"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_n1i88"]
 [ext_resource type="Resource" path="res://enemies/forest_witch.tres" id="4_witch"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="4_lancer"]
+[ext_resource type="Resource" path="res://enemies/forest_mage.tres" id="4_mage"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="5_dragon"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_adr31"]
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="6_shark"]
@@ -14,7 +15,7 @@
 
 [sub_resource type="Resource" id="s28_e1"]
 script = ExtResource("2_entry")
-enemy = ExtResource("3_guard")
+enemy = ExtResource("4_lancer")
 level = 25
 hp_percent = 2300
 
@@ -23,6 +24,13 @@ script = ExtResource("2_entry")
 enemy = ExtResource("4_witch")
 level = 25
 hp_percent = 2500
+
+[sub_resource type="Resource" id="s28_e3"]
+script = ExtResource("2_entry")
+enemy = ExtResource("4_mage")
+level = 25
+hp_percent = 2300
+init_cd = 2
 
 [resource]
 script = ExtResource("1_stage")
@@ -35,7 +43,7 @@ element_weights = Array[int]([25, 20, 20, 35])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("s28_e1"), SubResource("s28_e1")], [SubResource("s28_e2"), SubResource("s28_e1")]])
+rounds = Array[Array]([[SubResource("s28_e1"), SubResource("s28_e1")], [SubResource("s28_e2"), SubResource("s28_e3")]])
 rounds_init_cd = Array[Array]([[0, 1], [0, 2]])
 rounds_enemy_levels = Array[Array]([[25, 25], [25, 25]])
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

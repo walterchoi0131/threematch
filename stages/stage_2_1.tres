@@ -8,13 +8,13 @@
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
 [ext_resource type="AudioStream" path="res://assets/music/Rainforest Clash.mp3" id="6_music"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_nccdu"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="7_guard"]
 [ext_resource type="Resource" path="res://enemies/mushroom_man.tres" id="8_mushroom"]
+[ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="9_archer"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_snknq"]
 
 [sub_resource type="Resource" id="Resource_eep8t"]
 script = ExtResource("2_entry")
-enemy = ExtResource("7_guard")
+enemy = ExtResource("9_archer")
 level = 18
 hp_percent = 1800
 

@@ -5,20 +5,21 @@
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_nvbwk"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="5_guard"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_jya1o"]
 [ext_resource type="Resource" path="res://enemies/tree_man.tres" id="6_tree"]
+[ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="7_archer"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="8_lancer"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="13_736kx"]
 
 [sub_resource type="Resource" id="Resource_7ho6q"]
 script = ExtResource("2_entry")
-enemy = ExtResource("5_guard")
+enemy = ExtResource("7_archer")
 level = 20
 hp_percent = 1800
 
 [sub_resource type="Resource" id="Resource_7cvg6"]
 script = ExtResource("2_entry")
-enemy = ExtResource("5_guard")
+enemy = ExtResource("8_lancer")
 level = 20
 hp_percent = 1800
 
@@ -28,6 +29,69 @@ enemy = ExtResource("6_tree")
 level = 20
 hp_percent = 2600
 init_cd = 1
+
+[sub_resource type="Resource" id="s23_pre_gory_ouch"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "呃啊啊!!!"
+action = "enter"
+
+[sub_resource type="Resource" id="s23_pre_panda_shock"]
+script = ExtResource("3_line")
+character_id = "panda"
+position = "right"
+text_zh = "!!!"
+action = "enter"
+
+[sub_resource type="Resource" id="s23_pre_dragon_sorry"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "抱歉我看你攻過來就自然反擊, 你沒受傷吧?"
+action = "enter"
+
+[sub_resource type="Resource" id="s23_pre_shark_zanshin"]
+script = ExtResource("3_line")
+character_id = "shark"
+text_zh = "殘心! 不要鬆懈!"
+action = "enter"
+
+[sub_resource type="Resource" id="s23_pre_gory_lost"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "是在下輸了"
+
+[sub_resource type="Resource" id="s23_pre_gory_dispose"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "要怎麼處置在下, 任由你們決定"
+
+[sub_resource type="Resource" id="s23_pre_panda_not_killers"]
+script = ExtResource("3_line")
+character_id = "panda"
+position = "right"
+text_zh = "不是的! 我們不是什麼殺人魔!! 不過, 請教你的事情倒是有一件"
+
+[sub_resource type="Resource" id="s23_pre_dragon_forest"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "我們要去森之國"
+
+[sub_resource type="Resource" id="s23_pre_shark_crystal"]
+script = ExtResource("3_line")
+character_id = "shark"
+text_zh = "我們需要找到光之水晶並保護它, 光之國的水晶已經陷落了"
+
+[sub_resource type="Resource" id="s23_pre_gory_elder"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "我知道了, 我帶你們去找我們的長老吧"
+
+[sub_resource type="Resource" id="s23_pre"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s23_pre_gory_ouch"), SubResource("s23_pre_panda_shock"), SubResource("s23_pre_dragon_sorry"), SubResource("s23_pre_shark_zanshin"), SubResource("s23_pre_gory_lost"), SubResource("s23_pre_gory_dispose"), SubResource("s23_pre_panda_not_killers"), SubResource("s23_pre_dragon_forest"), SubResource("s23_pre_shark_crystal"), SubResource("s23_pre_gory_elder")])
+cast = Array[String](["gory", "panda", "dragon", "shark"])
 
 [sub_resource type="Resource" id="s23_start_1"]
 script = ExtResource("3_line")
@@ -59,6 +123,7 @@ allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 rounds = Array[Array]([[SubResource("Resource_7ho6q")], [SubResource("Resource_7cvg6"), SubResource("Resource_ekprs")]])
+pre_dialog = SubResource("s23_pre")
 start_stage_dialog = SubResource("s23_start")
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

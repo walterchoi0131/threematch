@@ -2,12 +2,9 @@
 
 [ext_resource type="AudioStream" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_bedroom.png" id="2_fsca4"]
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
-[ext_resource type="Texture2D" path="res://assets/slime.png" id="3_slimetex"]
 [ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="3_vmepe"]
-[ext_resource type="Texture2D" path="res://assets/blue_slime.png" id="4_blueslime"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_classroom.png" id="5_fjo77"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
@@ -17,6 +14,12 @@
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="14_epvkr"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="18_7x61u"]
+[ext_resource type="Resource" path="res://enemies/slime_fire.tres" id="19_slime_fire"]
+[ext_resource type="Resource" path="res://enemies/slime_water.tres" id="20_slime_water"]
+[ext_resource type="Resource" path="res://enemies/slime_leaf.tres" id="21_slime_leaf"]
+[ext_resource type="Resource" path="res://enemies/slime_light.tres" id="22_slime_light"]
+[ext_resource type="Resource" path="res://enemies/slime_dark.tres" id="23_slime_dark"]
+[ext_resource type="Resource" path="res://enemies/slime_water_big.tres" id="24_slime_water_big"]
 
 [sub_resource type="Resource" id="Resource_stage1_intro_morning"]
 script = ExtResource("3_6yv1j")
@@ -184,121 +187,48 @@ cast = Array[String](["dragon", "shark", "panda", "husky"])
 background = ExtResource("2_fsca4")
 initial_music = ExtResource("3_vmepe")
 
-[sub_resource type="Resource" id="Resource_piard"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 800
-attack_damage = 12
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("3_slimetex")
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_1"
-
 [sub_resource type="Resource" id="Resource_5oni6"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_piard")
+enemy = ExtResource("19_slime_fire")
 level = 3
 hp_percent = 800
 
-[sub_resource type="Resource" id="Resource_et6yt"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 900
-attack_damage = 14
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("3_slimetex")
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_2"
-
 [sub_resource type="Resource" id="Resource_f0mht"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_et6yt")
+enemy = ExtResource("20_slime_water")
 level = 3
 hp_percent = 900
-
-[sub_resource type="Resource" id="Resource_4g8bb"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 900
-attack_damage = 14
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("3_slimetex")
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_3"
 
 [sub_resource type="Resource" id="Resource_pqxqm"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_4g8bb")
+enemy = ExtResource("21_slime_leaf")
 level = 3
 hp_percent = 900
 
-[sub_resource type="Resource" id="Resource_fitqk"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 1000
-attack_damage = 14
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("3_slimetex")
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_4"
-
 [sub_resource type="Resource" id="Resource_yi8km"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_fitqk")
+enemy = ExtResource("22_slime_light")
 level = 3
 hp_percent = 1000
 init_cd = 2
 
-[sub_resource type="Resource" id="Resource_qfcwp"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 1000
-attack_damage = 14
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("3_slimetex")
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_5"
-
 [sub_resource type="Resource" id="Resource_xmigc"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_qfcwp")
+enemy = ExtResource("23_slime_dark")
 level = 3
 hp_percent = 1000
 init_cd = 3
 
-[sub_resource type="Resource" id="Resource_yj5ux"]
-script = ExtResource("2_enemy")
-enemy_level = 3
-max_hp = 1000
-attack_damage = 14
-action_pattern = Array[int]([2, 2, 2, 0])
-action_percents = Array[int]([15, 15, 15, 15])
-portrait_texture = ExtResource("3_slimetex")
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_6"
-
 [sub_resource type="Resource" id="Resource_033xj"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_yj5ux")
+enemy = ExtResource("20_slime_water")
 level = 3
 hp_percent = 1000
 init_cd = 1
 
-[sub_resource type="Resource" id="Resource_6if1r"]
-script = ExtResource("2_enemy")
-enemy_name = "Slime Boss"
-enemy_level = 4
-max_hp = 4000
-attack_damage = 35
-attack_interval = 1
-portrait_color = Color(0.25, 0.47, 0.85, 1)
-portrait_texture = ExtResource("4_blueslime")
-element = 1
-is_main_boss = true
-metadata/stage_editor_source_path = "res://stages/stage_dev.tres::slime_boss"
-
 [sub_resource type="Resource" id="Resource_ubk7d"]
 script = ExtResource("11_o6cdy")
-enemy = SubResource("Resource_6if1r")
+enemy = ExtResource("24_slime_water_big")
 level = 4
 hp_percent = 4000
 main_boss = true

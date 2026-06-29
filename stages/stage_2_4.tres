@@ -2,11 +2,11 @@
 
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="3_guard"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_uh213"]
 [ext_resource type="Resource" path="res://enemies/mushroom_man.tres" id="4_mushroom"]
 [ext_resource type="Resource" path="res://enemies/forest_witch.tres" id="5_witch"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="6_dragon"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="6_lancer"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="7_d4pm8"]
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="7_shark"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="8_panda"]
@@ -15,7 +15,7 @@
 
 [sub_resource type="Resource" id="s24_e1"]
 script = ExtResource("2_entry")
-enemy = ExtResource("3_guard")
+enemy = ExtResource("6_lancer")
 level = 21
 hp_percent = 1900
 

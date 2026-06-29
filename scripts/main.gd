@@ -297,6 +297,7 @@ var _speed_label: Label = null
 var _se_blast: AudioStream = null
 var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
+var _se_attack_impacts: Dictionary = {}
 var _se_join_team: AudioStream = null
 var _se_thor_active: AudioStream = null
 var _se_goal_achieve: AudioStream = null
@@ -546,6 +547,7 @@ func _ready() -> void:
 	_se_blast = _load_audio_stream("res://assets/se/111.wav")
 	_se_freeze = _load_audio_stream("res://assets/se/skef_freeze.mp3")
 	_se_impact = _load_audio_stream("res://assets/se/skef_atk1_B.mp3")
+	_load_attack_impact_sfx()
 	_se_join_team = _load_audio_stream("res://assets/se/join_team2.mp3")
 	_se_thor_active = _load_audio_stream("res://assets/se/magical_star_transmu.mp3")
 	_se_goal_achieve = _load_audio_stream("res://assets/se/goal_achieve.mp3")
@@ -6134,6 +6136,39 @@ func _play_sfx(stream: AudioStream, volume_scale: float = 1.0) -> AudioStreamPla
 	return player
 
 
+func _load_attack_impact_sfx() -> void:
+	_se_attack_impacts.clear()
+	var element_names := {
+		Block.Type.RED: "fire",
+		Block.Type.BLUE: "water",
+		Block.Type.GREEN: "leaf",
+		Block.Type.LIGHT: "light",
+		Block.Type.DARK: "dark",
+	}
+	for gem_type in element_names.keys():
+		var streams: Array[AudioStream] = []
+		var element_name: String = str(element_names[gem_type])
+		for idx in range(1, 5):
+			var path := "res://assets/se/attack/attack_se_%s_%d.wav" % [element_name, idx]
+			var stream := _load_audio_stream(path)
+			if stream != null:
+				streams.append(stream)
+		_se_attack_impacts[gem_type] = streams
+
+
+func _play_player_attack_impact_sfx(gem_type: Block.Type, volume_scale: float = 1.0) -> void:
+	var streams: Array = _se_attack_impacts.get(gem_type, [])
+	var choices: Array[AudioStream] = []
+	for stream_value in streams:
+		var stream := stream_value as AudioStream
+		if stream != null:
+			choices.append(stream)
+	if choices.is_empty():
+		_play_sfx(_se_impact, volume_scale)
+		return
+	_play_sfx(choices[randi() % choices.size()], volume_scale)
+
+
 func _play_enemy_voice_sfx(stream: AudioStream) -> void:
 	var player := _play_sfx(stream, ENEMY_VOICE_VOLUME_SCALE)
 	if player == null:
@@ -7967,7 +8002,7 @@ func _resolve_porcupine_building_turn(positions: Array) -> void:
 			if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
 				var applied_dmg: int = captured_target.take_damage(captured_dmg)
 				_spawn_damage_number(_get_enemy_image_center(captured_target), applied_dmg, green_color, true, false)
-			_play_sfx(_se_impact)
+			_play_player_attack_impact_sfx(Block.Type.GREEN)
 		, CONNECT_ONE_SHOT)
 		trail.launch(from_pos, target_pos, green_color, 0.5)
 		_add_log_entry("[b]%s[/b] %s ⚔ %d" % [Locale.tr_ui("Porcupine"), _gem_bbcode(Block.Type.GREEN), dmg], Block.Type.GREEN, null)
@@ -8135,7 +8170,7 @@ func _fire_emerald_tower_lasers(
 			DebrisVfx.play(fx_layer, tower_texture, tick_pos, 4, Vector2(0.42, 0.78), Vector2(0.32, 0.52), 118, tower_color)
 			played_impact = true
 		if played_impact:
-			_play_sfx(_se_impact)
+			_play_player_attack_impact_sfx(element_type)
 
 	for enemy in battle_manager.active_enemies.duplicate():
 		if is_instance_valid(enemy):
@@ -8598,7 +8633,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 						_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[gem_type], true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
-					_play_sfx(_se_impact)
+					_play_player_attack_impact_sfx(gem_type)
 				, CONNECT_ONE_SHOT)
 				await slash.play(target_pos)
 			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), applied_damage, 1, mult, chain_mult), gem_type, char_data)
@@ -8668,7 +8703,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 						_spawn_damage_number(_get_enemy_image_center(captured_target), applied_damage, color, true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
-					_play_sfx(_se_impact)
+					_play_player_attack_impact_sfx(gem_type)
 				, CONNECT_ONE_SHOT)
 				var attack_duration: float = float(attack.get("attack_vfx_duration", 0.5 * float(vfx_profile.get("duration_scale", 1.0))))
 				var power_level: int = int(vfx_profile.get("power_level", 0))
@@ -9019,7 +9054,7 @@ func _resolve_iceball_instant(pos: Vector2i, resp: Dictionary, spell_mult: float
 		prediction["spent"] = true
 		var applied_damage: int = target.take_damage(final_damage)
 		_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[Block.Type.BLUE], true, is_super)
-	_play_sfx(_se_impact)
+	_play_player_attack_impact_sfx(Block.Type.BLUE)
 	var ice_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.ICEBALL, null) as Texture2D
 	DebrisVfx.play(fx_layer, ice_texture, target_pos, ICEBALL_DEBRIS_SHARDS, Vector2(0.78, 1.18), Vector2(0.65, 0.95), 110, Color(0.72, 0.90, 1.0, 1.0))
 	if is_instance_valid(block):
@@ -9105,7 +9140,7 @@ func _resolve_light_triangle_instant(pos: Vector2i, resp: Dictionary, spell_mult
 		prediction["spent"] = true
 		var applied_damage: int = target.take_damage(final_damage)
 		_spawn_damage_number(_get_enemy_image_center(target), applied_damage, light_color, true, is_super)
-	_play_sfx(_se_impact)
+	_play_player_attack_impact_sfx(Block.Type.LIGHT)
 	var light_texture: Texture2D = Block.UPPER_GEM_TEXTURES.get(Block.UpperType.LIGHT_TRIANGLE, null) as Texture2D
 	DebrisVfx.play(fx_layer, light_texture, target_pos, LIGHT_TRIANGLE_DEBRIS_SHARDS, Vector2(0.82, 1.20), Vector2(0.68, 1.0), 112, light_color)
 	if is_instance_valid(block):
@@ -9414,7 +9449,7 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 				if is_instance_valid(captured_enemy):
 					var applied_dmg: int = _apply_enemy_damage_with_stage13_floor(captured_enemy, captured_dmg, Block.Type.LIGHT)
 					_spawn_damage_number(_get_enemy_image_center(captured_enemy), applied_dmg, light_color, true)
-				_play_sfx(_se_impact)
+				_play_player_attack_impact_sfx(Block.Type.LIGHT)
 			, CONNECT_ONE_SHOT)
 			var sword_tw := create_tween()
 			for fi: int in SWORD_OF_JUSTICE_FRAMES:
@@ -10308,7 +10343,7 @@ func _handle_active_skill(char_index: int) -> void:
 					if is_instance_valid(hit_target) and (hit_target.current_hp > 0 or hit_target.defer_death):
 						var applied_dmg: int = hit_target.take_damage(hit_dmg)
 						_spawn_damage_number(_get_enemy_image_center(hit_target), applied_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
-						_play_sfx(_se_impact)
+						_play_player_attack_impact_sfx(Block.Type.BLUE)
 					if is_instance_valid(block):
 						block.queue_free()
 				)

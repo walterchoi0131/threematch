@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="EnemyData" format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/enemy/forest_lancer.png" id="2_texture"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
+
+[sub_resource type="Resource" id="gold_drop"]
+script = ExtResource("3_loot_script")
+amount_min = 38
+amount_max = 66
+
+[resource]
+script = ExtResource("1_script")
+enemy_name = "Forest Lancer"
+enemy_name_zh = "森林槍兵"
+enemy_name_en = "Forest Lancer"
+max_hp = 2300
+action_pattern = Array[int]([2, 2, 0])
+action_percents = Array[int]([15, 15, 34])
+action_counts = Array[int]([3, 3, 3])
+portrait_color = Color(0.31, 0.66, 0.32, 1)
+portrait_texture = ExtResource("2_texture")
+element = 2
+loot_table = Array[ExtResource("3_loot_script")]([SubResource("gold_drop")])

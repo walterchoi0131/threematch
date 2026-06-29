@@ -3,18 +3,21 @@
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_2r8t7"]
-[ext_resource type="Resource" path="res://enemies/forest_guard.tres" id="3_guard"]
 [ext_resource type="Resource" path="res://enemies/forest_witch.tres" id="4_witch"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="4_lancer"]
+[ext_resource type="Resource" path="res://enemies/forest_mage.tres" id="4_mage"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="5_dragon"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_nn3g6"]
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="6_shark"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="7_panda"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="8_gory"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="9_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="10_seq"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="11_f6qc3"]
 
 [sub_resource type="Resource" id="s26_e1"]
 script = ExtResource("2_entry")
-enemy = ExtResource("3_guard")
+enemy = ExtResource("4_lancer")
 level = 23
 hp_percent = 2100
 
@@ -23,6 +26,42 @@ script = ExtResource("2_entry")
 enemy = ExtResource("4_witch")
 level = 23
 hp_percent = 2400
+
+[sub_resource type="Resource" id="s26_e3"]
+script = ExtResource("2_entry")
+enemy = ExtResource("4_mage")
+level = 23
+hp_percent = 2100
+init_cd = 2
+
+[sub_resource type="Resource" id="s26_pre_dragon_full"]
+script = ExtResource("9_line")
+character_id = "dragon"
+text_zh = "好飽啊, 原來森之國的食物這麼豐盛好吃"
+
+[sub_resource type="Resource" id="s26_pre_gory_no"]
+script = ExtResource("9_line")
+character_id = "gory"
+position = "right"
+text_zh = "不是這樣的"
+action = "enter"
+
+[sub_resource type="Resource" id="s26_pre_gory_poverty"]
+script = ExtResource("9_line")
+character_id = "gory"
+position = "right"
+text_zh = "我們的國家, 一直陷於貧困飢餓之中"
+
+[sub_resource type="Resource" id="s26_pre_panda_huh"]
+script = ExtResource("9_line")
+character_id = "panda"
+text_zh = "啊…?"
+action = "enter"
+
+[sub_resource type="Resource" id="s26_pre"]
+script = ExtResource("10_seq")
+lines = Array[ExtResource("9_line")]([SubResource("s26_pre_dragon_full"), SubResource("s26_pre_gory_no"), SubResource("s26_pre_gory_poverty"), SubResource("s26_pre_panda_huh")])
+cast = Array[String](["dragon", "gory", "panda"])
 
 [resource]
 script = ExtResource("1_stage")
@@ -35,7 +74,8 @@ element_weights = Array[int]([25, 20, 20, 35])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("s26_e1"), SubResource("s26_e1")], [SubResource("s26_e2"), SubResource("s26_e1")]])
+rounds = Array[Array]([[SubResource("s26_e1"), SubResource("s26_e1")], [SubResource("s26_e2"), SubResource("s26_e3")]])
 rounds_init_cd = Array[Array]([[0, 1], [0, 2]])
 rounds_enemy_levels = Array[Array]([[23, 23], [23, 23]])
+pre_dialog = SubResource("s26_pre")
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
