@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="EnemyData" format=3]
 
 [ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/enemy/forest_guard.png" id="2_texture"]
+[ext_resource type="Texture2D" path="res://assets/enemy/forest_villager_rabbit.png" id="2_texture"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
 
 [sub_resource type="Resource" id="gold_drop"]
@@ -11,9 +11,9 @@ amount_max = 58
 
 [resource]
 script = ExtResource("1_script")
-enemy_name = "Forest Guard"
-enemy_name_zh = "森林衛兵"
-enemy_name_en = "Forest Guard"
+enemy_name = "Villager Rabbit"
+enemy_name_zh = "村民 兔"
+enemy_name_en = "Villager Rabbit"
 max_hp = 1800
 action_pattern = Array[int]([2, 0])
 action_percents = Array[int]([15, 24])

@@ -45,6 +45,120 @@ cast = Array[String](["dragon", "shark", "panda"])
 background = ExtResource("5_bg")
 initial_music = ExtResource("6_music")
 
+[sub_resource type="Resource" id="s21_pre_panda_hot"]
+script = ExtResource("3_line")
+character_id = "panda"
+text_zh = "好熱啊~ 你確定常茂森林是走這邊嘛~"
+
+[sub_resource type="Resource" id="s21_pre_dragon_light"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "空氣中的光元素好多..."
+
+[sub_resource type="Resource" id="s21_pre_spear"]
+script = ExtResource("3_line")
+text_zh = "突然，一根木茅從空而降，正正扎中了小隊面前的土地上"
+
+[sub_resource type="Resource" id="s21_pre_shark_warn"]
+script = ExtResource("3_line")
+character_id = "shark"
+text_zh = "小心！！"
+
+[sub_resource type="Resource" id="s21_pre_gory_halt"]
+script = ExtResource("3_line")
+character_id = "gory"
+position = "right"
+text_zh = "來者何人！這裡是森之國的領土，再走半步，小心俺的鐵槍不客氣！"
+action = "enter"
+
+[sub_resource type="Resource" id="s21_pre_dragon_explain"]
+script = ExtResource("3_line")
+character_id = "dragon"
+text_zh = "不是的呃，我們從光之國來的... 哇啊！！！"
+
+[sub_resource type="Resource" id="s21_pre_panda_fall"]
+script = ExtResource("3_line")
+text_zh = "砰的一聲，阿潘突然摔了個跟到，滾到了木茅前方，差點沒把木茅壓爛。"
+
+[sub_resource type="Resource" id="s21_pre_gory_attack"]
+script = ExtResource("3_line")
+character_id = "gory"
+position = "right"
+text_zh = "可惡，納命來！"
+
+[sub_resource type="Resource" id="s21_pre"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s21_pre_panda_hot"), SubResource("s21_pre_dragon_light"), SubResource("s21_pre_spear"), SubResource("s21_pre_shark_warn"), SubResource("s21_pre_gory_halt"), SubResource("s21_pre_dragon_explain"), SubResource("s21_pre_panda_fall"), SubResource("s21_pre_gory_attack")])
+cast = Array[String](["panda", "dragon", "shark", "gory"])
+background = ExtResource("5_bg")
+initial_music = ExtResource("6_music")
+
+[sub_resource type="Resource" id="s21_post_gory_kneel"]
+script = ExtResource("3_line")
+text_zh = "戈爾捂著肚子，被小隊打翻跪在地上。"
+
+[sub_resource type="Resource" id="s21_post_gory_groan"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "唔...!!"
+
+[sub_resource type="Resource" id="s21_post_panda_shock"]
+script = ExtResource("3_line")
+character_id = "panda"
+position = "right"
+text_zh = "!!!"
+
+[sub_resource type="Resource" id="s21_post_dragon_sorry"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "抱歉我看你攻過來就自然反撃, 你沒受傷吧?"
+
+[sub_resource type="Resource" id="s21_post_shark_zanshin"]
+script = ExtResource("3_line")
+character_id = "shark"
+text_zh = "殘心! 不要鬆懈!"
+
+[sub_resource type="Resource" id="s21_post_gory_lost"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "是在下輸了。任由處置。"
+
+[sub_resource type="Resource" id="s21_post_panda_not_killers"]
+script = ExtResource("3_line")
+character_id = "panda"
+position = "right"
+text_zh = "不是的! 我們不是什麼殺人魔!! 我們是來... 呃，我們來幹什麼來著?"
+
+[sub_resource type="Resource" id="s21_post_dragon_forest"]
+script = ExtResource("3_line")
+character_id = "dragon"
+position = "right"
+text_zh = "我們要去森之國"
+
+[sub_resource type="Resource" id="s21_post_shark_crystal"]
+script = ExtResource("3_line")
+character_id = "shark"
+text_zh = "我們需要找到光之水晶並保護它，光之國的水晶已經陷落了。"
+
+[sub_resource type="Resource" id="s21_post_gory_know"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "我知道了。"
+
+[sub_resource type="Resource" id="s21_post_gory_lead"]
+script = ExtResource("3_line")
+character_id = "gory"
+text_zh = "看起來你們不像敵人，就由我帶路帶你們去森之國吧。"
+
+[sub_resource type="Resource" id="s21_post"]
+script = ExtResource("4_seq")
+lines = Array[ExtResource("3_line")]([SubResource("s21_post_gory_kneel"), SubResource("s21_post_gory_groan"), SubResource("s21_post_panda_shock"), SubResource("s21_post_dragon_sorry"), SubResource("s21_post_shark_zanshin"), SubResource("s21_post_gory_lost"), SubResource("s21_post_panda_not_killers"), SubResource("s21_post_dragon_forest"), SubResource("s21_post_shark_crystal"), SubResource("s21_post_gory_know"), SubResource("s21_post_gory_lead")])
+cast = Array[String](["gory", "panda", "dragon", "shark"])
+background = ExtResource("5_bg")
+initial_music = ExtResource("6_music")
+
 [resource]
 script = ExtResource("1_stage")
 stage_id = "2-1"
@@ -57,6 +171,8 @@ allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 rounds = Array[Array]([[SubResource("Resource_eep8t"), SubResource("Resource_1rkmf")]])
+pre_dialog = SubResource("s21_pre")
+post_dialog = SubResource("s21_post")
 start_stage_dialog = SubResource("s21_start")
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
