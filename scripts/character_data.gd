@@ -35,6 +35,8 @@ var current_exp: int = 0              # 當前累積經驗值（不存入 .tres�
 @export var square_offset: Vector2 = Vector2.ZERO  # 方形卡片頭像偏移（角色列表 / 準備畫面）
 @export var rectangular_scale: float = 1.0          # 矩形列頭像縮放（戰鬥結算 / 教學列）
 @export var rectangular_offset: Vector2 = Vector2.ZERO  # 矩形列頭像偏移（戰鬥結算 / 教學列）
+@export var loot_log_scale: float = 1.0
+@export var loot_log_offset: Vector2 = Vector2.ZERO
 
 # ── 技能定義 ─────────────────────────────────────────────────
 @export var passive_skill_name: String = ""   # 被動技能名稱

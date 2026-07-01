@@ -7,6 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Gory"
 gem_type = 2
+level = 13
 base_atk = 3
 atk_growth = 7.0
 hp_growth = 7.5
@@ -22,6 +23,8 @@ square_scale = 1.35
 square_offset = Vector2(-97, -71)
 rectangular_scale = 0.4
 rectangular_offset = Vector2(-98, 280)
+loot_log_scale = 0.66
+loot_log_offset = Vector2(-155.25325, -91.64878)
 active_skill_name = "Leaf Spear Call"
 active_skill_desc = "Select one top-row or bottom-row cell to create an inward-facing Wood Spear gem there. CD: 4 turns."
 active_skill_cd = 4
@@ -47,6 +50,6 @@ responding_skills = Array[Dictionary]([{
 "fuse_label": "7",
 "name": "Wood Spear",
 "priority": 1,
-"threshold": 7,
+"threshold": 6,
 "trigger_type": "count"
 }])

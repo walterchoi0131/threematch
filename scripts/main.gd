@@ -24,6 +24,7 @@ const _StartStageTutorialPage := preload("res://scripts/start_stage_tutorial_pag
 const _TutorialPageLibrary := preload("res://scripts/tutorial_page_library.gd")
 const _DialogBoxScene := preload("res://scenes/dialog_box.tscn")
 const SHIELD_ICON_TEXTURE := preload("res://assets/gems/shield.png")
+const PLAYER_SHIELD_OVERLAY_OUTSET := 4.0
 const PUZZLE_KEY_HUD_BASE_TEXTURE := preload("res://assets/blocks/puzzle_key_unlocked.png")
 const PUZZLE_KEY_HUD_GEM_TEXTURE := preload("res://assets/blocks/puzzle_key_gem.png")
 const PUZZLE_KEY_HUD_AURA_COLOR := Color(0.18, 0.95, 0.86, 0.62)
@@ -37,6 +38,10 @@ const LOOT_FLY_ICON_SIZE := 52
 const LOOT_TOAST_SIZE := Vector2(136.0, 46.0)
 const LOOT_TOAST_GAP := 5.0
 const LOOT_TOAST_ICON_SIZE := 40
+const LOOT_LOG_PORTRAIT_SLOT_SIZE := Vector2(80.0, 42.0)
+const LOOT_LOG_PORTRAIT_CANVAS_SIZE := Vector2(160.0, 160.0)
+const LOOT_LOG_CHARACTER_PORTRAIT_BASE_OFFSET := Vector2(-16.0, -24.0)
+const LOOT_LOG_ENEMY_PORTRAIT_BASE_OFFSET := Vector2(-40.0, -59.0)
 const LOOT_TOAST_TEXT_FONT_SIZE := 20
 const LOOT_TOAST_SKILL_FONT_SIZE := 20
 const LOOT_TOAST_RIGHT_MARGIN := 16.0
@@ -191,7 +196,7 @@ var _active_selection_dim_tween: Tween = null
 var _active_selection_preview_positions: Array[Vector2i] = []
 var _stage_intro_gems_ready: bool = false
 var _initial_boss_intro_shown: bool = false
-var _player_shield_overlay: ColorRect = null
+var _player_shield_overlay: Panel = null
 var _player_shield_badge: Control = null
 var _player_shield_icon: TextureRect = null
 var _player_shield_label: Label = null
@@ -7289,8 +7294,9 @@ func _add_log_entry(bbcode_text: String, gem_type: Block.Type = Block.Type.RED, 
 		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		portrait.modulate = Color(1, 1, 1, 0.35)
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		portrait.scale = Vector2(0.1, 0.1)
-		portrait.position = Vector2(2, (LOG_ENTRY_HEIGHT - LOG_ENTRY_HEIGHT * 0.1) * 0.5)
+		var log_scale: float = maxf(0.01, char_data.loot_log_scale)
+		portrait.scale = Vector2(0.1 * log_scale, 0.1 * log_scale)
+		portrait.position = Vector2(2, (LOG_ENTRY_HEIGHT - LOG_ENTRY_HEIGHT * 0.1) * 0.5) + char_data.loot_log_offset
 		entry.add_child(portrait)
 
 	# Layer 3: 文字（白色 + 黑色描邊）— 使用 VBoxContainer 垂直置中
@@ -11123,16 +11129,23 @@ func _setup_player_shield_ui() -> void:
 	if _player_shield_overlay != null:
 		return
 	var hp_bar: Control = $UILayer/PlayerHPBar
-	_player_shield_overlay = ColorRect.new()
+	_player_shield_overlay = Panel.new()
 	_player_shield_overlay.name = "ShieldOverlay"
-	_player_shield_overlay.color = Color(0.28, 0.68, 1.0, 0.48)
 	_player_shield_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_player_shield_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_player_shield_overlay.offset_top = -4.0
-	_player_shield_overlay.offset_bottom = 4.0
+	_player_shield_overlay.offset_left = -PLAYER_SHIELD_OVERLAY_OUTSET
+	_player_shield_overlay.offset_top = -PLAYER_SHIELD_OVERLAY_OUTSET
+	_player_shield_overlay.offset_right = PLAYER_SHIELD_OVERLAY_OUTSET
+	_player_shield_overlay.offset_bottom = PLAYER_SHIELD_OVERLAY_OUTSET
 	_player_shield_overlay.scale.x = 0.0
 	_player_shield_overlay.visible = false
 	_player_shield_overlay.z_index = 3
+	var shield_style := StyleBoxFlat.new()
+	shield_style.bg_color = Color(0.28, 0.68, 1.0, 0.48)
+	shield_style.border_color = Color.WHITE
+	shield_style.set_border_width_all(2)
+	shield_style.set_corner_radius_all(5)
+	_player_shield_overlay.add_theme_stylebox_override("panel", shield_style)
 	hp_bar.add_child(_player_shield_overlay)
 
 	_player_shield_badge = Control.new()
@@ -11523,7 +11536,7 @@ func _play_round_switch_transition(round_idx: int, total_rounds: int) -> void:
 
 	var label_tw := create_tween()
 	label_tw.tween_property(title, "modulate:a", 1.0, 0.24).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	label_tw.tween_interval(0.7)
+	label_tw.tween_interval(0.35)
 	label_tw.tween_property(old_number_label, "position:y", 42.0 + number_baseline_nudge, 0.22).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	label_tw.parallel().tween_property(old_number_label, "modulate:a", 0.0, 0.22).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	label_tw.parallel().tween_property(new_number_label, "position:y", number_baseline_nudge, 0.34).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
@@ -12003,7 +12016,7 @@ func _get_loot_toast_size_for_entry(entry: Dictionary) -> Vector2:
 		var raw_skill_name: String = String(entry.get("skill_name", ""))
 		var display_text: String = Locale.tr_or(raw_skill_name, raw_skill_name)
 		var text_width: float = _estimate_loot_toast_text_width(display_text, LOOT_TOAST_SKILL_FONT_SIZE)
-		toast_size.x = maxf(LOOT_TOAST_SIZE.x, ceil(text_width + 66.0))
+		toast_size.x = maxf(LOOT_TOAST_SIZE.x, ceil(text_width + LOOT_LOG_PORTRAIT_SLOT_SIZE.x + 26.0))
 	elif bool(entry.get("text_only", false)):
 		var text_width: float = _estimate_loot_toast_text_width(String(entry.get("text", "")), LOOT_TOAST_TEXT_FONT_SIZE)
 		toast_size.x = maxf(LOOT_TOAST_SIZE.x, ceil(text_width + 24.0))
@@ -12081,6 +12094,8 @@ func _start_next_loot_toast() -> void:
 		style.shadow_size = 0
 	style.set_corner_radius_all(8)
 	style.set_content_margin_all(4 if hostile_log else 2)
+	if skill_log:
+		style.set_content_margin(SIDE_LEFT, 0.0)
 	panel.add_theme_stylebox_override("panel", style)
 	$UILayer.add_child(panel)
 
@@ -12199,7 +12214,7 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary, toast_s
 
 	var row := HBoxContainer.new()
 	row.set_anchors_preset(Control.PRESET_FULL_RECT)
-	row.offset_left = 4.0
+	row.offset_left = 0.0
 	row.offset_right = -6.0
 	row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	row.add_theme_constant_override("separation", 6)
@@ -12207,7 +12222,8 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary, toast_s
 	content.add_child(row)
 
 	var portrait_slot := Control.new()
-	portrait_slot.custom_minimum_size = Vector2(40.0, 42.0)
+	portrait_slot.custom_minimum_size = LOOT_LOG_PORTRAIT_SLOT_SIZE
+	portrait_slot.size = LOOT_LOG_PORTRAIT_SLOT_SIZE
 	portrait_slot.clip_contents = true
 	portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(portrait_slot)
@@ -12217,25 +12233,29 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary, toast_s
 	var enemy_portrait: Texture2D = enemy_data.portrait_texture if enemy_data != null else null
 	if char_data != null and char_data.portrait_texture != null:
 		var portrait := TextureRect.new()
-		var atlas := AtlasTexture.new()
-		atlas.atlas = char_data.portrait_texture
-		var tex_size := char_data.portrait_texture.get_size()
-		atlas.region = Rect2(tex_size.x * 0.10, tex_size.y * 0.15, tex_size.x * 0.80, tex_size.y * 0.20)
-		portrait.texture = atlas
-		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portrait.texture = char_data.portrait_texture
+		portrait.size = LOOT_LOG_PORTRAIT_CANVAS_SIZE
+		portrait.custom_minimum_size = LOOT_LOG_PORTRAIT_CANVAS_SIZE
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		portrait.modulate = Color(1.0, 1.0, 1.0, 0.72)
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var char_log_scale: float = maxf(0.01, char_data.loot_log_scale)
+		portrait.scale = Vector2(char_log_scale, char_log_scale)
+		portrait.position = LOOT_LOG_CHARACTER_PORTRAIT_BASE_OFFSET + char_data.loot_log_offset
 		portrait_slot.add_child(portrait)
 	elif enemy_portrait != null:
 		var portrait := TextureRect.new()
 		portrait.texture = enemy_portrait
-		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portrait.size = LOOT_LOG_PORTRAIT_CANVAS_SIZE
+		portrait.custom_minimum_size = LOOT_LOG_PORTRAIT_CANVAS_SIZE
 		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		portrait.modulate = Color(1.0, 1.0, 1.0, 0.78)
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var enemy_log_scale: float = maxf(0.01, enemy_data.loot_log_scale)
+		portrait.scale = Vector2(enemy_log_scale, enemy_log_scale)
+		portrait.position = LOOT_LOG_ENEMY_PORTRAIT_BASE_OFFSET + enemy_data.loot_log_offset
 		portrait_slot.add_child(portrait)
 
 	var label := Label.new()
@@ -12247,7 +12267,7 @@ func _build_active_skill_loot_toast(content: Control, entry: Dictionary, toast_s
 	label.add_theme_constant_override("outline_size", 4)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.custom_minimum_size = Vector2(maxf(82.0, toast_size.x - 58.0), 42.0)
+	label.custom_minimum_size = Vector2(maxf(82.0, toast_size.x - LOOT_LOG_PORTRAIT_SLOT_SIZE.x - 18.0), 42.0)
 	label.clip_text = false
 	label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE

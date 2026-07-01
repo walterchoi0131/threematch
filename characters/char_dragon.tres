@@ -7,7 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Milo"
 job_id = "breaker"
-level = 8
+level = 30
 base_atk = 4
 atk_growth = 8.0
 base_hp = 60
@@ -22,17 +22,19 @@ square_scale = 0.85
 square_offset = Vector2(-40, -30)
 rectangular_scale = 0.25
 rectangular_offset = Vector2(-20, 151)
+loot_log_scale = 0.36
+loot_log_offset = Vector2(-41.678726, -43.74147)
 active_skill_name = "Dragon Flame Domain"
 active_skill_desc = "Select an area on the board: all gems in the fireball-shaped area (3×3 + extensions) are converted to fire gems. CD: 3 turns."
 active_skill_cd = 3
 active_unlock_stage_id = "1-5"
-active_skill_blast = true
 has_break_essence = true
+active_skill_blast = true
 responding_skills = Array[Dictionary]([{
 "desc": "create a Fireball gem at tapped cell. Click to blast 3×3 + extended area.",
 "fuse_label": "9",
 "name": "Fireball",
 "priority": 1,
-"threshold": 9,
+"threshold": 6,
 "trigger_type": "count"
 }])

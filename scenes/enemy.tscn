@@ -57,10 +57,11 @@ stretch_mode = 5
 [node name="HPRow" type="HBoxContainer" parent="VBox"]
 custom_minimum_size = Vector2(0, 20)
 mouse_filter = 2
+alignment = 1
 
 [node name="HPBar" type="Control" parent="VBox/HPRow"]
-custom_minimum_size = Vector2(0, 18)
-size_flags_horizontal = 3
+custom_minimum_size = Vector2(120, 18)
+size_flags_horizontal = 4
 mouse_filter = 2
 
 [node name="BG" type="ColorRect" parent="VBox/HPRow/HPBar"]

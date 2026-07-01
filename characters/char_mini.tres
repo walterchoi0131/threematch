@@ -7,6 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Mini"
 job_id = "attacker"
+level = 19
 base_atk = 4
 atk_growth = 8.5
 base_hp = 48
@@ -23,6 +24,8 @@ square_scale = 1.7
 square_offset = Vector2(-104, -129)
 rectangular_scale = 0.36
 rectangular_offset = Vector2(-63, 235)
+loot_log_scale = 0.55
+loot_log_offset = Vector2(-112.53253, -165.59267)
 active_skill_name = "Kindling Blaze"
 active_skill_desc = "Convert all leaf gems on the board into fire gems. CD: 5 turns."
 active_skill_cd = 5

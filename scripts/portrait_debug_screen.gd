@@ -16,6 +16,10 @@ const _STAT_HP_COLOR: Color = Color(0.36, 0.82, 0.96, 1.0)
 const _STAT_MAGIC_COLOR: Color = Color(0.78, 0.58, 1.0, 1.0)
 const _STAT_ATK_COLOR: Color = Color(1.0, 0.50, 0.42, 1.0)
 const _DIALOG_PHASE_PREVIEW_MAX_H: float = 640.0
+const _LOOT_LOG_PORTRAIT_SLOT_SIZE := Vector2(80.0, 42.0)
+const _LOOT_LOG_PORTRAIT_CANVAS_SIZE := Vector2(160.0, 160.0)
+const _LOOT_LOG_CHARACTER_PORTRAIT_BASE_OFFSET := Vector2(-16.0, -24.0)
+const _LOOT_LOG_ENEMY_PORTRAIT_BASE_OFFSET := Vector2(-40.0, -59.0)
 const _ENEMY_ROOT: String = "res://enemies"
 ## 遊戲 viewport 實際寬度（由 ViewportUtils.get_size().x 動態設定，預設等於專案基準 720px）
 var _VP_W: float = 720.0
@@ -28,12 +32,14 @@ const _CHAR_SYS: Array = [
 	["portrait_scale",      "portrait_offset",      "Battle Panel"],
 	["square_scale",        "square_offset",        "Square Card"],
 	["rectangular_scale",   "rectangular_offset",   "Result Row"],
+	["loot_log_scale",      "loot_log_offset",      "Loot Log"],
 	["dialog_square_scale", "dialog_square_offset", "Dialog Box"],
 	["dialog_phase_scale",  "dialog_phase_offset",  "Dialog Phase"],
 ]
 const _ENEMY_SYS: Array = [
 	["info_popup_scale",    "info_popup_offset",    "Info Popup"],
 	["dialog_phase_scale",  "dialog_phase_offset",  "Dialog Phase"],
+	["loot_log_scale",      "loot_log_offset",      "Loot Log"],
 ]
 
 var _char_data: CharacterData = null
@@ -50,7 +56,7 @@ var _wrappers: Array[Control]    = []
 ## TextureRect（或 null）for each preview card
 var _portraits: Array            = []   # untyped: TextureRect or null
 ## 是否用 anchor offset 定位（rectangular），否則用 .position
-var _is_rect: Array[bool]        = [false, false, true, false, false]
+var _is_rect: Array[bool]        = [false, false, true, false, false, false]
 
 var _scale_lbls: Array[Label]         = []
 var _offset_lbls: Array[Label]        = []
@@ -820,9 +826,9 @@ func _rebuild_preview(idx: int) -> void:
 	# Battle: CharacterRow offset_top=-200 → offset_bottom=-140 → 高度 60px
 	# Square: VP_W / 7 ≈ 82px（同 characters_screen / prepare_screen 公式）
 	var cell: float = _VP_W / 7.0
-	var scene_heights: Array[float] = [60.0, cell, 112.0, 190.0, _dialog_phase_preview_height()]
+	var scene_heights: Array[float] = [60.0, cell, 112.0, 58.0, 190.0, _dialog_phase_preview_height()]
 	if _target_mode == TargetMode.ENEMY:
-		scene_heights = [240.0, _dialog_phase_preview_height()]
+		scene_heights = [240.0, _dialog_phase_preview_height(), 58.0]
 	var scene_h: float = scene_heights[idx]
 
 	if _target_mode == TargetMode.ENEMY:
@@ -831,6 +837,8 @@ func _rebuild_preview(idx: int) -> void:
 				portrait_ref = _build_scene_enemy_info_popup(scene, scene_h)
 			1:
 				portrait_ref = _build_scene_enemy_dialog_phase(scene, scene_h)
+			2:
+				portrait_ref = _build_scene_loot_log(scene, scene_h)
 	else:
 		match idx:
 			0:
@@ -840,8 +848,10 @@ func _rebuild_preview(idx: int) -> void:
 			2:
 				portrait_ref = _build_scene_result(scene, scene_h)
 			3:
-				portrait_ref = _build_scene_dialog(scene, scene_h)
+				portrait_ref = _build_scene_loot_log(scene, scene_h)
 			4:
+				portrait_ref = _build_scene_dialog(scene, scene_h)
+			5:
 				portrait_ref = _build_scene_dialog_phase(scene, scene_h)
 
 	scene.size = Vector2(_VP_W, scene_h)
@@ -1049,6 +1059,74 @@ func _build_scene_result(scene: Control, scene_h: float) -> TextureRect:
 # 場景 3：Dialog Box — 對話面板（PANEL_H=190px，與 battle_dialog.gd 完全一致）
 # 142×142 頭像 clip，左邊接文字欄
 # ─────────────────────────────────────────────────────────────
+func _build_scene_loot_log(scene: Control, scene_h: float) -> TextureRect:
+	var bg := ColorRect.new()
+	bg.color = Color(0.06, 0.07, 0.12, 1.0)
+	bg.size = Vector2(_VP_W, scene_h)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scene.add_child(bg)
+
+	var toast_size := Vector2(224.0, 46.0)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(12.0, 6.0)
+	panel.size = toast_size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.5)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(2)
+	style.set_content_margin(SIDE_LEFT, 0.0)
+	panel.add_theme_stylebox_override("panel", style)
+	scene.add_child(panel)
+
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(row)
+
+	var portrait_slot := Control.new()
+	portrait_slot.custom_minimum_size = _LOOT_LOG_PORTRAIT_SLOT_SIZE
+	portrait_slot.size = _LOOT_LOG_PORTRAIT_SLOT_SIZE
+	portrait_slot.clip_contents = true
+	portrait_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(portrait_slot)
+
+	var portrait_ref: TextureRect = null
+	var portrait_texture: Texture2D = null
+	if _target_mode == TargetMode.ENEMY:
+		portrait_texture = _enemy_data.portrait_texture if _enemy_data != null else null
+	elif _char_data != null:
+		portrait_texture = _char_data.portrait_texture
+
+	if portrait_texture != null:
+		var portrait := TextureRect.new()
+		portrait.texture = portrait_texture
+		portrait.size = _LOOT_LOG_PORTRAIT_CANVAS_SIZE
+		portrait.custom_minimum_size = _LOOT_LOG_PORTRAIT_CANVAS_SIZE
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var base_position: Vector2 = _LOOT_LOG_ENEMY_PORTRAIT_BASE_OFFSET if _target_mode == TargetMode.ENEMY else _LOOT_LOG_CHARACTER_PORTRAIT_BASE_OFFSET
+		portrait.set_meta("debug_base_position", base_position)
+		portrait_slot.add_child(portrait)
+		portrait_ref = portrait
+
+	var label := Label.new()
+	label.text = "Loot Log"
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 4)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.custom_minimum_size = Vector2(120.0, 42.0)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	return portrait_ref
+
+
 func _build_scene_dialog(scene: Control, scene_h: float) -> TextureRect:
 	const PORTRAIT_SIZE: float = 142.0   # battle_dialog.gd PORTRAIT_SIZE
 	const PANEL_H: float       = 190.0   # battle_dialog.gd PANEL_HEIGHT

@@ -657,10 +657,10 @@ func _play_exp_phase() -> void:
 				)
 				tw.tween_callback(_play_level_up_pop.bind(pop_target, current_anim_lv))
 				if lv_idx < levels_gained - 1:
-					tw.tween_property(bar_fill, "scale:x", 1.0, 0.3)
+					tw.tween_property(bar_fill, "scale:x", 1.0, 0.3).from(0.0)
 
 			var final_ratio: float = float(end_exp) / float(maxi(c.exp_to_next_level(), 1))
-			tw.tween_property(bar_fill, "scale:x", clampf(final_ratio, 0.0, 1.0), 0.4)
+			tw.tween_property(bar_fill, "scale:x", clampf(final_ratio, 0.0, 1.0), 0.4).from(0.0)
 
 		tw.tween_callback(func() -> void:
 			_exp_done_count += 1

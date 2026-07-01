@@ -7,6 +7,7 @@
 script = ExtResource("1_script")
 character_name = "Boarz"
 job_id = "breaker"
+level = 12
 base_atk = 3
 atk_growth = 7.0
 base_hp = 56
@@ -24,6 +25,8 @@ square_scale = 1.56
 square_offset = Vector2(-84.383804, -2.890396)
 rectangular_scale = 0.45
 rectangular_offset = Vector2(-66.39731, 401.38956)
+loot_log_scale = 0.26
+loot_log_offset = Vector2(-56.26628, -7.290222)
 active_skill_name = "Forge"
 active_skill_desc = "Select a forge upper gem to upgrade it by 1 level, or select a normal gem to grant x3. CD: 4 turns."
 active_skill_cd = 4
