@@ -178,6 +178,8 @@ var _translations: Dictionary = {
 	"Leaf Spear Call": {"zh": "葉矛喚來", "en": "Leaf Spear Call"},
 	"Leaf Spear Call DESC": {"zh": "選擇頂列或底列 1 格，在該格生成朝棋盤內側刺出的木槍寶石；頂列朝下，底列朝上。CD：4 回合。", "en": "Select one top-row or bottom-row cell to create an inward-facing Wood Spear gem there; top row points down, bottom row points up. CD: 4 turns."},
 	"Leaf Spear Call DESC DYNAMIC": {"zh": "選擇頂列或底列 %d 格，在每格生成朝棋盤內側刺出的木槍寶石；頂列朝下，底列朝上。CD：%d 回合。", "en": "Select %d top-row or bottom-row cells to create inward-facing Wood Spear gems there; top row points down, bottom row points up. CD: %d turns."},
+	"不擇手段": {"zh": "不擇手段", "en": "Dirty Tricks"},
+	"不擇手段 DESC": {"zh": "進入選格狀態，拖曳一顆寶石使整列或整欄循環移動 1 格。拖回原格會取消該次選擇，可重新挑選。CD：5 回合。", "en": "Enter selection mode. Drag a gem to cycle its whole row or column by 1 cell. Dragging back to the original cell cancels that pick so you can choose again. CD: 5 turns."},
 
 	# ── 技能寶石強化 ──
 	"SKILL_UPGRADE_TITLE": {"zh": "寶石強化", "en": "Gem Upgrade"},
@@ -192,6 +194,9 @@ var _translations: Dictionary = {
 	"UPGRADE_GORY_LEAF_SPEAR_CD_1": {"zh": "冷卻回合 -1。", "en": "Cooldown -1."},
 	"UPGRADE_GORY_WOOD_SPEAR_PIERCE_BREAKABLE": {"zh": "木槍破壞可破壞障礙後，現在會繼續飛行。", "en": "Wood Spear now keeps flying after breaking a breakable obstacle."},
 	"UPGRADE_GORY_WOOD_SPEAR_THRESHOLD_1": {"zh": "合成需求 -1。", "en": "Fusing requirement -1."},
+	"UPGRADE_OWEN_DIRTY_TRICKS_DISTANCE_1": {"zh": "拖曳距離 +1 格（橫向或縱向）。", "en": "Drag distance +1 cell horizontally or vertically."},
+	"UPGRADE_OWEN_DIRTY_TRICKS_CD_1": {"zh": "冷卻回合 -1。", "en": "Cooldown -1."},
+	"UPGRADE_OWEN_DIRTY_TRICKS_INFINITE": {"zh": "拖曳距離不再受限制。", "en": "Drag distance is no longer limited."},
 
 	# ── 被動技能名稱與描述 ──
 	"Drinking": {"zh": "飲水", "en": "Drinking"},

@@ -154,6 +154,14 @@ var _selection_finished_emitted: bool = false           # 防止確認/取消重
 var _preview_center: Vector2i = Vector2i(-1, -1)  # 目前預覽的中心格
 var _selection_max_count: int = 1
 var _selection_selected_positions: Array[Vector2i] = []
+var _row_column_drag_mode: bool = false
+var _row_column_drag_origin: Vector2i = Vector2i(-1, -1)
+var _row_column_drag_max_distance: int = 1
+var _row_column_drag_finished_emitted: bool = false
+var _row_column_drag_press_local_pos: Vector2 = Vector2.ZERO
+var _row_column_drag_preview_axis: String = ""
+var _row_column_drag_preview_index: int = -1
+var _row_column_drag_preview_blocks: Array = []
 
 # ── 長按預覽系統（長按高階寶石顯示爆炸範圍）──
 const LONGPRESS_THRESHOLD := 0.35         # 長按觸發閾值（秒）
@@ -224,6 +232,7 @@ signal upper_gem_chain_triggered(upper_type: Block.UpperType)  # 連鎖中特殊
 signal selection_confirmed(positions: Array)  # 選擇模式確認時發出
 signal selection_finished(result: Dictionary) # 選擇模式完成或取消時發出 {positions, cancelled}
 signal selection_preview_changed(positions: Array) # 選擇模式 hover 範圍變更時發出
+signal row_column_drag_finished(result: Dictionary) # 列/欄拖曳完成或取消時發出
 signal blast_preview_entered()               # 長按預覽開始時發出
 signal blast_preview_exited()                # 長按預覽結束時發出
 signal enemy_break_pulse()                   # 敵方 AI 實際破壞棋盤格時發出，用於 SFX
@@ -1241,6 +1250,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _block_input_after_defeat():
 		return
 	if _board_input_paused:
+		return
+
+	if _row_column_drag_mode:
+		_handle_row_column_drag_input(event)
 		return
 
 	if _selection_mode:
@@ -4917,6 +4930,311 @@ func cancel_selection_mode() -> void:
 	_finish_selection([], true)
 
 
+func enter_row_column_drag_mode(max_distance: int = 1) -> void:
+	if _selection_mode:
+		cancel_selection_mode()
+	if _row_column_drag_mode:
+		cancel_row_column_drag_mode()
+	_row_column_drag_mode = true
+	_row_column_drag_origin = Vector2i(-1, -1)
+	_row_column_drag_max_distance = max_distance if max_distance < 0 else maxi(1, max_distance)
+	_row_column_drag_finished_emitted = false
+	_row_column_drag_press_local_pos = Vector2.ZERO
+	_row_column_drag_preview_axis = ""
+	_row_column_drag_preview_index = -1
+	_row_column_drag_preview_blocks.clear()
+	_refresh_row_column_drag_valid_centers()
+	_clear_selection_hover_preview()
+
+
+func cancel_row_column_drag_mode() -> void:
+	if not _row_column_drag_mode:
+		return
+	_finish_row_column_drag({}, true)
+
+
+func _finish_row_column_drag(result: Dictionary, cancelled: bool) -> void:
+	if _row_column_drag_finished_emitted:
+		return
+	_row_column_drag_finished_emitted = true
+	_row_column_drag_mode = false
+	if cancelled:
+		_restore_row_column_drag_preview_positions()
+	_row_column_drag_origin = Vector2i(-1, -1)
+	_row_column_drag_preview_axis = ""
+	_row_column_drag_preview_index = -1
+	_row_column_drag_preview_blocks.clear()
+	_clear_selection_visuals()
+	result["cancelled"] = cancelled
+	row_column_drag_finished.emit(result)
+
+
+func _reset_row_column_drag_pick() -> void:
+	_restore_row_column_drag_preview_positions()
+	_row_column_drag_origin = Vector2i(-1, -1)
+	_row_column_drag_preview_axis = ""
+	_row_column_drag_preview_index = -1
+	_row_column_drag_preview_blocks.clear()
+	_clear_selection_hover_preview()
+
+
+func _handle_row_column_drag_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_button: InputEventMouseButton = event as InputEventMouseButton
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+			return
+		var local_pos: Vector2 = get_local_mouse_position()
+		var gp: Vector2i = _mouse_to_grid_if_inside_board(local_pos)
+		if mouse_button.pressed:
+			if _is_row_column_drag_origin_valid(gp):
+				_row_column_drag_origin = gp
+				_row_column_drag_press_local_pos = local_pos
+				set_last_tapped_input(gp, local_pos)
+				_clear_row_column_drag_preview()
+			return
+		if _row_column_drag_origin == Vector2i(-1, -1):
+			return
+		if not _is_valid(gp):
+			_reset_row_column_drag_pick()
+			return
+		var result: Dictionary = _get_row_column_drag_result(gp)
+		if result.is_empty():
+			_reset_row_column_drag_pick()
+			return
+		_finish_row_column_drag(result, false)
+		return
+	if event is InputEventMouseMotion and _row_column_drag_origin != Vector2i(-1, -1):
+		_update_row_column_drag_motion_preview(get_local_mouse_position())
+
+
+func _mouse_to_grid_if_inside_board(local_pos: Vector2) -> Vector2i:
+	if local_pos.x < 0.0 or local_pos.y < 0.0:
+		return Vector2i(-1, -1)
+	if local_pos.x >= float(columns * CELL_SIZE) or local_pos.y >= float(rows * CELL_SIZE):
+		return Vector2i(-1, -1)
+	return world_to_grid(local_pos)
+
+
+func _is_row_column_drag_origin_valid(pos: Vector2i) -> bool:
+	if not _cell_accepts_block(pos):
+		return false
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or block.is_obstacle():
+		return false
+	return _is_row_column_drag_line_shiftable("x", pos.y) or _is_row_column_drag_line_shiftable("y", pos.x)
+
+
+func _refresh_row_column_drag_valid_centers() -> void:
+	_selection_valid_centers.clear()
+	for x in columns:
+		for y in rows:
+			var pos := Vector2i(x, y)
+			if _is_row_column_drag_origin_valid(pos):
+				_selection_valid_centers.append(pos)
+
+
+func _clear_row_column_drag_preview() -> void:
+	_clear_preview_overlays(false)
+	var empty_positions: Array[Vector2i] = []
+	_set_selection_preview_positions(empty_positions)
+
+
+func _update_row_column_drag_motion_preview(local_pos: Vector2) -> void:
+	if _row_column_drag_origin == Vector2i(-1, -1):
+		_clear_row_column_drag_preview()
+		return
+	if local_pos.x < 0.0 or local_pos.y < 0.0 or local_pos.x >= float(columns * CELL_SIZE) or local_pos.y >= float(rows * CELL_SIZE):
+		_restore_row_column_drag_preview_positions()
+		_clear_row_column_drag_preview()
+		return
+	var delta: Vector2 = local_pos - _row_column_drag_press_local_pos
+	if absf(delta.x) < 1.0 and absf(delta.y) < 1.0:
+		_restore_row_column_drag_preview_positions()
+		_clear_row_column_drag_preview()
+		return
+	var axis: String = "x" if absf(delta.x) >= absf(delta.y) else "y"
+	var index: int = _row_column_drag_origin.y if axis == "x" else _row_column_drag_origin.x
+	if not _is_row_column_drag_line_shiftable(axis, index):
+		_restore_row_column_drag_preview_positions()
+		_clear_row_column_drag_preview()
+		return
+	var positions: Array[Vector2i] = _get_row_column_drag_line_positions(axis, index)
+	_clear_preview_overlays(false)
+	_set_selection_preview_positions(positions)
+	_apply_row_column_drag_visual_preview(axis, index, delta.x if axis == "x" else delta.y)
+
+
+func _apply_row_column_drag_visual_preview(axis: String, index: int, raw_offset: float) -> void:
+	if axis != _row_column_drag_preview_axis or index != _row_column_drag_preview_index:
+		_restore_row_column_drag_preview_positions()
+		_row_column_drag_preview_axis = axis
+		_row_column_drag_preview_index = index
+		_row_column_drag_preview_blocks = _get_row_column_drag_line_blocks(axis, index)
+	var line_cells: int = columns if axis == "x" else rows
+	var line_length: float = float(line_cells * CELL_SIZE)
+	var max_offset: float = line_length if _row_column_drag_max_distance < 0 else float(_row_column_drag_max_distance * CELL_SIZE)
+	var offset: float = clampf(raw_offset, -max_offset, max_offset)
+	for value in _row_column_drag_preview_blocks:
+		var block: Block = value as Block
+		if block == null or not is_instance_valid(block):
+			continue
+		var base: Vector2 = grid_to_world(block.grid_pos)
+		if axis == "x":
+			var wrapped_x: float = fposmod(base.x - CELL_SIZE * 0.5 + offset, line_length) + CELL_SIZE * 0.5
+			block.position = Vector2(wrapped_x, base.y)
+		else:
+			var wrapped_y: float = fposmod(base.y - CELL_SIZE * 0.5 + offset, line_length) + CELL_SIZE * 0.5
+			block.position = Vector2(base.x, wrapped_y)
+
+
+func _restore_row_column_drag_preview_positions() -> void:
+	for value in _row_column_drag_preview_blocks:
+		var block: Block = value as Block
+		if block == null or not is_instance_valid(block):
+			continue
+		block.position = grid_to_world(block.grid_pos)
+
+
+func _get_row_column_drag_line_blocks(axis: String, index: int) -> Array:
+	var blocks: Array = []
+	var positions: Array[Vector2i] = _get_row_column_drag_line_positions(axis, index)
+	for pos in positions:
+		var block: Block = grid[pos.x][pos.y]
+		if block != null:
+			blocks.append(block)
+	return blocks
+
+
+func _get_row_column_drag_result(current: Vector2i) -> Dictionary:
+	if _row_column_drag_origin == Vector2i(-1, -1):
+		return {}
+	if not _is_valid(current):
+		return {}
+	var diff: Vector2i = current - _row_column_drag_origin
+	if diff == Vector2i.ZERO:
+		return {}
+	var axis: String = _row_column_drag_preview_axis if _row_column_drag_preview_axis != "" else ("x" if abs(diff.x) >= abs(diff.y) else "y")
+	var raw_amount: int = diff.x if axis == "x" else diff.y
+	var amount: int = _clamp_row_column_drag_amount(raw_amount)
+	if amount == 0:
+		return {}
+	var index: int = _row_column_drag_origin.y if axis == "x" else _row_column_drag_origin.x
+	if not _is_row_column_drag_line_shiftable(axis, index):
+		return {}
+	var target: Vector2i = _row_column_drag_origin + (Vector2i(amount, 0) if axis == "x" else Vector2i(0, amount))
+	return {
+		"axis": axis,
+		"index": index,
+		"amount": amount,
+		"origin": _row_column_drag_origin,
+		"target": target,
+		"positions": _get_row_column_drag_line_positions(axis, index),
+	}
+
+
+func _clamp_row_column_drag_amount(raw_amount: int) -> int:
+	if raw_amount == 0:
+		return 0
+	if _row_column_drag_max_distance < 0:
+		return raw_amount
+	var sign_value: int = 1 if raw_amount > 0 else -1
+	return sign_value * mini(abs(raw_amount), _row_column_drag_max_distance)
+
+
+func _is_row_column_drag_line_shiftable(axis: String, index: int) -> bool:
+	if axis == "x":
+		if index < 0 or index >= rows:
+			return false
+		for x in columns:
+			var pos := Vector2i(x, index)
+			if not _cell_accepts_block(pos):
+				return false
+			var block: Block = grid[x][index]
+			if block == null or block.is_obstacle():
+				return false
+		return true
+	if index < 0 or index >= columns:
+		return false
+	for y in rows:
+		var pos := Vector2i(index, y)
+		if not _cell_accepts_block(pos):
+			return false
+		var block: Block = grid[index][y]
+		if block == null or block.is_obstacle():
+			return false
+	return true
+
+
+func _get_row_column_drag_line_positions(axis: String, index: int) -> Array[Vector2i]:
+	var positions: Array[Vector2i] = []
+	if axis == "x":
+		for x in columns:
+			var pos := Vector2i(x, index)
+			if _cell_accepts_block(pos):
+				positions.append(pos)
+	else:
+		for y in rows:
+			var pos := Vector2i(index, y)
+			if _cell_accepts_block(pos):
+				positions.append(pos)
+	return positions
+
+
+func shift_row_or_column(axis: String, index: int, amount: int, duration: float = 0.18) -> void:
+	if amount == 0:
+		return
+	if not _is_row_column_drag_line_shiftable(axis, index):
+		return
+	if axis == "x":
+		await _shift_row(index, amount, duration)
+	else:
+		await _shift_column(index, amount, duration)
+
+
+func _shift_row(row_index: int, amount: int, duration: float) -> void:
+	var normalized_amount: int = posmod(amount, columns)
+	if normalized_amount == 0:
+		return
+	var old_row: Array = []
+	for x in columns:
+		old_row.append(grid[x][row_index])
+	var tween := create_tween().set_parallel(true)
+	for x in columns:
+		var source_x: int = posmod(x - normalized_amount, columns)
+		var block: Block = old_row[source_x] as Block
+		grid[x][row_index] = block
+		if block == null:
+			continue
+		block.grid_pos = Vector2i(x, row_index)
+		tween.tween_property(block, "position", grid_to_world(block.grid_pos), duration) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	await tween.finished
+	resync_logic_from_visual()
+	_update_fuse_hints()
+
+
+func _shift_column(column_index: int, amount: int, duration: float) -> void:
+	var normalized_amount: int = posmod(amount, rows)
+	if normalized_amount == 0:
+		return
+	var old_column: Array = []
+	for y in rows:
+		old_column.append(grid[column_index][y])
+	var tween := create_tween().set_parallel(true)
+	for y in rows:
+		var source_y: int = posmod(y - normalized_amount, rows)
+		var block: Block = old_column[source_y] as Block
+		grid[column_index][y] = block
+		if block == null:
+			continue
+		block.grid_pos = Vector2i(column_index, y)
+		tween.tween_property(block, "position", grid_to_world(block.grid_pos), duration) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	await tween.finished
+	resync_logic_from_visual()
+	_update_fuse_hints()
+
+
 func _finish_selection(positions: Array, cancelled: bool) -> void:
 	if _selection_finished_emitted:
 		return
@@ -5066,6 +5384,10 @@ func get_selection_valid_centers() -> Array[Vector2i]:
 
 func get_selection_preview_positions() -> Array[Vector2i]:
 	return _selection_preview_positions.duplicate()
+
+
+func is_row_column_drag_mode() -> bool:
+	return _row_column_drag_mode
 
 
 func _set_selection_preview_positions(positions: Array[Vector2i]) -> void:

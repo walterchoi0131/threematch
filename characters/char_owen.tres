@@ -24,6 +24,25 @@ rectangular_scale = 0.45
 rectangular_offset = Vector2(-150, 383)
 loot_log_scale = 0.42
 loot_log_offset = Vector2(-159.92863, -53.921753)
+active_skill_name = "不擇手段"
+active_skill_desc = "進入選格狀態，拖曳一顆寶石使整列或整欄循環移動 1 格。拖回原格會取消該次選擇，可重新挑選。CD：5 回合。"
+active_skill_cd = 5
+active_skill_upgrades = Array[Dictionary]([{
+"desc_key": "UPGRADE_OWEN_DIRTY_TRICKS_DISTANCE_1",
+"effects": {
+"dirty_tricks_extra_distance": 1
+}
+}, {
+"desc_key": "UPGRADE_OWEN_DIRTY_TRICKS_CD_1",
+"effects": {
+"active_cd_delta": -1
+}
+}, {
+"desc_key": "UPGRADE_OWEN_DIRTY_TRICKS_INFINITE",
+"effects": {
+"dirty_tricks_infinite_distance": 1
+}
+}])
 responding_skills = Array[Dictionary]([{
 "desc": "summon a dark Pawn building gem at tapped cell.",
 "fuse_label": "5",

@@ -9939,6 +9939,8 @@ func _on_active_skill_selection_cancelled(char_index: int) -> void:
 	if char_index != _active_board_selection_char_index:
 		return
 	board.cancel_selection_mode()
+	if board.has_method("cancel_row_column_drag_mode"):
+		board.cancel_row_column_drag_mode()
 
 
 func _on_board_selection_preview_changed(positions: Array) -> void:
@@ -10015,10 +10017,12 @@ func _get_board_selection_clear_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	if not board.has_method("get_selection_valid_centers"):
 		return rects
-	var centers: Array = board.get_selection_valid_centers()
-	for value in centers:
-		var pos: Vector2i = value as Vector2i
-		rects.append(_board_cell_rect(pos))
+	var row_column_dragging: bool = board.has_method("is_row_column_drag_mode") and board.is_row_column_drag_mode()
+	if not row_column_dragging or _active_selection_preview_positions.is_empty():
+		var centers: Array = board.get_selection_valid_centers()
+		for value in centers:
+			var pos: Vector2i = value as Vector2i
+			rects.append(_board_cell_rect(pos))
 	for preview_pos in _active_selection_preview_positions:
 		rects.append(_board_cell_rect(preview_pos))
 	return rects
@@ -10059,6 +10063,32 @@ func _run_board_selection_active_skill(char_index: int, convert_type: Block.Type
 	if not result.has("cancelled"):
 		result["cancelled"] = false
 	return result
+
+
+func _run_row_column_drag_active_skill(char_index: int, max_distance: int) -> Dictionary:
+	if _active_board_selection_running:
+		return {"cancelled": true}
+	_active_board_selection_running = true
+	_active_board_selection_char_index = char_index
+	_active_selection_preview_positions.clear()
+	board.enter_row_column_drag_mode(max_distance)
+	character_panel.enter_active_selection_cancel_mode(char_index)
+	_show_active_selection_dim(char_index)
+	var result: Dictionary = await board.row_column_drag_finished
+	await _hide_active_selection_dim()
+	character_panel.exit_active_selection_cancel_mode()
+	_active_selection_preview_positions.clear()
+	_active_board_selection_char_index = -1
+	_active_board_selection_running = false
+	if not result.has("cancelled"):
+		result["cancelled"] = false
+	return result
+
+
+func _owen_dirty_tricks_drag_distance(character: CharacterData) -> int:
+	if SkillUpgradeUtils.effect_max(character, SkillUpgradeUtils.KIND_ACTIVE, 0, "dirty_tricks_infinite_distance") > 0:
+		return -1
+	return 1 + SkillUpgradeUtils.effect_sum(character, SkillUpgradeUtils.KIND_ACTIVE, 0, "dirty_tricks_extra_distance")
 
 
 func _play_hammer_knock_vfx_at_cell(pos: Vector2i, impact_callback: Callable = Callable()) -> void:
@@ -10153,6 +10183,27 @@ func _handle_active_skill(char_index: int) -> void:
 	if handled_by_resolver:
 		return
 	match c.active_skill_name:
+		"不擇手段":
+			var max_distance: int = _owen_dirty_tricks_drag_distance(c)
+			var drag_result: Dictionary = await _run_row_column_drag_active_skill(char_index, max_distance)
+			if bool(drag_result.get("cancelled", false)):
+				return
+			var axis: String = str(drag_result.get("axis", ""))
+			var index: int = int(drag_result.get("index", -1))
+			var amount: int = int(drag_result.get("amount", 0))
+			if axis == "" or index < 0 or amount == 0:
+				return
+			_use_active_skill_and_show_loot_toast(char_index)
+			_update_skill_ui()
+			board.is_busy = true
+			board.set_input_queue_locked(true)
+			board.clear_deferred_clicks()
+			await board.shift_row_or_column(axis, index, amount)
+			board.clear_deferred_clicks()
+			board.set_input_queue_locked(false)
+			board.is_busy = false
+			var axis_label: String = "橫列" if axis == "x" else "直欄"
+			_add_log_entry("%s：%s %d" % [Locale.tr_ui("不擇手段"), axis_label, abs(amount)], Block.Type.DARK, c)
 		"Forge":
 			var selection: Dictionary = await _run_board_selection_active_skill(char_index, Block.Type.RED, "forge_single")
 			if bool(selection.get("cancelled", false)):
