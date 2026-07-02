@@ -227,6 +227,7 @@ signal selection_preview_changed(positions: Array) # 選擇模式 hover 範圍�
 signal blast_preview_entered()               # 長按預覽開始時發出
 signal blast_preview_exited()                # 長按預覽結束時發出
 signal enemy_break_pulse()                   # 敵方 AI 實際破壞棋盤格時發出，用於 SFX
+signal dark_chess_eat_impact()               # 暗棋 Pawn/Queen 吃子撞擊時發出，用於專用 SFX
 signal gems_refilled(count: int)             # 從天空填充新寶石時發出（count = 本批新生成數量）
 signal meteor_requested(global_pos: Vector2)  # FIREBALL 高階寶石引爆時發出（main 處理 3D 隕石 VFX）
 
@@ -2583,6 +2584,12 @@ func play_fuse_animation(block: Block) -> void:
 		if _fuse_animation_tweens.get(block, null) == tween:
 			_fuse_animation_tweens.erase(block)
 	, CONNECT_ONE_SHOT)
+	play_fuse_flash(block)
+
+
+func play_fuse_flash(block: Block) -> void:
+	if block == null or not is_instance_valid(block):
+		return
 	var flash := ColorRect.new()
 	flash.color = Color(1, 1, 1, 0.85)
 	flash.size = Vector2(CELL_SIZE, CELL_SIZE)
@@ -3770,7 +3777,7 @@ func _fire_greatsword_swing_screen_endpoints(positions: Array[Vector2i]) -> Arra
 
 ## 根據高階寶石類型取得爆炸範圍（點擊與連鏈共用）
 func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array[Vector2i]:
-	if Block.upper_type_has_building(ut):
+	if Block.upper_type_has_building(ut) and not [Block.UpperType.DARK_PAWN, Block.UpperType.DARK_QUEEN].has(ut):
 		return [pos]
 	match ut:
 		Block.UpperType.FIREBALL:
@@ -3803,6 +3810,10 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return _get_fire_greatsword_positions(pos)
 		Block.UpperType.FIRE_HAMMER:
 			return _get_fire_hammer_positions(pos)
+		Block.UpperType.DARK_PAWN:
+			return _get_dark_pawn_positions(pos)
+		Block.UpperType.DARK_QUEEN:
+			return _get_dark_queen_positions(pos)
 	return [pos]
 
 
@@ -3840,6 +3851,32 @@ func _get_wood_spear_positions(origin: Vector2i, direction_y: int) -> Array[Vect
 		current += Vector2i(0, direction_y)
 
 	_append_wood_spear_head(result, terminal)
+	return result
+
+
+func _get_dark_pawn_positions(origin: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for y in range(origin.y, rows):
+		var pos := Vector2i(origin.x, y)
+		if _cell_accepts_block(pos):
+			result.append(pos)
+	return result
+
+
+func _get_dark_queen_positions(origin: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	_append_unique_valid_position(result, origin)
+	var directions: Array[Vector2i] = [
+		Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+		Vector2i(-1, 0), Vector2i(1, 0),
+		Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
+	]
+	for direction in directions:
+		var current: Vector2i = origin + direction
+		while _is_valid(current):
+			if _cell_accepts_block(current):
+				_append_unique_valid_position(result, current)
+			current += direction
 	return result
 
 
@@ -3968,6 +4005,271 @@ func destroy_upper_gem_at(pos: Vector2i) -> void:
 		if is_instance_valid(block):
 			block.queue_free()
 	, CONNECT_ONE_SHOT)
+
+
+func can_building_upper_dash_to_crush(source: Vector2i, target: Vector2i) -> bool:
+	if not _is_valid(source) or not _is_valid(target) or source == target:
+		return false
+	var attacker: Block = grid[source.x][source.y]
+	var victim: Block = grid[target.x][target.y]
+	if attacker == null or victim == null:
+		return false
+	if not attacker.is_upper_gem() or not attacker.has_building_attribute():
+		return false
+	if victim.upper_owner_team != Block.UpperOwnerTeam.ENEMY or not victim.is_upper_gem():
+		return false
+	var path: Array[Vector2i] = _line_path_between(source, target)
+	if path.is_empty():
+		return false
+	for i in range(path.size() - 1):
+		var pos: Vector2i = path[i]
+		var block: Block = grid[pos.x][pos.y]
+		if block != null and block.is_stationary_obstacle():
+			return false
+	return true
+
+
+func dash_building_upper_to_crush_enemy_upper(source: Vector2i, target: Vector2i, duration: float = 0.22, collapse_after: bool = true) -> bool:
+	if not can_building_upper_dash_to_crush(source, target):
+		return false
+	var attacker: Block = grid[source.x][source.y]
+	var victim: Block = grid[target.x][target.y]
+	var path: Array[Vector2i] = _line_path_between(source, target)
+
+	var original_z: int = attacker.z_index
+	var original_rotation: float = attacker.rotation
+	var original_scale := Vector2.ONE
+	var float_offset := Vector2(0.0, -8.0)
+	attacker.scale = original_scale
+	attacker.z_index = maxi(attacker.z_index, victim.z_index) + 40
+
+	var windup := create_tween().set_parallel(true)
+	windup.tween_property(attacker, "position", grid_to_world(source) + float_offset, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	windup.tween_property(attacker, "rotation", original_rotation + deg_to_rad(30.0), 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	windup.tween_property(attacker, "scale", original_scale * 1.06, 0.16).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await windup.finished
+
+	var current: Vector2i = source
+	var step_duration: float = maxf(duration / float(maxi(path.size(), 1)), 0.06)
+	for next in path:
+		var is_final: bool = next == target
+		var next_block: Block = grid[next.x][next.y]
+
+		var move := create_tween().set_parallel(true)
+		move.tween_property(attacker, "position", grid_to_world(next) + float_offset, step_duration).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		if not is_final and next_block != null and next_block != attacker:
+			move.tween_property(next_block, "position", grid_to_world(current), step_duration).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		await move.finished
+
+		if is_final:
+			grid[current.x][current.y] = null
+			break
+		if next_block != null and next_block != attacker:
+			grid[current.x][current.y] = next_block
+			next_block.grid_pos = current
+			next_block.position = grid_to_world(current)
+		else:
+			grid[current.x][current.y] = null
+		grid[next.x][next.y] = attacker
+		attacker.grid_pos = next
+		attacker.position = grid_to_world(next) + float_offset
+		current = next
+
+	enemy_break_pulse.emit()
+	dark_chess_eat_impact.emit()
+	play_dark_chess_impact_rings(target)
+	_play_gem_break_debris(victim, true)
+	grid[target.x][target.y] = attacker
+	attacker.grid_pos = target
+	get_tree().create_timer(0.2).timeout.connect(func() -> void:
+		if is_instance_valid(victim):
+			victim.queue_free()
+	, CONNECT_ONE_SHOT)
+
+	var settle := create_tween().set_parallel(true)
+	settle.tween_property(attacker, "position", grid_to_world(target), 0.14).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	settle.tween_property(attacker, "rotation", original_rotation, 0.14).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	settle.tween_property(attacker, "scale", original_scale, 0.14).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await settle.finished
+	attacker.position = grid_to_world(target)
+	attacker.rotation = original_rotation
+	attacker.scale = original_scale
+	attacker.z_index = original_z
+
+	if collapse_after:
+		await _collapse_and_fill()
+		resync_logic_from_visual()
+	return true
+
+
+func finish_dark_chess_eat_batch() -> void:
+	await _collapse_and_fill()
+	resync_logic_from_visual()
+
+
+func play_dark_chess_impact_rings(pos: Vector2i) -> void:
+	if not _is_valid(pos):
+		return
+	var color: Color = UpperGemDefs.get_preview_color(Block.UpperType.DARK_QUEEN, Block.COLORS.get(Block.Type.DARK, Color(0.62, 0.24, 1.0)))
+	var center: Vector2 = grid_to_world(pos)
+	for i in 3:
+		var ring := Line2D.new()
+		ring.name = "DarkChessImpactRing"
+		ring.z_index = 122
+		ring.width = 4.5
+		ring.default_color = Color(color.r, color.g, color.b, 0.88)
+		ring.closed = true
+		ring.joint_mode = Line2D.LINE_JOINT_ROUND
+		ring.points = _dark_chess_ring_points(center, 13.0 + float(i) * 3.0)
+		add_child(ring)
+
+		var delay: float = float(i) * 0.055
+		var tween := create_tween().set_parallel(true)
+		tween.tween_method(func(radius: float) -> void:
+			if is_instance_valid(ring):
+				ring.points = _dark_chess_ring_points(center, radius)
+		, 13.0 + float(i) * 3.0, 44.0 + float(i) * 7.0, 0.34).set_delay(delay).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(ring, "modulate:a", 0.0, 0.34).set_delay(delay)
+		tween.finished.connect(func() -> void:
+			if is_instance_valid(ring):
+				ring.queue_free()
+		, CONNECT_ONE_SHOT)
+
+
+func get_dark_chess_dash_preview_positions(source: Vector2i, target: Vector2i) -> Array[Vector2i]:
+	var positions: Array[Vector2i] = []
+	if not _is_valid(source) or not _is_valid(target):
+		return positions
+	positions.append(source)
+	for pos in _line_path_between(source, target):
+		if _is_valid(pos):
+			positions.append(pos)
+	return positions
+
+
+func play_dark_chess_dash_preview(source: Vector2i, target: Vector2i, _duration: float = 0.22, loops: int = 2) -> void:
+	if not _is_valid(source) or not _is_valid(target):
+		return
+	var path: Array[Vector2i] = _line_path_between(source, target)
+	if path.is_empty():
+		return
+	var source_block: Block = grid[source.x][source.y]
+	var upper_type: Block.UpperType = source_block.upper_type if source_block != null else Block.UpperType.NONE
+	var element_type: Block.Type = Block.UPPER_ELEMENT.get(upper_type, Block.Type.DARK) as Block.Type
+	var element_color: Color = UpperGemDefs.get_preview_color(upper_type, Block.COLORS.get(element_type, Color.WHITE))
+	var overlay_color := Color(element_color.r, element_color.g, element_color.b, PREVIEW_INITIAL_ALPHA_MIN)
+	var flash_count: int = maxi(1, loops)
+	var base_visible_duration: float = PREVIEW_INITIAL_FADE_IN + PREVIEW_INITIAL_HOLD + PREVIEW_INITIAL_FADE_OUT
+	var previous_total_duration: float = base_visible_duration * 3.0 + PREVIEW_CHAIN_STEP_GAP * 2.0
+	var visible_duration: float = maxf(
+		base_visible_duration,
+		(previous_total_duration - PREVIEW_CHAIN_STEP_GAP * float(flash_count - 1)) / float(flash_count)
+	)
+	var duration_scale: float = visible_duration / base_visible_duration
+	var fade_in_duration: float = PREVIEW_INITIAL_FADE_IN * duration_scale
+	var hold_duration: float = PREVIEW_INITIAL_HOLD * duration_scale
+	var fade_out_duration: float = PREVIEW_INITIAL_FADE_OUT * duration_scale
+
+	for loop_index in flash_count:
+		var rects: Array[ColorRect] = []
+		for pos in path:
+			if not _is_valid(pos):
+				continue
+			var rect := ColorRect.new()
+			rect.name = "DarkChessDashPreviewCell"
+			rect.color = overlay_color
+			rect.size = Vector2(CELL_SIZE, CELL_SIZE)
+			rect.position = Vector2(pos.x * CELL_SIZE, pos.y * CELL_SIZE)
+			rect.z_index = PREVIEW_INITIAL_OVERLAY_Z
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(rect)
+			rects.append(rect)
+		if rects.is_empty():
+			continue
+
+		var tween := create_tween().set_parallel(true)
+		for rect in rects:
+			if is_instance_valid(rect):
+				tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MAX, fade_in_duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		tween.chain().tween_interval(hold_duration)
+		tween.chain()
+		tween.set_parallel(true)
+		for rect in rects:
+			if is_instance_valid(rect):
+				tween.tween_property(rect, "color:a", PREVIEW_INITIAL_ALPHA_MIN, fade_out_duration).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+		await tween.finished
+		for rect in rects:
+			if is_instance_valid(rect):
+				rect.queue_free()
+		if loop_index < flash_count - 1:
+			await get_tree().create_timer(PREVIEW_CHAIN_STEP_GAP).timeout
+
+
+func _line_path_between(source: Vector2i, target: Vector2i) -> Array[Vector2i]:
+	var diff: Vector2i = target - source
+	var abs_x: int = absi(diff.x)
+	var abs_y: int = absi(diff.y)
+	if diff.x != 0 and diff.y != 0 and abs_x != abs_y:
+		var empty: Array[Vector2i] = []
+		return empty
+	var step_x: int = 0 if diff.x == 0 else (1 if diff.x > 0 else -1)
+	var step_y: int = 0 if diff.y == 0 else (1 if diff.y > 0 else -1)
+	var steps: int = maxi(abs_x, abs_y)
+	var result: Array[Vector2i] = []
+	for i in range(1, steps + 1):
+		result.append(source + Vector2i(step_x * i, step_y * i))
+	return result
+
+
+func transform_upper_gem_at(pos: Vector2i, upper_type: Block.UpperType, animate: bool = true) -> bool:
+	if not _is_valid(pos):
+		return false
+	var block: Block = grid[pos.x][pos.y]
+	if block == null or not block.is_upper_gem():
+		return false
+	block.set_upper_type(upper_type)
+	if animate:
+		play_fuse_animation(block)
+	resync_logic_from_visual()
+	return true
+
+
+func play_dark_chess_promotion_rings(pos: Vector2i, color: Color, ring_count: int = 3, duration_scale: float = 1.0) -> void:
+	if not _is_valid(pos):
+		return
+	var center: Vector2 = grid_to_world(pos)
+	var count: int = maxi(1, ring_count)
+	var scale: float = maxf(0.1, duration_scale)
+	for i in count:
+		var ring := Line2D.new()
+		ring.name = "DarkChessPromotionRing"
+		ring.z_index = 121
+		ring.width = 5.0
+		ring.default_color = Color(color.r, color.g, color.b, 0.82)
+		ring.closed = true
+		ring.joint_mode = Line2D.LINE_JOINT_ROUND
+		ring.points = _dark_chess_ring_points(center, 16.0 + float(i) * 3.0)
+		add_child(ring)
+
+		var delay: float = float(i) * 0.1
+		var tween := create_tween().set_parallel(true)
+		tween.tween_method(func(radius: float) -> void:
+			if is_instance_valid(ring):
+				ring.points = _dark_chess_ring_points(center, radius)
+		, 16.0 + float(i) * 3.0, 62.0 + float(i) * 10.0, 0.52 * scale).set_delay(delay * scale).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(ring, "modulate:a", 0.0, 0.52 * scale).set_delay(delay * scale)
+		tween.finished.connect(func() -> void:
+			if is_instance_valid(ring):
+				ring.queue_free()
+		, CONNECT_ONE_SHOT)
+
+
+func _dark_chess_ring_points(center: Vector2, radius: float, point_count: int = 72) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in point_count:
+		var angle: float = TAU * float(i) / float(point_count)
+		points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+	return points
 
 
 func _destroy_upper_without_effect(pos: Vector2i) -> void:

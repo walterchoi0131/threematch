@@ -262,6 +262,14 @@ func _ginger_translations(key: String) -> String:
 			return "召喚: 暗靈之塔" if zh else "Dark Emerald Tower"
 		"Dark Emerald Tower DESC":
 			return "6+ 暗寶石召喚暗屬性的暗靈之塔[建築物]。爆炸時提供 6 暗元素攻擊；玩家回合結束時依召喚者魔力發射 7 倍攻擊，並將附近 3 格轉為暗寶石。" if zh else "Fuse 6+ dark gems to summon a dark-element Dark Emerald Tower building. Its blast contributes 6 dark attack; at player turn end it fires magic x7 and converts 3 nearby cells to dark."
+		"Pawn":
+			return "兵士" if zh else "Pawn"
+		"Pawn DESC":
+			return "5+ 暗寶石召喚暗屬性的兵士[建築物]。爆破範圍為自身開始往下所有格；玩家回合結束時若範圍內有敵方 upper gem，會衝過去吃掉並讓盤面掉落。若兵士位於棋盤最底列，會升變為皇后。" if zh else "Fuse 5+ dark gems to summon a dark-element Pawn building. Its blast range is every cell below itself including itself; at player turn end it dashes to crush an enemy upper gem in range and collapses the board. If it is on the bottom row, it promotes into Queen."
+		"Queen":
+			return "皇后" if zh else "Queen"
+		"Queen DESC":
+			return "12+ 暗寶石召喚暗屬性的皇后[建築物]。爆破範圍為自身開始的米字型 8 方向放射格；玩家回合結束時若範圍內有敵方 upper gem，會衝過去吃掉並讓盤面掉落。" if zh else "Fuse 12+ dark gems to summon a dark-element Queen building. Its blast range radiates from itself in all 8 directions; at player turn end it dashes to crush an enemy upper gem in range and collapses the board."
 		"Green to Fire":
 			return "燃薪猛火" if zh else "Green to Fire"
 		"Green to Fire DESC":

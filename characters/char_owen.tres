@@ -8,6 +8,7 @@ script = ExtResource("1_script")
 character_name = "Owen"
 job_id = "attacker"
 gem_type = 7
+level = 7
 base_atk = 3
 portrait_texture = ExtResource("2_portrait")
 portrait_color = Color(0.3, 0.2, 0.45, 1)
@@ -21,3 +22,15 @@ square_scale = 1.45
 square_offset = Vector2(-169, -34)
 rectangular_scale = 0.45
 rectangular_offset = Vector2(-150, 383)
+loot_log_scale = 0.42
+loot_log_offset = Vector2(-159.92863, -53.921753)
+responding_skills = Array[Dictionary]([{
+"desc": "summon a dark Pawn building gem at tapped cell.",
+"fuse_label": "5",
+"gem_type": 7,
+"name": "Pawn",
+"priority": 1,
+"threshold": 5,
+"trigger_type": "count",
+"upper_type": 21
+}])

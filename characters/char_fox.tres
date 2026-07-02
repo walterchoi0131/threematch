@@ -36,4 +36,22 @@ responding_skills = Array[Dictionary]([{
 "priority": 2,
 "threshold": 4,
 "trigger_type": "line"
+}, {
+"desc": "5+ dark gems summon a Pawn building. It dashes downward to crush enemy upper gems, and promotes to Queen on the bottom row.",
+"fuse_label": "5",
+"gem_type": 7,
+"name": "Pawn",
+"priority": 1,
+"threshold": 5,
+"trigger_type": "count",
+"upper_type": 21
+}, {
+"desc": "12+ dark gems summon a Queen building. It dashes along row, column, or diagonal rays to crush enemy upper gems.",
+"fuse_label": "12",
+"gem_type": 7,
+"name": "Queen",
+"priority": 1,
+"threshold": 12,
+"trigger_type": "count",
+"upper_type": 22
 }])

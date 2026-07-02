@@ -9,7 +9,7 @@ extends Node2D
 # WOOD_STRUCTURE：stationary + breakable obstacle.
 # PUZZLE_KEY：解謎鑰匙 — 固定障礙物；只會被上級寶石爆發解鎖。
 enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10, PUZZLE_KEY = 11 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構、解謎鑰匙
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE, FIRE_GREATSWORD, FIRE_HAMMER, EMERALD_TOWER, DARK_EMERALD_TOWER }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線、聖光三角、火焰巨劍、火焰巨鎔、綠寶石之塔、暗靈之塔
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE, FIRE_GREATSWORD, FIRE_HAMMER, EMERALD_TOWER, DARK_EMERALD_TOWER, DARK_PAWN, DARK_QUEEN }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線、聖光三角、火焰巨劍、火焰巨鎔、綠寶石之塔、暗靈之塔、暗兵士、暗皇后
 enum UpperOwnerTeam { PLAYER, ENEMY }
 
 # 額外效果（可同時掛載多個於單一寶石上）
@@ -89,6 +89,8 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.FIRE_HAMMER: preload("res://assets/gems/gem_fire_hammer_1.png"),
 	UpperType.EMERALD_TOWER: preload("res://assets/gems/gem_emerald_tower.png"),
 	UpperType.DARK_EMERALD_TOWER: preload("res://assets/gems/gem_dark_emerald_tower.png"),
+	UpperType.DARK_PAWN: preload("res://assets/gems/gem_pawn.png"),
+	UpperType.DARK_QUEEN: preload("res://assets/gems/gem_queen.png"),
 }
 
 const UPPER_FORGE_TEXTURES: Dictionary = {
@@ -148,6 +150,8 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.FIRE_HAMMER: 5,
 	UpperType.EMERALD_TOWER: 6,
 	UpperType.DARK_EMERALD_TOWER: 6,
+	UpperType.DARK_PAWN: 5,
+	UpperType.DARK_QUEEN: 12,
 }
 
 const UPPER_FORGE_INTRINSIC_VALUE: Dictionary = {
@@ -185,6 +189,8 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.FIRE_HAMMER: Type.RED,
 	UpperType.EMERALD_TOWER: Type.GREEN,
 	UpperType.DARK_EMERALD_TOWER: Type.DARK,
+	UpperType.DARK_PAWN: Type.DARK,
+	UpperType.DARK_QUEEN: Type.DARK,
 }
 
 const UPPER_INSTANT: Dictionary = {
@@ -198,6 +204,8 @@ const UPPER_BUILDING: Dictionary = {
 	UpperType.TURTLE: true,
 	UpperType.EMERALD_TOWER: true,
 	UpperType.DARK_EMERALD_TOWER: true,
+	UpperType.DARK_PAWN: true,
+	UpperType.DARK_QUEEN: true,
 }
 
 # 融合提示描邊色（較深色，避免與白色文字混淆）
@@ -561,28 +569,18 @@ func _ensure_upper_pulse_particles(color: Color) -> void:
 	_upper_pulse_particles.call("configure", color)
 
 
+func _upper_element_visual_color(alpha: float = 1.0) -> Color:
+	var element_type: int = int(UPPER_ELEMENT.get(upper_type, block_type))
+	var color: Color = COLORS.get(element_type, COLORS.get(block_type, Color.WHITE))
+	color.a = alpha
+	return color
+
+
 func refresh_upper_particle_system() -> void:
 	if upper_type == UpperType.NONE:
 		_clear_upper_pulse_particles()
 		return
-	var burst_color: Color
-	match upper_type:
-		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD, UpperType.LIGHT_TRIANGLE:
-			burst_color = Color(1.0, 0.95, 0.40, 0.60)
-		UpperType.LEAF_SHIELD:
-			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN, UpperType.LEAF_RAY, UpperType.EMERALD_TOWER:
-			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.DARK_EMERALD_TOWER:
-			burst_color = Color(0.55, 0.32, 0.85, 0.60)
-		UpperType.SNOWBALL, UpperType.ICEBALL:
-			burst_color = Color(0.35, 0.65, 1.0, 0.60)
-		UpperType.WATER_SLASH:
-			burst_color = Color(0.35, 0.65, 1.0, 0.60)
-		UpperType.FIRE_GREATSWORD, UpperType.FIRE_HAMMER:
-			burst_color = Color(1.0, 0.42, 0.12, 0.64)
-		_:
-			burst_color = Color(1.0, 0.65, 0.15, 0.60)
+	var burst_color: Color = _upper_element_visual_color(0.60)
 	_ensure_ray_burst(burst_color)
 
 
@@ -709,22 +707,6 @@ func _update_upper_overlay() -> void:
 		return
 
 	# 高階寶石 — 顯示對應元素底色
-	var upper_base_color: Color
-	match upper_type:
-		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD, UpperType.LIGHT_TRIANGLE:
-			upper_base_color = COLORS[Type.LIGHT]
-		UpperType.LEAF_SHIELD, UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN, UpperType.LEAF_RAY, UpperType.EMERALD_TOWER:
-			upper_base_color = COLORS[Type.GREEN]
-		UpperType.DARK_EMERALD_TOWER:
-			upper_base_color = COLORS[Type.DARK]
-		UpperType.SNOWBALL, UpperType.ICEBALL:
-			upper_base_color = COLORS[Type.BLUE]
-		UpperType.WATER_SLASH:
-			upper_base_color = COLORS[Type.BLUE]
-		UpperType.FIRE_GREATSWORD, UpperType.FIRE_HAMMER:
-			upper_base_color = COLORS[Type.RED]
-		_:
-			upper_base_color = COLORS[Type.RED]
 	if visual:
 		visual.visible = false
 	if icon_label:
@@ -740,24 +722,7 @@ func _update_upper_overlay() -> void:
 		add_child(_upper_sprite)
 
 	# 依高階寶石類型設定光芒顏色
-	var burst_color: Color
-	match upper_type:
-		UpperType.SAINT_CROSS, UpperType.LIGHT_SHIELD, UpperType.LIGHT_TRIANGLE:
-			burst_color = Color(1.0, 0.95, 0.40, 0.60)
-		UpperType.LEAF_SHIELD:
-			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.PORCUPINE, UpperType.TURTLE, UpperType.BAMBOO_SUPPLY, UpperType.WOOD_SPEAR_UP, UpperType.WOOD_SPEAR_DOWN, UpperType.LEAF_RAY, UpperType.EMERALD_TOWER:
-			burst_color = Color(0.40, 0.90, 0.35, 0.60)
-		UpperType.DARK_EMERALD_TOWER:
-			burst_color = Color(0.55, 0.32, 0.85, 0.60)
-		UpperType.SNOWBALL, UpperType.ICEBALL:
-			burst_color = Color(0.35, 0.65, 1.0, 0.60)
-		UpperType.WATER_SLASH:
-			burst_color = Color(0.35, 0.65, 1.0, 0.60)
-		UpperType.FIRE_GREATSWORD, UpperType.FIRE_HAMMER:
-			burst_color = Color(1.0, 0.42, 0.12, 0.64)
-		_:
-			burst_color = Color(1.0, 0.65, 0.15, 0.60)  # 火焰橙
+	var burst_color: Color = _upper_element_visual_color(0.60)
 	_ensure_ray_burst(burst_color)
 
 	_upper_sprite.visible = true

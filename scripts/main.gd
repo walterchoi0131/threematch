@@ -144,7 +144,7 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer", "Emerald Tower", "Dark Emerald Tower"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer", "Emerald Tower", "Dark Emerald Tower", "Pawn", "Queen"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
 const LEAF_RAY_MAGIC_MULT := 3.5
@@ -302,6 +302,7 @@ var _speed_label: Label = null
 var _se_blast: AudioStream = null
 var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
+var _se_dark_chess_eat_impact: AudioStream = null
 var _se_attack_impacts: Dictionary = {}
 var _se_join_team: AudioStream = null
 var _se_thor_active: AudioStream = null
@@ -502,6 +503,8 @@ func _ready() -> void:
 	board.blast_preview_entered.connect(_on_blast_preview_entered)
 	board.blast_preview_exited.connect(_on_blast_preview_exited)
 	board.enemy_break_pulse.connect(_on_enemy_break_pulse)
+	if board.has_signal("dark_chess_eat_impact"):
+		board.dark_chess_eat_impact.connect(_on_dark_chess_eat_impact)
 	board.gems_refilled.connect(_on_gems_refilled)
 	board.escape_marker_moved.connect(_on_escape_marker_moved)
 	board.goal_cells_broken.connect(_on_goal_cells_broken)
@@ -552,6 +555,7 @@ func _ready() -> void:
 	_se_blast = _load_audio_stream("res://assets/se/111.wav")
 	_se_freeze = _load_audio_stream("res://assets/se/skef_freeze.mp3")
 	_se_impact = _load_audio_stream("res://assets/se/skef_atk1_B.mp3")
+	_se_dark_chess_eat_impact = _load_audio_stream("res://assets/se/attack/attack_se_dark_2.wav")
 	_load_attack_impact_sfx()
 	_se_join_team = _load_audio_stream("res://assets/se/join_team2.mp3")
 	_se_thor_active = _load_audio_stream("res://assets/se/magical_star_transmu.mp3")
@@ -6305,6 +6309,10 @@ func _on_enemy_break_pulse() -> void:
 	_play_sfx(_se_blast, 0.8)
 
 
+func _on_dark_chess_eat_impact() -> void:
+	_play_sfx(_se_dark_chess_eat_impact)
+
+
 # ── 開發戰鬥日誌 ──────────────────────────────────────────────
 
 func _position_dev_log() -> void:
@@ -6577,6 +6585,8 @@ func _register_building_upper_resolvers() -> void:
 	_register_building_upper_resolver(Block.UpperType.TURTLE, Callable(self, "_resolve_turtle_building_turn"))
 	_register_building_upper_resolver(Block.UpperType.EMERALD_TOWER, Callable(self, "_resolve_emerald_tower_building_turn"))
 	_register_building_upper_resolver(Block.UpperType.DARK_EMERALD_TOWER, Callable(self, "_resolve_dark_emerald_tower_building_turn"))
+	_register_building_upper_resolver(Block.UpperType.DARK_PAWN, Callable(self, "_resolve_dark_pawn_building_turn"))
+	_register_building_upper_resolver(Block.UpperType.DARK_QUEEN, Callable(self, "_resolve_dark_queen_building_turn"))
 
 
 func _register_building_upper_resolver(upper_type: Block.UpperType, resolver: Callable) -> void:
@@ -7929,6 +7939,7 @@ func _resolve_building_upper_gems() -> void:
 		var positions: Array = positions_value as Array
 		for pos_value in positions:
 			all_positions[pos_value] = true
+	_add_dark_chess_eat_preview_positions_to_keep_set(all_positions, groups)
 	_dim_board_except(all_positions)
 
 	var resolved_any := false
@@ -8050,6 +8061,340 @@ func _resolve_emerald_tower_building_turn(positions: Array) -> void:
 
 func _resolve_dark_emerald_tower_building_turn(positions: Array) -> void:
 	await _resolve_spirit_tower_building_turn(positions, Block.UpperType.DARK_EMERALD_TOWER, Block.Type.DARK, "Dark Emerald Tower")
+
+
+func _resolve_dark_pawn_building_turn(positions: Array) -> void:
+	for pos_value in positions:
+		var pos: Vector2i = pos_value as Vector2i
+		if not board._is_valid(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if block == null or block.upper_type != Block.UpperType.DARK_PAWN:
+			continue
+		var action_type: Block.UpperType = Block.UpperType.DARK_PAWN
+		var action_name: String = "Pawn"
+		if pos.y >= board.rows - 1:
+			var promoted: bool = await _play_dark_pawn_promotion(pos)
+			if promoted:
+				_add_log_entry("[b]%s[/b] %s -> [b]%s[/b]" % [Locale.tr_ui("Pawn"), _gem_bbcode(Block.Type.DARK), Locale.tr_ui("Queen")], Block.Type.DARK, null)
+				await get_tree().create_timer(0.12).timeout
+				action_type = Block.UpperType.DARK_QUEEN
+				action_name = "Queen"
+			else:
+				continue
+		var target: Vector2i = _dark_chess_enemy_upper_target(pos, action_type)
+		if target.x >= 0:
+			await _play_dark_chess_eat_action(pos, target, action_name)
+
+
+func _resolve_dark_queen_building_turn(positions: Array) -> void:
+	var attackers: Array[Dictionary] = []
+	for pos_value in positions:
+		var pos: Vector2i = pos_value as Vector2i
+		if not board._is_valid(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if block == null or block.upper_type != Block.UpperType.DARK_QUEEN:
+			continue
+		attackers.append({
+			"block": block,
+			"pos": pos,
+			"upper_type": Block.UpperType.DARK_QUEEN,
+			"action_name": "Queen",
+		})
+	var plan: Array = _plan_dark_chess_eat_actions(attackers)
+	await _execute_dark_chess_eat_plan(plan)
+
+
+func _building_upper_owner_character(pos: Vector2i) -> CharacterData:
+	if not board._is_valid(pos):
+		return null
+	var block: Block = board.grid[pos.x][pos.y]
+	if block == null or block.upper_owner_team != Block.UpperOwnerTeam.PLAYER:
+		return null
+	var owner_id: int = int(block.upper_owner_id)
+	if owner_id < 0 or owner_id >= party.size():
+		return null
+	return party[owner_id]
+
+
+func _add_dark_chess_eat_preview_positions_to_keep_set(keep_set: Dictionary, groups: Dictionary) -> void:
+	if groups.has(Block.UpperType.DARK_PAWN):
+		var pawn_positions: Array = groups[Block.UpperType.DARK_PAWN] as Array
+		for pos_value in pawn_positions:
+			var pos: Vector2i = pos_value as Vector2i
+			if not board._is_valid(pos):
+				continue
+			var block: Block = board.grid[pos.x][pos.y]
+			if block == null or block.upper_type != Block.UpperType.DARK_PAWN:
+				continue
+			var action_type: Block.UpperType = Block.UpperType.DARK_QUEEN if pos.y >= board.rows - 1 else Block.UpperType.DARK_PAWN
+			var target: Vector2i = _dark_chess_enemy_upper_target(pos, action_type)
+			if target.x >= 0:
+				_add_dark_chess_preview_path_to_keep_set(keep_set, pos, target)
+	if groups.has(Block.UpperType.DARK_QUEEN):
+		var attackers: Array[Dictionary] = []
+		var queen_positions: Array = groups[Block.UpperType.DARK_QUEEN] as Array
+		for pos_value in queen_positions:
+			var pos: Vector2i = pos_value as Vector2i
+			if not board._is_valid(pos):
+				continue
+			var block: Block = board.grid[pos.x][pos.y]
+			if block == null or block.upper_type != Block.UpperType.DARK_QUEEN:
+				continue
+			attackers.append({
+				"block": block,
+				"pos": pos,
+				"upper_type": Block.UpperType.DARK_QUEEN,
+				"action_name": "Queen",
+			})
+		for action_value in _plan_dark_chess_eat_actions(attackers):
+			var action: Dictionary = action_value as Dictionary
+			var source: Vector2i = action.get("pos", Vector2i(-1, -1)) as Vector2i
+			var target: Vector2i = action.get("target_pos", Vector2i(-1, -1)) as Vector2i
+			_add_dark_chess_preview_path_to_keep_set(keep_set, source, target)
+
+
+func _add_dark_chess_preview_path_to_keep_set(keep_set: Dictionary, source: Vector2i, target: Vector2i) -> void:
+	var positions: Array[Vector2i] = []
+	if board.has_method("get_dark_chess_dash_preview_positions"):
+		positions = board.get_dark_chess_dash_preview_positions(source, target)
+	else:
+		positions = [source, target]
+	for path_pos in positions:
+		if board._is_valid(path_pos):
+			keep_set[path_pos] = true
+
+
+func _plan_dark_chess_eat_actions(attackers: Array[Dictionary]) -> Array:
+	var candidates_by_attacker: Array = []
+	for attacker in attackers:
+		var block: Block = attacker.get("block", null) as Block
+		var pos: Vector2i = attacker.get("pos", Vector2i(-1, -1)) as Vector2i
+		var upper_type: Block.UpperType = int(attacker.get("upper_type", Block.UpperType.NONE))
+		if block == null or not is_instance_valid(block) or not board._is_valid(pos):
+			continue
+		var candidates: Array = []
+		for target_pos in _dark_chess_enemy_upper_targets(pos, upper_type):
+			var target_block: Block = board.grid[target_pos.x][target_pos.y]
+			if target_block == null or not is_instance_valid(target_block):
+				continue
+			var diff: Vector2i = target_pos - pos
+			var distance: int = diff.x * diff.x + diff.y * diff.y
+			var action := attacker.duplicate()
+			action["target_block"] = target_block
+			action["target_pos"] = target_pos
+			action["distance"] = distance
+			candidates.append(action)
+		candidates.sort_custom(Callable(self, "_sort_dark_chess_action_candidate"))
+		candidates_by_attacker.append(candidates)
+	var best := {"count": -1, "distance": 2147483647, "actions": []}
+	_search_dark_chess_best_plan(candidates_by_attacker, 0, {}, [], 0, best)
+	return best.get("actions", []) as Array
+
+
+func _sort_dark_chess_action_candidate(left: Dictionary, right: Dictionary) -> bool:
+	var left_distance: int = int(left.get("distance", 0))
+	var right_distance: int = int(right.get("distance", 0))
+	if left_distance != right_distance:
+		return left_distance < right_distance
+	var left_pos: Vector2i = left.get("target_pos", Vector2i.ZERO) as Vector2i
+	var right_pos: Vector2i = right.get("target_pos", Vector2i.ZERO) as Vector2i
+	if left_pos.y != right_pos.y:
+		return left_pos.y < right_pos.y
+	return left_pos.x < right_pos.x
+
+
+func _search_dark_chess_best_plan(
+	candidates_by_attacker: Array,
+	index: int,
+	used_targets: Dictionary,
+	current: Array,
+	current_distance: int,
+	best: Dictionary
+) -> void:
+	if index >= candidates_by_attacker.size():
+		var current_count: int = current.size()
+		var best_count: int = int(best.get("count", -1))
+		var best_distance: int = int(best.get("distance", 2147483647))
+		if current_count > best_count or (current_count == best_count and current_distance < best_distance):
+			var actions: Array = []
+			for action_value in current:
+				actions.append((action_value as Dictionary).duplicate())
+			best["count"] = current_count
+			best["distance"] = current_distance
+			best["actions"] = actions
+		return
+
+	_search_dark_chess_best_plan(candidates_by_attacker, index + 1, used_targets, current, current_distance, best)
+	var candidates: Array = candidates_by_attacker[index] as Array
+	for candidate_value in candidates:
+		var candidate: Dictionary = candidate_value as Dictionary
+		var target_block: Block = candidate.get("target_block", null) as Block
+		if target_block == null or not is_instance_valid(target_block):
+			continue
+		var target_id: int = target_block.get_instance_id()
+		if used_targets.has(target_id):
+			continue
+		used_targets[target_id] = true
+		current.append(candidate)
+		_search_dark_chess_best_plan(candidates_by_attacker, index + 1, used_targets, current, current_distance + int(candidate.get("distance", 0)), best)
+		current.pop_back()
+		used_targets.erase(target_id)
+
+
+func _execute_dark_chess_eat_plan(plan: Array) -> void:
+	var crushed_any := false
+	for action_value in plan:
+		var action: Dictionary = action_value as Dictionary
+		var attacker: Block = action.get("block", null) as Block
+		var target_block: Block = action.get("target_block", null) as Block
+		if attacker == null or target_block == null or not is_instance_valid(attacker) or not is_instance_valid(target_block):
+			continue
+		var source_pos: Vector2i = _find_board_block_position(attacker)
+		var target_pos: Vector2i = _find_board_block_position(target_block)
+		if source_pos.x < 0 or target_pos.x < 0:
+			continue
+		if board.has_method("can_building_upper_dash_to_crush") and not board.can_building_upper_dash_to_crush(source_pos, target_pos):
+			continue
+		var action_name: String = str(action.get("action_name", "Queen"))
+		var crushed: bool = await _play_dark_chess_eat_action(source_pos, target_pos, action_name, false)
+		crushed_any = crushed_any or crushed
+	if crushed_any and board.has_method("finish_dark_chess_eat_batch"):
+		await board.finish_dark_chess_eat_batch()
+
+
+func _find_board_block_position(target_block: Block) -> Vector2i:
+	if target_block == null or not is_instance_valid(target_block):
+		return Vector2i(-1, -1)
+	for x in range(board.columns):
+		for y in range(board.rows):
+			if board.grid[x][y] == target_block:
+				return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+func _play_dark_pawn_promotion(pos: Vector2i) -> bool:
+	if not board._is_valid(pos):
+		return false
+	var block: Block = board.grid[pos.x][pos.y]
+	if block == null or block.upper_type != Block.UpperType.DARK_PAWN:
+		return false
+
+	var original_position: Vector2 = board.grid_to_world(pos)
+	var original_scale := Vector2.ONE
+	var original_z: int = block.z_index
+	var color: Color = Block.COLORS.get(Block.Type.DARK, Color(0.62, 0.24, 1.0, 1.0))
+	block.position = original_position
+	block.scale = original_scale
+	block.z_index = original_z + 45
+
+	var lift_offset := Vector2(0.0, -10.0)
+	var lift := create_tween().set_parallel(true)
+	lift.tween_property(block, "position", original_position + lift_offset, 0.224).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	lift.tween_property(block, "scale", original_scale * 1.24, 0.224).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await lift.finished
+
+	if board.has_method("play_dark_chess_promotion_rings"):
+		board.play_dark_chess_promotion_rings(pos, color, 3, 1.4)
+	_play_transmute_spiral_vfx(board.to_global(board.grid_to_world(pos)), color, 0.644)
+	await get_tree().create_timer(0.252).timeout
+
+	var transformed: bool = board.transform_upper_gem_at(pos, Block.UpperType.DARK_QUEEN, false)
+	if not transformed:
+		block.position = original_position
+		block.scale = original_scale
+		block.z_index = original_z
+		return false
+	_play_sfx(_se_freeze)
+	if board.has_method("play_fuse_flash"):
+		board.play_fuse_flash(block)
+
+	await get_tree().create_timer(0.336).timeout
+	var settle := create_tween().set_parallel(true)
+	settle.tween_property(block, "position", original_position, 0.252).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	settle.tween_property(block, "scale", original_scale, 0.252).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	await settle.finished
+	block.position = original_position
+	block.scale = original_scale
+	block.z_index = original_z
+	return true
+
+
+func _show_dark_chess_eat_loot_log(pos: Vector2i) -> void:
+	var owner: CharacterData = _building_upper_owner_character(pos)
+	if not _is_owen_character(owner):
+		return
+	_enqueue_character_message_loot_toast(owner, "Haha.", Block.Type.DARK)
+
+
+func _is_owen_character(character: CharacterData) -> bool:
+	if character == null:
+		return false
+	var character_name: String = character.character_name.strip_edges().to_lower()
+	var resource_path: String = character.resource_path.strip_edges().to_lower()
+	return character_name == "owen" or resource_path.find("char_owen") >= 0
+
+
+func _play_dark_chess_eat_action(pos: Vector2i, target: Vector2i, action_name: String, collapse_after: bool = true) -> bool:
+	_show_dark_chess_eat_loot_log(pos)
+	_brighten_dark_chess_trail(pos, target)
+	if board.has_method("play_dark_chess_dash_preview"):
+		await board.play_dark_chess_dash_preview(pos, target, 0.22, 2)
+	var crushed: bool = await board.dash_building_upper_to_crush_enemy_upper(pos, target, 0.22, collapse_after)
+	if crushed:
+		_add_log_entry("[b]%s[/b] %s crushes enemy upper gem" % [Locale.tr_ui(action_name), _gem_bbcode(Block.Type.DARK)], Block.Type.DARK, null)
+		await get_tree().create_timer(0.08).timeout
+	return crushed
+
+
+func _brighten_dark_chess_trail(source: Vector2i, target: Vector2i) -> void:
+	var positions: Array[Vector2i] = []
+	if board.has_method("get_dark_chess_dash_preview_positions"):
+		positions = board.get_dark_chess_dash_preview_positions(source, target)
+	else:
+		positions = [source, target]
+	for pos in positions:
+		if not board._is_valid(pos):
+			continue
+		var block: Block = board.grid[pos.x][pos.y]
+		if block == null:
+			continue
+		block.modulate = Color.WHITE
+
+
+func _dark_chess_enemy_upper_target(origin: Vector2i, upper_type: Block.UpperType) -> Vector2i:
+	var targets: Array[Vector2i] = _dark_chess_enemy_upper_targets(origin, upper_type)
+	if targets.is_empty():
+		return Vector2i(-1, -1)
+	return targets[0]
+
+
+func _dark_chess_enemy_upper_targets(origin: Vector2i, upper_type: Block.UpperType) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for target_pos in board._get_blast_positions_for_upper(origin, upper_type):
+		if target_pos == origin or not board._is_valid(target_pos):
+			continue
+		if board.has_method("can_building_upper_dash_to_crush") and not board.can_building_upper_dash_to_crush(origin, target_pos):
+			continue
+		var target: Block = board.grid[target_pos.x][target_pos.y]
+		if target == null or not target.is_upper_gem() or target.upper_owner_team != Block.UpperOwnerTeam.ENEMY:
+			continue
+		result.append(target_pos)
+	result.sort_custom(Callable(self, "_sort_dark_chess_target_pos").bind(origin))
+	return result
+
+
+func _sort_dark_chess_target_pos(left: Vector2i, right: Vector2i, origin: Vector2i) -> bool:
+	var left_diff: Vector2i = left - origin
+	var right_diff: Vector2i = right - origin
+	var left_dist: int = left_diff.x * left_diff.x + left_diff.y * left_diff.y
+	var right_dist: int = right_diff.x * right_diff.x + right_diff.y * right_diff.y
+	if left_dist != right_dist:
+		return left_dist < right_dist
+	if left.y != right.y:
+		return left.y < right.y
+	return left.x < right.x
 
 
 func _resolve_spirit_tower_building_turn(
@@ -8845,17 +9190,17 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _tc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _tc_count, Block.UpperType.TURTLE), fuse_gem_type, _tc)
 			await get_tree().create_timer(0.15).timeout
-		Block.UpperType.EMERALD_TOWER, Block.UpperType.DARK_EMERALD_TOWER:
+		Block.UpperType.EMERALD_TOWER, Block.UpperType.DARK_EMERALD_TOWER, Block.UpperType.DARK_PAWN, Block.UpperType.DARK_QUEEN:
 			var pos: Vector2i = board.last_tapped_pos
 			var char_index: int = int(resp.get("char_index", -1))
-			var tower_type: Block.UpperType = upper_type
-			var tower_element: Block.Type = Block.UPPER_ELEMENT.get(tower_type, fuse_gem_type) as Block.Type
-			if not board.place_upper_gem(pos, tower_type, tower_element, Block.UpperOwnerTeam.PLAYER, char_index):
+			var summon_type: Block.UpperType = upper_type
+			var summon_element: Block.Type = Block.UPPER_ELEMENT.get(summon_type, fuse_gem_type) as Block.Type
+			if not board.place_upper_gem(pos, summon_type, summon_element, Block.UpperOwnerTeam.PLAYER, char_index):
 				return
 			_play_sfx(_se_freeze)
 			var _etc: CharacterData = party[char_index] if char_index >= 0 and char_index < party.size() else null
 			var _etc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
-			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _etc_count, tower_type), fuse_gem_type, _etc)
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _etc_count, summon_type), fuse_gem_type, _etc)
 			await get_tree().create_timer(0.15).timeout
 		Block.UpperType.BAMBOO_SUPPLY:
 			# 竹葉補給：在點擊處生成竹葉補給寶石；爆破時消除周圍 8 格並回復觸發者 HP
@@ -11989,6 +12334,26 @@ func _enqueue_active_skill_loot_toast(char_data: CharacterData, hostile: bool = 
 		"hostile": hostile,
 		"callbacks": callbacks,
 	})
+	_start_next_loot_toast()
+
+
+func _enqueue_character_message_loot_toast(char_data: CharacterData, message: String, gem_type: Block.Type = Block.Type.DARK, hostile: bool = false, finished_callback: Callable = Callable()) -> void:
+	var clean_message: String = message.strip_edges()
+	if clean_message.is_empty():
+		return
+	var callbacks: Array = []
+	if finished_callback.is_valid():
+		callbacks.append(finished_callback)
+	var entry := {
+		"skill_log": true,
+		"gem_type": int(gem_type),
+		"skill_name": clean_message,
+		"hostile": hostile,
+		"callbacks": callbacks,
+	}
+	if char_data != null:
+		entry["character"] = char_data
+	_loot_toast_queue.append(entry)
 	_start_next_loot_toast()
 
 

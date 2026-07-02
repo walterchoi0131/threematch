@@ -572,6 +572,8 @@ func _upper_gem_templates() -> Array[Dictionary]:
 		_skill_template("Turtle", "Turtle", "Turtle", Block.UpperType.TURTLE, "count", "summon a Turtle gem at tapped cell."),
 		_skill_template("Emerald Tower", "Emerald Tower", "Tower", Block.UpperType.EMERALD_TOWER, "count", "summon an Emerald Tower building gem at tapped cell."),
 		_skill_template("Dark Emerald Tower", "Dark Emerald Tower", "Dark Tower", Block.UpperType.DARK_EMERALD_TOWER, "count", "summon a Dark Emerald Tower building gem at tapped cell."),
+		_skill_template("Pawn", "Pawn", "Pawn", Block.UpperType.DARK_PAWN, "count", "summon a dark Pawn building gem at tapped cell."),
+		_skill_template("Queen", "Queen", "Queen", Block.UpperType.DARK_QUEEN, "count", "summon a dark Queen building gem at tapped cell."),
 		_skill_template("Bamboo Supply", "Bamboo", "Bamboo", Block.UpperType.BAMBOO_SUPPLY, "count", "create a Bamboo Supply gem at tapped cell."),
 		_skill_template("Wood Spear", "Wood Spear", "Spear", Block.UpperType.WOOD_SPEAR_UP, "count", "create a Wood Spear gem at tapped cell."),
 		_skill_template("Leaf Ray", "Leaf Ray", "Ray", Block.UpperType.LEAF_RAY, "count", "create an instant Leaf Ray gem at tapped cell."),
