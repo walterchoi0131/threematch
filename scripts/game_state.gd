@@ -130,6 +130,13 @@ func mark_stage_reward_claimed(stage_id: String, auto_save: bool = true) -> void
 	if auto_save:
 		save_game()
 
+
+func claim_stage_reward_if_unclaimed(stage_id: String, auto_save: bool = true) -> bool:
+	if is_stage_reward_claimed(stage_id):
+		return false
+	mark_stage_reward_claimed(stage_id, auto_save)
+	return true
+
 # ── 戰鬥結算暫存（戰鬥勝利後寫入，結算場景讀取） ──
 var last_battle_loot: Dictionary = {}              # key=ItemDefs.Type, value=int
 var last_battle_party: Array[CharacterData] = []   # 出戰角色（結算用）

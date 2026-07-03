@@ -20,6 +20,10 @@ const INTENT_CD_DIGIT_FONT_SIZE := 18
 const INTENT_CD_ICON_FONT_SIZE := 23
 const INTENT_CD_ICON_OFFSET := Vector2(-1.5, -0.5)
 const INTENT_CD_DIGIT_OFFSET := Vector2(-1.5, -2.0)
+const HIT_BOUNCE_NORMAL := 0
+const HIT_BOUNCE_MID := 1
+const HIT_BOUNCE_MAX := 2
+const HIT_BOUNCE_DURATION := 0.35
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
@@ -48,6 +52,8 @@ var _long_press_fired: bool = false
 
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 var _base_minimum_size: Vector2 = Vector2.ZERO
+var _hit_bounce_tween: Tween = null
+var _hit_bounce_home_position: Vector2 = Vector2.ZERO
 var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
 var _passive_badge: Control = null
 var _passive_badge_icon: TextureRect = null
@@ -625,13 +631,45 @@ func _stop_spin() -> void:
 
 
 ## 受到傷害：扣血、更新血條、播放受傷閃爍、檢查死亡
-func take_damage(amount: int) -> int:
-	return _take_damage_internal(amount, -1)
+func play_hit_bounce(hit_power_level: int = HIT_BOUNCE_NORMAL) -> void:
+	if portrait == null or not is_node_ready():
+		return
+	var target_position: Vector2 = _hit_bounce_home_position
+	if _hit_bounce_tween == null or not _hit_bounce_tween.is_valid():
+		target_position = portrait.position
+		_hit_bounce_home_position = target_position
+	if _hit_bounce_tween != null and _hit_bounce_tween.is_valid():
+		_hit_bounce_tween.kill()
+	portrait.position = target_position + _hit_bounce_offset(hit_power_level)
+	var tween := create_tween()
+	_hit_bounce_tween = tween
+	tween.tween_property(portrait, "position", target_position, HIT_BOUNCE_DURATION) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tween.finished.connect(func() -> void:
+		if _hit_bounce_tween == tween:
+			portrait.position = target_position
+			_hit_bounce_home_position = target_position
+			_hit_bounce_tween = null
+	)
+
+
+func _hit_bounce_offset(hit_power_level: int) -> Vector2:
+	match clampi(hit_power_level, HIT_BOUNCE_NORMAL, HIT_BOUNCE_MAX):
+		HIT_BOUNCE_MAX:
+			return Vector2(0.0, -58.0)
+		HIT_BOUNCE_MID:
+			return Vector2(0.0, -36.0)
+		_:
+			return Vector2(0.0, -18.0)
+
+
+func take_damage(amount: int, hit_power_level: int = HIT_BOUNCE_NORMAL) -> int:
+	return _take_damage_internal(amount, -1, hit_power_level)
 
 
 ## 受到傷害，但若此次傷害會讓 HP 低於 hp_floor，直接鎖在 hp_floor 並跳過死亡流程。
-func take_damage_with_hp_floor(amount: int, hp_floor: int = 1) -> int:
-	return _take_damage_internal(amount, maxi(0, hp_floor))
+func take_damage_with_hp_floor(amount: int, hp_floor: int = 1, hit_power_level: int = HIT_BOUNCE_NORMAL) -> int:
+	return _take_damage_internal(amount, maxi(0, hp_floor), hit_power_level)
 
 
 func get_damage_after_passives(amount: int) -> int:
@@ -640,7 +678,7 @@ func get_damage_after_passives(amount: int) -> int:
 	return applied_amount
 
 
-func take_applied_damage_tick(applied_amount: int) -> int:
+func take_applied_damage_tick(applied_amount: int, hit_power_level: int = HIT_BOUNCE_NORMAL) -> int:
 	if applied_amount <= 0:
 		return 0
 	last_applied_damage = applied_amount
@@ -661,6 +699,8 @@ func take_applied_damage_tick(applied_amount: int) -> int:
 		var target_ratio: float = float(current_hp) / float(max_hp) if max_hp > 0 else 0.0
 		var bar_tween := create_tween()
 		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	if actual_damage > 0:
+		play_hit_bounce(hit_power_level)
 
 	var blink := create_tween()
 	blink.tween_property(self, "modulate", Color(2.0, 0.3, 0.3), 0.05)
@@ -685,7 +725,7 @@ func clear_damage_hp_floor() -> void:
 	damage_hp_floor = -1
 
 
-func _take_damage_internal(amount: int, hp_floor: int) -> int:
+func _take_damage_internal(amount: int, hp_floor: int, hit_power_level: int = HIT_BOUNCE_NORMAL) -> int:
 	var applied_amount: int = _apply_damage_passives(amount)
 	last_applied_damage = applied_amount
 	var prev_hp: int = current_hp
@@ -696,6 +736,7 @@ func _take_damage_internal(amount: int, hp_floor: int) -> int:
 		current_hp = effective_floor
 	else:
 		current_hp = max(0, next_hp)
+	var actual_damage: int = maxi(0, prev_hp - current_hp)
 	hp_changed.emit(current_hp, max_hp)
 	if floor_was_triggered:
 		hp_floor_triggered.emit(self)
@@ -707,6 +748,8 @@ func _take_damage_internal(amount: int, hp_floor: int) -> int:
 		var bar_tween := create_tween()
 		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		_play_hp_damage_preview(prev_ratio, target_ratio)
+	if actual_damage > 0:
+		play_hit_bounce(hit_power_level)
 
 	# 整個敎人閃紅提示受傷
 	var blink := create_tween()

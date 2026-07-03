@@ -1,8 +1,8 @@
-[gd_resource type="Resource" script_class="EnemyData" format=3]
+[gd_resource type="Resource" script_class="EnemyData" format=3 uid="uid://bwpp1rrepwxkg"]
 
-[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/enemy/slime_light.png" id="2_texture"]
-[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
+[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://bsn40mrw7dwql" path="res://assets/enemy/slime_light.png" id="2_texture"]
+[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="3_loot_script"]
 
 [sub_resource type="Resource" id="gold_drop"]
 script = ExtResource("3_loot_script")
@@ -17,7 +17,7 @@ enemy_name_en = "Light Slime"
 max_hp = 900
 action_pattern = Array[int]([2, 2, 2, 0])
 action_percents = Array[int]([15, 15, 15, 15])
-portrait_color = Color(1.0, 0.86, 0.22, 1)
+portrait_color = Color(1, 0.86, 0.22, 1)
 portrait_texture = ExtResource("2_texture")
 element = 6
 loot_table = Array[ExtResource("3_loot_script")]([SubResource("gold_drop")])

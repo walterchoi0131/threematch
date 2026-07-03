@@ -243,6 +243,8 @@ const INSTANT_UPPER_ORBIT_MIN_PERIOD := 0.42
 # 每個 item: { gem_type, count, global_positions, grid_positions, responses }
 var _attack_queue: Array = []
 var _attack_worker_running: bool = false
+var _dev_turn_report_rows: Array = []
+var _dev_current_turn_report: Dictionary = {}
 
 # ── VFX 粒子池 ──
 const MAX_VFX_PARTICLES := 16
@@ -433,10 +435,13 @@ var _stage_editor_character_catalog: Array[Dictionary] = []
 var _stage_editor_character_by_id: Dictionary = {}
 var _stage_editor_battle_background_catalog: Array[Dictionary] = []
 var _stage_editor_dialog_background_catalog: Array[Dictionary] = []
+var _stage_editor_dialog_background_icon_cache: Dictionary = {}
 var _stage_editor_dialog_music_catalog: Array[Dictionary] = []
 var _stage_editor_tutorial_image_catalog: Array[Dictionary] = []
 var _tutorial_page_library: _TutorialPageLibrary = null
 var _stage_editor_test_dialog: Control = null
+var _stage_editor_preview_bgm_player: AudioStreamPlayer = null
+var _stage_editor_preview_bgm_was_paused: bool = false
 var _stage_editor_enemy_area_panel: Control = null
 var _stage_editor_prev_round_button: Button = null
 var _stage_editor_next_round_button: Button = null
@@ -476,6 +481,7 @@ func _ready() -> void:
 	current_stage = GameState.selected_stage
 	if current_stage == null:
 		current_stage = preload("res://stages/stage_dev.tres")
+	_dev_reset_battle_report()
 
 	party = GameState.selected_party.duplicate()
 	if party.is_empty():
@@ -1001,7 +1007,8 @@ func _make_stage_editor_distribution_spin(type_value: int) -> Control:
 	label_row.add_child(label)
 
 	var value_label := Label.new()
-	value_label.text = str(current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1)
+	var initial_weight: int = clampi(current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1, 0, 10)
+	value_label.text = str(initial_weight)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value_label.custom_minimum_size = Vector2(24, 0)
 	value_label.add_theme_font_size_override("font_size", 9)
@@ -1010,9 +1017,9 @@ func _make_stage_editor_distribution_spin(type_value: int) -> Control:
 
 	var slider := HSlider.new()
 	slider.min_value = 0
-	slider.max_value = 100
+	slider.max_value = 10
 	slider.step = 1
-	slider.value = current_stage.get_element_weight_for_type(type_value) if current_stage != null else 1
+	slider.value = initial_weight
 	slider.custom_minimum_size = Vector2(88, 14)
 	slider.tooltip_text = "隨機生成權重。0 = 不會掉落。"
 	slider.value_changed.connect(_on_stage_editor_distribution_changed.bind(type_value))
@@ -1240,6 +1247,7 @@ func _build_stage_editor_dialog_panel() -> void:
 	dialog_action_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dialog_action_row.add_child(dialog_action_spacer)
 	dialog_action_row.add_child(_make_stage_editor_small_button("試播", _on_stage_editor_dialog_test_play_pressed, Vector2(58, 30)))
+	dialog_action_row.add_child(_make_stage_editor_small_button("試播戰後", _on_stage_editor_post_dialog_test_play_pressed, Vector2(82, 30)))
 	dialog_action_row.add_child(_make_stage_editor_small_button("保存", _on_stage_editor_save_pressed, Vector2(58, 30)))
 	dialog_action_row.add_child(_make_stage_editor_small_button("返回", _on_stage_editor_back_pressed, Vector2(58, 30)))
 
@@ -1344,6 +1352,7 @@ func _build_stage_editor_dialog_panel() -> void:
 	_stage_editor_dialog_exit_side_option.toggled.connect(_on_stage_editor_dialog_exit_side_toggled)
 	exit_row.add_child(_stage_editor_dialog_exit_side_option)
 	exit_row.add_child(_make_stage_editor_small_button("加入退場", _on_stage_editor_dialog_add_exit_pressed, Vector2(86, 30)))
+	exit_row.add_child(_make_stage_editor_small_button("全角色退場", _on_stage_editor_dialog_add_exit_all_pressed, Vector2(100, 30)))
 
 	var line_scroll := ScrollContainer.new()
 	line_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1806,6 +1815,7 @@ func _stage_editor_load_dialog_background_catalog() -> void:
 	if not _stage_editor_dialog_background_catalog.is_empty():
 		return
 	_stage_editor_dialog_background_catalog.clear()
+	_stage_editor_dialog_background_icon_cache.clear()
 	var dir := DirAccess.open(STAGE_EDITOR_DIALOG_BACKGROUND_ROOT)
 	if dir == null:
 		return
@@ -1931,8 +1941,57 @@ func _stage_editor_populate_dialog_background_selector(option: OptionButton, sel
 	option.clear()
 	_stage_editor_add_option_item(option, placeholder, "")
 	for entry: Dictionary in _stage_editor_dialog_background_catalog:
-		_stage_editor_add_option_item(option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
+		var resource_path: String = String(entry.get("resource_path", ""))
+		_stage_editor_add_option_item(option, String(entry.get("name", "BG")), resource_path)
 	_stage_editor_select_option_value(option, selected_path)
+	_stage_editor_attach_dialog_background_icon_loader(option)
+
+
+func _stage_editor_attach_dialog_background_icon_loader(option: OptionButton) -> void:
+	if option == null or option.has_meta("dialog_bg_icon_loader_connected"):
+		return
+	option.set_meta("dialog_bg_icon_loader_connected", true)
+	var popup: PopupMenu = option.get_popup()
+	if popup == null:
+		return
+	popup.about_to_popup.connect(_stage_editor_populate_dialog_background_icons.bind(option))
+
+
+func _stage_editor_populate_dialog_background_icons(option: OptionButton) -> void:
+	if option == null or bool(option.get_meta("dialog_bg_icons_loaded", false)):
+		return
+	option.set_meta("dialog_bg_icons_loaded", true)
+	for item_index in option.item_count:
+		var resource_path: String = String(option.get_item_metadata(item_index))
+		if resource_path.is_empty():
+			continue
+		var icon: Texture2D = _stage_editor_make_dialog_background_icon(resource_path)
+		if icon != null:
+			option.set_item_icon(item_index, icon)
+
+
+func _stage_editor_make_dialog_background_icon(resource_path: String) -> Texture2D:
+	if _stage_editor_dialog_background_icon_cache.has(resource_path):
+		return _stage_editor_dialog_background_icon_cache[resource_path] as Texture2D
+	var texture: Texture2D = load(resource_path) as Texture2D
+	if texture == null:
+		return null
+	var image: Image = texture.get_image()
+	if image == null:
+		return texture
+	var source_size: Vector2i = image.get_size()
+	if source_size.x <= 0 or source_size.y <= 0:
+		return texture
+	var icon_size := Vector2i(48, 28)
+	var scale: float = maxf(float(icon_size.x) / float(source_size.x), float(icon_size.y) / float(source_size.y))
+	var scaled_size := Vector2i(maxi(icon_size.x, int(ceil(source_size.x * scale))), maxi(icon_size.y, int(ceil(source_size.y * scale))))
+	var scaled: Image = image.duplicate()
+	scaled.resize(scaled_size.x, scaled_size.y, Image.INTERPOLATE_LANCZOS)
+	var crop_pos := Vector2i(maxi(0, (scaled_size.x - icon_size.x) / 2), maxi(0, (scaled_size.y - icon_size.y) / 2))
+	var cropped: Image = scaled.get_region(Rect2i(crop_pos, icon_size))
+	var icon := ImageTexture.create_from_image(cropped)
+	_stage_editor_dialog_background_icon_cache[resource_path] = icon
+	return icon
 
 
 func _stage_editor_populate_battle_background_selector(option: OptionButton, selected_path: String, area_key: String) -> void:
@@ -2144,14 +2203,10 @@ func _refresh_stage_editor_dialog_background_option(sequence: DialogSequence) ->
 	if _stage_editor_dialog_background_option == null:
 		return
 	_stage_editor_dialog_refreshing = true
-	_stage_editor_dialog_background_option.clear()
-	_stage_editor_add_option_item(_stage_editor_dialog_background_option, "無", "")
-	for entry: Dictionary in _stage_editor_dialog_background_catalog:
-		_stage_editor_add_option_item(_stage_editor_dialog_background_option, String(entry.get("name", "BG")), String(entry.get("resource_path", "")))
 	var selected_path: String = ""
 	if sequence != null and sequence.background != null:
 		selected_path = sequence.background.resource_path
-	_stage_editor_select_option_value(_stage_editor_dialog_background_option, selected_path)
+	_stage_editor_populate_dialog_background_selector(_stage_editor_dialog_background_option, selected_path, "無")
 	_stage_editor_dialog_background_option.disabled = sequence == null
 	_stage_editor_dialog_refreshing = false
 
@@ -2482,6 +2537,7 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	_stage_editor_add_option_item(action_option, "無", "none")
 	_stage_editor_add_option_item(action_option, "登場", "enter")
 	_stage_editor_add_option_item(action_option, "退場", "exit")
+	_stage_editor_add_option_item(action_option, "全退場", "exit_all")
 	_stage_editor_select_option_value(action_option, line.action)
 	action_option.item_selected.connect(_on_stage_editor_dialog_row_action_selected.bind(line_index, action_option))
 	_stage_editor_forward_dialog_row_drop(action_option, line_index)
@@ -2508,7 +2564,15 @@ func _stage_editor_make_dialog_row(line_index: int, line: DialogLine, sequence: 
 	row_box.add_child(text_row)
 
 	text_row.add_child(_stage_editor_make_character_indicator(line.character_id))
-	if _stage_editor_dialog_line_is_exit(line):
+	if _stage_editor_dialog_line_is_exit_all(line):
+		var exit_all_label := Label.new()
+		exit_all_label.text = "全角色退場"
+		exit_all_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		exit_all_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		exit_all_label.add_theme_font_size_override("font_size", 13)
+		exit_all_label.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+		text_row.add_child(exit_all_label)
+	elif _stage_editor_dialog_line_is_exit(line):
 		var exit_label := Label.new()
 		exit_label.text = "只播放退場動畫"
 		exit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2583,6 +2647,10 @@ func _stage_editor_dialog_line_is_exit(line: DialogLine) -> bool:
 	return line != null and line.action == "exit"
 
 
+func _stage_editor_dialog_line_is_exit_all(line: DialogLine) -> bool:
+	return line != null and line.action == "exit_all"
+
+
 func _stage_editor_dialog_line_is_switch_bg(line: DialogLine) -> bool:
 	return line != null and line.action == "switch_bg"
 
@@ -2632,6 +2700,11 @@ func _stage_editor_dialog_line_button_text(line_index: int, line: DialogLine) ->
 	var preview: String = line.text_zh.strip_edges()
 	if preview.is_empty():
 		preview = line.text_en.strip_edges()
+	if _stage_editor_dialog_line_is_exit_all(line):
+		speaker = "事件"
+		preview = "全角色退場"
+	elif _stage_editor_dialog_line_is_exit(line):
+		preview = "退場"
 	preview = preview.replace("\n", " ")
 	if preview.length() > 42:
 		preview = preview.substr(0, 42) + "..."
@@ -2893,6 +2966,24 @@ func _stage_editor_add_switch_bgm_line(resource_path: String, stop_music: bool =
 	_refresh_stage_editor_dialog_editor()
 
 
+func _stage_editor_add_exit_all_line() -> void:
+	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	if sequence == null:
+		return
+	var line := DialogLine.new()
+	line.character_id = ""
+	line.emotion = "normal"
+	line.position = "left"
+	line.text_zh = ""
+	line.text_en = ""
+	line.action = "exit_all"
+	line.shake = false
+	var insert_index: int = sequence.lines.size()
+	sequence.lines.insert(insert_index, line)
+	_stage_editor_dialog_selected_index = insert_index
+	_refresh_stage_editor_dialog_editor()
+
+
 func _stage_editor_reorder_dialog_line(source_index: int, target_index: int) -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
 	if sequence == null:
@@ -3132,16 +3223,31 @@ func _on_stage_editor_dialog_add_exit_pressed() -> void:
 	_refresh_stage_editor_dialog_editor()
 
 
+func _on_stage_editor_dialog_add_exit_all_pressed() -> void:
+	_stage_editor_add_exit_all_line()
+
+
 func _on_stage_editor_dialog_test_play_pressed() -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
+	_stage_editor_test_play_dialog_sequence(sequence)
+
+
+func _on_stage_editor_post_dialog_test_play_pressed() -> void:
+	var sequence: DialogSequence = _stage_editor_get_or_create_dialog_sequence(STAGE_EDITOR_TAB_AFTER)
+	_stage_editor_test_play_dialog_sequence(sequence)
+
+
+func _stage_editor_test_play_dialog_sequence(sequence: DialogSequence) -> void:
 	if sequence == null:
 		return
 	_stage_editor_ensure_dialog_cast(sequence)
 	if _stage_editor_test_dialog != null and is_instance_valid(_stage_editor_test_dialog):
 		_stage_editor_test_dialog.queue_free()
+	_stage_editor_resume_preview_bgm()
 	var dialog_control: Control = _DialogBoxScene.instantiate() as Control
 	if dialog_control == null:
 		return
+	_stage_editor_pause_preview_bgm()
 	_stage_editor_test_dialog = dialog_control
 	dialog_control.set("auto_start", false)
 	dialog_control.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -3153,6 +3259,25 @@ func _on_stage_editor_dialog_test_play_pressed() -> void:
 
 func _on_stage_editor_dialog_test_play_finished() -> void:
 	_stage_editor_test_dialog = null
+	_stage_editor_resume_preview_bgm()
+
+
+func _stage_editor_pause_preview_bgm() -> void:
+	var player: AudioStreamPlayer = GameState.bgm_player if GameState != null else null
+	if player == null or not is_instance_valid(player):
+		_stage_editor_preview_bgm_player = null
+		return
+	_stage_editor_preview_bgm_player = player
+	_stage_editor_preview_bgm_was_paused = player.stream_paused
+	player.stream_paused = true
+
+
+func _stage_editor_resume_preview_bgm() -> void:
+	var player: AudioStreamPlayer = _stage_editor_preview_bgm_player
+	_stage_editor_preview_bgm_player = null
+	if player == null or not is_instance_valid(player):
+		return
+	player.stream_paused = _stage_editor_preview_bgm_was_paused
 
 
 func _on_stage_editor_dialog_row_speaker_selected(_item_index: int, line_index: int, option: OptionButton) -> void:
@@ -3178,10 +3303,12 @@ func _on_stage_editor_dialog_row_action_selected(_item_index: int, line_index: i
 	if line == null:
 		return
 	line.action = _stage_editor_get_option_value(option)
-	if line.action == "exit":
+	if line.action == "exit" or line.action == "exit_all":
 		line.text_zh = ""
 		line.text_en = ""
 		line.shake = false
+	if line.action == "exit_all":
+		line.character_id = ""
 	_refresh_stage_editor_dialog_editor()
 
 
@@ -3319,6 +3446,12 @@ func _on_stage_editor_dialog_action_selected(_item_index: int) -> void:
 	var line: DialogLine = _stage_editor_get_selected_dialog_line()
 	if line != null:
 		line.action = _stage_editor_get_option_value(_stage_editor_dialog_action_option)
+		if line.action == "exit" or line.action == "exit_all":
+			line.text_zh = ""
+			line.text_en = ""
+			line.shake = false
+		if line.action == "exit_all":
+			line.character_id = ""
 
 
 func _on_stage_editor_dialog_shake_toggled(button_pressed: bool) -> void:
@@ -5139,7 +5272,7 @@ func _refresh_stage_editor_area_panel() -> void:
 	if current_stage != null:
 		for key in _stage_editor_distribution_spins.keys():
 			var slider: Range = _stage_editor_distribution_spins[key]
-			var weight: int = current_stage.get_element_weight_for_type(int(key))
+			var weight: int = clampi(current_stage.get_element_weight_for_type(int(key)), 0, 10)
 			slider.set_value_no_signal(weight)
 			_stage_editor_set_distribution_value_label(int(key), weight)
 		for key in _stage_editor_drop_start_spins.keys():
@@ -5247,9 +5380,9 @@ func _stage_editor_set_distribution_value_label(type_value: int, weight: int) ->
 func _stage_editor_get_distribution_weight_from_ui(type_value: int) -> int:
 	if _stage_editor_distribution_spins.has(type_value):
 		var slider: Range = _stage_editor_distribution_spins[type_value]
-		return maxi(0, int(round(slider.value)))
+		return clampi(int(round(slider.value)), 0, 10)
 	if current_stage != null:
-		return current_stage.get_element_weight_for_type(type_value)
+		return clampi(current_stage.get_element_weight_for_type(type_value), 0, 10)
 	return 0
 
 
@@ -5626,9 +5759,9 @@ func _stage_editor_get_distribution_allowed_types_snapshot() -> Array[Block.Type
 		var weight: int = 0
 		if _stage_editor_distribution_spins.has(type_value):
 			var slider: Range = _stage_editor_distribution_spins[type_value]
-			weight = maxi(0, int(round(slider.value)))
+			weight = clampi(int(round(slider.value)), 0, 10)
 		elif current_stage != null:
-			weight = current_stage.get_element_weight_for_type(type_value)
+			weight = clampi(current_stage.get_element_weight_for_type(type_value), 0, 10)
 		if weight > 0:
 			types.append(type_value as Block.Type)
 	if types.is_empty():
@@ -5652,11 +5785,11 @@ func _stage_editor_get_element_weights_snapshot(distribution_types: Array[Block.
 		var weight: int = 0
 		if _stage_editor_distribution_spins.has(normalized):
 			var slider: Range = _stage_editor_distribution_spins[normalized]
-			weight = maxi(0, int(round(slider.value)))
+			weight = clampi(int(round(slider.value)), 0, 10)
 		elif current_stage.element_weights.size() > weights.size():
-			weight = maxi(0, int(current_stage.element_weights[weights.size()]))
+			weight = clampi(int(current_stage.element_weights[weights.size()]), 0, 10)
 		else:
-			weight = current_stage.get_element_weight_for_type(normalized)
+			weight = clampi(current_stage.get_element_weight_for_type(normalized), 0, 10)
 		weights.append(weight)
 	return weights
 
@@ -5717,6 +5850,7 @@ func _stage_editor_get_round_bosses_snapshot() -> Array[Array]:
 
 
 func _on_stage_editor_back_pressed() -> void:
+	_stage_editor_resume_preview_bgm()
 	GameState.stage_edit_mode = false
 	board.set_edit_mode(false)
 	GameState.fade_to_scene("res://scenes/map.tscn", 0.25)
@@ -7868,6 +8002,7 @@ func _end_player_turn() -> void:
 	if puzzle_turn_ended_with_defeat:
 		return
 	board.set_board_input_paused(true)
+	_dev_commit_turn_report()
 	battle_manager.finish_turn()
 
 	# 召喚物每回合行動：豪豬攻擊 / 烏龜回血
@@ -8701,6 +8836,61 @@ func _bounce_block_at(pos: Vector2i) -> void:
 
 # ── 通用消除處理管線 ─────────────────────────────────────────────
 
+func _dev_reset_battle_report() -> void:
+	_dev_turn_report_rows.clear()
+	_dev_current_turn_report.clear()
+	GameState.set_meta("last_battle_dev_turn_report", [])
+
+
+func _dev_begin_turn_report(stage_gems_by_type: Dictionary, _attacks: Array) -> void:
+	if not GameState.dev_mode:
+		_dev_current_turn_report.clear()
+		return
+	var character_rows: Array = []
+	for i in party.size():
+		var character: CharacterData = party[i]
+		var display_name: String = Locale.tr_ui(character.character_name) if character != null else "P%d" % (i + 1)
+		character_rows.append({
+			"index": i,
+			"name": display_name,
+			"damage": 0,
+		})
+	var total_gems: int = 0
+	for gem_type_key in stage_gems_by_type:
+		total_gems += maxi(0, int(stage_gems_by_type.get(gem_type_key, 0)))
+	_dev_current_turn_report = {
+		"turn": battle_manager.turn + 1 if battle_manager != null else _dev_turn_report_rows.size() + 1,
+		"round": battle_manager.current_round + 1 if battle_manager != null else 1,
+		"blasted_by_type": stage_gems_by_type.duplicate(true),
+		"characters": character_rows,
+		"total_gems": total_gems,
+		"total_damage": 0,
+	}
+
+
+func _dev_add_turn_damage(char_index: int, amount: int) -> void:
+	if not GameState.dev_mode or _dev_current_turn_report.is_empty() or amount <= 0:
+		return
+	var character_rows: Array = _dev_current_turn_report.get("characters", []) as Array
+	if char_index < 0 or char_index >= character_rows.size():
+		return
+	var row: Dictionary = character_rows[char_index]
+	row["damage"] = int(row.get("damage", 0)) + amount
+	_dev_current_turn_report["total_damage"] = int(_dev_current_turn_report.get("total_damage", 0)) + amount
+
+
+func _dev_commit_turn_report() -> void:
+	if not GameState.dev_mode or _dev_current_turn_report.is_empty():
+		_dev_current_turn_report.clear()
+		return
+	if int(_dev_current_turn_report.get("total_gems", 0)) <= 0 and int(_dev_current_turn_report.get("total_damage", 0)) <= 0:
+		_dev_current_turn_report.clear()
+		return
+	_dev_turn_report_rows.append(_dev_current_turn_report.duplicate(true))
+	GameState.set_meta("last_battle_dev_turn_report", _dev_turn_report_rows.duplicate(true))
+	_dev_current_turn_report.clear()
+
+
 ## 處理一批消除結果：VFX 飛向角色卡 → 角色攻擊動畫
 ## blasted_by_type: { Block.Type -> count }
 ## blast_positions: { Block.Type -> Array[Vector2] } 全域座標（用於 VFX 起始點）
@@ -8763,6 +8953,8 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 			all_attacks.append(attack)
 
 	_retarget_attack_queue_by_simulated_hp(all_attacks)
+	var stage_gems_snapshot: Dictionary = battle_manager.turn_gem_blasts.duplicate(true) if battle_manager != null else blasted_by_type.duplicate(true)
+	_dev_begin_turn_report(stage_gems_snapshot, all_attacks)
 
 	# 等待所有 VFX 同時飛抵目標（僅在有攻擊時等待）
 	if all_attacks.size() > 0:
@@ -8948,6 +9140,7 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 	var char_data := party[char_index]
 	var chain_mult: float = attack.get("chain_mult", 1.0)
 	var vfx_profile: Dictionary = attack.get("vfx_profile", _attack_vfx_profile_for_count(gem_count))
+	var hit_power_level: int = int(vfx_profile.get("power_level", 0))
 
 	# 若原目標已失效，嘗試重新選擇一個存活敵人；若無存活敵人則過殺原目標
 	if not is_instance_valid(target) or target.current_hp <= 0:
@@ -8980,7 +9173,8 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var target_pos := _get_enemy_image_center(target)
 				slash.deduct_hp.connect(func():
 					if is_instance_valid(target):
-						applied_damage = _apply_enemy_damage_with_stage13_floor(target, damage, gem_type)
+						applied_damage = _apply_enemy_damage_with_stage13_floor(target, damage, gem_type, hit_power_level)
+						_dev_add_turn_damage(char_index, applied_damage)
 						_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[gem_type], true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
@@ -9050,18 +9244,18 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var captured_dmg := damage
 				trail.deduct_hp.connect(func():
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
-						applied_damage = _apply_enemy_damage_with_stage13_floor(captured_target, captured_dmg, gem_type)
+						applied_damage = _apply_enemy_damage_with_stage13_floor(captured_target, captured_dmg, gem_type, hit_power_level)
+						_dev_add_turn_damage(char_index, applied_damage)
 						_spawn_damage_number(_get_enemy_image_center(captured_target), applied_damage, color, true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
 					_play_player_attack_impact_sfx(gem_type)
 				, CONNECT_ONE_SHOT)
 				var attack_duration: float = float(attack.get("attack_vfx_duration", 0.5 * float(vfx_profile.get("duration_scale", 1.0))))
-				var power_level: int = int(vfx_profile.get("power_level", 0))
 				if trail.has_method("set_visual_size_multiplier"):
 					trail.set_visual_size_multiplier(float(vfx_profile.get("visual_scale", 1.0)))
-				if power_level > 0 and trail.has_method("launch_power_attack"):
-					trail.launch_power_attack(card_center, target_pos, color, attack_duration, 0.0, power_level)
+				if hit_power_level > 0 and trail.has_method("launch_power_attack"):
+					trail.launch_power_attack(card_center, target_pos, color, attack_duration, 0.0, hit_power_level)
 				else:
 					trail.launch(card_center, target_pos, color, attack_duration)
 				await get_tree().create_timer(attack_duration / TrailProjectileScript.speed_divisor + 0.05).timeout
@@ -14127,13 +14321,13 @@ func _should_stage13_floor_owen_light_hit(enemy: Enemy, gem_type: Block.Type) ->
 	return _is_stage13_owen(enemy)
 
 
-func _apply_enemy_damage_with_stage13_floor(enemy: Enemy, amount: int, gem_type: Block.Type) -> int:
+func _apply_enemy_damage_with_stage13_floor(enemy: Enemy, amount: int, gem_type: Block.Type, hit_power_level: int = 0) -> int:
 	if _should_stage13_floor_owen_light_hit(enemy, gem_type):
 		_stage13_owen_light_hit_pending = true
-		return enemy.take_damage_with_hp_floor(amount, 1)
+		return enemy.take_damage_with_hp_floor(amount, 1, hit_power_level)
 	if enemy == null or not is_instance_valid(enemy):
 		return 0
-	return enemy.take_damage(amount)
+	return enemy.take_damage(amount, hit_power_level)
 
 
 func _run_stage13_finale_and_win(emit_win_signal: bool = true) -> void:
@@ -14302,6 +14496,7 @@ func _on_battle_won() -> void:
 
 func _complete_battle_won() -> void:
 	board.is_busy = true
+	_dev_commit_turn_report()
 	await _wait_for_loot_animations_finished()
 	# ── 戰利品 UI 播完後 → 交叉淡入勝利音樂 ──
 	if current_stage == null or current_stage.mode != StageData.Mode.PUZZLE:
@@ -14331,6 +14526,7 @@ func _complete_battle_won() -> void:
 	GameState.last_battle_loot = _battle_loot.duplicate()
 	GameState.last_battle_party = _get_battle_result_party()
 	GameState.last_battle_exp = _battle_exp
+	GameState.set_meta("last_battle_dev_turn_report", _dev_turn_report_rows.duplicate(true) if GameState.dev_mode else [])
 
 	_show_victory_overlay()
 
@@ -14356,7 +14552,7 @@ func _apply_stage_one_time_rewards() -> void:
 		if GameState.grant_character(reward_character, true):
 			GameState.last_battle_reward_characters.append(reward_character)
 
-	GameState.mark_stage_reward_claimed(stage_id, false)
+	GameState.claim_stage_reward_if_unclaimed(stage_id, false)
 
 
 ## 顯示勝利覆蓋層（5 秒後或點擊後跳轉結算場景）
@@ -15213,7 +15409,7 @@ func _on_combo_test_pressed(source_btn: Button) -> void:
 	popup.offset_bottom = popup.offset_top + popup_size.y
 
 
-## 偵錯：根據技能名稱在棋盤隨機生成 15 個對應高階寶石
+## 偵錯：根據技能名稱在棋盤隨機生成 3 個對應高階寶石
 func _debug_spawn_upper(skill_name: String) -> void:
 	_debug_spawn_upper_type(_upper_type_for_response_skill(skill_name))
 
@@ -15224,7 +15420,7 @@ func _debug_spawn_upper_type(ut: Block.UpperType) -> void:
 	if ut == Block.UpperType.NONE:
 		# 倒回旧行為
 		if board.has_method("debug_spawn_firebombs"):
-			board.debug_spawn_firebombs(15)
+			board.debug_spawn_firebombs(3)
 		return
 	var candidates: Array = []
 	for x in board.columns:
@@ -15233,7 +15429,7 @@ func _debug_spawn_upper_type(ut: Block.UpperType) -> void:
 			if b != null and not b.is_upper_gem():
 				candidates.append(Vector2i(x, y))
 	candidates.shuffle()
-	var n: int = mini(15, candidates.size())
+	var n: int = mini(3, candidates.size())
 	for i in n:
 		board.place_upper_gem(candidates[i], ut)
 

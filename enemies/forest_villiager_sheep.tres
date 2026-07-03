@@ -20,5 +20,6 @@ action_percents = Array[int]([15, 24])
 action_counts = Array[int]([3, 3])
 portrait_color = Color(0.24, 0.62, 0.28, 1)
 portrait_texture = ExtResource("2_texture")
-element = 2
+dialog_phase_scale = 0.65
+dialog_phase_offset = Vector2(-13.3333435, -18.666626)
 loot_table = Array[ExtResource("3_loot_script")]([SubResource("gold_drop")])

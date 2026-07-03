@@ -105,6 +105,8 @@ func _connect_stage_button(sb: StageButton) -> void:
 		return
 	if not sb.stage_pressed.is_connected(_on_stage_button_pressed):
 		sb.stage_pressed.connect(_on_stage_button_pressed)
+	if not sb.stage_long_pressed.is_connected(_on_stage_button_long_pressed):
+		sb.stage_long_pressed.connect(_on_stage_button_long_pressed)
 	if not sb.stage_add_pressed.is_connected(_on_stage_button_add_pressed):
 		sb.stage_add_pressed.connect(_on_stage_button_add_pressed)
 	if not sb.stage_remove_pressed.is_connected(_on_stage_button_remove_pressed):
@@ -331,6 +333,14 @@ func _on_stage_button_pressed(stage: StageData) -> void:
 		return
 	if GameState.dev_mode:
 		_open_stage_editor(stage)
+		return
+	GameState.selected_stage = stage
+	GameState.stage_edit_mode = false
+	_open_overlay(PrepareScene)
+
+
+func _on_stage_button_long_pressed(stage: StageData) -> void:
+	if stage == null:
 		return
 	GameState.selected_stage = stage
 	GameState.stage_edit_mode = false

@@ -745,6 +745,18 @@ func _show_line(line: _DialogLine) -> void:
 		, CONNECT_ONE_SHOT)
 		return
 
+	if line.action == "exit_all":
+		_do_exit_all_characters()
+		_name_label.text = ""
+		_text_label.text = ""
+		_text_label.visible_ratio = 1.0
+		_typing = false
+		get_tree().create_timer(SLIDE_OUT_DUR).timeout.connect(func() -> void:
+			if is_inside_tree():
+				_advance()
+		, CONNECT_ONE_SHOT)
+		return
+
 	# ── 旁白行（無角色）──
 	if char_id.is_empty():
 		_set_all_portraits_dim("")
@@ -1172,6 +1184,38 @@ func _do_exit_character(char_id: String) -> void:
 		portrait.visible = false
 		portrait.modulate = ACTIVE_COLOR
 	)
+
+
+func _do_exit_all_characters() -> void:
+	var visible_portraits: Array[TextureRect] = []
+	for char_variant in _portrait_nodes.keys():
+		var char_id: String = String(char_variant)
+		var portrait: TextureRect = _portrait_nodes.get(char_id, null) as TextureRect
+		if portrait == null or not portrait.visible:
+			continue
+		var side: String = _get_character_side(char_id)
+		if side.is_empty():
+			side = "left"
+		var slide_offset: float = ViewportUtils.get_size().x * SLIDE_OFFSET_RATIO
+		var target_x: float = portrait.position.x - slide_offset if side == "left" else portrait.position.x + slide_offset
+		portrait.z_index = ACTIVE_PORTRAIT_Z
+		var tw := create_tween()
+		tw.tween_property(portrait, "position:x", target_x, SLIDE_OUT_DUR) \
+			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(portrait, "modulate:a", 0.0, SLIDE_OUT_DUR)
+		visible_portraits.append(portrait)
+	for side_name in ["left", "right"]:
+		var side_list: Array = _side_characters[side_name]
+		side_list.clear()
+		_side_speaker_ids[side_name] = ""
+	_last_speaker_id = ""
+	for portrait in visible_portraits:
+		var captured_portrait := portrait
+		get_tree().create_timer(SLIDE_OUT_DUR).timeout.connect(func() -> void:
+			if is_instance_valid(captured_portrait):
+				captured_portrait.visible = false
+				captured_portrait.modulate = ACTIVE_COLOR
+		, CONNECT_ONE_SHOT)
 
 
 func _set_all_portraits_dim(active_char_id: String) -> void:

@@ -3,38 +3,117 @@
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_uh213"]
-[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="10_line"]
-[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="11_seq"]
 [ext_resource type="Resource" path="res://enemies/mushroom_man.tres" id="4_mushroom"]
 [ext_resource type="Resource" path="res://enemies/forest_witch.tres" id="5_witch"]
-[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="6_dragon"]
 [ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="6_lancer"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="7_d4pm8"]
-[ext_resource type="Resource" path="res://characters/char_shark.tres" id="7_shark"]
-[ext_resource type="Resource" path="res://characters/char_panda.tres" id="8_panda"]
-[ext_resource type="Resource" path="res://characters/char_gory.tres" id="9_gory"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="10_line"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="11_seq"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="12_lsv65"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="13_bg"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_congee_share.png" id="14_congee"]
 [ext_resource type="AudioStream" path="res://assets/music/Rainforest Clash.mp3" id="15_music"]
 
-[sub_resource type="Resource" id="s24_e1"]
-script = ExtResource("2_entry")
-enemy = ExtResource("6_lancer")
-level = 21
-hp_percent = 1900
+[sub_resource type="Resource" id="s24_post_guard_groan"]
+script = ExtResource("10_line")
+character_id = "guard"
+position = "right"
+text_zh = "呃... 啊!!!"
 
-[sub_resource type="Resource" id="s24_e2"]
-script = ExtResource("2_entry")
-enemy = ExtResource("4_mushroom")
-level = 21
-hp_percent = 1600
+[sub_resource type="Resource" id="s24_post_guard_threat"]
+script = ExtResource("10_line")
+character_id = "guard"
+position = "right"
+text_zh = "你等著瞧!!"
 
-[sub_resource type="Resource" id="s24_e3"]
-script = ExtResource("2_entry")
-enemy = ExtResource("5_witch")
-level = 21
-hp_percent = 2200
+[sub_resource type="Resource" id="s24_post_dragon_hmph"]
+script = ExtResource("10_line")
+character_id = "dragon"
+text_zh = "哼!"
+
+[sub_resource type="Resource" id="s24_post_dragon_cool"]
+script = ExtResource("10_line")
+character_id = "dragon"
+text_zh = "看吧! 我帥不帥!"
+
+[sub_resource type="Resource" id="s24_post_villagers_silent"]
+script = ExtResource("10_line")
+character_id = "villagers"
+text_zh = "......"
+
+[sub_resource type="Resource" id="s24_post_villagers_worry"]
+script = ExtResource("10_line")
+character_id = "villagers"
+text_zh = "惹他們生氣的話，可能我們以後都得挨餓了。"
+
+[sub_resource type="Resource" id="s24_post_dragon_what"]
+script = ExtResource("10_line")
+character_id = "dragon"
+text_zh = "什麼??"
+
+[sub_resource type="Resource" id="s24_post_shark_idiot"]
+script = ExtResource("10_line")
+character_id = "shark"
+text_zh = "你個蠢蛋！"
+
+[sub_resource type="Resource" id="s24_post_chop"]
+script = ExtResource("10_line")
+text_zh = "埃德一個手刀巴在了米洛的頭上。"
+
+[sub_resource type="Resource" id="s24_post_dragon_pain"]
+script = ExtResource("10_line")
+character_id = "dragon"
+text_zh = "痛痛痛!!"
+
+[sub_resource type="Resource" id="s24_post_shark_problem"]
+script = ExtResource("10_line")
+character_id = "shark"
+text_zh = "這下結怨了，明天還用不用跟長老談判了?"
+
+[sub_resource type="Resource" id="s24_post_dragon_this"]
+script = ExtResource("10_line")
+character_id = "dragon"
+text_zh = "這"
+
+[sub_resource type="Resource" id="s24_post_panda_understand"]
+script = ExtResource("10_line")
+character_id = "panda"
+text_zh = "我能理解米洛的想法。事以至此，只能見步走步了。"
+
+[sub_resource type="Resource" id="s24_post_shark_tch"]
+script = ExtResource("10_line")
+character_id = "shark"
+text_zh = "切。"
+
+[sub_resource type="Resource" id="s24_post_gory_good"]
+script = ExtResource("10_line")
+character_id = "gory"
+position = "right"
+text_zh = "做得好。我老想[b]扁[/b]他們了。"
+
+[sub_resource type="Resource" id="s24_post_dragon_gory"]
+script = ExtResource("10_line")
+character_id = "dragon"
+text_zh = "戈爾..."
+
+[sub_resource type="Resource" id="s24_post"]
+script = ExtResource("11_seq")
+lines = Array[ExtResource("10_line")]([SubResource("s24_post_guard_groan"), SubResource("s24_post_guard_threat"), SubResource("s24_post_dragon_hmph"), SubResource("s24_post_dragon_cool"), SubResource("s24_post_villagers_silent"), SubResource("s24_post_villagers_worry"), SubResource("s24_post_dragon_what"), SubResource("s24_post_shark_idiot"), SubResource("s24_post_chop"), SubResource("s24_post_dragon_pain"), SubResource("s24_post_shark_problem"), SubResource("s24_post_dragon_this"), SubResource("s24_post_panda_understand"), SubResource("s24_post_shark_tch"), SubResource("s24_post_gory_good"), SubResource("s24_post_dragon_gory")])
+cast = Array[String](["guard", "dragon", "villagers", "shark", "panda", "gory"])
+cast_profiles = {
+"guard": {
+"kind": "npc",
+"name_en": "Guard",
+"name_zh": "衛兵"
+},
+"villagers": {
+"kind": "npc",
+"name_en": "Villagers",
+"name_zh": "村民眾"
+}
+}
+background = ExtResource("14_congee")
+initial_music = ExtResource("15_music")
 
 [sub_resource type="Resource" id="s24_pre_dragon_full"]
 script = ExtResource("10_line")
@@ -140,113 +219,30 @@ cast_profiles = {
 background = ExtResource("13_bg")
 initial_music = ExtResource("15_music")
 
-[sub_resource type="Resource" id="s24_post_guard_groan"]
-script = ExtResource("10_line")
-character_id = "guard"
-position = "right"
-text_zh = "呃... 啊!!!"
+[sub_resource type="Resource" id="s24_e1"]
+script = ExtResource("2_entry")
+enemy = ExtResource("6_lancer")
+level = 21
+hp_percent = 1900
 
-[sub_resource type="Resource" id="s24_post_guard_threat"]
-script = ExtResource("10_line")
-character_id = "guard"
-position = "right"
-text_zh = "你等著瞧!!"
+[sub_resource type="Resource" id="s24_e2"]
+script = ExtResource("2_entry")
+enemy = ExtResource("4_mushroom")
+level = 21
+hp_percent = 1600
 
-[sub_resource type="Resource" id="s24_post_dragon_hmph"]
-script = ExtResource("10_line")
-character_id = "dragon"
-text_zh = "哼!"
-
-[sub_resource type="Resource" id="s24_post_dragon_cool"]
-script = ExtResource("10_line")
-character_id = "dragon"
-text_zh = "看吧! 我帥不帥!"
-
-[sub_resource type="Resource" id="s24_post_villagers_silent"]
-script = ExtResource("10_line")
-character_id = "villagers"
-text_zh = "......"
-
-[sub_resource type="Resource" id="s24_post_villagers_worry"]
-script = ExtResource("10_line")
-character_id = "villagers"
-text_zh = "惹他們生氣的話，可能我們以後都得挨餓了。"
-
-[sub_resource type="Resource" id="s24_post_dragon_what"]
-script = ExtResource("10_line")
-character_id = "dragon"
-text_zh = "什麼??"
-
-[sub_resource type="Resource" id="s24_post_shark_idiot"]
-script = ExtResource("10_line")
-character_id = "shark"
-text_zh = "你個蠢蛋！"
-
-[sub_resource type="Resource" id="s24_post_chop"]
-script = ExtResource("10_line")
-text_zh = "埃德一個手刀巴在了米洛的頭上。"
-
-[sub_resource type="Resource" id="s24_post_dragon_pain"]
-script = ExtResource("10_line")
-character_id = "dragon"
-text_zh = "痛痛痛!!"
-
-[sub_resource type="Resource" id="s24_post_shark_problem"]
-script = ExtResource("10_line")
-character_id = "shark"
-text_zh = "這下結怨了，明天還用不用跟長老談判了?"
-
-[sub_resource type="Resource" id="s24_post_dragon_this"]
-script = ExtResource("10_line")
-character_id = "dragon"
-text_zh = "這"
-
-[sub_resource type="Resource" id="s24_post_panda_understand"]
-script = ExtResource("10_line")
-character_id = "panda"
-text_zh = "我能理解米洛的想法。事以至此，只能見步走步了。"
-
-[sub_resource type="Resource" id="s24_post_shark_tch"]
-script = ExtResource("10_line")
-character_id = "shark"
-text_zh = "切。"
-
-[sub_resource type="Resource" id="s24_post_gory_good"]
-script = ExtResource("10_line")
-character_id = "gory"
-position = "right"
-text_zh = "做得好。我老想[b]扁[/b]他們了。"
-
-[sub_resource type="Resource" id="s24_post_dragon_gory"]
-script = ExtResource("10_line")
-character_id = "dragon"
-text_zh = "戈爾..."
-
-[sub_resource type="Resource" id="s24_post"]
-script = ExtResource("11_seq")
-lines = Array[ExtResource("10_line")]([SubResource("s24_post_guard_groan"), SubResource("s24_post_guard_threat"), SubResource("s24_post_dragon_hmph"), SubResource("s24_post_dragon_cool"), SubResource("s24_post_villagers_silent"), SubResource("s24_post_villagers_worry"), SubResource("s24_post_dragon_what"), SubResource("s24_post_shark_idiot"), SubResource("s24_post_chop"), SubResource("s24_post_dragon_pain"), SubResource("s24_post_shark_problem"), SubResource("s24_post_dragon_this"), SubResource("s24_post_panda_understand"), SubResource("s24_post_shark_tch"), SubResource("s24_post_gory_good"), SubResource("s24_post_dragon_gory")])
-cast = Array[String](["guard", "dragon", "villagers", "shark", "panda", "gory"])
-cast_profiles = {
-"guard": {
-"kind": "npc",
-"name_en": "Guard",
-"name_zh": "衛兵"
-},
-"villagers": {
-"kind": "npc",
-"name_en": "Villagers",
-"name_zh": "村民眾"
-}
-}
-background = ExtResource("14_congee")
-initial_music = ExtResource("15_music")
+[sub_resource type="Resource" id="s24_e3"]
+script = ExtResource("2_entry")
+enemy = ExtResource("5_witch")
+level = 21
+hp_percent = 2200
 
 [resource]
 script = ExtResource("1_stage")
 stage_id = "2-4"
 prerequisite_stage_id = "2-3"
 connects_to = Array[String](["2-5"])
-map_position = Vector2(270, 876)
+map_position = Vector2(276.66675, 877.3334)
 stage_name = "Stage 2-4 光牆巡邏"
 element_weights = Array[int]([25, 20, 20, 35])
 allowed_types = Array[int]([0, 1, 2, 6])

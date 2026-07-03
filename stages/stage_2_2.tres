@@ -9,10 +9,7 @@
 [ext_resource type="Resource" path="res://enemies/gory.tres" id="7_gory_enemy"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="8_gory_char"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="8_jpuby"]
-[ext_resource type="Resource" path="res://characters/char_dragon.tres" id="9_dragon"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="10_juwhm"]
-[ext_resource type="Resource" path="res://characters/char_shark.tres" id="10_shark"]
-[ext_resource type="Resource" path="res://characters/char_panda.tres" id="11_panda"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_0ymui"]
 
 [sub_resource type="Resource" id="s22_post_1"]

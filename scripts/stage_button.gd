@@ -7,6 +7,7 @@ class_name StageButton
 extends Control
 
 signal stage_pressed(stage: StageData)
+signal stage_long_pressed(stage: StageData)
 signal stage_edit_pressed(stage: StageData)
 signal stage_add_pressed(stage: StageData)
 signal stage_remove_pressed(stage: StageData)
@@ -29,6 +30,7 @@ const CAPTION_BG_HEIGHT_RATIO: float = 0.4
 const DEV_BUTTON_SIZE: Vector2 = Vector2(26, 26)
 const DEV_BUTTON_GAP: float = 3.0
 const DEV_DRAG_THRESHOLD: float = 6.0
+const DEV_LONG_PRESS_SECONDS: float = 0.55
 const SPOT_HIT_PADDING: float = 2.4
 
 ## 綁定的關卡資料（必填）
@@ -66,6 +68,8 @@ var _unlock_pop_tween: Tween = null
 var _rays: Node2D = null
 var _dev_pointer_down: bool = false
 var _dev_drag_active: bool = false
+var _dev_long_press_fired: bool = false
+var _dev_press_msec: int = 0
 var _dev_press_global: Vector2 = Vector2.ZERO
 var _dev_press_offset: Vector2 = Vector2.ZERO
 var _dev_link_pointer_down: bool = false
@@ -79,6 +83,22 @@ func _ready() -> void:
 	size = button_size
 	_build()
 	_refresh()
+
+
+func _process(_delta: float) -> void:
+	if Engine.is_editor_hint() or not GameState.dev_mode:
+		return
+	if not _dev_pointer_down or _dev_drag_active or _dev_long_press_fired or stage == null:
+		return
+	var held_seconds: float = float(Time.get_ticks_msec() - _dev_press_msec) / 1000.0
+	if held_seconds < DEV_LONG_PRESS_SECONDS:
+		return
+	if not is_unlocked_for_play():
+		return
+	_dev_long_press_fired = true
+	_dev_pointer_down = false
+	_dev_drag_active = false
+	stage_long_pressed.emit(stage)
 
 
 func _build() -> void:
@@ -562,21 +582,27 @@ func _on_button_gui_input(event: InputEvent) -> void:
 		if mb.pressed:
 			_dev_pointer_down = true
 			_dev_drag_active = false
+			_dev_long_press_fired = false
+			_dev_press_msec = Time.get_ticks_msec()
 			_dev_press_global = get_global_mouse_position()
 			_dev_press_offset = _dev_press_global - global_position
 			accept_event()
 		elif _dev_pointer_down:
-			if _dev_drag_active:
+			if _dev_long_press_fired:
+				pass
+			elif _dev_drag_active:
 				stage_drag_finished.emit(self)
 			else:
 				stage_pressed.emit(stage)
 			_dev_pointer_down = false
 			_dev_drag_active = false
+			_dev_long_press_fired = false
 			accept_event()
 	elif event is InputEventMouseMotion and _dev_pointer_down:
 		var current_global: Vector2 = get_global_mouse_position()
 		if not _dev_drag_active and current_global.distance_to(_dev_press_global) >= DEV_DRAG_THRESHOLD:
 			_dev_drag_active = true
+			_dev_long_press_fired = false
 		if _dev_drag_active:
 			stage_dragged.emit(self, current_global - _dev_press_offset)
 			accept_event()

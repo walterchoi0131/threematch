@@ -45,6 +45,7 @@ const _ENEMY_SYS: Array = [
 var _char_data: CharacterData = null
 var _previous_char_data: CharacterData = null
 var _enemy_data: EnemyData = null
+var _previous_enemy_data: EnemyData = null
 var _target_mode: int = TargetMode.CHARACTER
 var _mode_char_btn: Button = null
 var _mode_enemy_btn: Button = null
@@ -221,7 +222,7 @@ func _build() -> void:
 		for i: int in enemies.size():
 			_build_enemy_btn(char_row, enemies[i], i)
 		if enemies.size() > 0:
-			_select_enemy(0)
+			_select_enemy(0, false)
 	else:
 		var chars: Array[CharacterData] = _debug_characters()
 		for i: int in chars.size():
@@ -1348,6 +1349,27 @@ func _add_dialog_phase_reference_label(parent: Control, character: CharacterData
 	panel.add_child(lbl)
 
 
+func _add_enemy_dialog_phase_reference_label(parent: Control, enemy: EnemyData, base_position: Vector2) -> void:
+	var panel := PanelContainer.new()
+	panel.position = base_position + Vector2(70.0, 24.0)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.045, 0.07, 0.74)
+	style.border_color = Color(0.9, 0.88, 0.62, 0.42)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(8)
+	panel.add_theme_stylebox_override("panel", style)
+	parent.add_child(panel)
+
+	var lbl := Label.new()
+	lbl.text = "參照物: %s" % enemy.get_display_name()
+	lbl.add_theme_font_size_override("font_size", 18)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.94, 0.68, 0.94))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(lbl)
+
+
 func _dialog_phase_preview_height() -> float:
 	return ceil(ViewportUtils.get_size().y * _dialog_phase_preview_scale())
 
@@ -1431,6 +1453,7 @@ func _build_scene_enemy_dialog_phase(scene: Control, scene_h: float) -> TextureR
 	const PHASE_PORTRAIT_SCALE: float = 7.2
 	const PHASE_PORTRAIT_Y_RATIO: float = 0.527
 	const PHASE_LEFT_X_RATIO: float = 0.064
+	const PHASE_REF_X_RATIO: float = 0.62
 	const PHASE_PANEL_H: float = 300.0
 	var actual_vp: Vector2 = ViewportUtils.get_size()
 	var preview_scale: float = _dialog_phase_preview_scale()
@@ -1450,9 +1473,9 @@ func _build_scene_enemy_dialog_phase(scene: Control, scene_h: float) -> TextureR
 	viewport_root.add_child(bg_color)
 
 	var portrait_ref: TextureRect = null
+	var portrait_w: float = 300.0 * (PHASE_PORTRAIT_SCALE / 4.0)
+	var portrait_h: float = 400.0 * (PHASE_PORTRAIT_SCALE / 4.0)
 	if _enemy_data.portrait_texture != null:
-		var portrait_w: float = 300.0 * (PHASE_PORTRAIT_SCALE / 4.0)
-		var portrait_h: float = 400.0 * (PHASE_PORTRAIT_SCALE / 4.0)
 		var base_position := Vector2(
 			actual_vp.x * PHASE_LEFT_X_RATIO - (portrait_w - 300.0) * 0.5 - 30.0,
 			actual_vp.y * PHASE_PORTRAIT_Y_RATIO - (portrait_h - 400.0)
@@ -1468,6 +1491,25 @@ func _build_scene_enemy_dialog_phase(scene: Control, scene_h: float) -> TextureR
 		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		viewport_root.add_child(portrait)
 		portrait_ref = portrait
+
+	if _previous_enemy_data != null and _previous_enemy_data != _enemy_data and _previous_enemy_data.portrait_texture != null:
+		var ref_base_position := Vector2(
+			actual_vp.x * PHASE_REF_X_RATIO - (portrait_w - 300.0) * 0.5,
+			actual_vp.y * PHASE_PORTRAIT_Y_RATIO - (portrait_h - 400.0)
+		)
+		var ref_portrait := TextureRect.new()
+		ref_portrait.texture = _previous_enemy_data.portrait_texture
+		ref_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ref_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ref_portrait.size = Vector2(portrait_w, portrait_h)
+		ref_portrait.custom_minimum_size = ref_portrait.size
+		ref_portrait.pivot_offset = Vector2(portrait_w * 0.5, portrait_h)
+		ref_portrait.modulate = Color(1.0, 1.0, 1.0, 0.72)
+		ref_portrait.position = ref_base_position + _previous_enemy_data.dialog_phase_offset
+		ref_portrait.scale = Vector2(_previous_enemy_data.dialog_phase_scale, _previous_enemy_data.dialog_phase_scale)
+		ref_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		viewport_root.add_child(ref_portrait)
+		_add_enemy_dialog_phase_reference_label(viewport_root, _previous_enemy_data, ref_base_position)
 
 	var panel := PanelContainer.new()
 	panel.position = Vector2(0.0, actual_vp.y - PHASE_PANEL_H)
@@ -1664,11 +1706,14 @@ func _select_char(idx: int, record_previous: bool = true) -> void:
 		_rebuild_preview(i)
 
 
-func _select_enemy(idx: int) -> void:
+func _select_enemy(idx: int, record_previous: bool = true) -> void:
 	var enemies: Array[EnemyData] = _debug_enemies()
 	if idx < 0 or idx >= enemies.size():
 		return
-	_enemy_data = enemies[idx]
+	var next_enemy: EnemyData = enemies[idx]
+	if record_previous and _enemy_data != null and _enemy_data != next_enemy:
+		_previous_enemy_data = _enemy_data
+	_enemy_data = next_enemy
 	for j: int in _enemy_btns.size():
 		var sel: Node = _enemy_btns[j].get_node_or_null("SelBorder")
 		if sel != null:
@@ -1726,7 +1771,7 @@ func _rebuild_preserving_selection(selected_path: String) -> void:
 		for i in enemies.size():
 			var enemy_data: EnemyData = enemies[i]
 			if enemy_data != null and enemy_data.resource_path == selected_path:
-				_select_enemy(i)
+				_select_enemy(i, false)
 				return
 	else:
 		var chars: Array[CharacterData] = _debug_characters()

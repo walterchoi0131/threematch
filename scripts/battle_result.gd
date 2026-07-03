@@ -12,6 +12,13 @@ const BattleVfx3DLayerScript := preload("res://scripts/battle_vfx_3d_layer.gd")
 const LOOT_CARD_SIZE := Vector2(112, 132)
 const LOOT_ICON_FRAME_SIZE := 96.0
 const LOOT_ICON_SIZE := 62
+const DEV_REPORT_GEM_ORDER: Array[int] = [
+	Block.Type.RED,
+	Block.Type.BLUE,
+	Block.Type.GREEN,
+	Block.Type.LIGHT,
+	Block.Type.DARK,
+]
 
 # ── 階段列舉 ──
 enum Phase { GOLD, EXP, LOOT, DONE }
@@ -27,6 +34,7 @@ var _party: Array[CharacterData] = []         # 從 GameState 讀取
 var _total_exp: int = 0                       # 從 GameState 讀取
 var _gold_amount: int = 0                     # 本場金幣總量
 var _reward_characters: Array[CharacterData] = []
+var _dev_report_rows: Array = []
 
 # ── UI 節點 ──
 var _content: VBoxContainer = null            # 主內容容器
@@ -37,8 +45,17 @@ var _char_cards: Array[Dictionary] = []       # [{card, bar_fill, lv_label, exp_
 var _tap_hint: Label = null                   # "Tap to continue" 提示
 
 # ── 全螢幕點擊 ──
+var _dev_pages_shell: Control = null
+var _dev_result_page: Control = null
+var _dev_report_page: Control = null
+var _dev_result_tab_button: Button = null
+var _dev_report_tab_button: Button = null
 var _battle_vfx_3d_layer: BattleVfx3DLayer = null
 var _tap_button: Button = null
+var _dev_tab_tap_tracking: bool = false
+var _dev_tab_tap_start: Vector2 = Vector2.ZERO
+var _post_dialog_active: bool = false
+var _result_exit_started: bool = false
 
 
 func _ready() -> void:
@@ -49,6 +66,12 @@ func _ready() -> void:
 	_party = GameState.last_battle_party.duplicate()
 	_total_exp = GameState.last_battle_exp
 	_reward_characters = GameState.last_battle_reward_characters.duplicate()
+	var dev_report_value: Variant = GameState.get_meta("last_battle_dev_turn_report", [])
+	if dev_report_value is Array:
+		var dev_report_array: Array = dev_report_value as Array
+		_dev_report_rows = dev_report_array.duplicate(true)
+	else:
+		_dev_report_rows = []
 	_gold_amount = _loot.get(ItemDefs.Type.GOLD, 0)
 
 	_build_ui()
@@ -81,6 +104,7 @@ func _build_ui() -> void:
 	add_child(title)
 
 	# 主內容容器
+	var show_dev_tabs: bool = GameState.dev_mode and not _dev_report_rows.is_empty()
 	_content = VBoxContainer.new()
 	_content.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_content.offset_left = 48.0
@@ -88,11 +112,291 @@ func _build_ui() -> void:
 	_content.offset_right = -48.0
 	_content.offset_bottom = -60.0
 	_content.add_theme_constant_override("separation", 20)
-	add_child(_content)
+	if show_dev_tabs:
+		_dev_pages_shell = Control.new()
+		_dev_pages_shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_dev_pages_shell.offset_left = 48.0
+		_dev_pages_shell.offset_top = 110.0
+		_dev_pages_shell.offset_right = -48.0
+		_dev_pages_shell.offset_bottom = -60.0
+		add_child(_dev_pages_shell)
+
+		var tab_row := HBoxContainer.new()
+		tab_row.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		tab_row.offset_left = 0.0
+		tab_row.offset_top = 0.0
+		tab_row.offset_right = 0.0
+		tab_row.offset_bottom = 34.0
+		tab_row.add_theme_constant_override("separation", 2)
+		_dev_pages_shell.add_child(tab_row)
+
+		_dev_result_tab_button = _make_dev_page_tab_button("結算")
+		_dev_result_tab_button.pressed.connect(_set_dev_report_page.bind(0))
+		tab_row.add_child(_dev_result_tab_button)
+
+		_dev_report_tab_button = _make_dev_page_tab_button("報表")
+		_dev_report_tab_button.pressed.connect(_set_dev_report_page.bind(1))
+		tab_row.add_child(_dev_report_tab_button)
+
+		var result_page := Control.new()
+		result_page.name = "結算"
+		_dev_result_page = result_page
+		_dev_result_page.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_dev_result_page.offset_top = 34.0
+		_dev_pages_shell.add_child(_dev_result_page)
+
+		_content.offset_left = 0.0
+		_content.offset_top = 10.0
+		_content.offset_right = 0.0
+		_content.offset_bottom = 0.0
+		_dev_result_page.add_child(_content)
+	else:
+		_dev_pages_shell = null
+		_dev_result_page = null
+		_dev_report_page = null
+		_dev_result_tab_button = null
+		_dev_report_tab_button = null
+		add_child(_content)
 
 	_build_exp_section()
 	_build_loot_section()
+	if show_dev_tabs:
+		_build_dev_report_page()
 	_build_tap_hint()
+
+
+func _make_dev_page_tab_button(text: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(86.0, 34.0)
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.add_theme_font_override("font", _font)
+	button.add_theme_font_size_override("font_size", 15)
+	button.add_theme_color_override("font_color", Color(0.88, 0.92, 1.0))
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 0.92, 0.42))
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	return button
+
+
+func _set_dev_report_page(page_index: int) -> void:
+	var report_active: bool = page_index == 1
+	if _dev_result_page != null:
+		_dev_result_page.visible = not report_active
+	if _dev_report_page != null:
+		_dev_report_page.visible = report_active
+	_style_dev_page_tab(_dev_result_tab_button, not report_active)
+	_style_dev_page_tab(_dev_report_tab_button, report_active)
+
+
+func _style_dev_page_tab(button: Button, active: bool) -> void:
+	if button == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.12, 0.18, 0.96) if active else Color(0.05, 0.06, 0.10, 0.92)
+	style.border_color = Color(0.52, 0.64, 0.95, 0.95) if active else Color(0.22, 0.28, 0.42, 0.85)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 0
+	style.corner_radius_bottom_right = 0
+	style.set_content_margin(SIDE_LEFT, 12.0)
+	style.set_content_margin(SIDE_RIGHT, 12.0)
+	style.set_content_margin(SIDE_TOP, 6.0)
+	style.set_content_margin(SIDE_BOTTOM, 6.0)
+	button.add_theme_stylebox_override("normal", style)
+	button.add_theme_stylebox_override("hover", style)
+	button.add_theme_stylebox_override("pressed", style)
+	button.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42) if active else Color(0.82, 0.86, 0.96))
+
+
+func _build_dev_report_page() -> void:
+	if _dev_pages_shell == null:
+		return
+	var page := Control.new()
+	page.name = "回合報表"
+	_dev_report_page = page
+	_dev_report_page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dev_report_page.offset_top = 34.0
+	_dev_pages_shell.add_child(_dev_report_page)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_dev_report_page.add_child(scroll)
+
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 10)
+	scroll.add_child(box)
+
+	var title := _make_styled_label("DEV 回合攻擊報表", 24, Color(1.0, 0.92, 0.42))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	var summary := _make_styled_label(_dev_report_summary_text_v2(), 16, Color(0.82, 0.90, 1.0))
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(summary)
+
+	for report in _dev_report_rows:
+		box.add_child(_make_dev_report_turn_card_v2(report))
+	_set_dev_report_page(0)
+
+
+func _dev_report_summary_text_v2() -> String:
+	var total_gems: int = 0
+	var total_damage: int = 0
+	for report in _dev_report_rows:
+		total_gems += int(report.get("total_gems", 0))
+		total_damage += int(report.get("total_damage", 0))
+	return "Turns %d    Stage Gems %d    Total DMG %d" % [_dev_report_rows.size(), total_gems, total_damage]
+
+
+func _make_dev_report_turn_card_v2(report: Dictionary) -> Control:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.09, 0.13, 0.92)
+	style.border_color = Color(0.38, 0.48, 0.70, 0.9)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(10)
+	card.add_theme_stylebox_override("panel", style)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	card.add_child(box)
+
+	var header := _make_styled_label(
+		"Turn %d / Round %d    Stage Gems %d    Total DMG %d" % [
+			int(report.get("turn", 0)),
+			int(report.get("round", 0)),
+			int(report.get("total_gems", 0)),
+			int(report.get("total_damage", 0)),
+		],
+		18,
+		Color(1.0, 0.95, 0.74)
+	)
+	box.add_child(header)
+
+	var gem_title := _make_styled_label("Stage Gems", 14, Color(0.78, 0.86, 1.0))
+	box.add_child(gem_title)
+	box.add_child(_make_dev_stage_gem_row(report.get("blasted_by_type", {})))
+
+	var damage_title := _make_styled_label("Character DMG", 14, Color(0.78, 0.86, 1.0))
+	box.add_child(damage_title)
+
+	var character_flow := HFlowContainer.new()
+	character_flow.alignment = FlowContainer.ALIGNMENT_CENTER
+	character_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	character_flow.add_theme_constant_override("h_separation", 10)
+	character_flow.add_theme_constant_override("v_separation", 10)
+	box.add_child(character_flow)
+
+	var characters: Array = report.get("characters", []) as Array
+	for char_report in characters:
+		if not (char_report is Dictionary):
+			continue
+		var row: Dictionary = char_report as Dictionary
+		character_flow.add_child(_make_dev_character_damage_card(row))
+	return card
+
+
+func _make_dev_stage_gem_row(value: Variant) -> Control:
+	var outer := HBoxContainer.new()
+	outer.alignment = BoxContainer.ALIGNMENT_CENTER
+	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer.add_theme_constant_override("separation", 10)
+	if not (value is Dictionary):
+		outer.add_child(_make_styled_label("-", 16, Color(0.92, 0.94, 1.0)))
+		return outer
+	var blasted: Dictionary = value
+	var ordered_keys: Array[int] = []
+	for gem_type_value in DEV_REPORT_GEM_ORDER:
+		var gem_type: int = int(gem_type_value)
+		if int(blasted.get(gem_type, 0)) > 0:
+			ordered_keys.append(gem_type)
+	for key in blasted.keys():
+		var gem_type: int = int(key)
+		if int(blasted.get(key, 0)) > 0 and not ordered_keys.has(gem_type):
+			ordered_keys.append(gem_type)
+	if ordered_keys.is_empty():
+		outer.add_child(_make_styled_label("0", 16, Color(0.92, 0.94, 1.0)))
+		return outer
+	for gem_type in ordered_keys:
+		outer.add_child(_make_dev_gem_count_chip(gem_type, int(blasted.get(gem_type, 0))))
+	return outer
+
+
+func _make_dev_gem_count_chip(gem_type: int, count: int) -> Control:
+	var chip := HBoxContainer.new()
+	chip.custom_minimum_size = Vector2(76.0, 38.0)
+	chip.alignment = BoxContainer.ALIGNMENT_CENTER
+	chip.add_theme_constant_override("separation", 4)
+
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(30.0, 30.0)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.texture = Block.GEM_TEXTURES.get(gem_type, null)
+	chip.add_child(icon)
+
+	var count_label := _make_styled_label("%d" % count, 18, Color.WHITE)
+	count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chip.add_child(count_label)
+	return chip
+
+
+func _make_dev_character_damage_card(row: Dictionary) -> Control:
+	var wrap := VBoxContainer.new()
+	wrap.custom_minimum_size = Vector2(118.0, 112.0)
+	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
+	wrap.add_theme_constant_override("separation", 4)
+
+	var character: CharacterData = _dev_character_for_row(row)
+	if character != null:
+		var card_data: Dictionary = CharacterCard.make_battle(character)
+		var panel: PanelContainer = card_data.get("panel", null) as PanelContainer
+		if panel != null:
+			panel.custom_minimum_size = Vector2(112.0, 76.0)
+			panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			wrap.add_child(panel)
+	else:
+		var fallback := PanelContainer.new()
+		fallback.custom_minimum_size = Vector2(112.0, 76.0)
+		var fallback_style := StyleBoxFlat.new()
+		fallback_style.bg_color = Color(0.11, 0.12, 0.16, 1.0)
+		fallback_style.border_color = Color(0.35, 0.40, 0.55, 1.0)
+		fallback_style.set_border_width_all(2)
+		fallback_style.set_corner_radius_all(8)
+		fallback.add_theme_stylebox_override("panel", fallback_style)
+		var name_label := _make_styled_label(String(row.get("name", "?")), 13, Color.WHITE)
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		fallback.add_child(name_label)
+		wrap.add_child(fallback)
+
+	var dmg_label := _make_styled_label("DMG %d" % int(row.get("damage", 0)), 15, Color(1.0, 0.88, 0.48))
+	dmg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dmg_label.custom_minimum_size = Vector2(118.0, 24.0)
+	wrap.add_child(dmg_label)
+	return wrap
+
+
+func _dev_character_for_row(row: Dictionary) -> CharacterData:
+	var index: int = int(row.get("index", -1))
+	if index >= 0 and index < _party.size():
+		return _party[index]
+	var row_name: String = String(row.get("name", ""))
+	for character_value in _party:
+		var character: CharacterData = character_value as CharacterData
+		if character == null:
+			continue
+		if Locale.tr_ui(character.character_name) == row_name or character.character_name == row_name:
+			return character
+	return null
 
 
 func _build_gold_section() -> void:
@@ -485,12 +789,58 @@ func _setup_tap_input() -> void:
 	_tap_button = Button.new()
 	_tap_button.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_tap_button.flat = true
+	_tap_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if _dev_pages_shell != null else Control.MOUSE_FILTER_STOP
 	_tap_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_tap_button.pressed.connect(_on_tap)
 	add_child(_tap_button)
 
 
+func _input(event: InputEvent) -> void:
+	if _post_dialog_active or _result_exit_started or _dev_pages_shell == null:
+		return
+	if event is InputEventMouseButton:
+		var mouse_event: InputEventMouseButton = event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+		_handle_dev_tab_tap_event(mouse_event.pressed, mouse_event.position)
+	elif event is InputEventScreenTouch:
+		var touch_event: InputEventScreenTouch = event as InputEventScreenTouch
+		_handle_dev_tab_tap_event(touch_event.pressed, touch_event.position)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F9:
+		_toggle_debug_panel()
+
+
+func _handle_dev_tab_tap_event(pressed: bool, position: Vector2) -> void:
+	const TAP_MOVE_LIMIT := 14.0
+	if pressed:
+		_dev_tab_tap_tracking = not _dev_tab_tap_ignored(position)
+		_dev_tab_tap_start = position
+		return
+	if not _dev_tab_tap_tracking:
+		return
+	_dev_tab_tap_tracking = false
+	if _dev_tab_tap_start.distance_to(position) > TAP_MOVE_LIMIT:
+		return
+	_on_tap()
+	get_viewport().set_input_as_handled()
+
+
+func _dev_tab_tap_ignored(position: Vector2) -> bool:
+	if _dev_pages_shell == null:
+		return true
+	var tabs_rect: Rect2 = _dev_pages_shell.get_global_rect()
+	if not tabs_rect.has_point(position):
+		return false
+	const TAB_BAR_HEIGHT := 42.0
+	return position.y <= tabs_rect.position.y + TAB_BAR_HEIGHT
+
+
 func _on_tap() -> void:
+	if _post_dialog_active or _result_exit_started:
+		return
 	if _phase == Phase.DONE:
 		_go_to_map()
 		return
@@ -731,6 +1081,9 @@ func _show_tap_hint() -> void:
 func _go_to_map() -> void:
 	# 防重複觸發
 	_tap_button.disabled = true
+	_result_exit_started = true
+	if _tap_button != null:
+		_tap_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var played_post_dialog: bool = await _play_post_dialog_after_result()
 	# 漸隱勝利音樂（存於 GameState）
 	GameState.fade_out_bgm(0.5)
@@ -748,12 +1101,15 @@ func _play_post_dialog_after_result() -> bool:
 	var dialog_control: Control = _DialogBoxScene.instantiate() as Control
 	if dialog_control == null:
 		return false
+	_post_dialog_active = true
+	_dev_tab_tap_tracking = false
 	dialog_control.set("auto_start", false)
 	dialog_control.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dialog_control.z_index = 500
 	add_child(dialog_control)
 	dialog_control.call("start", stage.post_dialog, true, true, true)
 	await dialog_control.tree_exited
+	_post_dialog_active = false
 	return true
 
 
@@ -772,11 +1128,6 @@ func _fade_out_before_post_dialog() -> void:
 # ── F9 角色矩形偏移 Debug 面板 ────────────────────────────────
 
 var _debug_panel: Control = null
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F9:
-		_toggle_debug_panel()
-
 
 func _toggle_debug_panel() -> void:
 	if _debug_panel != null and is_instance_valid(_debug_panel):

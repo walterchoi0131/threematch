@@ -7,10 +7,12 @@
 [ext_resource type="Texture2D" uid="uid://ddmgcprcgn54q" path="res://assets/blue_slime.png" id="5_blue"]
 [ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_loot"]
 [ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_char"]
-[ext_resource type="Resource" uid="uid://7kwe3q1qbp3y" path="res://characters/char_shark.tres" id="8_shark"]
+[ext_resource type="Resource" path="res://characters/char_shark.tres" id="8_shark"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="10_dragon"]
 [ext_resource type="Resource" path="res://characters/char_husky.tres" id="11_husky"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="12_gory"]
+[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="12_x5a8r"]
+[ext_resource type="Script" uid="uid://cmuy2cviws01p" path="res://scripts/start_stage_tutorial_page.gd" id="13_6kmig"]
 
 [sub_resource type="Resource" id="gold_loot"]
 script = ExtResource("6_loot")
