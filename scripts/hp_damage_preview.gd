@@ -27,6 +27,7 @@ static func show(fill: Control, prev_ratio: float, new_ratio: float) -> void:
 	var preview := ColorRect.new()
 	preview.name = "DmgPreview"
 	preview.color = _COLOR
+	preview.z_index = fill.z_index + 1
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	preview.anchor_top = 0.0
 	preview.anchor_bottom = 1.0

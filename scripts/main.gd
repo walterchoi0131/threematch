@@ -7660,7 +7660,8 @@ func _acquire_particle(pool_limit: int = MAX_VFX_PARTICLES) -> Node2D:
 ## ── 主動技 Animation Phase ──────────────────────────────────────────
 ## 各主動技的「動畫前置」參數查表。回傳 null = 該技能無動畫前置。
 ## 字典欄位：
-##   anim_path: String          影片資源路徑（必須）
+##   anim_path: String          影片資源路徑
+##   anim_frames_dir: String    逐格圖片資料夾；有值時優先使用 spritesheet/frames 播放
 ##   anim_offset: Vector2       相對於 board 左下角的位移（正值往右下）
 ##   anim_seek_sec: float       影片內起始秒數（seek 之後才 play）
 ##   anim_duration_sec: float   播放時長（0 = 等待影片自然結束；fallback 時用作等待秒數）
@@ -7671,33 +7672,35 @@ func _get_active_skill_anim_params(c: CharacterData) -> Variant:
 	match c.active_skill_name:
 		"Dragon Flame Domain":
 			return {
-				"anim_path": "res://assets/animation/anim_meteror.ogv",
-				"anim_offset": Vector2.ZERO,
+				"anim_frames_dir": "res://assets/animation/meteror",
+				"anim_offset": Vector2(-200.0, -50.0),
 				"anim_seek_sec": 1.0,
 				"anim_duration_sec": 0.0,
 				"anim_size": Vector2.ZERO,
 				"anim_scale": 0.5,
 				"anim_playback_speed": 1.5,
+				"anim_frame_rate": 24.0,
 			}
 	return null
 
 
-## 播放主動技動畫前置：建立 VideoStreamPlayer 於 board 左下角 + offset 處，
-## 期間 board.is_busy = true。影片載入失敗時 fallback 為等待 anim_duration_sec（或 1.5 秒）。
+## 播放主動技動畫前置：建立 VideoStreamPlayer 或 AnimatedSprite2D 於 board 左下角 + offset 處，
+## 期間 board.is_busy = true。資源載入失敗時 fallback 為等待 anim_duration_sec（或 1.5 秒）。
 func _play_skill_animation_phase(params: Variant) -> void:
 	if params == null:
 		return
 	var p: Dictionary = params as Dictionary
 	var anim_path: String = p.get("anim_path", "")
-	if anim_path.is_empty():
+	var anim_frames_dir: String = p.get("anim_frames_dir", "")
+	if anim_path.is_empty() and anim_frames_dir.is_empty():
 		return
 	var anim_offset: Vector2 = p.get("anim_offset", Vector2.ZERO)
 	var anim_seek: float = float(p.get("anim_seek_sec", 0.0))
 	var anim_duration: float = float(p.get("anim_duration_sec", 0.0))
 	var anim_size: Vector2 = p.get("anim_size", Vector2.ZERO)
 	var anim_scale: float = float(p.get("anim_scale", 1.0))
-
 	var anim_playback_speed: float = float(p.get("anim_playback_speed", 1.0))
+	var anim_frame_rate: float = float(p.get("anim_frame_rate", 12.0))
 
 	# 鎖住棋盤
 	var was_busy: bool = board.is_busy
@@ -7706,6 +7709,37 @@ func _play_skill_animation_phase(params: Variant) -> void:
 	# 計算 board 左下角 global 座標
 	var bl_local: Vector2 = Vector2(0.0, float(board.rows) * float(board.CELL_SIZE))
 	var anchor_global: Vector2 = board.to_global(bl_local) + anim_offset
+
+	if not anim_frames_dir.is_empty():
+		var frames_textures: Array[Texture2D] = _load_ordered_animation_frames(anim_frames_dir)
+		if not frames_textures.is_empty():
+			var frames := SpriteFrames.new()
+			frames.add_animation("play")
+			frames.set_animation_loop("play", false)
+			frames.set_animation_speed("play", anim_frame_rate)
+			for tex: Texture2D in frames_textures:
+				frames.add_frame("play", tex)
+
+			var sprite := AnimatedSprite2D.new()
+			sprite.sprite_frames = frames
+			sprite.animation = "play"
+			sprite.centered = false
+			sprite.scale = Vector2(anim_scale, anim_scale)
+			sprite.position = anchor_global - Vector2(0.0, float(frames_textures[0].get_height()) * anim_scale)
+			sprite.z_index = 50
+			sprite.speed_scale = anim_playback_speed
+			fx_layer.add_child(sprite)
+			sprite.play("play")
+			if anim_duration > 0.0:
+				await get_tree().create_timer(anim_duration / max(0.01, anim_playback_speed)).timeout
+			else:
+				await sprite.animation_finished
+			if is_instance_valid(sprite):
+				sprite.stop()
+				sprite.queue_free()
+			board.is_busy = was_busy
+			return
+		push_warning("Animation phase: failed to load frames from '%s'; falling back to video/wait." % anim_frames_dir)
 
 	var stream: VideoStream = null
 	if ResourceLoader.exists(anim_path):
@@ -7756,6 +7790,28 @@ func _play_skill_animation_phase(params: Variant) -> void:
 		await get_tree().create_timer(wait_sec).timeout
 
 	board.is_busy = was_busy
+
+
+func _load_ordered_animation_frames(dir_path: String) -> Array[Texture2D]:
+	var textures: Array[Texture2D] = []
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return textures
+	var file_names: Array[String] = []
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	while not file_name.is_empty():
+		var ext: String = file_name.get_extension().to_lower()
+		if not dir.current_is_dir() and ext in ["png", "webp", "jpg", "jpeg"]:
+			file_names.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	file_names.sort()
+	for name: String in file_names:
+		var tex := load(dir_path.path_join(name)) as Texture2D
+		if tex != null:
+			textures.append(tex)
+	return textures
 
 
 # ── 回合管線 ─────────────────────────────────────────────────────
@@ -14749,6 +14805,7 @@ func _setup_boss_bar() -> void:
 	_boss_bar_bg = ColorRect.new()
 	_boss_bar_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_boss_bar_bg.color = Color(0, 0, 0, 1)
+	_boss_bar_bg.z_index = 0
 	_boss_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_bg)
 
@@ -14761,6 +14818,7 @@ func _setup_boss_bar() -> void:
 	_boss_bar_fill.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_boss_bar_fill.stretch_mode = TextureRect.STRETCH_SCALE
 	_boss_bar_fill.pivot_offset = Vector2.ZERO
+	_boss_bar_fill.z_index = 1
 	_boss_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_fill)
 
@@ -14775,6 +14833,7 @@ func _setup_boss_bar() -> void:
 	_boss_bar_element_slot.offset_top = (BOSS_BAR_HEIGHT - element_slot_size) * 0.5
 	_boss_bar_element_slot.offset_right = _boss_bar_element_slot.offset_left + element_slot_size
 	_boss_bar_element_slot.offset_bottom = _boss_bar_element_slot.offset_top + element_slot_size
+	_boss_bar_element_slot.z_index = 4
 	_boss_bar_element_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_element_slot)
 
@@ -14823,6 +14882,7 @@ func _setup_boss_bar() -> void:
 	_boss_bar_label.add_theme_color_override("font_color", Color.WHITE)
 	_boss_bar_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_boss_bar_label.add_theme_constant_override("outline_size", 4)
+	_boss_bar_label.z_index = 5
 	_boss_bar_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_boss_bar_label)
 

@@ -121,6 +121,7 @@ offset_top = 76.0
 offset_right = -16.0
 offset_bottom = 252.0
 mouse_filter = 2
+theme_override_constants/separation = 24
 alignment = 1
 
 [node name="CharacterRow" type="HBoxContainer" parent="UILayer" unique_id=354252149]
