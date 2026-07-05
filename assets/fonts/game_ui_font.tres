@@ -1,8 +1,8 @@
 [gd_resource type="FontVariation" load_steps=3 format=3]
 
 [ext_resource type="FontFile" uid="uid://dc88yi3wlk6x1" path="res://assets/fonts/RussoOne-Regular.ttf" id="1_russo"]
-[ext_resource type="FontVariation" path="res://assets/fonts/hy_yong_zi_hu_shan_xing_secondary.tres" id="2_hyyong_secondary"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansTC-SemiBold.ttf" id="2_noto_tc_semibold"]
 
 [resource]
 base_font = ExtResource("1_russo")
-fallbacks = Array[Font]([ExtResource("2_hyyong_secondary")])
+fallbacks = Array[Font]([ExtResource("2_noto_tc_semibold")])

@@ -7,7 +7,6 @@
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
 [ext_resource type="Resource" path="res://enemies/gory.tres" id="5_v1cif"]
-[ext_resource type="AudioStream" path="res://assets/music/Rainforest Clash.mp3" id="6_music"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_nccdu"]
 [ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.wav" id="10_eep8t"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_snknq"]
@@ -75,17 +74,17 @@ script = ExtResource("4_seq")
 lines = Array[ExtResource("3_line")]([SubResource("s21_post_gory_kneel"), SubResource("s21_post_gory_groan"), SubResource("s21_post_panda_shock"), SubResource("s21_post_dragon_sorry"), SubResource("s21_post_shark_zanshin"), SubResource("s21_post_gory_lost"), SubResource("s21_post_panda_not_killers"), SubResource("s21_post_dragon_forest"), SubResource("s21_post_shark_crystal"), SubResource("s21_post_gory_know"), SubResource("s21_post_gory_lead")])
 cast = Array[String](["gory", "panda", "dragon", "shark"])
 background = ExtResource("5_bg")
-initial_music = ExtResource("6_music")
+initial_music = ExtResource("10_eep8t")
 
 [sub_resource type="Resource" id="s21_pre_dragon_light"]
 script = ExtResource("3_line")
-character_id = "dragon"
+character_id = "panda"
 text_zh = "空氣中的光元素好多..."
 action = "enter"
 
 [sub_resource type="Resource" id="s21_pre_panda_hot"]
 script = ExtResource("3_line")
-character_id = "panda"
+character_id = "dragon"
 text_zh = "好熱啊~ 你確定常茂森林是走這邊嘛~"
 action = "enter"
 
@@ -128,9 +127,9 @@ script = ExtResource("4_seq")
 lines = Array[ExtResource("3_line")]([SubResource("s21_pre_dragon_light"), SubResource("s21_pre_panda_hot"), SubResource("s21_pre_spear"), SubResource("s21_pre_shark_warn"), SubResource("s21_pre_gory_halt"), SubResource("s21_pre_dragon_explain"), SubResource("s21_pre_panda_fall"), SubResource("s21_pre_gory_attack")])
 cast = Array[String](["panda", "dragon", "shark", "gory"])
 background = ExtResource("5_bg")
-initial_music = ExtResource("6_music")
+initial_music = ExtResource("10_eep8t")
 
-[sub_resource type="Resource" id="Resource_1rkmf"]
+[sub_resource type="Resource" id="Resource_v1cif"]
 script = ExtResource("2_entry")
 enemy = ExtResource("5_v1cif")
 level = 10
@@ -153,7 +152,7 @@ element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("Resource_1rkmf")]])
+rounds = Array[Array]([[SubResource("Resource_v1cif")]])
 pre_dialog = SubResource("s21_pre")
 post_dialog = SubResource("s21_post")
 start_stage_dialog = SubResource("s21_start")
