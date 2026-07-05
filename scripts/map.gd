@@ -33,6 +33,8 @@ var _dev_drag_hint_panel: PanelContainer = null
 var _dev_drag_hint_label: Label = null
 var _remove_confirm_dialog: ConfirmationDialog = null
 var _pending_remove_stage: StageData = null
+var _remove_relation_confirm_dialog: ConfirmationDialog = null
+var _pending_remove_relation: Dictionary = {}
 var _portrait_debug_layer: CanvasLayer = null
 var _fuse_skill_debug_icon: Texture2D = preload("res://assets/blocks/puzzle_key_gem.png")
 var _tutorial_editor_layer: CanvasLayer = null
@@ -686,6 +688,33 @@ func _remove_prerequisite_relation(parent_id: String, child_id: String) -> void:
 		_refresh_stage_buttons()
 
 
+func _confirm_remove_prerequisite_relation(parent_id: String, child_id: String) -> void:
+	if parent_id == "" or child_id == "":
+		return
+	_pending_remove_relation = {
+		"parent_id": parent_id,
+		"child_id": child_id,
+	}
+	if _remove_relation_confirm_dialog == null or not is_instance_valid(_remove_relation_confirm_dialog):
+		_remove_relation_confirm_dialog = ConfirmationDialog.new()
+		_remove_relation_confirm_dialog.name = "RemoveRelationConfirmDialog"
+		_remove_relation_confirm_dialog.title = "確認刪除路線"
+		_remove_relation_confirm_dialog.confirmed.connect(_on_remove_relation_confirmed)
+		add_child(_remove_relation_confirm_dialog)
+		_remove_relation_confirm_dialog.get_ok_button().text = "刪除"
+		_remove_relation_confirm_dialog.get_cancel_button().text = "取消"
+	_remove_relation_confirm_dialog.dialog_text = "確定要刪除「%s → %s」前置路線嗎？\n這會移除該關卡的前置需求。" % [parent_id, child_id]
+	_remove_relation_confirm_dialog.popup_centered(Vector2(420, 170))
+
+
+func _on_remove_relation_confirmed() -> void:
+	var relation: Dictionary = _pending_remove_relation
+	_pending_remove_relation = {}
+	var parent_id: String = String(relation.get("parent_id", ""))
+	var child_id: String = String(relation.get("child_id", ""))
+	_remove_prerequisite_relation(parent_id, child_id)
+
+
 func _try_remove_relation_at_global_pos(global_pos: Vector2) -> bool:
 	if _path_layer == null or not _path_layer.has_method("find_relation_at_point"):
 		return false
@@ -695,7 +724,7 @@ func _try_remove_relation_at_global_pos(global_pos: Vector2) -> bool:
 		return false
 	var parent_id: String = String(relation.get("from_id", ""))
 	var child_id: String = String(relation.get("to_id", ""))
-	_remove_prerequisite_relation(parent_id, child_id)
+	_confirm_remove_prerequisite_relation(parent_id, child_id)
 	return true
 
 

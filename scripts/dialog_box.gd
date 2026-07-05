@@ -1295,6 +1295,7 @@ func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
 	var enemy_data: EnemyData = _dialog_enemy_data(char_id)
 	if enemy_data != null and enemy_data.portrait_texture != null:
 		return enemy_data.portrait_texture
+	var character_data: CharacterData = _find_character_data(char_id)
 	# 角色 ID 別名（例如 raccoon → raccoon_baby）
 	var aliased: String = _CHAR_ID_ALIAS.get(char_id, char_id)
 	# 嘗試情緒差分貼圖
@@ -1306,6 +1307,9 @@ func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
 			var tex: Texture2D = load(emotion_path)
 			_texture_cache[emotion_path] = tex
 			return tex
+
+	if character_data != null and character_data.portrait_texture != null:
+		return character_data.portrait_texture
 
 	# Fallback: 預設貼圖
 	var default_path := "res://assets/%s.png" % aliased

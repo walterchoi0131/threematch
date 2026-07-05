@@ -5,29 +5,17 @@
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
-[ext_resource type="AudioStream" path="res://assets/music/Rainforest Clash.mp3" id="6_music"]
-[ext_resource type="Resource" path="res://enemies/gory.tres" id="7_gory_enemy"]
+[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.wav" id="5_smd2q"]
+[ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="6_smd2q"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="8_gory_char"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="8_jpuby"]
+[ext_resource type="Resource" path="res://enemies/forest_lancer.tres" id="9_jpuby"]
+[ext_resource type="Resource" path="res://enemies/forest_mage.tres" id="10_0ymui"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="10_juwhm"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_0ymui"]
 
-[sub_resource type="Resource" id="s22_post_1"]
-script = ExtResource("3_line")
-character_id = "gory"
-text_zh = "你們真的不是來搶森林的？好吧，我帶你們去見長老。"
-text_en = "You really are not here to steal from the forest? Fine. I will take you to the elder."
-
-[sub_resource type="Resource" id="s22_post_2"]
-script = ExtResource("3_line")
-character_id = "shark"
-position = "right"
-text_zh = "合作比互相消耗更有效率。歡迎加入。"
-text_en = "Cooperation is more efficient than wasting strength. Welcome aboard."
-
 [sub_resource type="Resource" id="s22_post"]
 script = ExtResource("4_seq")
-lines = Array[ExtResource("3_line")]([SubResource("s22_post_1"), SubResource("s22_post_2")])
 cast = Array[String](["gory", "shark"])
 background = ExtResource("5_bg")
 
@@ -49,14 +37,52 @@ script = ExtResource("4_seq")
 lines = Array[ExtResource("3_line")]([SubResource("s22_pre_1"), SubResource("s22_pre_2")])
 cast = Array[String](["gory", "panda", "dragon", "shark"])
 background = ExtResource("5_bg")
-initial_music = ExtResource("6_music")
+initial_music = ExtResource("5_smd2q")
 
-[sub_resource type="Resource" id="s22_gory"]
+[sub_resource type="Resource" id="Resource_smd2q"]
 script = ExtResource("2_entry")
-enemy = ExtResource("7_gory_enemy")
-level = 19
-hp_percent = 4850
-main_boss = true
+enemy = ExtResource("6_smd2q")
+level = 10
+hp_percent = 1700
+
+[sub_resource type="Resource" id="Resource_jpuby"]
+script = ExtResource("2_entry")
+enemy = ExtResource("9_jpuby")
+level = 10
+hp_percent = 2300
+
+[sub_resource type="Resource" id="Resource_juwhm"]
+script = ExtResource("2_entry")
+enemy = ExtResource("10_0ymui")
+level = 10
+hp_percent = 1900
+
+[sub_resource type="Resource" id="Resource_0ymui"]
+script = ExtResource("2_entry")
+enemy = ExtResource("9_jpuby")
+level = 10
+hp_percent = 2300
+
+[sub_resource type="Resource" id="Resource_x84as"]
+script = ExtResource("2_entry")
+enemy = ExtResource("6_smd2q")
+level = 10
+hp_percent = 1700
+
+[sub_resource type="Resource" id="Resource_b1m45"]
+script = ExtResource("2_entry")
+enemy = ExtResource("9_jpuby")
+level = 15
+hp_percent = 2300
+
+[sub_resource type="Resource" id="Resource_yf3x8"]
+script = ExtResource("4_seq")
+
+[sub_resource type="Resource" id="Resource_7ff4n"]
+script = ExtResource("4_seq")
+
+[sub_resource type="Resource" id="Resource_kpnv5"]
+script = ExtResource("4_seq")
 
 [resource]
 script = ExtResource("1_stage")
@@ -65,15 +91,15 @@ prerequisite_stage_id = "2-1"
 connects_to = Array[String](["2-3"])
 map_position = Vector2(36, 737)
 stage_name = "Stage 2-2 Gory 的誤會"
-element_weights = Array[int]([25, 20, 20, 35])
+element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 one_time_reward_character = ExtResource("8_gory_char")
-rounds = Array[Array]([[SubResource("s22_gory")]])
-rounds_init_cd = Array[Array]([[0]])
-rounds_enemy_levels = Array[Array]([[19]])
-rounds_main_bosses = Array[Array]([[true]])
+rounds = Array[Array]([[SubResource("Resource_smd2q"), SubResource("Resource_jpuby")], [SubResource("Resource_juwhm"), SubResource("Resource_0ymui"), SubResource("Resource_x84as")], [SubResource("Resource_b1m45")]])
 pre_dialog = SubResource("s22_pre")
 post_dialog = SubResource("s22_post")
+start_stage_dialog = SubResource("Resource_yf3x8")
+start_round_dialogs = Array[ExtResource("4_seq")]([SubResource("Resource_yf3x8"), SubResource("Resource_7ff4n"), SubResource("Resource_kpnv5")])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

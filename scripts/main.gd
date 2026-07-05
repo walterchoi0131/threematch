@@ -305,6 +305,7 @@ var _se_blast: AudioStream = null
 var _se_freeze: AudioStream = null
 var _se_impact: AudioStream = null
 var _se_dark_chess_eat_impact: AudioStream = null
+var _owen_dark_chess_eat_voice_lines: Array[Dictionary] = []
 var _se_attack_impacts: Dictionary = {}
 var _se_join_team: AudioStream = null
 var _se_thor_active: AudioStream = null
@@ -393,6 +394,7 @@ var _stage_editor_mode_buttons: Dictionary = {}
 var _stage_editor_current_tab: String = STAGE_EDITOR_TAB_BOARD
 var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
+var _stage_editor_stage_name_edit: LineEdit = null
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_bg_override_option: OptionButton = null
 var _stage_editor_music_override_option: OptionButton = null
@@ -562,6 +564,11 @@ func _ready() -> void:
 	_se_freeze = _load_audio_stream("res://assets/se/skef_freeze.mp3")
 	_se_impact = _load_audio_stream("res://assets/se/skef_atk1_B.mp3")
 	_se_dark_chess_eat_impact = _load_audio_stream("res://assets/se/attack/attack_se_dark_2.wav")
+	_owen_dark_chess_eat_voice_lines = [
+		{"message": "天真!", "voice": _load_audio_stream("res://assets/voice/owen/owen_naive.mp3")},
+		{"message": "將軍!", "voice": _load_audio_stream("res://assets/voice/owen/owen_checkmate.mp3")},
+		{"message": "你已急哭", "voice": _load_audio_stream("res://assets/voice/owen/owen_youmad.mp3")},
+	]
 	_load_attack_impact_sfx()
 	_se_join_team = _load_audio_stream("res://assets/se/join_team2.mp3")
 	_se_thor_active = _load_audio_stream("res://assets/se/magical_star_transmu.mp3")
@@ -847,8 +854,23 @@ func _build_stage_editor_area_panel() -> void:
 
 	var selector_box := VBoxContainer.new()
 	selector_box.add_theme_constant_override("separation", 1)
-	selector_box.custom_minimum_size = Vector2(116, 0)
+	selector_box.custom_minimum_size = Vector2(150, 0)
 	row.add_child(selector_box)
+
+	var name_title := Label.new()
+	name_title.text = "關卡名稱"
+	name_title.add_theme_font_size_override("font_size", 9)
+	name_title.add_theme_color_override("font_color", Color(0.82, 0.9, 1.0, 1.0))
+	selector_box.add_child(name_title)
+
+	_stage_editor_stage_name_edit = LineEdit.new()
+	_stage_editor_stage_name_edit.custom_minimum_size = Vector2(146, 20)
+	_stage_editor_stage_name_edit.add_theme_font_size_override("font_size", 9)
+	_stage_editor_stage_name_edit.placeholder_text = "Stage Name"
+	_stage_editor_stage_name_edit.tooltip_text = "StageData.stage_name"
+	_stage_editor_stage_name_edit.text_submitted.connect(_on_stage_editor_stage_name_submitted)
+	_stage_editor_stage_name_edit.focus_exited.connect(_on_stage_editor_stage_name_focus_exited)
+	selector_box.add_child(_stage_editor_stage_name_edit)
 
 	var title := Label.new()
 	title.text = "地圖區域"
@@ -859,7 +881,7 @@ func _build_stage_editor_area_panel() -> void:
 	_stage_editor_area_option = OptionButton.new()
 	_stage_editor_area_option.focus_mode = Control.FOCUS_NONE
 	_stage_editor_area_option.fit_to_longest_item = false
-	_stage_editor_area_option.custom_minimum_size = Vector2(112, 24)
+	_stage_editor_area_option.custom_minimum_size = Vector2(146, 22)
 	_stage_editor_area_option.add_theme_font_size_override("font_size", 10)
 	for area_key: String in StageData.AREA_KEYS:
 		var item_index: int = _stage_editor_area_option.item_count
@@ -876,7 +898,7 @@ func _build_stage_editor_area_panel() -> void:
 
 	_stage_editor_bg_override_option = OptionButton.new()
 	_stage_editor_bg_override_option.focus_mode = Control.FOCUS_NONE
-	_stage_editor_bg_override_option.custom_minimum_size = Vector2(112, 20)
+	_stage_editor_bg_override_option.custom_minimum_size = Vector2(146, 20)
 	_stage_editor_bg_override_option.add_theme_font_size_override("font_size", 9)
 	_stage_editor_make_compact_option_button(_stage_editor_bg_override_option)
 	_stage_editor_bg_override_option.item_selected.connect(_on_stage_editor_bg_override_selected)
@@ -5244,6 +5266,8 @@ func _refresh_stage_editor_area_panel() -> void:
 		_stage_editor_selected_area = StageData.normalize_area(current_stage.area)
 	else:
 		_stage_editor_selected_area = StageData.DEFAULT_AREA
+	if _stage_editor_stage_name_edit != null:
+		_stage_editor_stage_name_edit.text = current_stage.stage_name if current_stage != null else ""
 	if _stage_editor_area_option != null:
 		for item_index in _stage_editor_area_option.item_count:
 			var item_area: String = String(_stage_editor_area_option.get_item_metadata(item_index))
@@ -5280,6 +5304,22 @@ func _refresh_stage_editor_area_panel() -> void:
 			drop_edit.text = str(_stage_editor_get_drop_start_value(int(key)))
 	_refresh_stage_editor_distribution_preview()
 	_refresh_stage_editor_reward_controls()
+
+
+func _on_stage_editor_stage_name_submitted(_text: String) -> void:
+	_stage_editor_apply_stage_name_from_ui()
+
+
+func _on_stage_editor_stage_name_focus_exited() -> void:
+	_stage_editor_apply_stage_name_from_ui()
+
+
+func _stage_editor_apply_stage_name_from_ui() -> void:
+	if current_stage == null or _stage_editor_stage_name_edit == null:
+		return
+	current_stage.stage_name = _stage_editor_stage_name_edit.text.strip_edges()
+	_stage_editor_stage_name_edit.text = current_stage.stage_name
+	_set_stage_editor_status("關卡名稱：%s" % current_stage.stage_name)
 
 
 func _stage_editor_get_drop_start_value(column_index: int) -> int:
@@ -5629,6 +5669,8 @@ func _on_stage_editor_save_pressed() -> void:
 		_set_stage_editor_status(validation_error, false)
 		return
 	var distribution_types: Array[Block.Type] = _stage_editor_get_distribution_allowed_types_snapshot()
+	if _stage_editor_stage_name_edit != null:
+		current_stage.stage_name = _stage_editor_stage_name_edit.text.strip_edges()
 	current_stage.area = StageData.normalize_area(_stage_editor_selected_area)
 	if _stage_editor_bg_override_option != null:
 		current_stage.battle_background_override_path = _stage_editor_get_option_value(_stage_editor_bg_override_option)
@@ -8460,7 +8502,19 @@ func _show_dark_chess_eat_loot_log(pos: Vector2i) -> void:
 	var owner: CharacterData = _building_upper_owner_character(pos)
 	if not _is_owen_character(owner):
 		return
-	_enqueue_character_message_loot_toast(owner, "Haha.", Block.Type.DARK)
+	var line: Dictionary = _random_owen_dark_chess_eat_voice_line()
+	var message: String = String(line.get("message", "天真!"))
+	_enqueue_character_message_loot_toast(owner, message, Block.Type.DARK)
+	var voice: AudioStream = line.get("voice", null) as AudioStream
+	if voice != null:
+		_play_sfx(voice)
+
+
+func _random_owen_dark_chess_eat_voice_line() -> Dictionary:
+	if _owen_dark_chess_eat_voice_lines.is_empty():
+		return {"message": "天真!", "voice": null}
+	var index: int = randi() % _owen_dark_chess_eat_voice_lines.size()
+	return _owen_dark_chess_eat_voice_lines[index]
 
 
 func _is_owen_character(character: CharacterData) -> bool:

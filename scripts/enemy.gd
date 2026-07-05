@@ -21,9 +21,9 @@ const INTENT_CD_ICON_FONT_SIZE := 23
 const INTENT_CD_ICON_OFFSET := Vector2(-1.5, -0.5)
 const INTENT_CD_DIGIT_OFFSET := Vector2(-1.5, -2.0)
 const HIT_BOUNCE_NORMAL := 0
-const HIT_BOUNCE_MID := 1
-const HIT_BOUNCE_MAX := 2
-const HIT_BOUNCE_DURATION := 0.35
+const HIT_BOUNCE_DURATION := 0.352
+const HIT_BOUNCE_SQUASH := Vector2(1.12, 0.84)
+const HIT_BOUNCE_STRETCH := Vector2(0.90, 1.16)
 
 var data: EnemyData               # 敎人資料
 var current_hp: int = 0           # 當前血量
@@ -53,7 +53,7 @@ var _long_press_fired: bool = false
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 var _base_minimum_size: Vector2 = Vector2.ZERO
 var _hit_bounce_tween: Tween = null
-var _hit_bounce_home_position: Vector2 = Vector2.ZERO
+var _hit_bounce_home_scale: Vector2 = Vector2.ONE
 var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
 var _passive_badge: Control = null
 var _passive_badge_icon: TextureRect = null
@@ -631,36 +631,29 @@ func _stop_spin() -> void:
 
 
 ## 受到傷害：扣血、更新血條、播放受傷閃爍、檢查死亡
-func play_hit_bounce(hit_power_level: int = HIT_BOUNCE_NORMAL) -> void:
+func play_hit_bounce(_hit_power_level: int = HIT_BOUNCE_NORMAL) -> void:
 	if portrait == null or not is_node_ready():
 		return
-	var target_position: Vector2 = _hit_bounce_home_position
 	if _hit_bounce_tween == null or not _hit_bounce_tween.is_valid():
-		target_position = portrait.position
-		_hit_bounce_home_position = target_position
+		_hit_bounce_home_scale = portrait.scale
 	if _hit_bounce_tween != null and _hit_bounce_tween.is_valid():
 		_hit_bounce_tween.kill()
-	portrait.position = target_position + _hit_bounce_offset(hit_power_level)
+	var base_scale: Vector2 = _hit_bounce_home_scale
+	portrait.pivot_offset = Vector2(portrait.size.x * 0.5, portrait.size.y)
 	var tween := create_tween()
 	_hit_bounce_tween = tween
-	tween.tween_property(portrait, "position", target_position, HIT_BOUNCE_DURATION) \
+	tween.tween_property(portrait, "scale", base_scale * HIT_BOUNCE_SQUASH, HIT_BOUNCE_DURATION * 0.3) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.tween_property(portrait, "scale", base_scale * HIT_BOUNCE_STRETCH, HIT_BOUNCE_DURATION * 0.35) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tween.tween_property(portrait, "scale", base_scale, HIT_BOUNCE_DURATION * 0.35) \
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_QUAD)
 	tween.finished.connect(func() -> void:
 		if _hit_bounce_tween == tween:
-			portrait.position = target_position
-			_hit_bounce_home_position = target_position
+			portrait.scale = base_scale
+			_hit_bounce_home_scale = base_scale
 			_hit_bounce_tween = null
 	)
-
-
-func _hit_bounce_offset(hit_power_level: int) -> Vector2:
-	match clampi(hit_power_level, HIT_BOUNCE_NORMAL, HIT_BOUNCE_MAX):
-		HIT_BOUNCE_MAX:
-			return Vector2(0.0, -58.0)
-		HIT_BOUNCE_MID:
-			return Vector2(0.0, -36.0)
-		_:
-			return Vector2(0.0, -18.0)
 
 
 func take_damage(amount: int, hit_power_level: int = HIT_BOUNCE_NORMAL) -> int:
@@ -699,7 +692,7 @@ func take_applied_damage_tick(applied_amount: int, hit_power_level: int = HIT_BO
 		var target_ratio: float = float(current_hp) / float(max_hp) if max_hp > 0 else 0.0
 		var bar_tween := create_tween()
 		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	if actual_damage > 0:
+	if applied_amount > 0:
 		play_hit_bounce(hit_power_level)
 
 	var blink := create_tween()
@@ -748,7 +741,7 @@ func _take_damage_internal(amount: int, hp_floor: int, hit_power_level: int = HI
 		var bar_tween := create_tween()
 		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 		_play_hp_damage_preview(prev_ratio, target_ratio)
-	if actual_damage > 0:
+	if applied_amount > 0:
 		play_hit_bounce(hit_power_level)
 
 	# 整個敎人閃紅提示受傷
