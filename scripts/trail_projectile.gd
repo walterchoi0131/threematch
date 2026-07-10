@@ -33,6 +33,22 @@ var _burst_pos := Vector2.ZERO
 var _burst_scale := 1.0
 var _burst_alpha := 0.0
 var _visual_size_multiplier: float = 1.0
+var _trail_length: int = TRAIL_LENGTH
+var _head_radius: float = HEAD_RADIUS
+var _head_glow_radius: float = HEAD_GLOW_RADIUS
+var _trail_width_head: float = TRAIL_WIDTH_HEAD
+var _trail_width_tail: float = TRAIL_WIDTH_TAIL
+var _sparkle_amount: int = SPARKLE_AMOUNT
+var _flare_count: int = FLARE_COUNT
+var _flare_length: float = FLARE_LENGTH
+var _flare_width: float = FLARE_WIDTH
+var _particle_scale_min: float = PARTICLE_SCALE_MIN
+var _particle_scale_max: float = PARTICLE_SCALE_MAX
+var _particle_lifetime: float = 0.4
+var _particle_velocity_min: float = 20.0
+var _particle_velocity_max: float = 60.0
+var _particle_gravity: float = 40.0
+var _fade_duration: float = 0.2
 var _orbiting := false
 var _orbit_center_global := Vector2.ZERO
 var _orbit_radius := 28.0
@@ -73,13 +89,86 @@ func set_visual_size_multiplier(value: float) -> void:
 	queue_redraw()
 
 
+static func get_power_attack_defaults(power_level: int) -> Dictionary:
+	var level: int = clampi(power_level, 1, 2)
+	return {
+		"duration_divisor": speed_divisor,
+		"arc_angle_deg": 0.0,
+		"pullback_ratio": 0.62 if level == 1 else 0.95,
+		"pullback_min": 140.0 if level == 1 else 210.0,
+		"pullback_max": 410.0 if level == 1 else 620.0,
+		"arc_height_ratio": 0.46 if level == 1 else 0.50,
+		"arc_height_min": 105.0 if level == 1 else 120.0,
+		"approach_ratio": 0.36 if level == 1 else 0.46,
+		"approach_min": 105.0 if level == 1 else 140.0,
+		"approach_max": 260.0 if level == 1 else 340.0,
+		"side_factor": 0.45 if level == 1 else 0.75,
+		"pull_arc_factor": 0.38 if level == 1 else 0.16,
+		"time_power": 2.15 if level == 1 else 2.65,
+		"visual_scale": 2.0 if level == 1 else 3.0,
+		"trail_length": TRAIL_LENGTH,
+		"trail_width_head": TRAIL_WIDTH_HEAD,
+		"trail_width_tail": TRAIL_WIDTH_TAIL,
+		"head_radius": HEAD_RADIUS,
+		"head_glow_radius": HEAD_GLOW_RADIUS,
+		"flare_count": FLARE_COUNT,
+		"flare_length": FLARE_LENGTH,
+		"flare_width": FLARE_WIDTH,
+		"sparkle_amount": SPARKLE_AMOUNT,
+		"particle_lifetime": 0.4,
+		"particle_velocity_min": 20.0,
+		"particle_velocity_max": 60.0,
+		"particle_gravity": 40.0,
+		"particle_scale_min": PARTICLE_SCALE_MIN,
+		"particle_scale_max": PARTICLE_SCALE_MAX,
+		"fade_duration": 0.2,
+	}
+
+
+static func get_normal_attack_defaults() -> Dictionary:
+	var defaults: Dictionary = get_power_attack_defaults(1)
+	defaults["arc_height_ratio"] = 0.35
+	defaults["arc_height_min"] = 0.0
+	defaults["normal_arc_factor"] = 0.5
+	defaults["side_factor"] = 1.0
+	defaults["time_power"] = 1.0
+	defaults["visual_scale"] = 1.0
+	return defaults
+
+
+func apply_power_attack_visual_parameters(parameters: Dictionary) -> void:
+	_visual_size_multiplier = maxf(0.1, float(parameters.get("visual_scale", _visual_size_multiplier)))
+	_trail_length = maxi(2, int(parameters.get("trail_length", _trail_length)))
+	_trail_width_head = maxf(0.1, float(parameters.get("trail_width_head", _trail_width_head)))
+	_trail_width_tail = maxf(0.1, float(parameters.get("trail_width_tail", _trail_width_tail)))
+	_head_radius = maxf(0.1, float(parameters.get("head_radius", _head_radius)))
+	_head_glow_radius = maxf(0.1, float(parameters.get("head_glow_radius", _head_glow_radius)))
+	_flare_count = maxi(0, int(parameters.get("flare_count", _flare_count)))
+	_flare_length = maxf(0.0, float(parameters.get("flare_length", _flare_length)))
+	_flare_width = maxf(0.0, float(parameters.get("flare_width", _flare_width)))
+	_sparkle_amount = maxi(1, int(parameters.get("sparkle_amount", _sparkle_amount)))
+	_particle_lifetime = maxf(0.05, float(parameters.get("particle_lifetime", _particle_lifetime)))
+	_particle_velocity_min = maxf(0.0, float(parameters.get("particle_velocity_min", _particle_velocity_min)))
+	_particle_velocity_max = maxf(_particle_velocity_min, float(parameters.get("particle_velocity_max", _particle_velocity_max)))
+	_particle_gravity = float(parameters.get("particle_gravity", _particle_gravity))
+	_particle_scale_min = maxf(0.01, float(parameters.get("particle_scale_min", _particle_scale_min)))
+	_particle_scale_max = maxf(_particle_scale_min, float(parameters.get("particle_scale_max", _particle_scale_max)))
+	_fade_duration = maxf(0.01, float(parameters.get("fade_duration", _fade_duration)))
+	_apply_particle_size()
+	queue_redraw()
+
+
 ## 發射：從 from 到 to（全域座標），沿 Bezier 弧線飛行
-func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0) -> void:
+func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0, parameters: Dictionary = {}) -> void:
 	is_available = false
 	_orbiting = false
 	_following = false
 	_follow_target = null
-	duration = duration / speed_divisor  # 速度加快
+	var profile: Dictionary = get_normal_attack_defaults()
+	profile.merge(parameters, true)
+	if not parameters.is_empty():
+		apply_power_attack_visual_parameters(profile)
+	duration = duration / maxf(0.01, float(profile.get("duration_divisor", speed_divisor)))
 	_color = color
 	_trail.clear()
 	_head_pos = from
@@ -100,18 +189,25 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 	# Bezier 弧線計算
 	var dir: Vector2 = to - from
 	var perp := Vector2(-dir.y, dir.x).normalized()
-	var side: float = spread
-	var arc_height: float = dir.length() * 0.35
-	var control: Vector2 = (from + to) * 0.5 + perp * arc_height * side + Vector2(0, -arc_height * 0.5)
+	var side: float = spread * float(profile.get("side_factor", 1.0))
+	var arc_height: float = maxf(
+		dir.length() * float(profile.get("arc_height_ratio", 0.35)),
+		float(profile.get("arc_height_min", 0.0))
+	)
+	var arc_direction: Vector2 = Vector2.UP.rotated(deg_to_rad(float(profile.get("arc_angle_deg", 0.0))))
+	var control: Vector2 = (from + to) * 0.5 + perp * arc_height * side \
+		+ arc_direction * arc_height * float(profile.get("normal_arc_factor", 0.5))
+	var time_power: float = maxf(0.1, float(profile.get("time_power", 1.0)))
 
 	_tween = create_tween()
 	_tween.tween_method(func(t: float) -> void:
-		var inv: float = 1.0 - t
-		_head_pos = inv * inv * from + 2.0 * inv * t * control + t * t * to
+		var curve_t: float = pow(t, time_power)
+		var inv: float = 1.0 - curve_t
+		_head_pos = inv * inv * from + 2.0 * inv * curve_t * control + curve_t * curve_t * to
 		# 記錄拖尾點
 		_trail.push_front(_head_pos)
-		if _trail.size() > TRAIL_LENGTH:
-			_trail.resize(TRAIL_LENGTH)
+		if _trail.size() > _trail_length:
+			_trail.resize(_trail_length)
 		# 更新粒子發射位置
 		if _particles:
 			_particles.global_position = _head_pos
@@ -120,12 +216,16 @@ func launch(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, sp
 	_tween.tween_callback(_on_flight_done)
 
 
-func launch_power_attack(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0, power_level: int = 1) -> void:
+func launch_power_attack(from: Vector2, to: Vector2, color: Color, duration: float = 0.35, spread: float = 0.0, power_level: int = 1, parameters: Dictionary = {}) -> void:
 	is_available = false
 	_orbiting = false
 	_following = false
 	_follow_target = null
-	duration = duration / speed_divisor
+	var level: int = clampi(power_level, 1, 2)
+	var profile: Dictionary = get_power_attack_defaults(level)
+	profile.merge(parameters, true)
+	apply_power_attack_visual_parameters(profile)
+	duration = duration / maxf(0.01, float(profile.get("duration_divisor", speed_divisor)))
 	_color = color
 	_trail.clear()
 	_head_pos = from
@@ -147,14 +247,24 @@ func launch_power_attack(from: Vector2, to: Vector2, color: Color, duration: flo
 	var dist: float = dir.length()
 	var dir_n: Vector2 = dir.normalized() if dist > 0.001 else Vector2.RIGHT
 	var perp := Vector2(-dir_n.y, dir_n.x)
-	var level: int = clampi(power_level, 1, 2)
-	var pullback_dist: float = minf(maxf(dist * (0.62 if level == 1 else 0.95), 140.0 if level == 1 else 210.0), 410.0 if level == 1 else 620.0)
-	var arc_height: float = maxf(dist * (0.46 if level == 1 else 0.50), 105.0 if level == 1 else 120.0)
-	var approach_dist: float = minf(maxf(dist * (0.36 if level == 1 else 0.46), 105.0 if level == 1 else 140.0), 260.0 if level == 1 else 340.0)
-	var side: float = spread * (0.45 if level == 1 else 0.75)
-	var pull_control: Vector2 = from - dir_n * pullback_dist + perp * pullback_dist * side + Vector2(0.0, -arc_height * (0.38 if level == 1 else 0.16))
+	var pullback_dist: float = minf(
+		maxf(dist * float(profile.get("pullback_ratio", 0.62)), float(profile.get("pullback_min", 140.0))),
+		float(profile.get("pullback_max", 410.0))
+	)
+	var arc_height: float = maxf(
+		dist * float(profile.get("arc_height_ratio", 0.46)),
+		float(profile.get("arc_height_min", 105.0))
+	)
+	var approach_dist: float = minf(
+		maxf(dist * float(profile.get("approach_ratio", 0.36)), float(profile.get("approach_min", 105.0))),
+		float(profile.get("approach_max", 260.0))
+	)
+	var side: float = spread * float(profile.get("side_factor", 0.45))
+	var arc_direction: Vector2 = Vector2.UP.rotated(deg_to_rad(float(profile.get("arc_angle_deg", 0.0))))
+	var pull_control: Vector2 = from - dir_n * pullback_dist + perp * pullback_dist * side \
+		+ arc_direction * arc_height * float(profile.get("pull_arc_factor", 0.38))
 	var approach_control: Vector2 = to - dir_n * approach_dist
-	var time_power: float = 2.15 if level == 1 else 2.65
+	var time_power: float = maxf(0.1, float(profile.get("time_power", 2.15)))
 
 	_tween = create_tween()
 	_tween.tween_method(func(t: float) -> void:
@@ -173,8 +283,8 @@ func launch_power_attack(from: Vector2, to: Vector2, color: Color, duration: flo
 func _set_head_position(pos: Vector2) -> void:
 	_head_pos = pos
 	_trail.push_front(_head_pos)
-	if _trail.size() > TRAIL_LENGTH:
-		_trail.resize(TRAIL_LENGTH)
+	if _trail.size() > _trail_length:
+		_trail.resize(_trail_length)
 	if _particles:
 		_particles.global_position = _head_pos
 	queue_redraw()
@@ -204,7 +314,7 @@ func start_orbit(center_global: Vector2, radius: float, color: Color, start_angl
 	_apply_particle_color(color)
 	_particles.emitting = true
 	set_process(true)
-	for i in TRAIL_LENGTH:
+	for i in _trail_length:
 		var tail_angle: float = start_angle - float(i) * 0.035
 		_set_head_position(_orbit_center_global + Vector2(cos(tail_angle), sin(tail_angle)) * _orbit_radius)
 
@@ -260,7 +370,7 @@ func follow_node(target: Node2D, color: Color, offset: Vector2 = Vector2.ZERO, v
 	if preserve_trail and not _trail.is_empty():
 		_set_head_position(start_pos)
 	else:
-		for i in TRAIL_LENGTH:
+		for i in _trail_length:
 			_set_head_position(start_pos)
 
 
@@ -368,7 +478,7 @@ func _on_flight_done() -> void:
 	fade_tw.tween_method(func(t: float) -> void:
 		modulate.a = 1.0 - t
 		queue_redraw()
-	, 0.0, 1.0, 0.2)
+	, 0.0, 1.0, _fade_duration)
 	fade_tw.tween_callback(func() -> void:
 		visible = false
 		modulate.a = 1.0
@@ -492,8 +602,8 @@ func _draw() -> void:
 			var t1: float = float(i + 1) / float(count - 1)
 			var alpha0: float = pow(1.0 - t0, 2.2) * a_mult
 			var alpha1: float = pow(1.0 - t1, 2.2) * a_mult
-			var w0: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t0, 0.6)) * w_mult * visual_mult
-			var w1: float = lerpf(TRAIL_WIDTH_HEAD, TRAIL_WIDTH_TAIL, pow(t1, 0.6)) * w_mult * visual_mult
+			var w0: float = lerpf(_trail_width_head, _trail_width_tail, pow(t0, 0.6)) * w_mult * visual_mult
+			var w1: float = lerpf(_trail_width_head, _trail_width_tail, pow(t1, 0.6)) * w_mult * visual_mult
 			var p0: Vector2 = trail_points[i] - global_position
 			var p1: Vector2 = trail_points[i + 1] - global_position
 			if p0.distance_squared_to(p1) < 0.25:
@@ -526,23 +636,23 @@ func _draw() -> void:
 		var head_local: Vector2 = trail_points[0] - global_position
 
 		# 最外層柔暈
-		draw_circle(head_local, HEAD_GLOW_RADIUS * visual_mult, Color(_color.r, _color.g, _color.b, 0.12))
+		draw_circle(head_local, _head_glow_radius * visual_mult, Color(_color.r, _color.g, _color.b, 0.12))
 		# 中層暈
-		draw_circle(head_local, HEAD_GLOW_RADIUS * 0.6 * visual_mult, Color(_color.r, _color.g, _color.b, 0.25))
+		draw_circle(head_local, _head_glow_radius * 0.6 * visual_mult, Color(_color.r, _color.g, _color.b, 0.25))
 		# 元素色核心
-		draw_circle(head_local, HEAD_RADIUS * 1.4 * visual_mult, _color)
+		draw_circle(head_local, _head_radius * 1.4 * visual_mult, _color)
 		# 白色核心
-		draw_circle(head_local, HEAD_RADIUS * visual_mult, Color(1, 1, 1, 0.92))
+		draw_circle(head_local, _head_radius * visual_mult, Color(1, 1, 1, 0.92))
 		# 最亮高光
-		draw_circle(head_local, HEAD_RADIUS * 0.45 * visual_mult, Color(1, 1, 1, 1.0))
+		draw_circle(head_local, _head_radius * 0.45 * visual_mult, Color(1, 1, 1, 1.0))
 
 		# 十字光芒（lens flare spikes）
-		for fi in FLARE_COUNT:
-			var angle: float = (PI / float(FLARE_COUNT)) * float(fi)
+		for fi in _flare_count:
+			var angle: float = (PI / float(maxi(_flare_count, 1))) * float(fi)
 			var dir_f := Vector2(cos(angle), sin(angle))
 			var perp_f := Vector2(-dir_f.y, dir_f.x)
-			var flare_length: float = FLARE_LENGTH * visual_mult
-			var flare_width: float = FLARE_WIDTH * visual_mult
+			var flare_length: float = _flare_length * visual_mult
+			var flare_width: float = _flare_width * visual_mult
 			var tip_a: Vector2 = head_local + dir_f * flare_length
 			var tip_b: Vector2 = head_local - dir_f * flare_length
 			var side_a: Vector2 = head_local + perp_f * flare_width
@@ -564,22 +674,22 @@ func _draw_guest_join_burst(visual_mult: float) -> void:
 	var burst_local: Vector2 = _burst_pos - global_position
 	var a: float = _burst_alpha
 	var s: float = _burst_scale * visual_mult
-	draw_circle(burst_local, HEAD_GLOW_RADIUS * 0.95 * s, Color(_color.r, _color.g, _color.b, 0.18 * a))
-	draw_circle(burst_local, HEAD_GLOW_RADIUS * 0.55 * s, Color(1, 1, 1, 0.28 * a))
-	draw_arc(burst_local, HEAD_GLOW_RADIUS * 0.75 * s, 0.0, TAU, 40, Color(1, 1, 1, 0.65 * a), 3.0 * visual_mult, true)
+	draw_circle(burst_local, _head_glow_radius * 0.95 * s, Color(_color.r, _color.g, _color.b, 0.18 * a))
+	draw_circle(burst_local, _head_glow_radius * 0.55 * s, Color(1, 1, 1, 0.28 * a))
+	draw_arc(burst_local, _head_glow_radius * 0.75 * s, 0.0, TAU, 40, Color(1, 1, 1, 0.65 * a), 3.0 * visual_mult, true)
 	for fi in 8:
 		var angle: float = TAU * float(fi) / 8.0
 		var dir_f := Vector2(cos(angle), sin(angle))
-		var inner: Vector2 = burst_local + dir_f * HEAD_RADIUS * 1.5 * s
-		var outer: Vector2 = burst_local + dir_f * HEAD_GLOW_RADIUS * 1.15 * s
+		var inner: Vector2 = burst_local + dir_f * _head_radius * 1.5 * s
+		var outer: Vector2 = burst_local + dir_f * _head_glow_radius * 1.15 * s
 		draw_line(inner, outer, Color(1, 1, 1, 0.55 * a), 2.0 * visual_mult)
 
 
 ## 建立 GPUParticles2D 火花粒子
 func _build_particles() -> void:
 	_particles = GPUParticles2D.new()
-	_particles.amount = SPARKLE_AMOUNT
-	_particles.lifetime = 0.4
+	_particles.amount = _sparkle_amount
+	_particles.lifetime = _particle_lifetime
 	_particles.explosiveness = 0.0
 	_particles.emitting = false
 	_particles.top_level = true  # 使用全域座標
@@ -588,11 +698,11 @@ func _build_particles() -> void:
 	var mat := ParticleProcessMaterial.new()
 	mat.direction = Vector3(0, 0, 0)
 	mat.spread = 180.0
-	mat.initial_velocity_min = 20.0
-	mat.initial_velocity_max = 60.0
-	mat.gravity = Vector3(0, 40, 0)
-	mat.scale_min = PARTICLE_SCALE_MIN
-	mat.scale_max = PARTICLE_SCALE_MAX
+	mat.initial_velocity_min = _particle_velocity_min
+	mat.initial_velocity_max = _particle_velocity_max
+	mat.gravity = Vector3(0, _particle_gravity, 0)
+	mat.scale_min = _particle_scale_min
+	mat.scale_max = _particle_scale_max
 	mat.damping_min = 20.0
 	mat.damping_max = 40.0
 
@@ -639,8 +749,8 @@ func _apply_particle_size() -> void:
 	var mat: ParticleProcessMaterial = _particles.process_material as ParticleProcessMaterial
 	if mat == null:
 		return
-	mat.scale_min = PARTICLE_SCALE_MIN * _visual_size_multiplier
-	mat.scale_max = PARTICLE_SCALE_MAX * _visual_size_multiplier
+	mat.scale_min = _particle_scale_min * _visual_size_multiplier
+	mat.scale_max = _particle_scale_max * _visual_size_multiplier
 
 
 ## 套用顏色到粒子材質
