@@ -106,6 +106,9 @@ var _event_transitioning: bool = false
 var _type_tween: Tween = null
 var _bg_switch_tween: Tween = null
 var _texture_cache: Dictionary = {}  # path -> Texture2D
+var _character_data_cache: Dictionary = {}  # character_id -> CharacterData/null
+var _enemy_data_cache: Dictionary = {}  # character_id -> EnemyData/null
+var _portrait_texture_cache: Dictionary = {}  # character_id|emotion -> Texture2D/null
 var _auto_skipping: bool = false
 var _skip_timer: Timer = null
 var _skip_arrow_tween: Tween = null
@@ -173,9 +176,13 @@ func start(sequence: _DialogSequence, preview_mode: bool = false, finish_with_fa
 		if portrait_node != null:
 			portrait_node.queue_free()
 	_portrait_nodes.clear()
+	_character_data_cache.clear()
+	_enemy_data_cache.clear()
+	_portrait_texture_cache.clear()
 	_set_auto_skip(false)
 	_portrait_left.visible = false
 	_portrait_right.visible = false
+	_precache_dialog_portraits(sequence)
 
 	# Sequence 背景優先；沒有時使用目前 stage spot 所屬 area 的預設劇情背景。
 	_set_background_texture(_resolve_initial_background(sequence))
@@ -780,9 +787,10 @@ func _show_line(line: _DialogLine) -> void:
 			, CONNECT_ONE_SHOT)
 			return
 		else:
+			var previous_side_speaker: String = _side_active_speaker_id(side)
 			_last_speaker_id = char_id
 			_side_speaker_ids[side] = char_id
-			_ensure_character_entered(char_id, side, line.emotion)
+			_ensure_character_entered(char_id, side, line.emotion, previous_side_speaker != char_id)
 			_set_side_portraits_dim(side, char_id)
 
 		# ── 擠壓彈跳說話動畫 ──
@@ -1036,21 +1044,30 @@ func _dialog_cast_profile(char_id: String) -> Dictionary:
 
 
 func _dialog_enemy_data(char_id: String) -> EnemyData:
+	if _enemy_data_cache.has(char_id):
+		return _enemy_data_cache[char_id] as EnemyData
 	var profile: Dictionary = _dialog_cast_profile(char_id)
 	if profile.is_empty() or String(profile.get("kind", "")) != "enemy":
+		_enemy_data_cache[char_id] = null
 		return null
 	var enemy_path: String = String(profile.get("enemy_path", "")).strip_edges()
 	if enemy_path.is_empty() or not ResourceLoader.exists(enemy_path):
+		_enemy_data_cache[char_id] = null
 		return null
 	var resource: Resource = load(enemy_path)
-	return resource as EnemyData
+	var enemy_data: EnemyData = resource as EnemyData
+	_enemy_data_cache[char_id] = enemy_data
+	return enemy_data
 
 
 func _find_character_data(char_id: String) -> CharacterData:
 	if char_id.is_empty():
 		return null
+	if _character_data_cache.has(char_id):
+		return _character_data_cache[char_id] as CharacterData
 	var gs: Node = get_node_or_null("/root/GameState")
 	if gs == null or not gs.has_method("get_character_catalog"):
+		_character_data_cache[char_id] = null
 		return null
 	var lower := char_id.to_lower()
 	var catalog: Array = gs.call("get_character_catalog")
@@ -1059,8 +1076,19 @@ func _find_character_data(char_id: String) -> CharacterData:
 			var c: CharacterData = entry as CharacterData
 			var path_id := c.resource_path.get_file().get_basename().trim_prefix("char_").to_lower()
 			if path_id == lower or c.character_name.to_lower() == lower:
+				_character_data_cache[char_id] = c
 				return c
+	_character_data_cache[char_id] = null
 	return null
+
+
+func _precache_dialog_portraits(sequence: _DialogSequence) -> void:
+	if sequence == null:
+		return
+	for line: _DialogLine in sequence.lines:
+		if line == null or line.character_id.is_empty():
+			continue
+		_load_character_texture(line.character_id, line.emotion)
 
 
 func _make_dynamic_portrait(char_id: String) -> TextureRect:
@@ -1134,13 +1162,15 @@ func _layout_portraits(animated: bool, skip_char_id: String = "") -> void:
 				portrait.scale = target_scale
 
 
-func _ensure_character_entered(char_id: String, side: String, emotion: String) -> void:
+func _ensure_character_entered(char_id: String, side: String, emotion: String, relayout: bool = true) -> void:
 	side = _normalize_dialog_side(side)
 	var portrait: TextureRect = _get_dynamic_portrait(char_id)
 	_update_portrait_texture(portrait, char_id, emotion, side == "left")
 	var current_side: String = _get_character_side(char_id)
 	if current_side == side and portrait.visible:
-		_layout_portraits(true)
+		portrait.z_index = ACTIVE_PORTRAIT_Z
+		if relayout:
+			_layout_portraits(true)
 		return
 
 	_remove_character_from_sides(char_id)
@@ -1283,17 +1313,32 @@ func _do_instant_exit(is_left: bool, portrait: TextureRect) -> void:
 	portrait.position.x = portrait.get_meta("home_x", fallback_x)
 
 
+func _portrait_texture_key(char_id: String, emotion: String) -> String:
+	var normalized_emotion := emotion if not emotion.is_empty() else "normal"
+	return "%s|%s" % [char_id, normalized_emotion]
+
+
 func _update_portrait_texture(portrait: TextureRect, char_id: String, emotion: String, is_left: bool) -> void:
+	var texture_key := _portrait_texture_key(char_id, emotion)
+	if String(portrait.get_meta("dialog_texture_key", "")) == texture_key:
+		portrait.flip_h = is_left
+		return
 	var tex: Texture2D = _load_character_texture(char_id, emotion)
 	if tex != null:
-		portrait.texture = tex
+		if portrait.texture != tex:
+			portrait.texture = tex
+		portrait.set_meta("dialog_texture_key", texture_key)
 		# 左側角色朝右（面向中心），右側角色朝左（面向中心）
 		portrait.flip_h = is_left
 
 
 func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
+	var texture_key := _portrait_texture_key(char_id, emotion)
+	if _portrait_texture_cache.has(texture_key):
+		return _portrait_texture_cache[texture_key] as Texture2D
 	var enemy_data: EnemyData = _dialog_enemy_data(char_id)
 	if enemy_data != null and enemy_data.portrait_texture != null:
+		_portrait_texture_cache[texture_key] = enemy_data.portrait_texture
 		return enemy_data.portrait_texture
 	var character_data: CharacterData = _find_character_data(char_id)
 	# 角色 ID 別名（例如 raccoon → raccoon_baby）
@@ -1302,30 +1347,41 @@ func _load_character_texture(char_id: String, emotion: String) -> Texture2D:
 	if emotion != "normal" and not emotion.is_empty():
 		var emotion_path := "res://assets/characters/%s_%s.png" % [aliased, emotion]
 		if _texture_cache.has(emotion_path):
-			return _texture_cache[emotion_path]
+			var cached_emotion_texture: Texture2D = _texture_cache[emotion_path] as Texture2D
+			_portrait_texture_cache[texture_key] = cached_emotion_texture
+			return cached_emotion_texture
 		if ResourceLoader.exists(emotion_path):
 			var tex: Texture2D = load(emotion_path)
 			_texture_cache[emotion_path] = tex
+			_portrait_texture_cache[texture_key] = tex
 			return tex
 
 	if character_data != null and character_data.portrait_texture != null:
+		_portrait_texture_cache[texture_key] = character_data.portrait_texture
 		return character_data.portrait_texture
 
 	# Fallback: 預設貼圖
 	var default_path := "res://assets/%s.png" % aliased
 	if _texture_cache.has(default_path):
-		return _texture_cache[default_path]
+		var cached_default_texture: Texture2D = _texture_cache[default_path] as Texture2D
+		_portrait_texture_cache[texture_key] = cached_default_texture
+		return cached_default_texture
 	if ResourceLoader.exists(default_path):
 		var tex: Texture2D = load(default_path)
 		_texture_cache[default_path] = tex
+		_portrait_texture_cache[texture_key] = tex
 		return tex
 
+	_portrait_texture_cache[texture_key] = null
 	return null
 
 
 func _set_portrait_dim(portrait: TextureRect, dim: bool) -> void:
 	if not portrait.visible:
 		return
+	if portrait.has_meta("dialog_dimmed") and bool(portrait.get_meta("dialog_dimmed")) == dim:
+		return
+	portrait.set_meta("dialog_dimmed", dim)
 	var target: Color = INACTIVE_COLOR if dim else ACTIVE_COLOR
 	var tw := create_tween()
 	tw.tween_property(portrait, "modulate", target, DIM_DUR)

@@ -1081,7 +1081,7 @@ func _on_cancel() -> void:
 
 
 func _on_confirm() -> void:
-	if _selected_count() == 0:
+	if _selected_count() == 0 or (_confirm_btn != null and _confirm_btn.disabled):
 		return
 	GameState.selected_party.clear()
 	for idx in _selected_party_indices():
@@ -1091,7 +1091,9 @@ func _on_confirm() -> void:
 	var next_path: String = "res://scenes/main.tscn"
 	if _stage.pre_dialog != null and _stage.pre_dialog.lines.size() > 0:
 		next_path = "res://scenes/dialog_box.tscn"
-	GameState.fade_to_scene(next_path)
+	if _confirm_btn != null:
+		_confirm_btn.disabled = true
+	GameState.load_stage_and_change_scene(_stage, next_path)
 
 
 # ── 工具 ──────────────────────────────────────────────────────

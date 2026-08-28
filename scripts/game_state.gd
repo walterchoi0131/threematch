@@ -154,8 +154,8 @@ const RUNTIME_PREWARM_CACHE_LIMIT := 24
 const _LOADING_FONT := preload("res://assets/fonts/game_ui_font.tres")
 const LOADING_FADE_DURATION := 0.28
 const LOADING_BOUNCE_INTERVAL := 0.5
-const LOADING_PORTRAIT_SIZE := 72.0
-const LOADING_PORTRAIT_GAP := 12.0
+const LOADING_TEXT := "Loading"
+const LOADING_LETTER_WIDTH := 34.0
 const _DIALOG_CHAR_ID_ALIAS := {
 	"raccoon": "raccoon_baby",
 }
@@ -247,10 +247,10 @@ var _runtime_prewarm_order: Array[String] = []
 var _scene_transition_serial: int = 0
 var _loading_layer: CanvasLayer = null
 var _loading_root: Control = null
-var _loading_portrait_host: Control = null
-var _loading_portrait_slots: Array[Control] = []
+var _loading_letter_slots: Array[Control] = []
 var _loading_active: bool = false
 var _loading_serial: int = 0
+var _stage_loading_transition_active: bool = false
 
 
 func prewarm_resource(path: String) -> void:
@@ -365,97 +365,56 @@ func _ensure_loading_screen() -> void:
 	content.anchor_right = 0.5
 	content.anchor_bottom = 0.5
 	content.offset_left = -250.0
-	content.offset_top = -100.0
+	content.offset_top = -60.0
 	content.offset_right = 250.0
-	content.offset_bottom = 120.0
+	content.offset_bottom = 60.0
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_loading_root.add_child(content)
 
-	var loading_label := Label.new()
-	loading_label.text = "Loading"
-	loading_label.position = Vector2(0.0, 26.0)
-	loading_label.size = Vector2(500.0, 44.0)
-	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	loading_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	loading_label.add_theme_font_override("font", _LOADING_FONT)
-	loading_label.add_theme_font_size_override("font_size", 28)
-	loading_label.add_theme_color_override("font_color", Color.WHITE)
-	loading_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	loading_label.add_theme_constant_override("outline_size", 4)
-	loading_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(loading_label)
-
-	_loading_portrait_host = Control.new()
-	_loading_portrait_host.position = Vector2(0.0, 92.0)
-	_loading_portrait_host.size = Vector2(500.0, LOADING_PORTRAIT_SIZE + 24.0)
-	_loading_portrait_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(_loading_portrait_host)
-
-
-func _populate_loading_portraits(characters: Array[CharacterData]) -> void:
-	for child in _loading_portrait_host.get_children():
-		child.free()
-	_loading_portrait_slots.clear()
-	var display_characters: Array[CharacterData] = []
-	for character in characters:
-		if character != null:
-			display_characters.append(character)
-	var count: int = display_characters.size()
-	if count <= 0:
-		return
-	var total_width: float = float(count) * LOADING_PORTRAIT_SIZE + float(count - 1) * LOADING_PORTRAIT_GAP
-	var start_x: float = (_loading_portrait_host.size.x - total_width) * 0.5
-	for index in count:
-		var character: CharacterData = display_characters[index]
-		var slot := PanelContainer.new()
-		slot.position = Vector2(start_x + float(index) * (LOADING_PORTRAIT_SIZE + LOADING_PORTRAIT_GAP), 12.0)
-		slot.size = Vector2(LOADING_PORTRAIT_SIZE, LOADING_PORTRAIT_SIZE)
-		slot.custom_minimum_size = slot.size
-		slot.clip_contents = true
-		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.set_meta("loading_home_y", slot.position.y)
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.035, 0.035, 0.045, 1.0)
-		style.border_color = character.portrait_color.lightened(0.18)
-		style.set_border_width_all(3)
-		style.set_corner_radius_all(6)
-		slot.add_theme_stylebox_override("panel", style)
-		_loading_portrait_host.add_child(slot)
-
-		var portrait := TextureRect.new()
-		portrait.texture = character.portrait_texture
-		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
-		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.add_child(portrait)
-		_loading_portrait_slots.append(slot)
+	var total_width: float = float(LOADING_TEXT.length()) * LOADING_LETTER_WIDTH
+	var start_x: float = (content.size.x - total_width) * 0.5
+	_loading_letter_slots.clear()
+	for index in LOADING_TEXT.length():
+		var letter := Label.new()
+		letter.text = LOADING_TEXT.substr(index, 1)
+		letter.position = Vector2(start_x + float(index) * LOADING_LETTER_WIDTH, 30.0)
+		letter.size = Vector2(LOADING_LETTER_WIDTH, 48.0)
+		letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		letter.add_theme_font_override("font", _LOADING_FONT)
+		letter.add_theme_font_size_override("font_size", 30)
+		letter.add_theme_color_override("font_color", Color.WHITE)
+		letter.add_theme_color_override("font_outline_color", Color.BLACK)
+		letter.add_theme_constant_override("outline_size", 4)
+		letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		letter.set_meta("loading_home_y", letter.position.y)
+		content.add_child(letter)
+		_loading_letter_slots.append(letter)
 
 
 func _run_loading_bounce_loop(serial: int) -> void:
 	while _loading_active and serial == _loading_serial:
-		if _loading_portrait_slots.is_empty():
+		if _loading_letter_slots.is_empty():
 			await get_tree().create_timer(LOADING_BOUNCE_INTERVAL).timeout
 			continue
-		for slot in _loading_portrait_slots:
+		for slot in _loading_letter_slots:
 			if not _loading_active or serial != _loading_serial:
 				return
 			if is_instance_valid(slot):
 				var home_y: float = float(slot.get_meta("loading_home_y", slot.position.y))
 				var bounce := create_tween()
-				bounce.tween_property(slot, "position:y", home_y - 18.0, 0.14) \
+				bounce.tween_property(slot, "position:y", home_y - 14.0, 0.14) \
 					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 				bounce.tween_property(slot, "position:y", home_y, 0.20) \
 					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BOUNCE)
 			await get_tree().create_timer(LOADING_BOUNCE_INTERVAL).timeout
 
 
-func show_stage_loading(stage: StageData, characters: Array[CharacterData]) -> void:
+func show_stage_loading(stage: StageData) -> void:
 	_ensure_loading_screen()
 	_loading_serial += 1
 	var serial := _loading_serial
 	_loading_active = true
-	_populate_loading_portraits(characters)
 	_loading_root.modulate.a = 0.0
 	_loading_root.visible = true
 	_loading_root.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -464,7 +423,7 @@ func show_stage_loading(stage: StageData, characters: Array[CharacterData]) -> v
 	for path in loading_paths:
 		prewarm_resource(path)
 	_run_loading_bounce_loop(serial)
-	var minimum_visible_seconds: float = maxf(1.0, float(maxi(1, _loading_portrait_slots.size())) * LOADING_BOUNCE_INTERVAL)
+	var minimum_visible_seconds := 1.0
 	var minimum_end_msec: int = Time.get_ticks_msec() + int(minimum_visible_seconds * 1000.0)
 	var fade_in := create_tween()
 	fade_in.tween_property(_loading_root, "modulate:a", 1.0, LOADING_FADE_DURATION)
@@ -491,6 +450,24 @@ func hide_stage_loading() -> void:
 	await fade_out.finished
 	_loading_root.visible = false
 	_loading_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func load_stage_and_change_scene(stage: StageData, path: String) -> void:
+	if _stage_loading_transition_active:
+		return
+	_stage_loading_transition_active = true
+	_scene_transition_serial += 1
+	_pending_fade_in = false
+	await show_stage_loading(stage)
+	var packed_scene: PackedScene = await _await_prewarmed_resource(path) as PackedScene
+	if packed_scene != null:
+		get_tree().change_scene_to_packed(packed_scene)
+	else:
+		get_tree().change_scene_to_file(path)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await hide_stage_loading()
+	_stage_loading_transition_active = false
 
 func _ensure_fade_layer() -> void:
 	if _fade_layer != null and is_instance_valid(_fade_layer):
