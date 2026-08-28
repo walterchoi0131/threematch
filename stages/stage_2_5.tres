@@ -5,7 +5,7 @@
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
-[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="6_music"]
+[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.ogg" id="6_music"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="7_04jpd"]
 [ext_resource type="Resource" path="res://enemies/amon.tres" id="7_amon"]
 [ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="8_archer"]

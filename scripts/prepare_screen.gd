@@ -7,9 +7,11 @@ signal closed
 const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const CharacterSorter = preload("res://scripts/character_sorter.gd")
 const RosterLayout = preload("res://scripts/roster_layout.gd")
+const PREP_BATTLE_BG_SHADER := preload("res://shaders/prepare_battle_background_fade.gdshader")
 
 var _font: Font
 var _stage: StageData
+var stage_override: StageData = null
 
 # ── 選擇狀態 ──
 var _selected_indices: Array[int] = []
@@ -43,7 +45,7 @@ const PREP_TOP_ROW_HEIGHT: float = 272.0
 
 func _ready() -> void:
 	_font = load(FONT_PATH)
-	_stage = GameState.selected_stage
+	_stage = stage_override if stage_override != null else GameState.selected_stage
 	if _stage == null:
 		closed.emit()
 		return
@@ -308,21 +310,8 @@ func _add_battle_background_preview() -> void:
 	battle_bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	battle_bg.texture = texture
 
-	var shader := Shader.new()
-	shader.code = """
-shader_type canvas_item;
-uniform float fade_start = 0.8;
-uniform float edge_fade = 0.2;
-
-void fragment() {
-	vec4 tex_color = texture(TEXTURE, UV);
-	float top_alpha = smoothstep(0.0, edge_fade, UV.y);
-	float bottom_alpha = 1.0 - smoothstep(fade_start, 1.0, UV.y);
-	COLOR = vec4(tex_color.rgb, tex_color.a * top_alpha * bottom_alpha);
-}
-"""
 	var material := ShaderMaterial.new()
-	material.shader = shader
+	material.shader = PREP_BATTLE_BG_SHADER
 	material.set_shader_parameter("fade_start", 1.0 - PREP_BATTLE_BG_EDGE_FADE)
 	material.set_shader_parameter("edge_fade", PREP_BATTLE_BG_EDGE_FADE)
 	battle_bg.material = material

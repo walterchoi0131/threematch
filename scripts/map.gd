@@ -51,6 +51,7 @@ var _tutorial_editor_status_label: Label = null
 var _tutorial_editor_selected_index: int = -1
 var _tutorial_editor_refreshing: bool = false
 var _tutorial_image_catalog: Array[Dictionary] = []
+var _opening_prepare: bool = false
 
 @onready var _pages_root: Control = $UILayer/Pages
 @onready var _map_page: Control = $UILayer/Pages/MapPage
@@ -336,17 +337,47 @@ func _on_stage_button_pressed(stage: StageData) -> void:
 	if GameState.dev_mode:
 		_open_stage_editor(stage)
 		return
-	GameState.selected_stage = stage
-	GameState.stage_edit_mode = false
-	_open_overlay(PrepareScene)
+	_open_prepare_for_stage(stage)
 
 
 func _on_stage_button_long_pressed(stage: StageData) -> void:
 	if stage == null:
 		return
+	_open_prepare_for_stage(stage)
+
+
+func _loading_party_for_stage(stage: StageData) -> Array[CharacterData]:
+	var result: Array[CharacterData] = []
+	if stage != null and not stage.set_party.is_empty():
+		for character: CharacterData in stage.set_party:
+			if character != null:
+				result.append(character)
+		return result
+	for character: CharacterData in GameState.get_last_used_party():
+		if character != null and result.size() < GameState.MAX_PARTY_SIZE:
+			result.append(character)
+	if not result.is_empty():
+		return result
+	for character: CharacterData in GameState.owned_characters:
+		if character != null and result.size() < GameState.MAX_PARTY_SIZE:
+			result.append(character)
+	return result
+
+
+func _open_prepare_for_stage(stage: StageData) -> void:
+	if stage == null or _opening_prepare:
+		return
+	_opening_prepare = true
 	GameState.selected_stage = stage
 	GameState.stage_edit_mode = false
+	await GameState.show_stage_loading(stage, _loading_party_for_stage(stage))
+	if not is_inside_tree():
+		return
 	_open_overlay(PrepareScene)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await GameState.hide_stage_loading()
+	_opening_prepare = false
 
 
 func _on_stage_button_edit_pressed(stage: StageData) -> void:
@@ -773,6 +804,8 @@ func _open_overlay(scene: PackedScene) -> void:
 	_overlay_layer.add_child(frame)
 
 	var screen: Node = scene.instantiate()
+	if scene == PrepareScene and GameState.selected_stage != null:
+		screen.set("stage_override", GameState.selected_stage)
 	if screen is Control:
 		var ctrl: Control = screen as Control
 		ctrl.set_anchors_preset(Control.PRESET_FULL_RECT)

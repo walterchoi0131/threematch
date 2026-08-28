@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://cltbddg47a1y3"
+path="res://.godot/imported/Rainforest Parley.ogg-01f67d22cee5fe6426e62a2530459d5e.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/music/Rainforest Parley.ogg"
+dest_files=["res://.godot/imported/Rainforest Parley.ogg-01f67d22cee5fe6426e62a2530459d5e.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

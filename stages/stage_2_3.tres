@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="StageData" format=3]
 
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
-[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.wav" id="2_736kx"]
+[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.ogg" id="2_736kx"]
 [ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="2_entry"]
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_nvbwk"]

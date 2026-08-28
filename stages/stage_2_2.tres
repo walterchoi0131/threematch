@@ -5,7 +5,7 @@
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_line"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
-[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.wav" id="5_smd2q"]
+[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.ogg" id="5_smd2q"]
 [ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="6_smd2q"]
 [ext_resource type="Resource" path="res://characters/char_gory.tres" id="8_gory_char"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="8_jpuby"]

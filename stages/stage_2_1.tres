@@ -8,7 +8,7 @@
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="5_bg"]
 [ext_resource type="Resource" path="res://enemies/gory.tres" id="5_v1cif"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_nccdu"]
-[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.wav" id="10_eep8t"]
+[ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.ogg" id="10_eep8t"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_snknq"]
 
 [sub_resource type="Resource" id="s21_post_gory_kneel"]

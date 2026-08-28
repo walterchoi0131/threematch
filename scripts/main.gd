@@ -593,6 +593,7 @@ func _ready() -> void:
 	if DEV_ACTION_LOG_ENABLED:
 		_setup_dev_log() # 關掉 dev character action log：註解這個 if 區塊。
 
+	call_deferred("_prewarm_gold_coin_renderer")
 	_play_stage_intro()
 
 
@@ -12406,6 +12407,23 @@ func _get_battle_vfx_3d_layer() -> BattleVfx3DLayer:
 	_battle_vfx_3d_layer.name = "BattleVfx3DLayer"
 	fx_layer.add_child(_battle_vfx_3d_layer)
 	return _battle_vfx_3d_layer
+
+
+func _prewarm_gold_coin_renderer() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_inside_tree() or fx_layer == null:
+		return
+	var proxy := _make_gold_coin_3d_proxy(2, false)
+	proxy.name = "GoldCoinRendererWarmup"
+	proxy.position = ViewportUtils.get_size() * 0.5
+	proxy.modulate.a = 0.02
+	proxy.z_index = -100
+	fx_layer.add_child(proxy)
+	for _frame in 4:
+		await get_tree().process_frame
+	if is_instance_valid(proxy):
+		proxy.queue_free()
 
 
 func _make_gold_coin_3d_proxy(pixel_size: int, animate_spin: bool = true) -> Control:

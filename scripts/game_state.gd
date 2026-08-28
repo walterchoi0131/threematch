@@ -150,6 +150,15 @@ var _bgm_fade_tween: Tween = null
 
 const _BGM_DEFAULT_VOLUME_DB := 0.0
 const _BGM_SILENT_VOLUME_DB := -40.0
+const RUNTIME_PREWARM_CACHE_LIMIT := 24
+const _LOADING_FONT := preload("res://assets/fonts/game_ui_font.tres")
+const LOADING_FADE_DURATION := 0.28
+const LOADING_BOUNCE_INTERVAL := 0.5
+const LOADING_PORTRAIT_SIZE := 72.0
+const LOADING_PORTRAIT_GAP := 12.0
+const _DIALOG_CHAR_ID_ALIAS := {
+	"raccoon": "raccoon_baby",
+}
 
 ## 啟動 BGM（替換舊播放器）。若 id 相同且正在播放則跳過。
 func play_bgm(stream: AudioStream, loop: bool = false, id: String = "") -> void:
@@ -232,6 +241,256 @@ func stop_bgm() -> void:
 var _fade_layer: CanvasLayer = null
 var _fade_rect: ColorRect = null
 var _pending_fade_in: bool = false
+var _runtime_prewarm_cache: Dictionary = {}
+var _runtime_prewarm_pending: Dictionary = {}
+var _runtime_prewarm_order: Array[String] = []
+var _scene_transition_serial: int = 0
+var _loading_layer: CanvasLayer = null
+var _loading_root: Control = null
+var _loading_portrait_host: Control = null
+var _loading_portrait_slots: Array[Control] = []
+var _loading_active: bool = false
+var _loading_serial: int = 0
+
+
+func prewarm_resource(path: String) -> void:
+	var clean_path := path.strip_edges()
+	if clean_path.is_empty() or _runtime_prewarm_cache.has(clean_path) \
+			or _runtime_prewarm_pending.has(clean_path) or not ResourceLoader.exists(clean_path):
+		return
+	var request_error: Error = ResourceLoader.load_threaded_request(clean_path)
+	if request_error != OK:
+		return
+	_runtime_prewarm_pending[clean_path] = true
+	call_deferred("_collect_prewarmed_resource", clean_path)
+
+
+func _collect_prewarmed_resource(path: String) -> void:
+	while _runtime_prewarm_pending.has(path):
+		var status := ResourceLoader.load_threaded_get_status(path)
+		if status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			await get_tree().process_frame
+			continue
+		_runtime_prewarm_pending.erase(path)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			var resource: Resource = ResourceLoader.load_threaded_get(path)
+			if resource != null:
+				_store_prewarmed_resource(path, resource)
+		return
+
+
+func _store_prewarmed_resource(path: String, resource: Resource) -> void:
+	_runtime_prewarm_cache[path] = resource
+	_runtime_prewarm_order.erase(path)
+	_runtime_prewarm_order.append(path)
+	while _runtime_prewarm_order.size() > RUNTIME_PREWARM_CACHE_LIMIT:
+		var oldest_path: String = _runtime_prewarm_order.pop_front()
+		_runtime_prewarm_cache.erase(oldest_path)
+
+
+func _await_prewarmed_resource(path: String) -> Resource:
+	if _runtime_prewarm_cache.has(path):
+		_runtime_prewarm_order.erase(path)
+		_runtime_prewarm_order.append(path)
+		return _runtime_prewarm_cache[path] as Resource
+	prewarm_resource(path)
+	while _runtime_prewarm_pending.has(path):
+		await get_tree().process_frame
+	return _runtime_prewarm_cache.get(path, null) as Resource
+
+
+func _append_loading_path(paths: Array[String], path: String) -> void:
+	var clean_path := path.strip_edges()
+	if not clean_path.is_empty() and ResourceLoader.exists(clean_path) and not paths.has(clean_path):
+		paths.append(clean_path)
+
+
+func _append_dialog_loading_paths(paths: Array[String], sequence: DialogSequence) -> void:
+	if sequence == null:
+		return
+	for line: DialogLine in sequence.lines:
+		if line == null or line.character_id.is_empty():
+			continue
+		var profile: Dictionary = sequence.get_cast_profile(line.character_id)
+		var enemy_path: String = String(profile.get("enemy_path", "")).strip_edges()
+		if not enemy_path.is_empty():
+			_append_loading_path(paths, enemy_path)
+			continue
+		if line.emotion == "normal" or line.emotion.is_empty():
+			continue
+		var aliased_id: String = String(_DIALOG_CHAR_ID_ALIAS.get(line.character_id, line.character_id))
+		_append_loading_path(paths, "res://assets/characters/%s_%s.png" % [aliased_id, line.emotion])
+
+
+func _get_stage_loading_paths(stage: StageData) -> Array[String]:
+	var paths: Array[String] = []
+	_append_loading_path(paths, "res://scenes/dialog_box.tscn")
+	_append_loading_path(paths, "res://scenes/main.tscn")
+	if stage == null:
+		return paths
+	var battle_bg_path: String = stage.battle_background_override_path.strip_edges()
+	if battle_bg_path.is_empty():
+		battle_bg_path = StageData.get_battle_background_path(stage.area)
+	_append_loading_path(paths, battle_bg_path)
+	_append_loading_path(paths, stage.battle_music_override_path)
+	_append_loading_path(paths, StageData.get_dialog_background_path(stage.area))
+	_append_dialog_loading_paths(paths, stage.pre_dialog)
+	_append_dialog_loading_paths(paths, stage.post_dialog)
+	return paths
+
+
+func _ensure_loading_screen() -> void:
+	if is_instance_valid(_loading_root):
+		return
+	_loading_layer = CanvasLayer.new()
+	_loading_layer.layer = 240
+	add_child(_loading_layer)
+
+	_loading_root = Control.new()
+	_loading_root.name = "StageLoadingScreen"
+	_loading_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_loading_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_loading_root.visible = false
+	_loading_layer.add_child(_loading_root)
+
+	var background := ColorRect.new()
+	background.color = Color.BLACK
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_loading_root.add_child(background)
+
+	var content := Control.new()
+	content.anchor_left = 0.5
+	content.anchor_top = 0.5
+	content.anchor_right = 0.5
+	content.anchor_bottom = 0.5
+	content.offset_left = -250.0
+	content.offset_top = -100.0
+	content.offset_right = 250.0
+	content.offset_bottom = 120.0
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_loading_root.add_child(content)
+
+	var loading_label := Label.new()
+	loading_label.text = "Loading"
+	loading_label.position = Vector2(0.0, 26.0)
+	loading_label.size = Vector2(500.0, 44.0)
+	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loading_label.add_theme_font_override("font", _LOADING_FONT)
+	loading_label.add_theme_font_size_override("font_size", 28)
+	loading_label.add_theme_color_override("font_color", Color.WHITE)
+	loading_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	loading_label.add_theme_constant_override("outline_size", 4)
+	loading_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(loading_label)
+
+	_loading_portrait_host = Control.new()
+	_loading_portrait_host.position = Vector2(0.0, 92.0)
+	_loading_portrait_host.size = Vector2(500.0, LOADING_PORTRAIT_SIZE + 24.0)
+	_loading_portrait_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(_loading_portrait_host)
+
+
+func _populate_loading_portraits(characters: Array[CharacterData]) -> void:
+	for child in _loading_portrait_host.get_children():
+		child.free()
+	_loading_portrait_slots.clear()
+	var display_characters: Array[CharacterData] = []
+	for character in characters:
+		if character != null:
+			display_characters.append(character)
+	var count: int = display_characters.size()
+	if count <= 0:
+		return
+	var total_width: float = float(count) * LOADING_PORTRAIT_SIZE + float(count - 1) * LOADING_PORTRAIT_GAP
+	var start_x: float = (_loading_portrait_host.size.x - total_width) * 0.5
+	for index in count:
+		var character: CharacterData = display_characters[index]
+		var slot := PanelContainer.new()
+		slot.position = Vector2(start_x + float(index) * (LOADING_PORTRAIT_SIZE + LOADING_PORTRAIT_GAP), 12.0)
+		slot.size = Vector2(LOADING_PORTRAIT_SIZE, LOADING_PORTRAIT_SIZE)
+		slot.custom_minimum_size = slot.size
+		slot.clip_contents = true
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.set_meta("loading_home_y", slot.position.y)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.035, 0.035, 0.045, 1.0)
+		style.border_color = character.portrait_color.lightened(0.18)
+		style.set_border_width_all(3)
+		style.set_corner_radius_all(6)
+		slot.add_theme_stylebox_override("panel", style)
+		_loading_portrait_host.add_child(slot)
+
+		var portrait := TextureRect.new()
+		portrait.texture = character.portrait_texture
+		portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(portrait)
+		_loading_portrait_slots.append(slot)
+
+
+func _run_loading_bounce_loop(serial: int) -> void:
+	while _loading_active and serial == _loading_serial:
+		if _loading_portrait_slots.is_empty():
+			await get_tree().create_timer(LOADING_BOUNCE_INTERVAL).timeout
+			continue
+		for slot in _loading_portrait_slots:
+			if not _loading_active or serial != _loading_serial:
+				return
+			if is_instance_valid(slot):
+				var home_y: float = float(slot.get_meta("loading_home_y", slot.position.y))
+				var bounce := create_tween()
+				bounce.tween_property(slot, "position:y", home_y - 18.0, 0.14) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+				bounce.tween_property(slot, "position:y", home_y, 0.20) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BOUNCE)
+			await get_tree().create_timer(LOADING_BOUNCE_INTERVAL).timeout
+
+
+func show_stage_loading(stage: StageData, characters: Array[CharacterData]) -> void:
+	_ensure_loading_screen()
+	_loading_serial += 1
+	var serial := _loading_serial
+	_loading_active = true
+	_populate_loading_portraits(characters)
+	_loading_root.modulate.a = 0.0
+	_loading_root.visible = true
+	_loading_root.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var loading_paths: Array[String] = _get_stage_loading_paths(stage)
+	for path in loading_paths:
+		prewarm_resource(path)
+	_run_loading_bounce_loop(serial)
+	var minimum_visible_seconds: float = maxf(1.0, float(maxi(1, _loading_portrait_slots.size())) * LOADING_BOUNCE_INTERVAL)
+	var minimum_end_msec: int = Time.get_ticks_msec() + int(minimum_visible_seconds * 1000.0)
+	var fade_in := create_tween()
+	fade_in.tween_property(_loading_root, "modulate:a", 1.0, LOADING_FADE_DURATION)
+	await fade_in.finished
+
+	while serial == _loading_serial:
+		var has_pending := false
+		for path in loading_paths:
+			if _runtime_prewarm_pending.has(path):
+				has_pending = true
+				break
+		if not has_pending and Time.get_ticks_msec() >= minimum_end_msec:
+			return
+		await get_tree().process_frame
+
+
+func hide_stage_loading() -> void:
+	if not is_instance_valid(_loading_root) or not _loading_root.visible:
+		return
+	_loading_active = false
+	_loading_serial += 1
+	var fade_out := create_tween()
+	fade_out.tween_property(_loading_root, "modulate:a", 0.0, LOADING_FADE_DURATION)
+	await fade_out.finished
+	_loading_root.visible = false
+	_loading_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _ensure_fade_layer() -> void:
 	if _fade_layer != null and is_instance_valid(_fade_layer):
@@ -248,15 +507,26 @@ func _ensure_fade_layer() -> void:
 ## 淡出當前畫面到黑，然後切換到指定場景。新場景若呼叫 fade_in_if_pending
 ## 則會在載入後自動從黑淡入。
 func fade_to_scene(path: String, duration: float = 0.45) -> void:
+	_scene_transition_serial += 1
+	var transition_serial := _scene_transition_serial
+	prewarm_resource(path)
 	_ensure_fade_layer()
 	_fade_rect.color = Color(0, 0, 0, 0)
 	_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
 	var tw := create_tween()
 	tw.tween_property(_fade_rect, "color:a", 1.0, duration)
-	tw.tween_callback(func() -> void:
-		_pending_fade_in = true
+	tw.tween_callback(_finish_scene_transition.bind(path, transition_serial))
+
+
+func _finish_scene_transition(path: String, transition_serial: int) -> void:
+	var packed_scene: PackedScene = await _await_prewarmed_resource(path) as PackedScene
+	if transition_serial != _scene_transition_serial:
+		return
+	_pending_fade_in = true
+	if packed_scene != null:
+		get_tree().change_scene_to_packed(packed_scene)
+	else:
 		get_tree().change_scene_to_file(path)
-	)
 
 ## 若上一步是 fade_to_scene 則從黑淡入；否則無動作。
 func fade_in_if_pending(duration: float = 0.45) -> void:

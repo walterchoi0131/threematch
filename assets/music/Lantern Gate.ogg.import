@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://d23ar3jj8fawm"
+path="res://.godot/imported/Lantern Gate.ogg-c4b8c8fc8287c6af510d7b93c09a7f42.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/music/Lantern Gate.ogg"
+dest_files=["res://.godot/imported/Lantern Gate.ogg-c4b8c8fc8287c6af510d7b93c09a7f42.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

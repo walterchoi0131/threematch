@@ -18,15 +18,22 @@ signal stage_link_dragged(button: StageButton, global_position: Vector2)
 signal stage_link_drag_finished(button: StageButton, global_position: Vector2)
 
 const RAY_BURST_SCRIPT := preload("res://scripts/ray_burst.gd")
+const SPOT_GLOW_SHADER: Shader = preload("res://shaders/ui_outline_glow.gdshader")
 ## Spot 圖佔總高度的比例（其餘空間留給下方關卡名稱）
 const SPOT_HEIGHT_RATIO: float = 0.62
 const SPOT_DISPLAY_SCALE: float = 0.9
-const SPOT_BACKDROP_PAD: float = 6.0
-const SPOT_GLOW_PAD: float = 8.0
+const SPOT_GLOW_PAD: float = 12.0
 const SPOT_LOCKED_TINT: Color = Color(0.42, 0.42, 0.46, 0.68)
-const SPOT_GLOW_TINT: Color = Color(1.0, 0.92, 0.25, 0.0)
+const SPOT_GLOW_CLEARED_COLOR: Color = Color(0.05, 0.72, 1.0, 0.82)
+const SPOT_GLOW_PROGRESS_COLOR: Color = Color(1.0, 0.43, 0.08, 0.88)
+const SPOT_GLOW_CLEARED_STRENGTH: float = 1.0
+const SPOT_GLOW_PROGRESS_STRENGTH: float = 1.25
+const SPOT_GLOW_HOVER_STRENGTH: float = 1.5
+const SPOT_GLOW_BASE_RADIUS: float = 12.0
+const SPOT_GLOW_HOVER_RADIUS: float = 17.0
 const LATEST_RAY_COLOR: Color = Color(1.0, 0.93, 0.22, 0.76)
-const CAPTION_BG_HEIGHT_RATIO: float = 0.4
+const CAPTION_BG_WIDTH_RATIO: float = 0.5
+const CAPTION_BG_HEIGHT_RATIO: float = 0.32
 const DEV_BUTTON_SIZE: Vector2 = Vector2(26, 26)
 const DEV_BUTTON_GAP: float = 3.0
 const DEV_DRAG_THRESHOLD: float = 6.0
@@ -60,9 +67,11 @@ var _remove_btn: Button = null
 var _label: Label = null
 var _label_bg: TextureRect = null
 var _is_latest: bool = false
-var _spot_backdrop: TextureRect = null
+var _is_hovered: bool = false
+var _is_cleared: bool = false
 var _spot_rect: TextureRect = null
 var _spot_glow: TextureRect = null
+var _spot_glow_material: ShaderMaterial = null
 var _glow_tween: Tween = null
 var _unlock_pop_tween: Tween = null
 var _rays: Node2D = null
@@ -106,20 +115,18 @@ func _build() -> void:
 		return
 	var spot_h: float = button_size.y * SPOT_HEIGHT_RATIO
 
-	_spot_backdrop = TextureRect.new()
-	_spot_backdrop.name = "SpotBackdrop"
-	_spot_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_spot_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_spot_backdrop.stretch_mode = TextureRect.STRETCH_SCALE
-	_spot_backdrop.texture = _make_spot_backdrop_texture()
-	add_child(_spot_backdrop)
-
 	_spot_glow = TextureRect.new()
 	_spot_glow.name = "SpotGlow"
 	_spot_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_spot_glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_spot_glow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_spot_glow.modulate = SPOT_GLOW_TINT
+	_spot_glow.stretch_mode = TextureRect.STRETCH_SCALE
+	_spot_glow_material = ShaderMaterial.new()
+	_spot_glow_material.shader = SPOT_GLOW_SHADER
+	_spot_glow_material.set_shader_parameter("glow_color", SPOT_GLOW_PROGRESS_COLOR)
+	_spot_glow_material.set_shader_parameter("glow_strength", 0.0)
+	_spot_glow_material.set_shader_parameter("glow_radius", SPOT_GLOW_BASE_RADIUS)
+	_spot_glow_material.set_shader_parameter("halo_gain", 3.0)
+	_spot_glow.material = _spot_glow_material
 	add_child(_spot_glow)
 
 	_rays = Node2D.new()
@@ -222,24 +229,6 @@ func _build() -> void:
 	_layout()
 
 
-func _make_spot_backdrop_texture() -> GradientTexture2D:
-	var gradient := Gradient.new()
-	gradient.offsets = PackedFloat32Array([0.0, 0.62, 1.0])
-	gradient.colors = PackedColorArray([
-		Color(0, 0, 0, 0.62),
-		Color(0, 0, 0, 0.36),
-		Color(0, 0, 0, 0.0),
-	])
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill = GradientTexture2D.FILL_RADIAL
-	texture.fill_from = Vector2(0.5, 0.5)
-	texture.fill_to = Vector2(1.0, 0.5)
-	texture.width = 192
-	texture.height = 128
-	return texture
-
-
 func _layout() -> void:
 	pivot_offset = button_size * 0.5
 	var spot_h: float = button_size.y * SPOT_HEIGHT_RATIO
@@ -248,15 +237,13 @@ func _layout() -> void:
 		(button_size.x - spot_display_size.x) * 0.5,
 		(spot_h - spot_display_size.y) * 0.5
 	)
-	var spot_hit_rect: Rect2 = _spot_content_rect(spot_display_pos, spot_display_size).grow(SPOT_HIT_PADDING)
+	var spot_content_rect: Rect2 = _spot_content_rect(spot_display_pos, spot_display_size)
+	var spot_hit_rect: Rect2 = spot_content_rect.grow(SPOT_HIT_PADDING)
 	var caption_y: float = minf(button_size.y -70.0, spot_display_pos.y + spot_display_size.y - 4.0)
-	if _spot_backdrop != null:
-		var backdrop_pad: Vector2 = Vector2(SPOT_BACKDROP_PAD, SPOT_BACKDROP_PAD)
-		_spot_backdrop.position = spot_display_pos - backdrop_pad
-		_spot_backdrop.size = spot_display_size + backdrop_pad * 2.0
 	if _spot_glow != null:
-		_spot_glow.position = spot_display_pos - Vector2(SPOT_GLOW_PAD, SPOT_GLOW_PAD)
-		_spot_glow.size = spot_display_size + Vector2(SPOT_GLOW_PAD * 2.0, SPOT_GLOW_PAD * 2.0)
+		_spot_glow.position = spot_content_rect.position - Vector2(SPOT_GLOW_PAD, SPOT_GLOW_PAD)
+		_spot_glow.size = spot_content_rect.size + Vector2(SPOT_GLOW_PAD * 2.0, SPOT_GLOW_PAD * 2.0)
+		_configure_spot_glow_material(_spot_rect.texture if _spot_rect != null else null, spot_content_rect.size)
 	if _spot_rect != null:
 		_spot_rect.position = spot_display_pos
 		_spot_rect.size = spot_display_size
@@ -271,9 +258,10 @@ func _layout() -> void:
 		_remove_btn.size = DEV_BUTTON_SIZE
 	if _label_bg != null:
 		var caption_h: float = button_size.y - caption_y
+		var bg_w: float = button_size.x * CAPTION_BG_WIDTH_RATIO
 		var bg_h: float = caption_h * CAPTION_BG_HEIGHT_RATIO
-		_label_bg.position = Vector2(0, caption_y + (caption_h - bg_h) * 0.5)
-		_label_bg.size = Vector2(button_size.x, bg_h)
+		_label_bg.position = Vector2((button_size.x - bg_w) * 0.5, caption_y + (caption_h - bg_h) * 0.5)
+		_label_bg.size = Vector2(bg_w, bg_h)
 	if _label != null:
 		_label.position = Vector2(0, caption_y)
 		_label.size = Vector2(button_size.x, button_size.y - caption_y)
@@ -282,6 +270,22 @@ func _layout() -> void:
 		_rays.position = Vector2(button_size.x * 0.5, spot_h * 0.5)
 		_rays.set("outer_radius", maxf(spot_display_size.x * 0.42, spot_display_size.y * 0.82))
 		_rays.queue_redraw()
+
+
+func _configure_spot_glow_material(texture: Texture2D, content_size: Vector2) -> void:
+	if _spot_glow_material == null or texture == null:
+		return
+	var safe_content_size := Vector2(maxf(content_size.x, 1.0), maxf(content_size.y, 1.0))
+	var safe_glow_size := Vector2(maxf(_spot_glow.size.x, 1.0), maxf(_spot_glow.size.y, 1.0))
+	_spot_glow_material.set_shader_parameter("source_texture", texture)
+	_spot_glow_material.set_shader_parameter("source_texel_size", Vector2(
+		1.0 / safe_content_size.x,
+		1.0 / safe_content_size.y
+	))
+	_spot_glow_material.set_shader_parameter("padding_uv", Vector2(
+		SPOT_GLOW_PAD / safe_glow_size.x,
+		SPOT_GLOW_PAD / safe_glow_size.y
+	))
 
 
 ## 由父層 (map.gd) 在解鎖狀態變動時呼叫，重新整理可見性與標記
@@ -300,7 +304,7 @@ func play_unlock_pop() -> void:
 	var base_label_bg_modulate: Color = _label_bg.modulate if _label_bg != null else Color.WHITE
 	modulate.a = 1.0
 	var spot_nodes: Array = []
-	for node in [_spot_backdrop, _spot_glow, _rays, _spot_rect]:
+	for node in [_spot_glow, _rays, _spot_rect]:
 		if node != null:
 			spot_nodes.append(node)
 	var base_spot_scales: Dictionary = {}
@@ -408,13 +412,12 @@ func _refresh() -> void:
 	if stage == null:
 		_btn.text = ""
 		_btn.disabled = true
-		if _spot_backdrop != null:
-			_spot_backdrop.visible = false
+		_is_cleared = false
 		if _spot_rect != null:
 			_spot_rect.texture = null
 		if _spot_glow != null:
 			_spot_glow.texture = null
-			_spot_glow.modulate = SPOT_GLOW_TINT
+		_set_spot_glow_strength(0.0, 0.0)
 		_set_dev_buttons_visible(false)
 		visible = true
 		if _label != null:
@@ -428,39 +431,35 @@ func _refresh() -> void:
 	if not in_editor and stage.map_hidden:
 		visible = false
 		_btn.disabled = true
+		_set_spot_glow_strength(0.0, 0.0)
 		_set_dev_buttons_visible(false)
 		if _rays != null:
 			_rays.visible = false
 		return
 	var unlocked: bool = is_unlocked_for_play()
 	var cleared: bool = not in_editor and GameState.is_stage_cleared(sid)
+	_is_cleared = cleared
 	if not in_editor and not unlocked:
 		visible = false
 		_btn.disabled = true
+		_set_spot_glow_strength(0.0, 0.0)
 		_set_dev_buttons_visible(false)
-		if _spot_backdrop != null:
-			_spot_backdrop.visible = false
 		if _rays != null:
 			_rays.visible = false
-		if _spot_glow != null:
-			_spot_glow.modulate = SPOT_GLOW_TINT
 		return
 
 	visible = true
 	_btn.text = ""
 	_btn.disabled = not unlocked
 	_btn.modulate = cleared_tint if cleared else available_tint
-	if _spot_backdrop != null:
-		_spot_backdrop.visible = true
 	var spot_texture: Texture2D = load(StageData.get_stage_spot_path(stage.area)) as Texture2D
 	if _spot_rect != null:
 		_spot_rect.texture = spot_texture
 		_spot_rect.modulate = _get_spot_tint(unlocked, cleared)
 	if _spot_glow != null:
 		_spot_glow.texture = spot_texture
-		var glow_alpha: float = _spot_glow.modulate.a
-		_spot_glow.modulate = Color(SPOT_GLOW_TINT.r, SPOT_GLOW_TINT.g, SPOT_GLOW_TINT.b, glow_alpha)
 	_layout()
+	_refresh_spot_glow(0.0)
 	_set_dev_buttons_visible(not in_editor and GameState.dev_mode)
 	if _label != null:
 		_label.text = sid
@@ -485,6 +484,7 @@ func set_latest(latest: bool) -> void:
 	var show_rays: bool = latest and visible and is_unlocked_for_play() and not cleared
 	if _rays != null:
 		_rays.visible = show_rays
+	_refresh_spot_glow(0.18)
 
 
 func _on_pressed() -> void:
@@ -613,19 +613,80 @@ func _on_hover_enter() -> void:
 		return
 	if not is_unlocked_for_play():
 		return
-	_fade_glow(1.0, 0.12)
+	_is_hovered = true
+	_refresh_spot_glow(0.12)
 
 
 func _on_hover_exit() -> void:
-	if _spot_glow == null:
-		return
-	_fade_glow(0.0, 0.18)
+	_is_hovered = false
+	_refresh_spot_glow(0.18)
 
 
-func _fade_glow(target_alpha: float, duration: float) -> void:
-	if _spot_glow == null:
+func _target_spot_glow_strength() -> float:
+	if stage == null or not visible or not is_unlocked_for_play():
+		return 0.0
+	if _is_hovered:
+		return SPOT_GLOW_HOVER_STRENGTH
+	if _is_cleared:
+		return SPOT_GLOW_CLEARED_STRENGTH
+	if _is_latest:
+		return SPOT_GLOW_PROGRESS_STRENGTH
+	return 0.0
+
+
+func _target_spot_glow_color() -> Color:
+	return SPOT_GLOW_CLEARED_COLOR if _is_cleared else SPOT_GLOW_PROGRESS_COLOR
+
+
+func _target_spot_glow_radius() -> float:
+	return SPOT_GLOW_HOVER_RADIUS if _is_hovered else SPOT_GLOW_BASE_RADIUS
+
+
+func _refresh_spot_glow(duration: float) -> void:
+	_set_spot_glow_visual(
+		_target_spot_glow_strength(),
+		_target_spot_glow_color(),
+		_target_spot_glow_radius(),
+		duration
+	)
+
+
+func _set_spot_glow_strength(target_strength: float, duration: float) -> void:
+	_set_spot_glow_visual(
+		target_strength,
+		_target_spot_glow_color(),
+		SPOT_GLOW_BASE_RADIUS,
+		duration
+	)
+
+
+func _set_spot_glow_visual(target_strength: float, target_color: Color, target_radius: float, duration: float) -> void:
+	if _spot_glow_material == null:
 		return
 	if _glow_tween != null and _glow_tween.is_valid():
 		_glow_tween.kill()
+	var clamped_strength: float = clampf(target_strength, 0.0, 1.5)
+	if duration <= 0.0:
+		_spot_glow_material.set_shader_parameter("glow_color", target_color)
+		_spot_glow_material.set_shader_parameter("glow_strength", clamped_strength)
+		_spot_glow_material.set_shader_parameter("glow_radius", target_radius)
+		return
 	_glow_tween = create_tween()
-	_glow_tween.tween_property(_spot_glow, "modulate:a", target_alpha, duration)
+	_glow_tween.tween_property(
+		_spot_glow_material,
+		"shader_parameter/glow_strength",
+		clamped_strength,
+		duration
+	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_glow_tween.parallel().tween_property(
+		_spot_glow_material,
+		"shader_parameter/glow_color",
+		target_color,
+		duration
+	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	_glow_tween.parallel().tween_property(
+		_spot_glow_material,
+		"shader_parameter/glow_radius",
+		target_radius,
+		duration
+	).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
