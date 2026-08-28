@@ -1024,6 +1024,12 @@ func _build_portrait_debug_btn() -> void:
 	fuse_btn.pressed.connect(_open_fuse_skill_debug)
 	_portrait_debug_layer.add_child(fuse_btn)
 
+	var attack_vfx_btn: Button = _make_debug_launcher_button("FX", "Attack VFX Debug", 16, -70.0, -16.0)
+	attack_vfx_btn.offset_left = -136.0
+	attack_vfx_btn.offset_right = -82.0
+	attack_vfx_btn.pressed.connect(_open_attack_vfx_debug)
+	_portrait_debug_layer.add_child(attack_vfx_btn)
+
 
 func _make_debug_launcher_button(label_text: String, tooltip: String, font_size: int, top_offset: float, bottom_offset: float) -> Button:
 	var btn := Button.new()
@@ -1103,6 +1109,18 @@ func _open_fuse_skill_debug() -> void:
 				child.get_script().resource_path == "res://scripts/fuse_skill_debug_screen.gd":
 			return
 	var screen: Control = load("res://scripts/fuse_skill_debug_screen.gd").new() as Control
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_portrait_debug_layer.add_child(screen)
+
+
+func _open_attack_vfx_debug() -> void:
+	if _portrait_debug_layer == null:
+		return
+	for child in _portrait_debug_layer.get_children():
+		if child.get_script() != null and \
+				child.get_script().resource_path == "res://scripts/attack_vfx_debug_screen.gd":
+			return
+	var screen: Control = load("res://scripts/attack_vfx_debug_screen.gd").new() as Control
 	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_portrait_debug_layer.add_child(screen)
 
