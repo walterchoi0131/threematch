@@ -25,9 +25,7 @@ const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const CHAR_NAMES := {
 	"husky":   { "zh": "索爾", "en": "Thor" },
 	"fox":     { "zh": "小狐",       "en": "Fox" },
-	"polar":   { "zh": "白熊",       "en": "Polar" },
 	"raccoon": { "zh": "小浣",       "en": "Raccoon" },
-	"boar":    { "zh": "山豬",       "en": "Boar" },
 	"panda":   { "zh": "阿潘",       "en": "Pan" },
 	"dragon":  { "zh": "米洛",       "en": "Milo" },
 	"shark":   { "zh": "埃德",       "en": "Ed" },
@@ -37,9 +35,7 @@ const CHAR_NAMES := {
 const CHAR_NAME_COLORS := {
 	"husky":   Color(1.0, 0.92, 0.5),
 	"fox":     Color(1.0, 0.55, 0.35),
-	"polar":   Color(0.6, 0.82, 1.0),
 	"raccoon": Color(0.55, 0.9, 0.5),
-	"boar":    Color(0.45, 0.7, 1.0),
 	"panda":   Color(0.55, 0.9, 0.5),
 	"dragon":  Color(1.0, 0.45, 0.3),
 	"shark":   Color(0.4, 0.85, 1.0),

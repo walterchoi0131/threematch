@@ -1,116 +1,207 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://cvqdsv4hob5hx"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="2_enemy"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="3_dline"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="4_dseq"]
-[ext_resource type="Texture2D" uid="uid://bx5n5vnogl2ux" path="res://assets/duan.png" id="5_duan_tex"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="2_enemy"]
+[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.ogg" id="3_2sd5u"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_dline"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_dseq"]
+[ext_resource type="Texture2D" path="res://assets/duan.png" id="5_duan_tex"]
+[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="6_2sd5u"]
 [ext_resource type="Resource" path="res://characters/char_duan.tres" id="6_duan_char"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_s56y8"]
-[ext_resource type="Texture2D" uid="uid://bi2seucruxr6u" path="res://assets/dialog_background/dialog_bg_classroom.png" id="7_classroom_bg"]
-[ext_resource type="AudioStream" uid="uid://cefk476j4ku6" path="res://assets/music/Puzzles.mp3" id="8_music"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="10_21e67"]
-[ext_resource type="Script" uid="uid://cmuy2cviws01p" path="res://scripts/start_stage_tutorial_page.gd" id="11_21e67"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_s56y8"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_classroom.png" id="7_classroom_bg"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="10_21e67"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="10_o30ma"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="11_21e67"]
 
 [sub_resource type="Resource" id="post_duan_1"]
 script = ExtResource("3_dline")
 character_id = "duan"
 position = "right"
-text_zh = "我輸了……但我明白 Husky 老師為什麼信任你們。"
+text_zh = "我輸了…米洛你們真的很強。我還需要更多的練習。"
 text_en = "I lost... but I understand why Master Husky trusts you."
-action = "enter"
-music = ExtResource("8_music")
-
-[sub_resource type="Resource" id="post_husky"]
-script = ExtResource("3_dline")
-character_id = "husky"
-text_zh = "很好。決鬥比講課更能教會你們節奏。"
-text_en = "Good. A duel teaches rhythm better than a lecture."
 action = "enter"
 
 [sub_resource type="Resource" id="post_dragon"]
 script = ExtResource("3_dline")
 character_id = "dragon"
-text_zh = "Duan，跟我們一起來吧！接下來我們要去拿冒險者證書。"
+text_zh = "你也很強啊敦！和你戰鬥真有趣！"
 text_en = "Duan, come with us! We are getting our adventurer certificate next."
+
+[sub_resource type="Resource" id="Resource_2sd5u"]
+script = ExtResource("3_dline")
+character_id = "duan"
+position = "right"
+text_zh = "謝謝你米洛。我不會再打擾你們上課了。"
+text_en = "I lost... but I understand why Master Husky trusts you."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_l23w1"]
+script = ExtResource("3_dline")
+character_id = "duan"
+position = "right"
+action = "exit"
+shake = false
+
+[sub_resource type="Resource" id="post_husky"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "啊..."
+text_en = "Good. A duel teaches rhythm better than a lecture."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_6rsta"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "這樣吧，敦，雖然你還未夠資格成為冒險者，但我準備你一同參加這次的冒險者加冕儀式。"
+text_en = "Good. A duel teaches rhythm better than a lecture."
+action = "enter"
 
 [sub_resource type="Resource" id="post_duan_2"]
 script = ExtResource("3_dline")
 character_id = "duan"
 position = "right"
-text_zh = "如果老師允許，我想在實戰中學習。"
+text_zh = "真的嗎！老師！"
 text_en = "If Master permits it, I would like to learn in the field."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_crnws"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "嗯。跟著團隊實戰對你也是一件好事。"
+text_en = "Good. A duel teaches rhythm better than a lecture."
+action = "enter"
 
 [sub_resource type="Resource" id="post_husky_2"]
 script = ExtResource("3_dline")
-character_id = "husky"
-text_zh = "准許。你們所有人都要保持警覺。"
+character_id = "panda"
+text_zh = "太好了！敦！"
 text_en = "Permission granted. Stay sharp, all of you."
+
+[sub_resource type="Resource" id="Resource_wery2"]
+script = ExtResource("3_dline")
+character_id = "dragon"
+text_zh = "耶！"
+text_en = "Duan, come with us! We are getting our adventurer certificate next."
+
+[sub_resource type="Resource" id="Resource_4elfx"]
+script = ExtResource("3_dline")
+character_id = "shark"
+text_zh = "我可不想顧小孩..."
 
 [sub_resource type="Resource" id="post_dialog"]
 script = ExtResource("4_dseq")
-lines = Array[ExtResource("3_dline")]([SubResource("post_duan_1"), SubResource("post_husky"), SubResource("post_dragon"), SubResource("post_duan_2"), SubResource("post_husky_2")])
-cast = Array[String](["husky", "duan", "dragon"])
+lines = Array[ExtResource("3_dline")]([SubResource("post_duan_1"), SubResource("post_dragon"), SubResource("Resource_2sd5u"), SubResource("Resource_l23w1"), SubResource("post_husky"), SubResource("Resource_6rsta"), SubResource("post_duan_2"), SubResource("Resource_crnws"), SubResource("post_husky_2"), SubResource("Resource_wery2"), SubResource("Resource_4elfx")])
+cast = Array[String](["husky", "duan", "dragon", "shark", "panda"])
 background = ExtResource("7_classroom_bg")
-initial_music = ExtResource("8_music")
+initial_music = ExtResource("3_2sd5u")
 
 [sub_resource type="Resource" id="pre_intro"]
 script = ExtResource("3_dline")
-text_zh = "畢業演練結束後，Husky 要隊伍留在訓練廳。"
+text_zh = "畢業演練結束後，一個學生從門口衝了進來。"
 text_en = "After graduation drills, Husky asks the team to stay in the training hall."
-music = ExtResource("8_music")
-
-[sub_resource type="Resource" id="pre_husky_1"]
-script = ExtResource("3_dline")
-character_id = "husky"
-text_zh = "在你們去拿證書之前，還有最後一課：和另一名寶石使用者交手。"
-text_en = "Before you go chasing certificates, there is one more lesson: fighting another gem user."
-action = "enter"
 
 [sub_resource type="Resource" id="pre_duan_enter"]
 script = ExtResource("3_dline")
 character_id = "duan"
 position = "right"
-text_zh = "Husky 老師，我準備好了。"
+text_zh = "看招~啊啊啊！！！"
 text_en = "Master Husky, I am ready."
 action = "enter"
-
-[sub_resource type="Resource" id="pre_husky_2"]
-script = ExtResource("3_dline")
-character_id = "husky"
-text_zh = "這位是 Duan，我最年輕的學生。他讀盤很快，也擅長用光寶石保護自己。"
-text_en = "This is Duan, my youngest student. He reads the board quickly and protects himself with light gems."
 
 [sub_resource type="Resource" id="pre_panda"]
 script = ExtResource("3_dline")
 character_id = "panda"
-text_zh = "最年輕的學生？他看起來比我們全部人都嚴肅。"
+text_zh = "危險！"
 text_en = "Youngest student? He looks more serious than all of us."
+
+[sub_resource type="Resource" id="pre_husky_1"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "敦，我說過，你離成為冒險者還有不少的訓練。"
+text_en = "Before you go chasing certificates, there is one more lesson: fighting another gem user."
+action = "enter"
 
 [sub_resource type="Resource" id="pre_duan_challenge"]
 script = ExtResource("3_dline")
 character_id = "duan"
 position = "right"
-text_zh = "請和我決鬥。我會像敵方冒險者一樣行動，也不會手下留情。"
+text_zh = "我不管！你說過打贏米洛他們，我就有資格一起冒險！"
 text_en = "Please duel me. I will move as an enemy adventurer would, and I will not hold back."
+
+[sub_resource type="Resource" id="pre_husky_2"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "哎呀..."
+text_en = "This is Duan, my youngest student. He reads the board quickly and protects himself with light gems."
 
 [sub_resource type="Resource" id="pre_husky_3"]
 script = ExtResource("3_dline")
-character_id = "husky"
-text_zh = "仔細看好。決鬥時，敵人也能使用棋盤。"
+character_id = "dragon"
+text_zh = "我接受你的挑戰！"
 text_en = "Watch carefully. In a duel, the enemy can use the board too."
+
+[sub_resource type="Resource" id="Resource_o30ma"]
+script = ExtResource("3_dline")
+character_id = "duan"
+position = "right"
+text_zh = "!!!"
+text_en = "Please duel me. I will move as an enemy adventurer would, and I will not hold back."
+
+[sub_resource type="Resource" id="Resource_06egh"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "米洛！"
+text_en = "This is Duan, my youngest student. He reads the board quickly and protects himself with light gems."
+
+[sub_resource type="Resource" id="Resource_41gpv"]
+script = ExtResource("3_dline")
+character_id = "dragon"
+text_zh = "小敦是認真的！我們不能這樣打發小敦的熱情！"
+text_en = "Watch carefully. In a duel, the enemy can use the board too."
+
+[sub_resource type="Resource" id="Resource_no18u"]
+script = ExtResource("3_dline")
+character_id = "duan"
+position = "right"
+text_zh = "米洛！！老師，可以嗎?"
+text_en = "Please duel me. I will move as an enemy adventurer would, and I will not hold back."
+
+[sub_resource type="Resource" id="Resource_sqaa3"]
+script = ExtResource("3_dline")
+character_id = "husky"
+text_zh = "唉... 好吧。就一次，別太胡來了。那麼，決鬥的規則都清楚了嗎?"
+text_en = "This is Duan, my youngest student. He reads the board quickly and protects himself with light gems."
+
+[sub_resource type="Resource" id="Resource_5rlrb"]
+script = ExtResource("3_dline")
+character_id = "duan"
+position = "right"
+text_zh = "我已經準備好了！"
+text_en = "Please duel me. I will move as an enemy adventurer would, and I will not hold back."
+
+[sub_resource type="Resource" id="Resource_olf17"]
+script = ExtResource("3_dline")
+character_id = "dragon"
+text_zh = "來吧小敦！！"
+text_en = "Watch carefully. In a duel, the enemy can use the board too."
+
+[sub_resource type="Resource" id="Resource_427kg"]
+script = ExtResource("3_dline")
+character_id = "shark"
+text_zh = "......"
 
 [sub_resource type="Resource" id="pre_dialog"]
 script = ExtResource("4_dseq")
-lines = Array[ExtResource("3_dline")]([SubResource("pre_intro"), SubResource("pre_husky_1"), SubResource("pre_duan_enter"), SubResource("pre_husky_2"), SubResource("pre_panda"), SubResource("pre_duan_challenge"), SubResource("pre_husky_3")])
-cast = Array[String](["husky", "duan", "panda"])
+lines = Array[ExtResource("3_dline")]([SubResource("pre_intro"), SubResource("pre_duan_enter"), SubResource("pre_panda"), SubResource("pre_husky_1"), SubResource("pre_duan_challenge"), SubResource("pre_husky_2"), SubResource("pre_husky_3"), SubResource("Resource_o30ma"), SubResource("Resource_06egh"), SubResource("Resource_41gpv"), SubResource("Resource_no18u"), SubResource("Resource_sqaa3"), SubResource("Resource_5rlrb"), SubResource("Resource_olf17"), SubResource("Resource_427kg")])
+cast = Array[String](["husky", "duan", "panda", "dragon", "shark"])
 background = ExtResource("7_classroom_bg")
-initial_music = ExtResource("8_music")
+initial_music = ExtResource("6_2sd5u")
 
-[sub_resource type="Resource" id="duan_duel_enemy"]
+[sub_resource type="Resource" id="Resource_ulfj3"]
 script = ExtResource("2_enemy")
 enemy_name = "Duan"
-enemy_name_zh = "Duan"
+enemy_name_zh = "敦"
 enemy_name_en = "Duan"
 enemy_level = 4
 max_hp = 2800
@@ -121,25 +212,35 @@ portrait_color = Color(1, 0.92, 0.23, 1)
 portrait_texture = ExtResource("5_duan_tex")
 element = 6
 is_main_boss = true
+metadata/stage_editor_source_path = "res://stages/stage_1_2.tres::duan_duel_enemy"
+
+[sub_resource type="Resource" id="Resource_614so"]
+script = ExtResource("10_o30ma")
+enemy = SubResource("Resource_ulfj3")
+level = 4
+hp_percent = 2800
+main_boss = true
+
+[sub_resource type="Resource" id="Resource_kfbob"]
+script = ExtResource("4_dseq")
 
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-2"
 prerequisite_stage_id = "1-1"
 connects_to = Array[String](["1-3"])
-map_position = Vector2(335, 452)
+map_position = Vector2(205.25879, 555.45386)
 stage_name = "Stage 1-2 Duel Lesson"
-element_weights = Array[int]([30, 25, 25, 20])
+element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "school"
-battle_background_override_path = "res://assets/dialog_background/dialog_bg_classroom.png"
-battle_music_override_path = "res://assets/music/Thundering Chariot.mp3"
+battle_music_override_path = "res://assets/music/Rune Academy Duel.mp3"
 one_time_reward_character = ExtResource("6_duan_char")
-rounds = Array[Array]([[SubResource("duan_duel_enemy")]])
-rounds_init_cd = Array[Array]([[0]])
-rounds_enemy_levels = Array[Array]([[4]])
-rounds_main_bosses = Array[Array]([[true]])
+rounds = Array[Array]([[SubResource("Resource_614so")]])
 pre_dialog = SubResource("pre_dialog")
 post_dialog = SubResource("post_dialog")
+start_stage_dialog = SubResource("Resource_kfbob")
+start_round_dialogs = Array[ExtResource("4_dseq")]([SubResource("Resource_kfbob")])
+start_stage_tutorial_page_ids = Array[String](["1_7_new_tutorial_1"])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

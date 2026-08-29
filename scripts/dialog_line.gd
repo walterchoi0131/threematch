@@ -2,7 +2,7 @@
 class_name DialogLine
 extends Resource
 
-## 角色 ID（對應 assets 中的圖檔名：husky, fox, polar, raccoon, boar, panda）
+## 角色 ID（對應 assets 中的圖檔名，例如 husky、fox、raccoon、panda）
 @export var character_id: String = ""
 
 ## 情緒 key（normal, happy, excited, nervous, angry, thinking, serious…）
@@ -24,10 +24,10 @@ extends Resource
 ## 是否播放擠壓彈跳說話動畫
 @export var shake: bool = true
 
-## 此行開始時切換的背景音樂（null = 不改變）
+## 僅供 switch_bgm / switch_bg 事件使用的背景音樂（null = 不改變）。
 @export var music: AudioStream = null
 
-## If true, this line fades out the current dialog BGM instead of switching to a new track.
+## Only music events may use this to fade out the current dialog BGM.
 @export var stop_music: bool = false
 
 ## Optional sound effect played when this dialog line appears.

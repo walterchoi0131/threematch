@@ -308,6 +308,35 @@ const _StartStageTutorialPage := preload("res://scripts/start_stage_tutorial_pag
 @export var start_stage_dialog: _DialogSequence = null
 @export var start_round_dialogs: Array[_DialogSequence] = []
 @export var start_stage_tutorial_page_ids: Array[String] = []
+
+
+## 強度調節使用關卡內最高的敵人出場等級；沒有敵人資料時回傳 0。
+func get_strength_adjustment_level() -> int:
+	var highest_level := 0
+	for round_index in rounds.size():
+		var round_entries: Array = rounds[round_index]
+		var legacy_levels: Array = []
+		if round_index < rounds_enemy_levels.size() and rounds_enemy_levels[round_index] is Array:
+			legacy_levels = rounds_enemy_levels[round_index]
+		for enemy_index in round_entries.size():
+			var entry_variant: Variant = round_entries[enemy_index]
+			var level_value := 0
+			if entry_variant is StageEnemyEntry:
+				var entry: StageEnemyEntry = entry_variant as StageEnemyEntry
+				if entry == null or entry.enemy == null:
+					continue
+				level_value = entry.level
+			elif entry_variant is EnemyData:
+				var enemy_data: EnemyData = entry_variant as EnemyData
+				if enemy_data == null:
+					continue
+				level_value = enemy_data.enemy_level
+			else:
+				continue
+			if enemy_index < legacy_levels.size():
+				level_value = int(legacy_levels[enemy_index])
+			highest_level = maxi(highest_level, clampi(level_value, 1, 99))
+	return highest_level
 @export var start_stage_tutorial: Array[_StartStageTutorialPage] = []
 
 ## 教學模式：啟用後使用固定棋盤並觸發教學流程

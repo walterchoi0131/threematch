@@ -152,6 +152,7 @@ var _selection_valid_centers: Array[Vector2i] = []      # 當前模式可點擊�
 var _selection_preview_positions: Array[Vector2i] = []  # 目前 hover 顯示的影響範圍
 var _selection_finished_emitted: bool = false           # 防止確認/取消重複發出
 var _preview_center: Vector2i = Vector2i(-1, -1)  # 目前預覽的中心格
+var _selection_pointer_down: bool = false
 var _selection_max_count: int = 1
 var _selection_selected_positions: Array[Vector2i] = []
 var _row_column_drag_mode: bool = false
@@ -1242,7 +1243,7 @@ func _normalize_edit_value(value: int) -> int:
 	return EDIT_RANDOM
 
 
-## 處理滑鼠輸入：左鍵點擊棋盤上的寶石；選擇模式下懸停預覽 + 點擊確認；長按高階寶石預覽爆炸範圍
+## 處理滑鼠輸入：選擇模式下懸停／拖曳預覽並於放開時確認；長按高階寶石預覽爆炸範圍
 func _unhandled_input(event: InputEvent) -> void:
 	if _edit_mode:
 		_handle_edit_input(event)
@@ -1262,34 +1263,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			var gp := world_to_grid(local_pos)
 			if _is_valid(gp) and gp != _preview_center:
 				_update_selection_preview(gp)
-			elif not _is_valid(gp):
+			elif not _is_valid(gp) and not _selection_pointer_down:
 				_clear_selection_hover_preview()
 				_preview_center = Vector2i(-1, -1)
-		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			var local_pos := get_local_mouse_position()
 			var gp := world_to_grid(local_pos)
-			if _cell_accepts_block(gp):
-				var clicked_block: Block = grid[gp.x][gp.y]
-				var positions := _get_selection_positions(gp)
-				if positions.is_empty():
-					_clear_selection_hover_preview()
-					_preview_center = Vector2i(-1, -1)
-					return
-				if positions.size() <= 1 and _is_static_obstacle(clicked_block):
-					_shake_block(clicked_block)
-					return
-				if _selection_max_count > 1:
-					for p in positions:
-						if not _selection_selected_positions.has(p):
-							_selection_selected_positions.append(p)
-					_update_selection_preview(gp)
-					if _selection_selected_positions.size() >= _selection_max_count:
-						var selected: Array = _selection_selected_positions.slice(0, _selection_max_count)
-						_finish_selection(selected, false)
-						selection_confirmed.emit(selected)
-					return
-				_finish_selection(positions, false)
-				selection_confirmed.emit(positions)
+			if event.pressed:
+				_selection_pointer_down = true
+				_update_selection_preview_from_pointer(gp)
+				return
+			if not _selection_pointer_down:
+				return
+			_selection_pointer_down = false
+			if not _update_selection_preview_from_pointer(gp):
+				return
+			_confirm_current_selection_preview()
 		return
 
 	# ── 長按追蹤中：處理放開、移動 ──
@@ -4905,7 +4894,7 @@ func _get_cross_positions(center: Vector2i) -> Array[Vector2i]:
 	return result
 
 
-## 進入選擇模式（由 main.gd 呼叫，玩家懸停預覽，點擊確認轉換）
+## 進入選擇模式（由 main.gd 呼叫，預設置中預覽，放開指標時確認轉換）
 func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross", max_count: int = 1) -> void:
 	if _selection_mode:
 		cancel_selection_mode()
@@ -4915,8 +4904,12 @@ func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross", m
 	_selection_max_count = maxi(1, max_count)
 	_selection_selected_positions.clear()
 	_selection_finished_emitted = false
+	_selection_pointer_down = false
 	_preview_center = Vector2i(-1, -1)
 	_refresh_selection_valid_centers()
+	var default_center: Vector2i = _get_default_selection_center()
+	if default_center != Vector2i(-1, -1):
+		_update_selection_preview(default_center)
 
 
 ## 離開選擇模式（取消）
@@ -5250,12 +5243,47 @@ func _finish_selection(positions: Array, cancelled: bool) -> void:
 	else:
 		_clear_selection_visuals()
 	_selection_selected_positions.clear()
+	_selection_pointer_down = false
 	_selection_max_count = 1
 	_preview_center = Vector2i(-1, -1)
 	selection_finished.emit({
 		"positions": positions,
 		"cancelled": cancelled,
 	})
+
+
+func _update_selection_preview_from_pointer(center: Vector2i) -> bool:
+	if not _cell_accepts_block(center):
+		return false
+	var positions: Array[Vector2i] = _get_selection_positions(center)
+	if positions.is_empty():
+		return false
+	_update_selection_preview(center)
+	return true
+
+
+func _confirm_current_selection_preview() -> void:
+	if not _selection_mode or _preview_center == Vector2i(-1, -1):
+		return
+	var positions: Array[Vector2i] = _get_selection_positions(_preview_center)
+	if positions.is_empty():
+		return
+	var clicked_block: Block = grid[_preview_center.x][_preview_center.y]
+	if positions.size() <= 1 and _is_static_obstacle(clicked_block):
+		_shake_block(clicked_block)
+		return
+	if _selection_max_count > 1:
+		for pos: Vector2i in positions:
+			if not _selection_selected_positions.has(pos):
+				_selection_selected_positions.append(pos)
+		_update_selection_preview(_preview_center)
+		if _selection_selected_positions.size() >= _selection_max_count:
+			var selected: Array = _selection_selected_positions.slice(0, _selection_max_count)
+			_finish_selection(selected, false)
+			selection_confirmed.emit(selected)
+		return
+	_finish_selection(positions, false)
+	selection_confirmed.emit(positions)
 
 
 ## 更新十字預覽覆蓋層（黃色半透明方塊顯示在預覽位置上方）
@@ -5376,6 +5404,20 @@ func _refresh_selection_valid_centers() -> void:
 			var center: Vector2i = Vector2i(x, y)
 			if _is_selection_center_viable(center):
 				_selection_valid_centers.append(center)
+
+
+func _get_default_selection_center() -> Vector2i:
+	if _selection_valid_centers.is_empty():
+		return Vector2i(-1, -1)
+	var board_center := Vector2(float(columns - 1) * 0.5, float(rows - 1) * 0.5)
+	var best_center: Vector2i = _selection_valid_centers[0]
+	var best_distance: float = Vector2(best_center).distance_squared_to(board_center)
+	for center: Vector2i in _selection_valid_centers:
+		var distance: float = Vector2(center).distance_squared_to(board_center)
+		if distance < best_distance:
+			best_center = center
+			best_distance = distance
+	return best_center
 
 
 func get_selection_valid_centers() -> Array[Vector2i]:

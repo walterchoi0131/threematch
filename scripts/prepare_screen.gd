@@ -27,6 +27,8 @@ var _roster_grid: Control = null
 # ── UI 節點 ──
 var _confirm_btn: Button = null
 var _auto_team_btn: Button = null
+var _strength_adjustment_switch: CheckButton = null
+var _strength_adjustment_level: int = 0
 var _team_summary: HBoxContainer = null   # 頂部隊伍縮圖列
 var _team_summary_cards: Array[Control] = []
 var _debug_panel: Control = null
@@ -41,6 +43,8 @@ const PREP_BATTLE_BG_TOP_MASK_HEIGHT: float = 86.0
 const PREP_BATTLE_BG_BOTTOM_MASK_HEIGHT: float = 132.0
 const PREP_LOWER_SECTION_OFFSET_Y: float =0.0
 const PREP_TOP_ROW_HEIGHT: float = 272.0
+const STRENGTH_ADJUSTED_LEVEL_COLOR := Color(0.28, 0.72, 1.0)
+const DEFAULT_LEVEL_COLOR := Color.WHITE
 
 
 func _ready() -> void:
@@ -49,6 +53,7 @@ func _ready() -> void:
 	if _stage == null:
 		closed.emit()
 		return
+	_strength_adjustment_level = _stage.get_strength_adjustment_level()
 	_build_ui()
 
 
@@ -178,6 +183,9 @@ func _build_ui() -> void:
 
 	_auto_team_btn = _make_auto_team_button()
 	sel_header.add_child(_auto_team_btn)
+
+	_strength_adjustment_switch = _make_strength_adjustment_switch()
+	sel_header.add_child(_strength_adjustment_switch)
 
 	var sel_spacer := Control.new()
 	sel_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -380,6 +388,34 @@ func _make_auto_team_button() -> Button:
 	_apply_compact_button_style(button, Color(0.35, 0.42, 0.55))
 	button.pressed.connect(_on_auto_team_pressed)
 	return button
+
+
+func _make_strength_adjustment_switch() -> CheckButton:
+	var switch := CheckButton.new()
+	switch.text = Locale.tr_ui("STRENGTH_ADJUSTMENT")
+	switch.custom_minimum_size = Vector2(108, 28)
+	switch.button_pressed = _strength_adjustment_level > 0
+	switch.disabled = _strength_adjustment_level <= 0
+	switch.focus_mode = Control.FOCUS_NONE
+	switch.add_theme_font_override("font", _font)
+	switch.add_theme_font_size_override("font_size", 12)
+	switch.toggled.connect(_on_strength_adjustment_toggled)
+	if _strength_adjustment_level > 0:
+		switch.tooltip_text = Locale.tr_ui("STRENGTH_ADJUSTMENT_HINT") % _strength_adjustment_level
+	return switch
+
+
+func _on_strength_adjustment_toggled(_button_pressed: bool) -> void:
+	_update_strength_adjusted_level_labels()
+	_apply_sort()
+
+
+func _strength_adjustment_is_active() -> bool:
+	return (
+		_strength_adjustment_switch != null
+		and _strength_adjustment_switch.button_pressed
+		and _strength_adjustment_level > 0
+	)
 
 
 func _apply_compact_button_style(btn: Button, base_color: Color) -> void:
@@ -789,6 +825,24 @@ func _update_lv_labels_visibility() -> void:
 	for lbl: Label in _card_lv_labels:
 		if lbl != null:
 			lbl.visible = show
+	_update_strength_adjusted_level_labels()
+
+
+func _update_strength_adjusted_level_labels() -> void:
+	var adjusted: bool = _strength_adjustment_is_active()
+	for index in _card_lv_labels.size():
+		var label: Label = _card_lv_labels[index]
+		if label == null or index >= GameState.owned_characters.size():
+			continue
+		var character: CharacterData = GameState.owned_characters[index]
+		if character == null:
+			continue
+		var display_level: int = _strength_adjustment_level if adjusted else character.level
+		label.text = "Lv.%d" % display_level
+		label.add_theme_color_override(
+			"font_color",
+			STRENGTH_ADJUSTED_LEVEL_COLOR if adjusted else DEFAULT_LEVEL_COLOR
+		)
 
 
 ## 套用「實心」按鈕樣式（不透明背景）— 確保按鈕在覆蓋層上仍清晰可見。
@@ -860,6 +914,7 @@ func _on_element_filter_changed(element_filter: int) -> void:
 func _apply_sort() -> void:
 	if _roster_grid == null:
 		return
+	var adjusted: bool = _strength_adjustment_is_active()
 	var fixed_set: Dictionary = {}
 	if _is_party_locked():
 		for c: CharacterData in _stage.set_party:
@@ -872,6 +927,8 @@ func _apply_sort() -> void:
 			"c": ch,
 			"card": _card_panels[i],
 			"is_fixed": fixed_set.has(ch),
+			"display_level": _strength_adjustment_level if adjusted else ch.level,
+			"level_color": STRENGTH_ADJUSTED_LEVEL_COLOR if adjusted else DEFAULT_LEVEL_COLOR,
 		})
 	RosterLayout.apply(_roster_grid, entries, _sort_mode, 6, _sort_ascending, _element_filter)
 
@@ -1086,6 +1143,12 @@ func _on_confirm() -> void:
 	GameState.selected_party.clear()
 	for idx in _selected_party_indices():
 		GameState.selected_party.append(GameState.owned_characters[idx])
+	GameState.battle_strength_adjustment_enabled = (
+		_strength_adjustment_switch != null
+		and _strength_adjustment_switch.button_pressed
+		and _strength_adjustment_level > 0
+	)
+	GameState.battle_strength_adjustment_level = _strength_adjustment_level
 
 	# 有對話 → 先進對話場景；否則直接進戰鬥
 	var next_path: String = "res://scenes/main.tscn"

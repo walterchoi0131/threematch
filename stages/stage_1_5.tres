@@ -1,11 +1,11 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://eiqbv4mb35d3"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="3_s712o"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="4_dline"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="5_dseq"]
-[ext_resource type="Script" uid="uid://cmuy2cviws01p" path="res://scripts/start_stage_tutorial_page.gd" id="6_tpage"]
+[ext_resource type="AudioStream" path="res://assets/music/pulsepounding.mp3" id="1_lvgyu"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="3_s712o"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="4_dline"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_dseq"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="6_tpage"]
 
 [sub_resource type="Resource" id="stage15_start_line_1"]
 script = ExtResource("4_dline")
@@ -31,8 +31,8 @@ cast = Array[String](["panda", "shark"])
 script = ExtResource("1_script")
 stage_id = "1-5"
 prerequisite_stage_id = "1-4"
-connects_to = Array[String](["1-6"])
-map_position = Vector2(480, 611)
+connects_to = Array[String](["1-6", "2-1"])
+map_position = Vector2(498.62622, 407.30518)
 stage_name = "Stage 1-5 (Escape)"
 element_weights = Array[int]([60, 10, 10])
 allowed_types = Array[int]([0, 2, 6])

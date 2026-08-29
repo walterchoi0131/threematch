@@ -174,6 +174,7 @@ static func _ensure_init() -> void:
 		Block.Type.GREEN,
 		Color(0.30, 0.80, 0.35),
 		"Bamboo Supply",
+		"res://assets/vfx/green_burst.png", 6, 2, 12, 6.0, 0.03,
 	)
 	_defs[Block.UpperType.WOOD_SPEAR_UP] = Def.new(
 		Block.Type.GREEN,

@@ -45,6 +45,8 @@ var _translations: Dictionary = {
 	"SELECT_PARTY": {"zh": "選擇隊員", "en": "SELECT PARTY"},
 	"DEPLOYED": {"zh": "出戰", "en": "DEPLOYED"},
 	"AUTO_TEAM": {"zh": "自動組隊", "en": "Auto Team"},
+	"STRENGTH_ADJUSTMENT": {"zh": "強度調節", "en": "Level Sync"},
+	"STRENGTH_ADJUSTMENT_HINT": {"zh": "本次出戰角色等級鎖定為關卡最高敵人等級 Lv.%d。", "en": "Lock the party to the stage's highest enemy level, Lv.%d, for this battle."},
 	"ENEMY_INTENT_DUEL": {"zh": "決鬥", "en": "Duel"},
 	"CONFIRM": {"zh": "確認", "en": "Confirm"},
 	"EMBARK": {"zh": "出發", "en": "Embark"},
@@ -121,14 +123,12 @@ var _translations: Dictionary = {
 	"Wood Spear DESC DYNAMIC PIERCE": {"zh": "%d 顆以上葉寶石合成時，在點擊處生成木槍寶石。點擊該格上半部時朝上，下半部時朝下。爆發會破壞可破壞障礙並繼續飛行，直到不可破壞障礙或邊界。", "en": "Fuse %d+ leaf gems to create a Wood Spear gem at the tapped cell. Tapping the upper half points it up; tapping the lower half points it down. On blast, it breaks breakable obstacles and keeps flying until an unbreakable obstacle or the edge."},
 
 	# ── 角色名稱 ──
-	"Boar": {"zh": "野豬", "en": "Boar"},
 	"Raccoon": {"zh": "浣熊", "en": "Raccoon"},
 	"Elder Raccoon": {"zh": "浣熊長老", "en": "Elder Raccoon"},
 	"Panda": {"zh": "阿潘", "en": "Pan"},
 	"Fox": {"zh": "小狐", "en": "Fox"},
 	"Husky": {"zh": "索爾", "en": "Thor"},
 	"Thor": {"zh": "索爾", "en": "Thor"},
-	"Polar": {"zh": "阿極", "en": "Polar"},
 	"Polarz": {"zh": "極極", "en": "Polarz"},
 	"Dragon": {"zh": "米洛", "en": "Milo"},
 	"Shark": {"zh": "埃德", "en": "Ed"},
@@ -144,19 +144,16 @@ var _translations: Dictionary = {
 	# ── 對話用角色暱稱（與正式名稱可不同；key = "DIALOG_" + char_id 大寫） ──
 	"DIALOG_husky":   {"zh": "索爾", "en": "Thor"},
 	"DIALOG_fox":     {"zh": "小狐",       "en": "Fox"},
-	"DIALOG_polar":   {"zh": "阿極",       "en": "Polar"},
 	"DIALOG_polarz":  {"zh": "極極",       "en": "Polarz"},
 	"DIALOG_raccoon": {"zh": "小浣",       "en": "Raccoon"},
-	"DIALOG_boar":    {"zh": "山豬",       "en": "Boar"},
 	"DIALOG_panda":   {"zh": "阿潘",       "en": "Pan"},
 	"DIALOG_dragon":  {"zh": "米洛",       "en": "Milo"},
 	"DIALOG_shark":   {"zh": "埃德",       "en": "Ed"},
 	"DIALOG_gory":    {"zh": "戈爾",       "en": "Gory"},
 	"DIALOG_owen":    {"zh": "奧云",       "en": "Owen"},
+	"DIALOG_duan":    {"zh": "敦",         "en": "Duan"},
 
 	# ── 主動技能名稱與描述 ──
-	"Attack Form": {"zh": "攻擊形態", "en": "Attack Form"},
-	"Attack Form DESC": {"zh": "將棋盤上所有火寶石轉換為水寶石。CD：5 回合。", "en": "Convert all fire gems on the board into water gems. CD: 5 turns."},
 	"Tranquil Mirror": {"zh": "止水明鏡", "en": "Tranquil Mirror"},
 	"Tranquil Mirror DESC": {"zh": "將棋盤上所有火寶石轉換為水寶石。CD：5 回合。", "en": "Convert all fire gems on the board into water gems. CD: 5 turns."},
 	"居合。水": {"zh": "居合。水", "en": "Iai: Tidal"},
@@ -169,8 +166,6 @@ var _translations: Dictionary = {
 	"Resurgence DESC": {"zh": "選擇一顆寶石，將其上下左右四鄰轉換為相同元素。CD：4 回合。", "en": "Select a gem; convert its four neighbors to the same element. CD: 4 turns."},
 	"Resurgence+": {"zh": "生息.強", "en": "Resurgence+"},
 	"Resurgence+ DESC": {"zh": "選擇一顆寶石，將其上下左右四鄰轉換為相同元素，並使被點擊的寶石獲得 X5 效果（消除/連鎖/合成時計為 5 顆）。CD：6 回合。", "en": "Select a gem; convert its four neighbors to the same element and grant the tapped gem X5 (counts as 5 when blasted/chained/fused). CD: 6 turns."},
-	"Snowball Fight": {"zh": "打雪仗", "en": "Snowball Fight"},
-	"Snowball Fight DESC": {"zh": "動員棋盤上所有雪球寶石飛向目標敵人，每顆造成 ATK×10 傷害。CD：5 回合。", "en": "Mobilize all Snowball gems on the board to attack the targeted enemy. Each snowball deals ATK×10 damage. CD: 5 turns."},
 	"冰球法印": {"zh": "冰球法印", "en": "Iceball Sigil"},
 	"冰球法印 DESC": {"zh": "在棋盤右上與左下各生成一圈 8 顆水寶石。CD：5 回合。", "en": "Create two 8-gem water circles at the top-right and bottom-left of the board. CD: 5 turns."},
 	"Blast": {"zh": "爆炸", "en": "Blast"},
@@ -199,8 +194,6 @@ var _translations: Dictionary = {
 	"UPGRADE_OWEN_DIRTY_TRICKS_INFINITE": {"zh": "拖曳距離不再受限制。", "en": "Drag distance is no longer limited."},
 
 	# ── 被動技能名稱與描述 ──
-	"Drinking": {"zh": "飲水", "en": "Drinking"},
-	"Drinking DESC": {"zh": "水寶石攻擊時，額外回復攻擊傷害的 50%。", "en": "Water gems also heal you for 50% of attack damage."},
 	"Photosynthesis": {"zh": "光合作用", "en": "Photosynthesis"},
 	"Photosynthesis DESC": {"zh": "每回合開始時，將 3 顆寶石轉為葉寶石（優先紅 > 藍）。", "en": "At the start of each turn, convert 3 gems into leaf gems (priority Red > Blue)."},
 

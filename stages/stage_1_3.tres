@@ -1,38 +1,37 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://bhaeyvbiufrkc"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Resource" path="res://characters/char_polar.tres" id="1_57o8d"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="2_dline"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="3_dseq"]
-[ext_resource type="Resource" uid="uid://cwlbnblhs083t" path="res://enemies/slime.tres" id="6_57o8d"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="6_y33w2"]
-[ext_resource type="Script" uid="uid://die3wh2nhhigk" path="res://scripts/stage_enemy_entry.gd" id="7_y33w2"]
-[ext_resource type="Texture2D" uid="uid://hvr2h3v6b8qp" path="res://assets/dialog_background/dialog_bg_church.png" id="8_church_bg"]
-[ext_resource type="Resource" uid="uid://b80vwgwxa8r8s" path="res://enemies/dark_minion_warrior.tres" id="9_8idvt"]
-[ext_resource type="AudioStream" uid="uid://b2dvatxiqjqq2" path="res://assets/music/pulsepounding.mp3" id="9_music"]
-[ext_resource type="Resource" uid="uid://c0bs3a327q3fe" path="res://enemies/dark_minion_archer.tres" id="10_enq8n"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="10_gxyjn"]
-[ext_resource type="Resource" uid="uid://d4h10xj64cmix" path="res://enemies/dark_minion_mage.tres" id="11_w6yip"]
-[ext_resource type="Script" uid="uid://cmuy2cviws01p" path="res://scripts/start_stage_tutorial_page.gd" id="14_57o8d"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="2_dline"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="3_dseq"]
+[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="6_8idvt"]
+[ext_resource type="Resource" path="res://enemies/slime.tres" id="6_57o8d"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="6_y33w2"]
+[ext_resource type="AudioStream" path="res://assets/music/Crimson Vow.mp3" id="7_enq8n"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="7_y33w2"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_church.png" id="8_church_bg"]
+[ext_resource type="Resource" path="res://enemies/dark_minion_warrior.tres" id="9_8idvt"]
+[ext_resource type="Resource" path="res://enemies/dark_minion_archer.tres" id="10_enq8n"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="10_gxyjn"]
+[ext_resource type="Resource" path="res://enemies/dark_minion_mage.tres" id="11_w6yip"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_57o8d"]
 
 [sub_resource type="Resource" id="post_clear"]
 script = ExtResource("2_dline")
-text_zh = "最後一名爪牙倒下。聖所再次安靜下來，但祭壇上留下了 Owen 的印記。"
+text_zh = "最後一名爪牙倒下。聖所再次安靜下來。"
 text_en = "The last minion falls. The sanctuary is quiet again, but the altar bears the mark of Owen."
-music = ExtResource("9_music")
 
 [sub_resource type="Resource" id="post_duan"]
 script = ExtResource("2_dline")
 character_id = "duan"
 position = "right"
-text_zh = "他們不是隨便襲擊這裡。他們在找祭壇底下的某樣東西。"
+text_zh = "他們，他們是誰？？"
 text_en = "They were not raiding at random. They were searching for something under the altar."
 action = "enter"
 
 [sub_resource type="Resource" id="post_dragon"]
 script = ExtResource("2_dline")
 character_id = "dragon"
-text_zh = "可是證書還在！"
+text_zh = "老師，我們去找老師！！"
 text_en = "But the certificates are still here!"
 action = "enter"
 
@@ -40,13 +39,13 @@ action = "enter"
 script = ExtResource("2_dline")
 character_id = "shark"
 position = "right"
-text_zh = "先拿走。然後我們查清楚 Owen 為什麼要包圍這裡。"
+text_zh = "好，不要慌張，跟我走。"
 text_en = "Take them. Then we find out why Owen wanted this place surrounded."
 
 [sub_resource type="Resource" id="post_panda"]
 script = ExtResource("2_dline")
 character_id = "panda"
-text_zh = "正式冒險者遇上第一場正式災難。聽起來很合理。"
+text_zh = "事情怎麼變成這樣了哎呀呀..."
 text_en = "Official adventurers on our first official disaster. That sounds about right."
 
 [sub_resource type="Resource" id="post_dialog"]
@@ -54,65 +53,133 @@ script = ExtResource("3_dseq")
 lines = Array[ExtResource("2_dline")]([SubResource("post_clear"), SubResource("post_duan"), SubResource("post_dragon"), SubResource("post_shark"), SubResource("post_panda")])
 cast = Array[String](["dragon", "panda", "duan", "shark"])
 background = ExtResource("8_church_bg")
-initial_music = ExtResource("9_music")
+initial_music = ExtResource("7_enq8n")
 
 [sub_resource type="Resource" id="pre_arrive"]
 script = ExtResource("2_dline")
 text_zh = "隊伍抵達聖所，這裡是新晉冒險者領取正式證書的地方。"
 text_en = "The team reaches the sanctuary where new adventurers receive their official certificates."
-music = ExtResource("9_music")
 
 [sub_resource type="Resource" id="pre_dragon"]
 script = ExtResource("2_dline")
 character_id = "dragon"
-text_zh = "就是那裡！拿到證書之後，我們就是合法無敵了。"
+text_zh = "到了到了！就是這裡！好美啊！"
 text_en = "There it is! One certificate, then we are legally unstoppable."
 action = "enter"
 
-[sub_resource type="Resource" id="pre_panda"]
+[sub_resource type="Resource" id="Resource_57o8d"]
 script = ExtResource("2_dline")
 character_id = "panda"
-text_zh = "拜託不要在聖所旁邊說什麼合法無敵。"
-text_en = "Please never say legally unstoppable near a holy building."
+position = "right"
+text_zh = "金碧輝煌，光之大陸的王國聖所！"
+text_en = "There it is! One certificate, then we are legally unstoppable."
 action = "enter"
 
 [sub_resource type="Resource" id="pre_duan"]
 script = ExtResource("2_dline")
 character_id = "duan"
 position = "right"
-text_zh = "情況不對。大門開著，但沒有人守著封印。"
+text_zh = "哇哦！！你看看這顆寶石！"
 text_en = "Something is wrong. The doors are open, but no one is guarding the seal."
 action = "enter"
 
 [sub_resource type="Resource" id="pre_shark"]
 script = ExtResource("2_dline")
 character_id = "shark"
-position = "right"
-text_zh = "有腳步聲。不只一個。"
+text_zh = "不要亂碰！！"
 text_en = "Footsteps. More than one."
 action = "enter"
 
+[sub_resource type="Resource" id="pre_panda"]
+script = ExtResource("2_dline")
+character_id = "husky"
+position = "right"
+text_zh = "我有點事要找國王，你們先在大堂等我。"
+text_en = "Please never say legally unstoppable near a holy building."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_y33w2"]
+script = ExtResource("2_dline")
+character_id = "husky"
+position = "right"
+text_zh = "埃德，幫我照看他們。"
+text_en = "Please never say legally unstoppable near a holy building."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_8idvt"]
+script = ExtResource("2_dline")
+character_id = "shark"
+text_zh = "唉。好吧。"
+text_en = "Please never say legally unstoppable near a holy building."
+action = "enter"
+
+[sub_resource type="Resource" id="Resource_w6yip"]
+script = ExtResource("2_dline")
+character_id = "husky"
+position = "right"
+action = "exit"
+shake = false
+
+[sub_resource type="Resource" id="Resource_l0pyy"]
+script = ExtResource("2_dline")
+action = "switch_bgm"
+shake = false
+music = ExtResource("7_enq8n")
+
 [sub_resource type="Resource" id="pre_minion"]
 script = ExtResource("2_dline")
-text_zh = "Owen 的爪牙從聖所走廊湧出，包圍了證書祭壇。"
+text_zh = "一群人靜靜地坐在大堂裡等候，時間不知不覺過了半小時。"
 text_en = "Owen's minions pour from the sanctuary halls, surrounding the certificate altar."
 
 [sub_resource type="Resource" id="pre_panda_2"]
 script = ExtResource("2_dline")
 character_id = "panda"
-text_zh = "看來這趟差事一點也不簡單。"
+text_zh = "哎～好睏啊。老師還沒回來嗎?"
 text_en = "So much for a simple errand."
+
+[sub_resource type="Resource" id="Resource_kqu2e"]
+script = ExtResource("2_dline")
+character_id = "dragon"
+text_zh = "要不我們去找他?"
 
 [sub_resource type="Resource" id="Resource_3pugy"]
 script = ExtResource("2_dline")
+character_id = "enemy_dark_minion_mage"
+position = "right"
+text_zh = "你們是...!! 喂，我不是叫你清理大堂區域的嗎?"
+
+[sub_resource type="Resource" id="Resource_ssn5h"]
+script = ExtResource("2_dline")
 character_id = "enemy_dark_minion_sword"
-text_zh = "測試"
+text_zh = "已，已經清理過了！！"
+
+[sub_resource type="Resource" id="Resource_ihorc"]
+script = ExtResource("2_dline")
+character_id = "duan"
+text_zh = "嗚哇！！"
+
+[sub_resource type="Resource" id="Resource_cwsa5"]
+script = ExtResource("2_dline")
+character_id = "shark"
+text_zh = "來者何人！"
+
+[sub_resource type="Resource" id="Resource_b4so5"]
+script = ExtResource("2_dline")
+character_id = "enemy_dark_minion_mage"
+position = "right"
+text_zh = "算了，把你們也一同收拾了！！"
 
 [sub_resource type="Resource" id="pre_dialog"]
 script = ExtResource("3_dseq")
-lines = Array[ExtResource("2_dline")]([SubResource("pre_arrive"), SubResource("pre_dragon"), SubResource("pre_panda"), SubResource("pre_duan"), SubResource("pre_shark"), SubResource("pre_minion"), SubResource("pre_panda_2"), SubResource("Resource_3pugy")])
-cast = Array[String](["dragon", "panda", "duan", "shark", "enemy_dark_minion_sword"])
+lines = Array[ExtResource("2_dline")]([SubResource("pre_arrive"), SubResource("pre_dragon"), SubResource("Resource_57o8d"), SubResource("pre_duan"), SubResource("pre_shark"), SubResource("pre_panda"), SubResource("Resource_y33w2"), SubResource("Resource_8idvt"), SubResource("Resource_w6yip"), SubResource("Resource_l0pyy"), SubResource("pre_minion"), SubResource("pre_panda_2"), SubResource("Resource_kqu2e"), SubResource("Resource_3pugy"), SubResource("Resource_ssn5h"), SubResource("Resource_ihorc"), SubResource("Resource_cwsa5"), SubResource("Resource_b4so5")])
+cast = Array[String](["dragon", "panda", "duan", "shark", "enemy_dark_minion_sword", "husky", "enemy_dark_minion_mage"])
 cast_profiles = {
+"enemy_dark_minion_mage": {
+"enemy_path": "res://enemies/dark_minion_mage.tres",
+"kind": "enemy",
+"name_en": "Dark Minion Mage",
+"name_zh": "黑暗爪牙。法"
+},
 "enemy_dark_minion_sword": {
 "enemy_path": "res://enemies/dark_minion_warrior.tres",
 "kind": "enemy",
@@ -121,45 +188,47 @@ cast_profiles = {
 }
 }
 background = ExtResource("8_church_bg")
-initial_music = ExtResource("9_music")
+initial_music = ExtResource("6_8idvt")
 
-[sub_resource type="Resource" id="Resource_57o8d"]
+[sub_resource type="Resource" id="Resource_ti8aa"]
 script = ExtResource("7_y33w2")
 enemy = ExtResource("6_57o8d")
-level = 30
+level = 7
 hp_percent = 1475
 
-[sub_resource type="Resource" id="Resource_y33w2"]
+[sub_resource type="Resource" id="Resource_b6rcx"]
 script = ExtResource("7_y33w2")
 enemy = ExtResource("9_8idvt")
+level = 6
 hp_percent = 1700
 
 [sub_resource type="Resource" id="Resource_enq8n"]
 script = ExtResource("6_y33w2")
 item_type = 1
 
-[sub_resource type="Resource" id="Resource_8idvt"]
+[sub_resource type="Resource" id="Resource_2t3td"]
 script = ExtResource("7_y33w2")
 enemy = ExtResource("10_enq8n")
 hp_percent = 1500
 stage_extra_loot_table = Array[ExtResource("6_y33w2")]([SubResource("Resource_enq8n")])
 
-[sub_resource type="Resource" id="Resource_w6yip"]
+[sub_resource type="Resource" id="Resource_khfjv"]
 script = ExtResource("7_y33w2")
 enemy = ExtResource("11_w6yip")
 level = 5
 hp_percent = 1350
+main_boss = true
 
-[sub_resource type="Resource" id="Resource_kqu2e"]
+[sub_resource type="Resource" id="Resource_sqgqf"]
 script = ExtResource("7_y33w2")
 enemy = ExtResource("10_enq8n")
 level = 5
 hp_percent = 1500
 
-[sub_resource type="Resource" id="Resource_ssn5h"]
+[sub_resource type="Resource" id="Resource_vuai2"]
 script = ExtResource("3_dseq")
 
-[sub_resource type="Resource" id="Resource_ihorc"]
+[sub_resource type="Resource" id="Resource_tmoib"]
 script = ExtResource("3_dseq")
 
 [resource]
@@ -167,20 +236,18 @@ script = ExtResource("1_script")
 stage_id = "1-3"
 prerequisite_stage_id = "1-2"
 connects_to = Array[String](["1-4"])
-map_position = Vector2(322, 598)
-stage_name = "Stage 1-3 Sanctuary Ambush"
+map_position = Vector2(376.594, 393.01993)
+stage_name = "Stage 1-3 聖所埋伏戰"
 element_weights = Array[int]([1, 1, 1, 1])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "church"
 battle_music_override_path = "res://assets/music/Wolf Banner Clash.mp3"
 one_time_reward_item_type = 1
 one_time_reward_item_amount = 1
-one_time_reward_character = ExtResource("1_57o8d")
-rounds = Array[Array]([[SubResource("Resource_57o8d"), SubResource("Resource_y33w2"), SubResource("Resource_8idvt")], [SubResource("Resource_w6yip"), SubResource("Resource_kqu2e")]])
+rounds = Array[Array]([[SubResource("Resource_ti8aa"), SubResource("Resource_b6rcx"), SubResource("Resource_2t3td")], [SubResource("Resource_khfjv"), SubResource("Resource_sqgqf")]])
 pre_dialog = SubResource("pre_dialog")
 post_dialog = SubResource("post_dialog")
-start_stage_dialog = SubResource("Resource_ssn5h")
-start_round_dialogs = Array[ExtResource("3_dseq")]([SubResource("Resource_ssn5h"), SubResource("Resource_ihorc")])
-start_stage_tutorial_page_ids = Array[String](["1_3_tutorial_1"])
+start_stage_dialog = SubResource("Resource_vuai2")
+start_round_dialogs = Array[ExtResource("3_dseq")]([SubResource("Resource_vuai2"), SubResource("Resource_tmoib")])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

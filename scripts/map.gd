@@ -87,7 +87,7 @@ func _ready() -> void:
 	_show_page(Page.MAP)
 	_refresh_stage_buttons(GameState.consume_map_unlock_pop_source_stage_id())
 
-	GameState.play_bgm(load("res://assets/music/mhr_quest.mp3"), true, "map")
+	GameState.play_bgm(load("res://assets/music/Crossroads Waltz.mp3"), true, "map")
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_build_portrait_debug_btn()
 	_build_dev_mode_label()

@@ -24,7 +24,7 @@ static func apply(host: Control, entries: Array, sort_mode: int, columns: int = 
 		var card: Control = e.card
 		if card.get_parent() != null:
 			card.get_parent().remove_child(card)
-		_set_metric_badge(card, e.c, sort_mode)
+		_set_metric_badge(card, e, sort_mode)
 
 	# 2) 清空 host 現有內容
 	for child in host.get_children():
@@ -162,7 +162,8 @@ static func _build_grouped_layout(host: Control, sorted_entries: Array[Dictionar
 
 # ── 內部：指標徽章（底部左）──────────────────────────────
 
-static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> void:
+static func _set_metric_badge(card: Control, entry: Dictionary, mode: int) -> void:
+	var c: CharacterData = entry.c
 	# 尋找或建立 overlay
 	var overlay: Control = null
 	if card.has_meta("_metric_overlay"):
@@ -195,9 +196,11 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 
 	var text: String = ""
 	var icon_path: String = ""
+	var text_color: Color = Color.WHITE
 	match mode:
 		CharacterSorterRef.Mode.LEVEL:
-			text = "Lv. %d" % c.level
+			text = "Lv. %d" % int(entry.get("display_level", c.level))
+			text_color = entry.get("level_color", Color.WHITE) as Color
 		CharacterSorterRef.Mode.ATK:
 			text = "%d" % c.get_atk()
 			icon_path = ATK_ICON_PATH
@@ -228,7 +231,7 @@ static func _set_metric_badge(card: Control, c: CharacterData, mode: int) -> voi
 	if font != null:
 		lbl.add_theme_font_override("font", font)
 	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", Color.WHITE)
+	lbl.add_theme_color_override("font_color", text_color)
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	lbl.add_theme_constant_override("outline_size", 3)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE

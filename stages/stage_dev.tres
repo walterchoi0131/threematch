@@ -1,25 +1,25 @@
-[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://co6fa34f1bg44"]
+[gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="AudioStream" uid="uid://dee447dk6xl0b" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
-[ext_resource type="Script" uid="uid://os1213yie2uy" path="res://scripts/stage_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://c1p5d48fcifmf" path="res://assets/dialog_background/dialog_bg_bedroom.png" id="2_fsca4"]
-[ext_resource type="Script" uid="uid://p0xuoqfdtl53" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
+[ext_resource type="AudioStream" path="res://assets/music/Final Fantasy Crystal Chronicles Ring of Fates  Mog's Private Teachings.mp3" id="1_lvgyu"]
+[ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_bedroom.png" id="2_fsca4"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_6yv1j"]
 [ext_resource type="AudioStream" path="res://assets/music/Lantern Square.ogg" id="3_vmepe"]
-[ext_resource type="Texture2D" uid="uid://bi2seucruxr6u" path="res://assets/dialog_background/dialog_bg_classroom.png" id="5_fjo77"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="5_loot"]
-[ext_resource type="Script" uid="uid://dn432v3sxicm3" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
-[ext_resource type="Script" uid="uid://gll61m3xkgh3" path="res://scripts/character_data.gd" id="7_jsm3v"]
-[ext_resource type="Script" uid="uid://die3wh2nhhigk" path="res://scripts/stage_enemy_entry.gd" id="11_o6cdy"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_classroom.png" id="5_fjo77"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="5_loot"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_vmepe"]
+[ext_resource type="Script" path="res://scripts/character_data.gd" id="7_jsm3v"]
+[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="11_o6cdy"]
 [ext_resource type="Resource" path="res://characters/char_dragon.tres" id="13_7x61u"]
 [ext_resource type="Resource" path="res://characters/char_shark.tres" id="14_epvkr"]
 [ext_resource type="Resource" path="res://characters/char_panda.tres" id="15_wrajf"]
-[ext_resource type="Script" uid="uid://cmuy2cviws01p" path="res://scripts/start_stage_tutorial_page.gd" id="18_7x61u"]
-[ext_resource type="Resource" uid="uid://ci0l0jxljv2bh" path="res://enemies/slime_fire.tres" id="19_slime_fire"]
-[ext_resource type="Resource" uid="uid://dudqil7ardyq8" path="res://enemies/slime_water.tres" id="20_slime_water"]
-[ext_resource type="Resource" uid="uid://chwdh4f1bsod8" path="res://enemies/slime_leaf.tres" id="21_slime_leaf"]
-[ext_resource type="Resource" uid="uid://bwpp1rrepwxkg" path="res://enemies/slime_light.tres" id="22_slime_light"]
-[ext_resource type="Resource" uid="uid://c3wxflg23akwx" path="res://enemies/slime_dark.tres" id="23_slime_dark"]
-[ext_resource type="Resource" uid="uid://b6q31ryctwtxh" path="res://enemies/slime_water_big.tres" id="24_slime_water_big"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="18_7x61u"]
+[ext_resource type="Resource" path="res://enemies/slime_fire.tres" id="19_slime_fire"]
+[ext_resource type="Resource" path="res://enemies/slime_water.tres" id="20_slime_water"]
+[ext_resource type="Resource" path="res://enemies/slime_leaf.tres" id="21_slime_leaf"]
+[ext_resource type="Resource" path="res://enemies/slime_light.tres" id="22_slime_light"]
+[ext_resource type="Resource" path="res://enemies/slime_dark.tres" id="23_slime_dark"]
+[ext_resource type="Resource" path="res://enemies/slime_water_big.tres" id="24_slime_water_big"]
 
 [sub_resource type="Resource" id="Resource_stage1_intro_morning"]
 script = ExtResource("3_6yv1j")
@@ -187,71 +187,81 @@ cast = Array[String](["dragon", "shark", "panda", "husky"])
 background = ExtResource("2_fsca4")
 initial_music = ExtResource("3_vmepe")
 
-[sub_resource type="Resource" id="Resource_5oni6"]
+[sub_resource type="Resource" id="Resource_piard"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("19_slime_fire")
 level = 3
 hp_percent = 800
 
-[sub_resource type="Resource" id="Resource_f0mht"]
+[sub_resource type="Resource" id="Resource_5oni6"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("20_slime_water")
 level = 3
 hp_percent = 900
 
-[sub_resource type="Resource" id="Resource_pqxqm"]
+[sub_resource type="Resource" id="Resource_et6yt"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("21_slime_leaf")
 level = 3
 hp_percent = 900
 
-[sub_resource type="Resource" id="Resource_yi8km"]
+[sub_resource type="Resource" id="Resource_f0mht"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("22_slime_light")
 level = 3
 hp_percent = 1000
 init_cd = 2
 
-[sub_resource type="Resource" id="Resource_xmigc"]
+[sub_resource type="Resource" id="Resource_4g8bb"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("23_slime_dark")
 level = 3
 hp_percent = 1000
 init_cd = 3
 
-[sub_resource type="Resource" id="Resource_033xj"]
+[sub_resource type="Resource" id="Resource_pqxqm"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("20_slime_water")
 level = 3
 hp_percent = 1000
 init_cd = 1
 
-[sub_resource type="Resource" id="Resource_ubk7d"]
+[sub_resource type="Resource" id="Resource_fitqk"]
 script = ExtResource("11_o6cdy")
 enemy = ExtResource("24_slime_water_big")
 level = 4
 hp_percent = 4000
 main_boss = true
 
-[sub_resource type="Resource" id="Resource_k41va"]
+[sub_resource type="Resource" id="Resource_yi8km"]
+script = ExtResource("5_vmepe")
+
+[sub_resource type="Resource" id="Resource_qfcwp"]
+script = ExtResource("5_vmepe")
+
+[sub_resource type="Resource" id="Resource_xmigc"]
+script = ExtResource("5_vmepe")
+
+[sub_resource type="Resource" id="Resource_yj5ux"]
 script = ExtResource("5_vmepe")
 
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-1"
 connects_to = Array[String](["1-2"])
-map_position = Vector2(231, 564)
+map_position = Vector2(317.06616, 521.59033)
 stage_name = "1-1 畢業測驗"
 element_weights = Array[int]([1, 1, 1, 1])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "school"
-battle_music_override_path = "res://assets/music/Lantern Gate.ogg"
-rounds = Array[Array]([[SubResource("Resource_5oni6")], [SubResource("Resource_f0mht"), SubResource("Resource_pqxqm")], [SubResource("Resource_yi8km"), SubResource("Resource_xmigc"), SubResource("Resource_033xj")], [SubResource("Resource_ubk7d")]])
+battle_music_override_path = "res://assets/music/Rune Academy Duel.mp3"
+rounds = Array[Array]([[SubResource("Resource_piard")], [SubResource("Resource_5oni6"), SubResource("Resource_et6yt")], [SubResource("Resource_f0mht"), SubResource("Resource_4g8bb"), SubResource("Resource_pqxqm")], [SubResource("Resource_fitqk")]])
 rounds_init_cd = Array[Array]([[], [], [2, 3, 1], []])
 background = 1
 bgm = ExtResource("1_lvgyu")
 pre_dialog = SubResource("Resource_stage1_intro_new")
-start_stage_dialog = SubResource("Resource_k41va")
+start_stage_dialog = SubResource("Resource_yi8km")
+start_round_dialogs = Array[ExtResource("5_vmepe")]([SubResource("Resource_yi8km"), SubResource("Resource_qfcwp"), SubResource("Resource_xmigc"), SubResource("Resource_yj5ux")])
 is_tutorial = true
 set_party = Array[ExtResource("7_jsm3v")]([ExtResource("13_7x61u"), ExtResource("14_epvkr"), ExtResource("15_wrajf")])
 fixed_layout = [[0, 0, 0, 0, 0, 0, 0, 6], [1, 1, 6, 6, 6, 6, 0, 6], [1, 1, 6, 6, 2, 0, 0, 6], [1, 6, 1, 6, 0, 0, 1, 0], [2, 1, 1, 1, 2, 2, 6, 1], [2, 1, 1, 6, 2, 1, 6, 6], [6, 1, 6, 6, 0, 0, 6, 6], [6, 2, 2, 6, 6, 6, 6, 2]]

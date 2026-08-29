@@ -36,12 +36,10 @@ const DEFAULT_CHARACTER_LEVEL := 5
 const DEFAULT_CHARACTER_EXP := 0
 const GOLD_ECONOMIC_MULTIPLIER := 50
 const DEFAULT_CHARACTER_PATHS := [
-	"res://characters/char_boar.tres",
 	"res://characters/char_raccoon.tres",
 	"res://characters/char_fox.tres",
 	"res://characters/char_husky.tres",
 	"res://characters/char_panda.tres",
-	"res://characters/char_polar.tres",
 	"res://characters/char_polarz.tres",
 	"res://characters/char_shark.tres",
 	"res://characters/char_dragon.tres",
@@ -53,6 +51,10 @@ const DEFAULT_CHARACTER_PATHS := [
 	"res://characters/char_boarz.tres",
 	"res://characters/char_giz.tres",
 ]
+const REMOVED_CHARACTER_PATHS := {
+	"res://characters/char_boar.tres": true,
+	"res://characters/char_polar.tres": true,
+}
 const STARTING_CHARACTER_PATHS := [
 	"res://characters/char_dragon.tres",
 	"res://characters/char_panda.tres",
@@ -61,6 +63,8 @@ const STARTING_CHARACTER_PATHS := [
 
 var selected_stage: StageData = null           # 當前選擇的關卡
 var selected_party: Array[CharacterData] = []  # 當前選擇的隊伍
+var battle_strength_adjustment_enabled: bool = false
+var battle_strength_adjustment_level: int = 0
 var detail_character: CharacterData = null      # 要查看詳細資訊的角色
 var stage_edit_mode: bool = false               # 以棋盤編輯模式進入 main.tscn（不持久化）
 var dev_mode: bool = false
@@ -153,7 +157,8 @@ const _BGM_SILENT_VOLUME_DB := -40.0
 const RUNTIME_PREWARM_CACHE_LIMIT := 24
 const _LOADING_FONT := preload("res://assets/fonts/game_ui_font.tres")
 const LOADING_FADE_DURATION := 0.28
-const LOADING_BOUNCE_INTERVAL := 0.5
+const LOADING_BOUNCE_INTERVAL := 0.2
+const LOADING_BOUNCE_DURATION := 1.0
 const LOADING_TEXT := "Loading"
 const LOADING_LETTER_WIDTH := 34.0
 const _DIALOG_CHAR_ID_ALIAS := {
@@ -403,9 +408,9 @@ func _run_loading_bounce_loop(serial: int) -> void:
 			if is_instance_valid(slot):
 				var home_y: float = float(slot.get_meta("loading_home_y", slot.position.y))
 				var bounce := create_tween()
-				bounce.tween_property(slot, "position:y", home_y - 14.0, 0.14) \
+				bounce.tween_property(slot, "position:y", home_y - 14.0, LOADING_BOUNCE_DURATION * 0.4) \
 					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-				bounce.tween_property(slot, "position:y", home_y, 0.20) \
+				bounce.tween_property(slot, "position:y", home_y, LOADING_BOUNCE_DURATION * 0.6) \
 					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BOUNCE)
 			await get_tree().create_timer(LOADING_BOUNCE_INTERVAL).timeout
 
@@ -522,9 +527,9 @@ func fade_in_if_pending(duration: float = 0.45) -> void:
 ## 內部：建立 AudioStreamPlayer（必要時複製並設定 loop）
 func _make_bgm_player(stream: AudioStream, loop: bool) -> AudioStreamPlayer:
 	var player := AudioStreamPlayer.new()
-	if loop and stream is AudioStreamMP3:
+	if stream is AudioStreamMP3:
 		var dup: AudioStreamMP3 = (stream as AudioStreamMP3).duplicate() as AudioStreamMP3
-		dup.loop = true
+		dup.loop = loop
 		player.stream = dup
 	else:
 		player.stream = stream
@@ -839,7 +844,7 @@ func _deserialize(d: Dictionary, save_version: int = SAVE_VERSION) -> void:
 			xp = int(entry.get("exp", -1))
 		else:
 			path = str(entry)
-		if path == "":
+		if path == "" or REMOVED_CHARACTER_PATHS.has(path):
 			continue
 		var res: Resource = load(path)
 		if res is CharacterData:
@@ -883,7 +888,7 @@ func _deserialize(d: Dictionary, save_version: int = SAVE_VERSION) -> void:
 	last_used_party_paths.clear()
 	for p in d.get("last_used_party", []):
 		var s := str(p)
-		if s != "":
+		if s != "" and not REMOVED_CHARACTER_PATHS.has(s):
 			last_used_party_paths.append(s)
 
 

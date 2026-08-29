@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cm4ef4ymhn42k"
-path="res://.godot/imported/polar.png-8c05b3cda8f3176d0bcc847545023817.ctex"
+uid="uid://byh0h6xsdsjpe"
+path="res://.godot/imported/green_burst.png-f126c34d43499c01d4afae3e2a4a9f5c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/polar.png"
-dest_files=["res://.godot/imported/polar.png-8c05b3cda8f3176d0bcc847545023817.ctex"]
+source_file="res://assets/vfx/green_burst.png"
+dest_files=["res://.godot/imported/green_burst.png-f126c34d43499c01d4afae3e2a4a9f5c.ctex"]
 
 [params]
 

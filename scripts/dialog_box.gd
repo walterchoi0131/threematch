@@ -59,9 +59,7 @@ const FONT_PATH := "res://assets/fonts/game_ui_font.tres"
 const CHAR_NAME_COLORS := {
 	"husky":   Color(1.0, 0.92, 0.5),
 	"fox":     Color(1.0, 0.55, 0.35),
-	"polar":   Color(0.6, 0.82, 1.0),
 	"raccoon": Color(0.55, 0.9, 0.5),
-	"boar":    Color(0.45, 0.7, 1.0),
 	"panda":   Color(0.55, 0.9, 0.5),
 	"dragon":  Color(1.0, 0.45, 0.3),
 	"shark":   Color(0.4, 0.85, 1.0),
@@ -718,10 +716,12 @@ func _show_line(line: _DialogLine) -> void:
 	var char_id: String = line.character_id
 	_play_line_sound_effect(line)
 	var side: String = _normalize_dialog_side(line.position)
-	if line.stop_music:
-		_fade_out_dialog_bgm()
-	elif line.music != null:
-		_change_bgm(line.music)
+	var is_music_event: bool = line.action == "switch_bg" or line.action == "switch_bgm"
+	if is_music_event:
+		if line.stop_music:
+			_fade_out_dialog_bgm()
+		elif line.music != null:
+			_change_bgm(line.music)
 
 	# ── 音樂切換 ──
 	if line.action == "switch_bg":

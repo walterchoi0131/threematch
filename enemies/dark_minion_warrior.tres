@@ -1,8 +1,8 @@
-[gd_resource type="Resource" script_class="EnemyData" format=3 uid="uid://b80vwgwxa8r8s"]
+[gd_resource type="Resource" script_class="EnemyData" format=3]
 
-[ext_resource type="Script" uid="uid://ben0r714icod7" path="res://scripts/enemy_data.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://eg7wxms24oe1" path="res://assets/enemy/dark_minion_warrior.png" id="2_texture"]
-[ext_resource type="Script" uid="uid://ddcvay3vg6vge" path="res://scripts/loot_item.gd" id="3_loot_script"]
+[ext_resource type="Script" path="res://scripts/enemy_data.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/enemy/dark_minion_warrior.png" id="2_texture"]
+[ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_loot_script"]
 
 [sub_resource type="Resource" id="gold_drop"]
 script = ExtResource("3_loot_script")
@@ -21,7 +21,7 @@ action_counts = Array[int]([3, 3])
 portrait_color = Color(0.3, 0.2, 0.45, 1)
 portrait_texture = ExtResource("2_texture")
 info_popup_offset = Vector2(-6.0759583, 78.98578)
-dialog_phase_scale = 0.61
-dialog_phase_offset = Vector2(6.085452, -0.00012302399)
+dialog_phase_scale = 0.9400000000000001
+dialog_phase_offset = Vector2(-0.337368, 66.82727)
 element = 7
 loot_table = Array[ExtResource("3_loot_script")]([SubResource("gold_drop")])

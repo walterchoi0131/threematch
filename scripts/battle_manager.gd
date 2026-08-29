@@ -428,14 +428,6 @@ func get_enemy_damage_after_passives(enemy: Enemy, raw_damage: int) -> int:
 	return raw_damage
 
 
-## 取得野豬「飲水」被動的治療量（傷害的 50%）
-func get_heal_amount(char_index: int, damage: int) -> int:
-	var c := characters[char_index]
-	if c.passive_skill_name == "Drinking":
-		return int(floor(damage * 0.5))
-	return 0
-
-
 ## 回復玩家血量
 func apply_heal(amount: int) -> void:
 	if amount <= 0:

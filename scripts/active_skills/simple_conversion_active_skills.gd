@@ -12,15 +12,10 @@ func _init(main_context: Node) -> void:
 
 
 func register(registry: ActiveSkillResolverRegistry) -> void:
-	registry.register("Attack Form", Callable(self, "resolve_attack_form"))
 	registry.register("Green to Fire", Callable(self, "resolve_green_to_fire"))
 	registry.register("Kindling Blaze", Callable(self, "resolve_kindling_blaze"))
 	registry.register("Tranquil Mirror", Callable(self, "resolve_tranquil_mirror"))
 	registry.register("Light Energy Transfer", Callable(self, "resolve_light_energy_transfer"))
-
-
-func resolve_attack_form(char_index: int, character: CharacterData) -> void:
-	await _resolve_convert_all(char_index, character, "Attack Form", Block.Type.RED, Block.Type.BLUE, Block.Type.BLUE)
 
 
 func resolve_green_to_fire(char_index: int, character: CharacterData) -> void:

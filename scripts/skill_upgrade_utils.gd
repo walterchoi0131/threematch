@@ -5,13 +5,21 @@ const KIND_ACTIVE := "active"
 const KIND_RESPONDING := "responding"
 const COST_ITEM_TYPE: ItemDefs.Type = ItemDefs.Type.SAPPHIRE
 const COST_ITEM_AMOUNT: int = 1
+const BATTLE_SOURCE_PATH_META := "battle_strength_source_path"
+
+
+static func _character_identity_path(character: CharacterData) -> String:
+	if character == null:
+		return ""
+	var source_path := String(character.get_meta(BATTLE_SOURCE_PATH_META, "")).strip_edges()
+	return source_path if not source_path.is_empty() else character.resource_path
 
 
 static func get_skill_key(character: CharacterData, kind: String, skill_index: int = 0) -> String:
 	if character == null:
 		return ""
 	if kind == KIND_ACTIVE:
-		var path: String = character.resource_path
+		var path: String = _character_identity_path(character)
 		if path == "":
 			path = character.character_name
 		return "%s|%s|%d|%s" % [path, kind, skill_index, character.active_skill_name]
@@ -37,7 +45,7 @@ static func canonical_responding_upgrade_upper_type(upper_type: Block.UpperType)
 static func get_legacy_skill_key(character: CharacterData, kind: String, skill_index: int = 0) -> String:
 	if character == null:
 		return ""
-	var path: String = character.resource_path
+	var path: String = _character_identity_path(character)
 	if path == "":
 		path = character.character_name
 	var skill_name: String = ""

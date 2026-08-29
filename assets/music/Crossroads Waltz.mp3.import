@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://b333kn7s7y121"
+path="res://.godot/imported/Crossroads Waltz.mp3-e07d6ea26de74dba9894d6918c81cb40.mp3str"
+
+[deps]
+
+source_file="res://assets/music/Crossroads Waltz.mp3"
+dest_files=["res://.godot/imported/Crossroads Waltz.mp3-e07d6ea26de74dba9894d6918c81cb40.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

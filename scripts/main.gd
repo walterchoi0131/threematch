@@ -4,7 +4,6 @@ const ProjectileScript := preload("res://scripts/projectile.gd")
 const GemParticleScript := preload("res://scripts/gem_particle.gd")
 const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const HammerKnockVfxScript := preload("res://scripts/hammer_knock_vfx.gd")
-const SlashEffectScript := preload("res://scripts/slash_effect.gd")
 const LeafRayLaserVfxScript := preload("res://scripts/leaf_ray_laser_vfx.gd")
 const DamageNumberScript := preload("res://scripts/damage_number.gd")
 const BulletProjectileScript := preload("res://scripts/bullet_projectile.gd")
@@ -16,6 +15,7 @@ const BattleVfx3DLayerScript := preload("res://scripts/battle_vfx_3d_layer.gd")
 const ActiveSkillResolverRegistryScript := preload("res://scripts/active_skill_resolver_registry.gd")
 const SimpleConversionActiveSkillsScript := preload("res://scripts/active_skills/simple_conversion_active_skills.gd")
 const EmeraldTowerActiveSkillsScript := preload("res://scripts/active_skills/emerald_tower_active_skills.gd")
+const VICTORY_RESULT_MUSIC := preload("res://assets/music/Clockwork Lesson.mp3")
 const _BattleDialog := preload("res://scripts/battle_dialog.gd")
 const _TutorialManager := preload("res://scripts/tutorial_manager.gd")
 const _Stage1Tutorial := preload("res://dialogs/stage1_tutorial.gd")
@@ -128,18 +128,18 @@ const _PLANK_EVENT_DISTANCE := 200
 const _Stage1_4Emergency := preload("res://dialogs/stage1_4_emergency.gd")
 const _Stage1_3Owen := preload("res://dialogs/stage1_3_owen.gd")
 const OWEN_STORY_STAGE_ID := "1-4"
+const BATTLE_STRENGTH_SOURCE_META := "battle_strength_source_character"
+const BATTLE_STRENGTH_SOURCE_PATH_META := "battle_strength_source_path"
 const ESCAPE_PLANK_STAGE_ID := "1-5"
 
 ## 主動技能完整執行完成信號（供外部事件 await 完成狀態使用）
 signal active_skill_finished(char_index: int)
 
 # ── game data ─────────────────────────────────────────────────────────
-const CHAR_BOAR := preload("res://characters/char_boar.tres")
 const CHAR_RACCOON := preload("res://characters/char_raccoon.tres")
 const CHAR_PANDA := preload("res://characters/char_panda.tres")
 const CHAR_FOX := preload("res://characters/char_fox.tres")
 const CHAR_HUSKY := preload("res://characters/char_husky.tres")
-const CHAR_POLAR := preload("res://characters/char_polar.tres")
 const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
@@ -155,6 +155,7 @@ const EMERALD_TOWER_MAGIC_MULT := 7
 const EMERALD_TOWER_CONVERT_COUNT := 3
 const LIGHT_TRIANGLE_MAGIC_MULT := 6
 const LIGHT_TRIANGLE_DEBRIS_SHARDS := 9
+const MILO_ACTIVE_SPRITE_ANIMATION_ENABLED := false
 const COMBO_UI_MARGIN := Vector2(28.0, 92.0)
 const COMBO_UI_SLOT_GAP := 142.0
 const COMBO_UI_VALUE_OFFSET_Y := 20.0
@@ -496,6 +497,7 @@ func _ready() -> void:
 		_stage13_result_party = party.duplicate()
 		party = [CHAR_HUSKY]
 		_guest_result_exclusions[CHAR_HUSKY] = true
+	party = _make_strength_adjusted_party(party)
 
 	if GameState.stage_edit_mode:
 		call_deferred("_setup_stage_edit_mode")
@@ -595,6 +597,28 @@ func _ready() -> void:
 
 	call_deferred("_prewarm_gold_coin_renderer")
 	_play_stage_intro()
+
+
+func _make_strength_adjusted_party(source_party: Array[CharacterData]) -> Array[CharacterData]:
+	if GameState.stage_edit_mode or not GameState.battle_strength_adjustment_enabled:
+		return source_party
+	var target_level := clampi(GameState.battle_strength_adjustment_level, 1, 99)
+	if GameState.battle_strength_adjustment_level <= 0:
+		return source_party
+	var adjusted_party: Array[CharacterData] = []
+	for source_character: CharacterData in source_party:
+		if source_character == null:
+			continue
+		var adjusted_character: CharacterData = source_character.duplicate(false) as CharacterData
+		if adjusted_character == null:
+			adjusted_party.append(source_character)
+			continue
+		adjusted_character.level = target_level
+		adjusted_character.current_exp = source_character.current_exp
+		adjusted_character.set_meta(BATTLE_STRENGTH_SOURCE_META, source_character)
+		adjusted_character.set_meta(BATTLE_STRENGTH_SOURCE_PATH_META, source_character.resource_path)
+		adjusted_party.append(adjusted_character)
+	return adjusted_party
 
 
 ## 套用關卡地區背景圖片。
@@ -3165,11 +3189,44 @@ func _on_stage_editor_dialog_music_selected(_item_index: int) -> void:
 	var sequence: DialogSequence = _stage_editor_active_dialog_sequence()
 	if sequence == null:
 		return
+	_stage_editor_clear_hidden_opening_music_override(sequence)
 	var resource_path: String = _stage_editor_get_option_value(_stage_editor_dialog_music_option)
 	if resource_path.is_empty():
 		sequence.initial_music = null
 		return
 	sequence.initial_music = load(resource_path) as AudioStream
+
+
+func _stage_editor_clear_hidden_opening_music_override(sequence: DialogSequence) -> void:
+	if sequence == null or sequence.lines.is_empty():
+		return
+	var first_line: DialogLine = sequence.lines[0]
+	_stage_editor_clear_hidden_line_music_override(first_line)
+
+
+func _stage_editor_clear_hidden_line_music_override(line: DialogLine) -> void:
+	if line == null or line.action == "switch_bg" or line.action == "switch_bgm":
+		return
+	line.music = null
+	line.stop_music = false
+
+
+func _stage_editor_sanitize_dialog_music_commands() -> void:
+	if current_stage == null:
+		return
+	var sequences: Array[DialogSequence] = []
+	if current_stage.pre_dialog != null:
+		sequences.append(current_stage.pre_dialog)
+	if current_stage.post_dialog != null:
+		sequences.append(current_stage.post_dialog)
+	if current_stage.start_stage_dialog != null:
+		sequences.append(current_stage.start_stage_dialog)
+	for sequence: DialogSequence in current_stage.start_round_dialogs:
+		if sequence != null and not sequences.has(sequence):
+			sequences.append(sequence)
+	for sequence: DialogSequence in sequences:
+		for line: DialogLine in sequence.lines:
+			_stage_editor_clear_hidden_line_music_override(line)
 
 
 func _on_stage_editor_dialog_add_switch_bg_selected(_item_index: int, option: OptionButton) -> void:
@@ -5700,6 +5757,7 @@ func _on_stage_editor_save_pressed() -> void:
 	current_stage.start_round_dialogs = _stage_editor_get_start_round_dialogs_snapshot()
 	current_stage.start_stage_dialog = current_stage.start_round_dialogs[0] if not current_stage.start_round_dialogs.is_empty() else null
 	_stage_editor_ensure_start_tutorial_pages()
+	_stage_editor_sanitize_dialog_music_commands()
 	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
 	if err == OK:
 		var file_name: String = current_stage.resource_path.get_file()
@@ -6282,7 +6340,8 @@ func _get_battle_result_party() -> Array[CharacterData]:
 			continue
 		if _guest_result_exclusions.has(c):
 			continue
-		result.append(c)
+		var source_character: CharacterData = c.get_meta(BATTLE_STRENGTH_SOURCE_META, null) as CharacterData
+		result.append(source_character if source_character != null else c)
 	return result
 
 
@@ -7464,7 +7523,7 @@ func _add_log_entry(bbcode_text: String, gem_type: Block.Type = Block.Type.RED, 
 
 	# Layer 2: 角色肖像裁切（只顯示眼部區域，0.1 縮放 + 半透明）
 	# 裁切參數說明：region = Rect2(x起始%, y起始%, 寬度%, 高度%)
-	#   Boar 眼部約在圖片 15%~35% 高度；Raccoon 約 18%~32%；Fox 約 20%~38%
+	#   Raccoon 眼部約在圖片 18%~32% 高度；Fox 約 20%~38%
 	#   若需調整，修改下方 eye_y (Y起始比例) 和 eye_h (高度比例)
 	if char_data != null and char_data.portrait_texture != null:
 		var portrait := TextureRect.new()
@@ -7665,22 +7724,24 @@ func _acquire_particle(pool_limit: int = MAX_VFX_PARTICLES) -> Node2D:
 ##   anim_frames_dir: String    逐格圖片資料夾；有值時優先使用 spritesheet/frames 播放
 ##   anim_offset: Vector2       相對於 board 左下角的位移（正值往右下）
 ##   anim_seek_sec: float       影片內起始秒數（seek 之後才 play）
-##   anim_duration_sec: float   播放時長（0 = 等待影片自然結束；fallback 時用作等待秒數）
+##   anim_duration_sec: float   完整播放時長（0 = 依原始速度自然結束；fallback 時用作等待秒數）
 ##   anim_size: Vector2         顯示尺寸（Vector2.ZERO = 用影片原寸）
 func _get_active_skill_anim_params(c: CharacterData) -> Variant:
 	if c == null:
 		return null
 	match c.active_skill_name:
 		"Dragon Flame Domain":
+			if not MILO_ACTIVE_SPRITE_ANIMATION_ENABLED:
+				return null
 			return {
 				"anim_frames_dir": "res://assets/animation/meteror",
-				"anim_offset": Vector2(-200.0, -50.0),
+				"anim_offset": Vector2(-190.0, -20.0),
 				"anim_seek_sec": 1.0,
-				"anim_duration_sec": 0.0,
+				"anim_duration_sec": 1.5,
 				"anim_size": Vector2.ZERO,
 				"anim_scale": 0.5,
-				"anim_playback_speed": 1.5,
-				"anim_frame_rate": 24.0,
+				"anim_playback_speed": 1.0,
+				"anim_frame_rate": 12.0,
 			}
 	return null
 
@@ -7728,13 +7789,14 @@ func _play_skill_animation_phase(params: Variant) -> void:
 			sprite.scale = Vector2(anim_scale, anim_scale)
 			sprite.position = anchor_global - Vector2(0.0, float(frames_textures[0].get_height()) * anim_scale)
 			sprite.z_index = 50
-			sprite.speed_scale = anim_playback_speed
+			var sprite_speed: float = anim_playback_speed
+			if anim_duration > 0.0:
+				var natural_duration: float = float(frames_textures.size()) / maxf(anim_frame_rate, 0.01)
+				sprite_speed = natural_duration / anim_duration
+			sprite.speed_scale = sprite_speed
 			fx_layer.add_child(sprite)
 			sprite.play("play")
-			if anim_duration > 0.0:
-				await get_tree().create_timer(anim_duration / max(0.01, anim_playback_speed)).timeout
-			else:
-				await sprite.animation_finished
+			await sprite.animation_finished
 			if is_instance_valid(sprite):
 				sprite.stop()
 				sprite.queue_free()
@@ -9052,10 +9114,6 @@ func _process_blast_results(blasted_by_type: Dictionary, blast_positions: Dictio
 		for attack in attacks:
 			var chain_mult: float = 1.0 + chain_bonus
 			var attack_vfx_duration: float = profile_attack_duration
-			var attack_char_index: int = int(attack.get("char_index", -1))
-			var attack_char: CharacterData = party[attack_char_index] if attack_char_index >= 0 and attack_char_index < party.size() else null
-			if attack_char != null and attack_char.character_name == "Boar":
-				attack_vfx_duration = 0.5
 			max_attack_duration = maxf(max_attack_duration, attack_vfx_duration)
 			attack.damage = int(attack.damage * chain_mult)
 			attack["chain_mult"] = chain_mult
@@ -9275,30 +9333,6 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 
 	# 根據角色類型播放不同的攻擊特效
 	match char_data.character_name:
-		"Boar":  # 水屬性 — 斬擊特效 + 治療
-			var applied_damage: int = damage
-			if is_instance_valid(target):
-				var slash := Node2D.new()
-				slash.set_script(SlashEffectScript)
-				fx_layer.add_child(slash)
-				var target_pos := _get_enemy_image_center(target)
-				slash.deduct_hp.connect(func():
-					if is_instance_valid(target):
-						applied_damage = _apply_enemy_damage_with_stage13_floor(target, damage, gem_type, hit_power_level)
-						_dev_add_turn_damage(char_index, applied_damage)
-						_spawn_damage_number(_get_enemy_image_center(target), applied_damage, Block.COLORS[gem_type], true, is_super)
-						if bool(vfx_profile.get("shake", false)):
-							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
-					_play_player_attack_impact_sfx(gem_type)
-				, CONNECT_ONE_SHOT)
-				await slash.play(target_pos)
-			_add_log_entry(_format_atk_bbcode(gem_type, gem_count, char_data.get_atk(), applied_damage, 1, mult, chain_mult), gem_type, char_data)
-			# 「飲水」被動：治療傷害的 50%
-			var heal := battle_manager.get_heal_amount(char_index, applied_damage)
-			if heal > 0:
-				battle_manager.apply_heal(heal)
-				character_panel.show_heal_text(char_index, heal)
-			_add_log_entry("%s [b]%s[/b] [color=#44ff88]+%d[/color]" % [_gem_bbcode(gem_type), Locale.tr_ui("Drinking"), heal], gem_type, char_data)
 		## ── 浣熊弓箭攻擊（暫時停用，改走預設攻擊，保留備用）──
 		# "Raccoon":  # 葉屬性 — 每 3 個寶石發射 1 枝箭，每枝隨機攻擊一個存活敵人
 		# 	var arrow_count := ceili(float(gem_count) / 3.0)
@@ -10951,127 +10985,6 @@ func _handle_active_skill(char_index: int) -> void:
 			# 透過通用管線播放 VFX → 攻擊
 			await _process_blast_results(blasted, _upper_blast_positions)
 			await _end_player_turn()
-		"Snowball Fight":
-			# 打雪仗：動員棋盤上所有雪球飛向目標敵人，每顆造成 ATK×10 傷害
-			var snowballs: Array[Vector2i] = board.find_upper_gems(Block.UpperType.SNOWBALL)
-			if snowballs.is_empty():
-				return
-			_use_active_skill_and_show_loot_toast(char_index)
-			board.is_busy = true
-			var polar_atk := c.get_atk()
-			var snowball_dmg := polar_atk * 10
-			var snowball_count := snowballs.size()
-			var target: Enemy = battle_manager.targeted_enemy
-			if target == null or not is_instance_valid(target) or target.current_hp <= 0:
-				target = _get_best_target_for_damage(c.gem_type, snowball_dmg, 1.0, _get_current_enemy_hp_sim())
-			if target == null:
-				board.is_busy = false
-				_update_skill_ui()
-				return
-
-			# ── 第 1 階段：逐顆浮起 ──
-			var float_height := 32.0  # 半格高度
-			var sb_blocks: Array[Block] = []
-			var sb_float_tweens: Array[Tween] = []
-			for i in snowball_count:
-				var sb_pos: Vector2i = snowballs[i]
-				var block: Block = board.grid[sb_pos.x][sb_pos.y]
-				if block == null:
-					continue
-				# 從棋盤網格移除但保留節點
-				board.grid[sb_pos.x][sb_pos.y] = null
-				# 記錄全域位置後重新掛載到 FX 層
-				var gpos: Vector2 = block.global_position
-				block.get_parent().remove_child(block)
-				fx_layer.add_child(block)
-				block.global_position = gpos
-				block.z_index = 10
-				sb_blocks.append(block)
-				# 浮起動畫：0.7 秒向上移動 float_height
-				var float_tw := create_tween()
-				float_tw.tween_property(block, "global_position:y", gpos.y - float_height, 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-				await float_tw.finished
-				# 浮起完成後開始循環漂浮
-				var bob_tw := create_tween().set_loops()
-				var bob_base: float = block.global_position.y
-				bob_tw.tween_property(block, "global_position:y", bob_base - 6.0, 0.5).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-				bob_tw.tween_property(block, "global_position:y", bob_base + 6.0, 0.5).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-				sb_float_tweens.append(bob_tw)
-
-			# 啟用延遲死亡
-			for enemy in battle_manager.active_enemies:
-				if is_instance_valid(enemy):
-					enemy.defer_death = true
-
-			# ── 第 2 階段：預計算目標，fire-and-forget 發射 ──
-			var fly_duration := 0.4
-
-			# 預計算每顆雪球的目標與傷害（依序分配存活敵人的 HP）
-			var sim_hp: Dictionary = {}  # enemy -> simulated remaining HP
-			for enemy in battle_manager.active_enemies:
-				if is_instance_valid(enemy):
-					sim_hp[enemy] = enemy.current_hp
-			var sb_targets: Array[Enemy] = []
-			var sb_damages: Array[int] = []
-			var sb_supers: Array[bool] = []
-			for i in sb_blocks.size():
-				# 若目標已被模擬擊殺，切換到下一個
-				if not is_instance_valid(target) or int(sim_hp.get(target, 0)) <= 0:
-					var new_target: Enemy = _get_best_target_for_damage(c.gem_type, snowball_dmg, 1.0, sim_hp)
-					if new_target != null:
-						target = new_target
-				var mult: float = battle_manager.get_element_multiplier(c.gem_type, target.data.element)
-				var final_dmg: int = int(snowball_dmg * mult)
-				sb_targets.append(target)
-				sb_damages.append(final_dmg)
-				sb_supers.append(mult > 1.0)
-				sim_hp[target] = sim_hp.get(target, 0) - final_dmg
-
-			# 逐顆發射（fire-and-forget，不等抵達）
-			for i in sb_blocks.size():
-				var block: Block = sb_blocks[i]
-				if not is_instance_valid(block):
-					continue
-				# 停止漂浮循環
-				if i < sb_float_tweens.size() and sb_float_tweens[i] != null:
-					sb_float_tweens[i].kill()
-				var hit_target: Enemy = sb_targets[i]
-				var hit_dmg: int = sb_damages[i]
-				var hit_super: bool = sb_supers[i]
-				var target_pos: Vector2 = _get_enemy_image_center(hit_target) if is_instance_valid(hit_target) else board.global_position
-				# 飛行動畫（fire-and-forget）
-				var fly_tw := create_tween()
-				fly_tw.set_parallel(true)
-				fly_tw.tween_property(block, "global_position", target_pos, fly_duration).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-				fly_tw.tween_property(block, "scale", Vector2(0.6, 0.6), fly_duration)
-				fly_tw.tween_property(block, "modulate:a", 0.5, fly_duration * 0.8).set_delay(fly_duration * 0.2)
-				# 抵達時造成傷害並銷毀
-				fly_tw.finished.connect(func() -> void:
-					if is_instance_valid(hit_target) and (hit_target.current_hp > 0 or hit_target.defer_death):
-						var applied_dmg: int = hit_target.take_damage(hit_dmg)
-						_spawn_damage_number(_get_enemy_image_center(hit_target), applied_dmg, Block.COLORS[Block.Type.BLUE], true, hit_super)
-						_play_player_attack_impact_sfx(Block.Type.BLUE)
-					if is_instance_valid(block):
-						block.queue_free()
-				)
-				# 0.3 秒後發射下一顆
-				if i < sb_blocks.size() - 1:
-					await get_tree().create_timer(0.3).timeout
-
-			# 等最後一顆雪球抵達
-			await get_tree().create_timer(fly_duration + 0.05).timeout
-
-			# 結算延遲死亡
-			for enemy in battle_manager.active_enemies.duplicate():
-				if is_instance_valid(enemy):
-					enemy.defer_death = false
-					if enemy.current_hp <= 0:
-						enemy.finalize_death()
-			_add_log_entry("[b]打雪仗[/b] %s ×%d ⚔%d = %d" % [_gem_bbcode(Block.Type.BLUE), snowball_count, snowball_dmg, snowball_dmg * snowball_count], Block.Type.BLUE, c)
-			await board._collapse_and_fill()
-			await _end_player_turn()
-
-
 ## 更新技能 UI（冷卻顯示、就緒發光）
 func _update_skill_ui() -> void:
 	for i in party.size():
@@ -11210,7 +11123,58 @@ func _run_auto_enemy_active_skill(enemy: Enemy, auto_character: CharacterData) -
 		return false
 	if auto_character.active_skill_name == "Leaf Spear Call":
 		return await _run_auto_gory_leaf_spear_call(enemy, auto_character)
+	if auto_character.active_skill_name == "希望之光":
+		return await _run_auto_duan_hope_of_light(enemy, auto_character)
 	return false
+
+
+func _run_auto_duan_hope_of_light(enemy: Enemy, auto_character: CharacterData) -> bool:
+	if not _auto_enemy_can_continue(enemy):
+		return false
+	var targets: Array[Vector2i] = _get_random_convertible_cells(Block.Type.LIGHT, 5)
+	if targets.is_empty():
+		return false
+
+	var light_color: Color = Block.COLORS.get(Block.Type.LIGHT, Color(1.0, 0.92, 0.23))
+	var from_pos: Vector2 = _get_enemy_image_center(enemy)
+	var launched := 0
+	for i in targets.size():
+		var target_pos: Vector2i = targets[i]
+		if not board._is_valid(target_pos):
+			continue
+		var target_block: Block = board.grid[target_pos.x][target_pos.y]
+		if target_block == null or target_block.is_obstacle() or target_block.is_upper_gem() or target_block.block_type == Block.Type.LIGHT:
+			continue
+
+		var trail := Node2D.new()
+		trail.set_script(TrailProjectileScript)
+		trail.z_index = 100
+		fx_layer.add_child(trail)
+		var captured_pos: Vector2i = target_pos
+		trail.deduct_hp.connect(func() -> void:
+			if board._is_valid(captured_pos):
+				var block: Block = board.grid[captured_pos.x][captured_pos.y]
+				if block != null and not block.is_obstacle() and not block.is_upper_gem() and block.block_type != Block.Type.LIGHT:
+					board._animate_gem_morph(block, Block.Type.LIGHT)
+			_play_sfx(_se_impact, 0.7)
+		, CONNECT_ONE_SHOT)
+		var spread: float = (float(i) / maxf(float(targets.size() - 1), 1.0)) * 1.4 - 0.7 if targets.size() > 1 else 0.0
+		trail.launch(from_pos, target_block.global_position, light_color, 0.5, spread)
+		launched += 1
+		if i < targets.size() - 1:
+			await get_tree().create_timer(0.06).timeout
+
+	if launched <= 0:
+		return false
+	await get_tree().create_timer(0.5 / TrailProjectileScript.speed_divisor + 0.18).timeout
+	board.resync_logic_from_visual()
+	_add_log_entry("[b]%s[/b] %s：%d→%s" % [
+		enemy.data.get_display_name(),
+		Locale.tr_ui(auto_character.active_skill_name),
+		launched,
+		_gem_bbcode(Block.Type.LIGHT),
+	], Block.Type.LIGHT)
+	return true
 
 
 func _run_auto_gory_leaf_spear_call(enemy: Enemy, auto_character: CharacterData) -> bool:
@@ -14626,10 +14590,10 @@ func _complete_battle_won() -> void:
 	board.is_busy = true
 	_dev_commit_turn_report()
 	await _wait_for_loot_animations_finished()
-	# ── 戰利品 UI 播完後 → 交叉淡入勝利音樂 ──
+	# 一般戰鬥播放一次並跨場景延續至結算；Puzzle 保留原本不切換勝利音樂的流程。
 	if current_stage == null or current_stage.mode != StageData.Mode.PUZZLE:
-		GameState.crossfade_bgm(load("res://assets/music/fez_winfare.mp3"), false, 0.5, "winfare")
-	_bgm_player = GameState.bgm_player
+		GameState.crossfade_bgm(VICTORY_RESULT_MUSIC, false, 0.5, "victory_result")
+		_bgm_player = GameState.bgm_player
 	# ── 教學：Boss 擊敗後收尾對話（勝利橫幅前）──
 	if current_stage.is_tutorial and _battle_dialog != null:
 		_battle_dialog.show_lines(_Stage1Tutorial.make_victory_dialog())
