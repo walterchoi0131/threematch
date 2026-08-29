@@ -8,7 +8,8 @@
 [resource]
 script = ExtResource("1_script")
 stage_id = "1-7-puzzle-test"
-map_position = Vector2(546.83203, 877.1406)
+map_position = Vector2(0, 0)
+map_hidden = true
 stage_name = "Puzzle Test"
 element_weights = Array[int]([25])
 allowed_types = Array[int]([2])

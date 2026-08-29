@@ -6,30 +6,35 @@
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_w6jkx"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="5_hh7lg"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="6_ljjpk"]
+[ext_resource type="Script" path="res://scripts/dialog_line.gd" id="7_wefjs"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="9_p0jd2"]
 
-[sub_resource type="Resource" id="s2s2_amon"]
+[sub_resource type="Resource" id="Resource_w6jkx"]
 script = ExtResource("2_entry")
 enemy = ExtResource("3_amon")
 level = 22
 hp_percent = 2600
 init_cd = 2
 
+[sub_resource type="Resource" id="Resource_hh7lg"]
+script = ExtResource("6_ljjpk")
+
 [resource]
 script = ExtResource("1_stage")
 stage_id = "2-S2"
 prerequisite_stage_id = "2-5"
 map_position = Vector2(0, 949.47784)
-stage_name = "Stage 2-S2 Panda 的復甦"
-element_weights = Array[int]([25, 20, 20, 35])
+stage_name = "Stage 2-S2 阿潘的復甦"
+element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Puzzles.mp3"
-rounds = Array[Array]([[SubResource("s2s2_amon")]])
-rounds_init_cd = Array[Array]([[2]])
-rounds_enemy_levels = Array[Array]([[22]])
+rounds = Array[Array]([[SubResource("Resource_w6jkx")]])
 mode = 2
 puzzle_goal_target_type = 2
 puzzle_goal_required_count = 30
 puzzle_turn_limit = 14
+start_stage_dialog = SubResource("Resource_hh7lg")
+start_round_dialogs = Array[ExtResource("6_ljjpk")]([SubResource("Resource_hh7lg")])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

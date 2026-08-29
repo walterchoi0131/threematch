@@ -4,13 +4,8 @@
 [ext_resource type="AudioStream" path="res://assets/music/Crimson Vow.mp3" id="2_joqwg"]
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_trv1n"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_75yhj"]
-[ext_resource type="AudioStream" path="res://assets/music/Lantern Square.wav" id="5_wkekp"]
-[ext_resource type="Resource" path="res://enemies/slime.tres" id="6_q0olg"]
-[ext_resource type="Script" path="res://scripts/stage_enemy_entry.gd" id="7_l4bff"]
-[ext_resource type="Script" path="res://scripts/loot_item.gd" id="8_v0c43"]
-[ext_resource type="Resource" path="res://enemies/dark_minion_warrior.tres" id="9_lr2r3"]
-[ext_resource type="Resource" path="res://enemies/dark_minion_archer.tres" id="10_rcivr"]
-[ext_resource type="Resource" path="res://enemies/dark_minion_mage.tres" id="11_j8fpu"]
+[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_meadow.png" id="5_d0tyo"]
+[ext_resource type="AudioStream" path="res://assets/music/Canopy Council.mp3" id="6_vu7f2"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="12_boca6"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="13_jx2h5"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="14_a83tb"]
@@ -200,49 +195,8 @@ cast_profiles = {
 "name_zh": "爪牙"
 }
 }
-background = ExtResource("1_gfe34")
-initial_music = ExtResource("5_wkekp")
-
-[sub_resource type="Resource" id="Resource_ukgt1"]
-script = ExtResource("7_l4bff")
-enemy = ExtResource("6_q0olg")
-level = 7
-hp_percent = 1475
-
-[sub_resource type="Resource" id="Resource_q7d7g"]
-script = ExtResource("7_l4bff")
-enemy = ExtResource("9_lr2r3")
-level = 6
-hp_percent = 1700
-
-[sub_resource type="Resource" id="Resource_f4aks"]
-script = ExtResource("8_v0c43")
-item_type = 1
-
-[sub_resource type="Resource" id="Resource_orpf2"]
-script = ExtResource("7_l4bff")
-enemy = ExtResource("10_rcivr")
-hp_percent = 1500
-stage_extra_loot_table = Array[ExtResource("8_v0c43")]([SubResource("Resource_f4aks")])
-
-[sub_resource type="Resource" id="Resource_8tpth"]
-script = ExtResource("7_l4bff")
-enemy = ExtResource("11_j8fpu")
-level = 5
-hp_percent = 1350
-main_boss = true
-
-[sub_resource type="Resource" id="Resource_064ag"]
-script = ExtResource("7_l4bff")
-enemy = ExtResource("10_rcivr")
-level = 5
-hp_percent = 1500
-
-[sub_resource type="Resource" id="Resource_8shh5"]
-script = ExtResource("4_75yhj")
-
-[sub_resource type="Resource" id="Resource_s0m43"]
-script = ExtResource("4_75yhj")
+background = ExtResource("5_d0tyo")
+initial_music = ExtResource("6_vu7f2")
 
 [resource]
 script = ExtResource("12_boca6")
@@ -257,9 +211,7 @@ area = "church"
 battle_music_override_path = "res://assets/music/Wolf Banner Clash.mp3"
 one_time_reward_item_type = 1
 one_time_reward_item_amount = 1
-rounds = Array[Array]([])
 pre_dialog = SubResource("Resource_qhc42")
 post_dialog = SubResource("Resource_olm1e")
-start_round_dialogs = Array[ExtResource("4_75yhj")]([])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
