@@ -47,6 +47,7 @@ var _translations: Dictionary = {
 	"AUTO_TEAM": {"zh": "自動組隊", "en": "Auto Team"},
 	"STRENGTH_ADJUSTMENT": {"zh": "強度調節", "en": "Level Sync"},
 	"STRENGTH_ADJUSTMENT_HINT": {"zh": "本次出戰角色等級鎖定為關卡最高敵人等級 Lv.%d。", "en": "Lock the party to the stage's highest enemy level, Lv.%d, for this battle."},
+	"STORY_STAGE": {"zh": "劇情關卡", "en": "Story Stage"},
 	"ENEMY_INTENT_DUEL": {"zh": "決鬥", "en": "Duel"},
 	"CONFIRM": {"zh": "確認", "en": "Confirm"},
 	"EMBARK": {"zh": "出發", "en": "Embark"},

@@ -3660,11 +3660,12 @@ func _line_cells_between(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
 	return cells
 
 
-## 播放高階寶石爆炸 VFX：水劍會在每個受影響格子各播放一次（X 旋轉 90°）；
-## 其他類型則維持單點播放於中心。
+## 播放高階寶石爆炸 VFX：水劍與光之盾會在每個受影響格各播放一次；
+## 光之盾的能量柱會順時針旋轉 90°，配合橫排爆破方向。
 func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_global: Vector2) -> void:
-	if ut == Block.UpperType.WATER_SLASH:
+	if ut == Block.UpperType.WATER_SLASH or ut == Block.UpperType.LIGHT_SHIELD:
 		var positions: Array[Vector2i] = _get_blast_positions_for_upper(center_pos, ut)
+		var rotation: float = PI * 0.5 if ut == Block.UpperType.LIGHT_SHIELD else 0.0
 		for p in positions:
 			var gp: Vector2 = center_global
 			if p.x >= 0 and p.x < grid.size() and p.y >= 0 and p.y < grid[p.x].size():
@@ -3673,7 +3674,7 @@ func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_globa
 					gp = b.global_position
 				else:
 					gp = center_global + Vector2(p - center_pos) * float(CELL_SIZE)
-			BlastVfx.play(self, gp, ut, 0.0)
+			BlastVfx.play(self, gp, ut, rotation)
 		return
 	BlastVfx.play(self, center_global, ut)
 

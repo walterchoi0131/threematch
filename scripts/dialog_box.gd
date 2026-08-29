@@ -868,7 +868,14 @@ func _finish_dialog() -> void:
 		fade.tween_property(_bgm_player, "volume_db", -40.0, 0.6)
 		fade.tween_callback(_bgm_player.stop)
 
-	# 淡出畫面 → 切換至戰鬥場景
+	var gs := get_node_or_null("/root/GameState")
+	var story_only: bool = (
+		auto_start
+		and gs != null
+		and gs.selected_stage != null
+		and gs.is_story_only_stage(gs.selected_stage))
+
+	# 淡出畫面 → 劇情關卡回地圖，其他關卡進戰鬥。
 	var overlay := ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -880,7 +887,11 @@ func _finish_dialog() -> void:
 	tw.tween_property(overlay, "color:a", 1.0, 0.5)
 	tw.tween_callback(func() -> void:
 		dialog_finished.emit()
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+		if story_only:
+			gs.complete_story_only_stage(gs.selected_stage)
+			gs.fade_to_scene("res://scenes/map.tscn", 0.0)
+		else:
+			get_tree().change_scene_to_file("res://scenes/main.tscn")
 	)
 
 

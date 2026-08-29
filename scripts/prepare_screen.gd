@@ -203,6 +203,13 @@ func _build_ui() -> void:
 	root.add_child(scroll)
 
 	_build_roster_grid(scroll)
+	var story_only: bool = _is_story_only_stage()
+	sel_header.visible = not story_only
+	scroll.visible = not story_only
+	if story_only:
+		var story_spacer := Control.new()
+		story_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		root.add_child(story_spacer)
 
 	# ── 底部按鈕列 ──
 	var btn_row := HBoxContainer.new()
@@ -225,8 +232,10 @@ func _build_ui() -> void:
 	_confirm_btn.pressed.connect(_on_confirm)
 	btn_row.add_child(_confirm_btn)
 
-	# 自動選取：關卡指定隊伍則使用之；否則預選上次出戰隊伍；都沒有則預選前 N 個角色
-	if _stage.set_party.size() > 0:
+	# 純劇情關卡不需要隊伍；其他關卡依指定／上次使用隊伍自動選取。
+	if story_only:
+		_refresh_team_summary()
+	elif _stage.set_party.size() > 0:
 		for c: CharacterData in _stage.set_party:
 			var idx: int = GameState.owned_characters.find(c)
 			if idx >= 0 and not _selection_has(idx):
@@ -475,6 +484,11 @@ func _refresh_team_summary() -> void:
 
 	var battle_card_size: Vector2 = _battle_character_panel_card_size()
 	for i in GameState.MAX_PARTY_SIZE:
+		if _is_story_only_stage():
+			var story_slot: PanelContainer = _make_story_summary_slot(battle_card_size)
+			_team_summary.add_child(story_slot)
+			_team_summary_cards.append(story_slot)
+			continue
 		var selected_index: int = _selected_indices[i] if i < _selected_indices.size() else -1
 		if selected_index >= 0 and selected_index < GameState.owned_characters.size():
 			var c: CharacterData = GameState.owned_characters[selected_index]
@@ -500,7 +514,7 @@ func _refresh_team_summary() -> void:
 			_team_summary_cards.append(slot)
 
 	if _confirm_btn:
-		_confirm_btn.disabled = _selected_count() == 0
+		_confirm_btn.disabled = not _is_story_only_stage() and _selected_count() == 0
 
 
 func _is_locked_empty_party_slot(slot_index: int) -> bool:
@@ -586,6 +600,34 @@ func _make_empty_summary_slot(s: float, label_text: String = "+", locked: bool =
 	lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(lbl)
+	return panel
+
+
+func _make_story_summary_slot(card_size: Vector2) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = card_size
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.07, 0.11, 0.88)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.85, 0.63, 0.23, 0.9)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(4)
+	panel.add_theme_stylebox_override("panel", style)
+
+	var label := Label.new()
+	label.text = Locale.tr_ui("STORY_STAGE")
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _font != null:
+		label.add_theme_font_override("font", _font)
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.52))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 2)
+	panel.add_child(label)
 	return panel
 
 
@@ -1053,7 +1095,11 @@ func _on_slot_card_input(event: InputEvent, index: int) -> void:
 
 
 func _is_party_locked() -> bool:
-	return _stage != null and _stage.set_party.size() > 0
+	return _is_story_only_stage() or (_stage != null and _stage.set_party.size() > 0)
+
+
+func _is_story_only_stage() -> bool:
+	return GameState.is_story_only_stage(_stage)
 
 
 func _ensure_selection_slots() -> void:
@@ -1138,24 +1184,30 @@ func _on_cancel() -> void:
 
 
 func _on_confirm() -> void:
-	if _selected_count() == 0 or (_confirm_btn != null and _confirm_btn.disabled):
+	var story_only: bool = _is_story_only_stage()
+	if (not story_only and _selected_count() == 0) or (_confirm_btn != null and _confirm_btn.disabled):
 		return
 	GameState.selected_party.clear()
-	for idx in _selected_party_indices():
-		GameState.selected_party.append(GameState.owned_characters[idx])
-	GameState.battle_strength_adjustment_enabled = (
+	if not story_only:
+		for idx in _selected_party_indices():
+			GameState.selected_party.append(GameState.owned_characters[idx])
+	GameState.battle_strength_adjustment_enabled = not story_only and (
 		_strength_adjustment_switch != null
 		and _strength_adjustment_switch.button_pressed
-		and _strength_adjustment_level > 0
-	)
+		and _strength_adjustment_level > 0)
 	GameState.battle_strength_adjustment_level = _strength_adjustment_level
 
 	# 有對話 → 先進對話場景；否則直接進戰鬥
 	var next_path: String = "res://scenes/main.tscn"
-	if _stage.pre_dialog != null and _stage.pre_dialog.lines.size() > 0:
+	var has_pre_dialog: bool = _stage.pre_dialog != null and _stage.pre_dialog.lines.size() > 0
+	if has_pre_dialog:
 		next_path = "res://scenes/dialog_box.tscn"
 	if _confirm_btn != null:
 		_confirm_btn.disabled = true
+	if story_only and not has_pre_dialog:
+		GameState.complete_story_only_stage(_stage)
+		GameState.fade_to_scene("res://scenes/map.tscn", 0.4)
+		return
 	GameState.load_stage_and_change_scene(_stage, next_path)
 
 

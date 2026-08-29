@@ -141,6 +141,52 @@ func claim_stage_reward_if_unclaimed(stage_id: String, auto_save: bool = true) -
 	mark_stage_reward_claimed(stage_id, auto_save)
 	return true
 
+
+## 關卡編輯器更改 stage_id 後，同步玩家存檔內以該 ID 為 key 的進度。
+func rename_stage_progress(old_stage_id: String, new_stage_id: String) -> void:
+	var old_id: String = old_stage_id.strip_edges()
+	var new_id: String = new_stage_id.strip_edges()
+	if old_id.is_empty() or new_id.is_empty() or old_id == new_id:
+		return
+	if cleared_stages.has(old_id):
+		if not cleared_stages.has(new_id):
+			cleared_stages[new_id] = cleared_stages[old_id]
+		cleared_stages.erase(old_id)
+	if claimed_stage_rewards.has(old_id):
+		if not claimed_stage_rewards.has(new_id):
+			claimed_stage_rewards[new_id] = claimed_stage_rewards[old_id]
+		claimed_stage_rewards.erase(old_id)
+	if map_unlock_pop_source_stage_id == old_id:
+		map_unlock_pop_source_stage_id = new_id
+	save_game()
+
+
+## 一般／逃脫關卡沒有任何 wave 時，只播放戰前對話，不建立戰鬥。
+## Puzzle 保留既有的零 wave 行為。
+func is_story_only_stage(stage: StageData) -> bool:
+	return stage != null and stage.mode != StageData.Mode.PUZZLE and stage.rounds.is_empty()
+
+
+## 完成純劇情關卡，並直接發放其一次性獎勵。
+func complete_story_only_stage(stage: StageData) -> void:
+	if not is_story_only_stage(stage):
+		return
+	var stage_id: String = stage.stage_id.strip_edges()
+	if stage_id.is_empty():
+		return
+
+	if not is_stage_reward_claimed(stage_id):
+		var has_item_reward: bool = stage.one_time_reward_item_amount > 0
+		var has_character_reward: bool = stage.one_time_reward_character != null
+		if has_item_reward:
+			add_loot(stage.one_time_reward_item_type, stage.one_time_reward_item_amount)
+		if has_character_reward:
+			grant_character(stage.one_time_reward_character, true, true)
+		if has_item_reward or has_character_reward:
+			claim_stage_reward_if_unclaimed(stage_id, false)
+
+	mark_stage_cleared(stage_id)
+
 # ── 戰鬥結算暫存（戰鬥勝利後寫入，結算場景讀取） ──
 var last_battle_loot: Dictionary = {}              # key=ItemDefs.Type, value=int
 var last_battle_party: Array[CharacterData] = []   # 出戰角色（結算用）

@@ -2,11 +2,15 @@
 
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="1_stage"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="2_jatlg"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="3_qdl04"]
+[ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="4_sm2i6"]
 
 [resource]
 script = ExtResource("1_stage")
 stage_id = "PZ-R2"
 connects_to = Array[String](["PZ-R3"])
+map_position = Vector2(580, 256.02405)
+map_hidden = true
 stage_name = "Puzzle Research 2"
 element_weights = Array[int]([1])
 allowed_types = Array[int]([6])

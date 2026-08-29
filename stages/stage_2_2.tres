@@ -19,22 +19,8 @@ script = ExtResource("4_seq")
 cast = Array[String](["gory", "shark"])
 background = ExtResource("5_bg")
 
-[sub_resource type="Resource" id="s22_pre_1"]
-script = ExtResource("3_line")
-character_id = "gory"
-position = "right"
-text_zh = "闖入者！這裡不是你們可以亂碰的森林。"
-text_en = "Intruders! This forest is not yours to touch."
-
-[sub_resource type="Resource" id="s22_pre_2"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "我們只是想見長老，順便問問這裡為什麼亮得像午餐盒。"
-text_en = "We only want to see the elder, and maybe ask why everything glows like lunch."
-
 [sub_resource type="Resource" id="s22_pre"]
 script = ExtResource("4_seq")
-lines = Array[ExtResource("3_line")]([SubResource("s22_pre_1"), SubResource("s22_pre_2")])
 cast = Array[String](["gory", "panda", "dragon", "shark"])
 background = ExtResource("5_bg")
 initial_music = ExtResource("5_smd2q")
@@ -90,7 +76,7 @@ stage_id = "2-2"
 prerequisite_stage_id = "2-1"
 connects_to = Array[String](["2-3"])
 map_position = Vector2(36, 737)
-stage_name = "Stage 2-2 Gory 的誤會"
+stage_name = "Stage 2-2 森林深處"
 element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"

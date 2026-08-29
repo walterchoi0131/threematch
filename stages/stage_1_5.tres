@@ -7,6 +7,9 @@
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="5_dseq"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="6_tpage"]
 
+[sub_resource type="Resource" id="Resource_weorl"]
+script = ExtResource("5_dseq")
+
 [sub_resource type="Resource" id="stage15_start_line_1"]
 script = ExtResource("4_dline")
 character_id = "panda"
@@ -31,8 +34,8 @@ cast = Array[String](["panda", "shark"])
 script = ExtResource("1_script")
 stage_id = "1-5"
 prerequisite_stage_id = "1-4"
-connects_to = Array[String](["1-6", "2-1"])
-map_position = Vector2(498.62622, 407.30518)
+connects_to = Array[String](["1-6"])
+map_position = Vector2(488.99194, 426.58228)
 stage_name = "Stage 1-5 (Escape)"
 element_weights = Array[int]([60, 10, 10])
 allowed_types = Array[int]([0, 2, 6])
@@ -43,7 +46,9 @@ background = 1
 bgm = ExtResource("1_lvgyu")
 mode = 1
 escape_refill_target = 400
+post_dialog = SubResource("Resource_weorl")
 start_stage_dialog = SubResource("stage15_start_dialog")
+start_round_dialogs = Array[ExtResource("5_dseq")]([SubResource("stage15_start_dialog")])
 start_stage_tutorial_page_ids = Array[String](["1_5_tutorial_1", "1_5_tutorial_2", "1_5_tutorial_3"])
 fixed_layout = [[-1, -1, -1, 8, 8, -1, -1, -1], [-1, -1, -1, 8, 8, 8, -1, -1], [-1, -1, -1, -1, 8, 8, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, 8, 8, -1, -1, -1], [-1, -1, -1, 8, 8, 8, -1, -1], [-1, -1, -1, -1, 8, 8, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

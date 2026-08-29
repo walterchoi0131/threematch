@@ -5,7 +5,7 @@ class_name BlastVfx
 extends Node2D
 
 ## 每種 VFX 同時存在的上限（連鎖過多時會回收最舊的實例重用）
-const MAX_PER_TYPE := 8
+const MAX_PER_TYPE := 24
 
 # 每種 VFX path -> Array[BlastVfx]（依生成順序，front = 最舊）
 static var _active_by_path: Dictionary = {}

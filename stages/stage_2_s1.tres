@@ -5,6 +5,7 @@
 [ext_resource type="Resource" path="res://enemies/amon.tres" id="3_amon"]
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_x7c17"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="5_qtc86"]
+[ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="6_ak3qp"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="9_h4yfs"]
 
 [sub_resource type="Resource" id="Resource_0bpg4"]
@@ -18,7 +19,7 @@ init_cd = 2
 script = ExtResource("1_stage")
 stage_id = "2-S1"
 prerequisite_stage_id = "2-5"
-map_position = Vector2(4, 821)
+map_position = Vector2(0, 849.91565)
 stage_name = "Stage 2-S1 Shark 的水心"
 element_weights = Array[int]([25, 20, 20, 35])
 allowed_types = Array[int]([0, 1, 2, 6])

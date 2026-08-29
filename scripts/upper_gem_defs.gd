@@ -202,6 +202,7 @@ static func _ensure_init() -> void:
 		Block.Type.LIGHT,
 		Color(0.55, 0.82, 1.0),
 		"Light Shield",
+		"res://assets/animation/RetroImpactEffectPack5A.png", 9, 30, 9, 1.0, 0.04, "", 225,
 	)
 	_defs[Block.UpperType.LEAF_RAY] = Def.new(
 		Block.Type.GREEN,

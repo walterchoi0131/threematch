@@ -373,6 +373,8 @@ const STAGE_EDITOR_BATTLE_BACKGROUND_ROOT := "res://assets/battle_background"
 const STAGE_EDITOR_DIALOG_BACKGROUND_ROOT := "res://assets/dialog_background"
 const STAGE_EDITOR_DIALOG_MUSIC_ROOT := "res://assets/music"
 const STAGE_EDITOR_TUTOR_ROOT := "res://assets/tutor"
+const STAGE_EDITOR_STAGE_ROOT := "res://stages"
+const STAGE_EDITOR_CHARACTER_ROOT := "res://characters"
 const TUTORIAL_PAGE_LIBRARY_PATH := "res://data/tutorial_page_library.tres"
 const STAGE_EDITOR_TAB_BEFORE := "before"
 const STAGE_EDITOR_TAB_START_DIALOG := "start_dialog"
@@ -395,7 +397,9 @@ var _stage_editor_mode_buttons: Dictionary = {}
 var _stage_editor_current_tab: String = STAGE_EDITOR_TAB_BOARD
 var _stage_editor_selected_value: int = Block.Type.RED
 var _stage_editor_selected_area: String = StageData.DEFAULT_AREA
+var _stage_editor_stage_id_edit: LineEdit = null
 var _stage_editor_stage_name_edit: LineEdit = null
+var _stage_editor_status_label: Label = null
 var _stage_editor_area_option: OptionButton = null
 var _stage_editor_bg_override_option: OptionButton = null
 var _stage_editor_music_override_option: OptionButton = null
@@ -882,6 +886,21 @@ func _build_stage_editor_area_panel() -> void:
 	selector_box.custom_minimum_size = Vector2(150, 0)
 	row.add_child(selector_box)
 
+	var id_title := Label.new()
+	id_title.text = "Stage ID"
+	id_title.add_theme_font_size_override("font_size", 9)
+	id_title.add_theme_color_override("font_color", Color(1.0, 0.82, 0.42, 1.0))
+	selector_box.add_child(id_title)
+
+	_stage_editor_stage_id_edit = LineEdit.new()
+	_stage_editor_stage_id_edit.custom_minimum_size = Vector2(146, 20)
+	_stage_editor_stage_id_edit.add_theme_font_size_override("font_size", 9)
+	_stage_editor_stage_id_edit.placeholder_text = "例如 1-6"
+	_stage_editor_stage_id_edit.tooltip_text = "大地圖解鎖與關卡邏輯使用的 StageData.stage_id；保存時會同步更新引用，資源檔名不會改變。"
+	_stage_editor_stage_id_edit.text_submitted.connect(_on_stage_editor_stage_id_committed)
+	_stage_editor_stage_id_edit.focus_exited.connect(_on_stage_editor_stage_id_focus_exited)
+	selector_box.add_child(_stage_editor_stage_id_edit)
+
 	var name_title := Label.new()
 	name_title.text = "關卡名稱"
 	name_title.add_theme_font_size_override("font_size", 9)
@@ -1003,6 +1022,13 @@ func _build_stage_editor_area_panel() -> void:
 	action_row.add_child(_make_stage_editor_command_button("清空", _on_stage_editor_clear_pressed))
 	action_row.add_child(_make_stage_editor_command_button("保存", _on_stage_editor_save_pressed))
 	action_row.add_child(_make_stage_editor_command_button("返回", _on_stage_editor_back_pressed))
+
+	_stage_editor_status_label = Label.new()
+	_stage_editor_status_label.text = ""
+	_stage_editor_status_label.custom_minimum_size = Vector2(0, 14)
+	_stage_editor_status_label.add_theme_font_size_override("font_size", 9)
+	_stage_editor_status_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	distribution_box.add_child(_stage_editor_status_label)
 
 	var dist_title_row := HBoxContainer.new()
 	dist_title_row.add_theme_constant_override("separation", 6)
@@ -5326,6 +5352,8 @@ func _refresh_stage_editor_area_panel() -> void:
 		_stage_editor_selected_area = StageData.DEFAULT_AREA
 	if _stage_editor_stage_name_edit != null:
 		_stage_editor_stage_name_edit.text = current_stage.stage_name if current_stage != null else ""
+	if _stage_editor_stage_id_edit != null:
+		_stage_editor_stage_id_edit.text = current_stage.stage_id if current_stage != null else ""
 	if _stage_editor_area_option != null:
 		for item_index in _stage_editor_area_option.item_count:
 			var item_area: String = String(_stage_editor_area_option.get_item_metadata(item_index))
@@ -5370,6 +5398,22 @@ func _on_stage_editor_stage_name_submitted(_text: String) -> void:
 
 func _on_stage_editor_stage_name_focus_exited() -> void:
 	_stage_editor_apply_stage_name_from_ui()
+
+
+func _on_stage_editor_stage_id_committed(_text: String) -> void:
+	_stage_editor_normalize_stage_id_edit()
+
+
+func _on_stage_editor_stage_id_focus_exited() -> void:
+	_stage_editor_normalize_stage_id_edit()
+
+
+func _stage_editor_normalize_stage_id_edit() -> void:
+	if _stage_editor_stage_id_edit == null:
+		return
+	_stage_editor_stage_id_edit.text = _stage_editor_stage_id_edit.text.strip_edges()
+	if current_stage != null and _stage_editor_stage_id_edit.text != current_stage.stage_id:
+		_set_stage_editor_status("Stage ID 將在保存時改為：%s" % _stage_editor_stage_id_edit.text)
 
 
 func _stage_editor_apply_stage_name_from_ui() -> void:
@@ -5721,6 +5765,14 @@ func _on_stage_editor_save_pressed() -> void:
 	if current_stage == null or current_stage.resource_path.is_empty():
 		_set_stage_editor_status("保存失敗：沒有關卡資源", false)
 		return
+	var old_stage_id: String = current_stage.stage_id.strip_edges()
+	var requested_stage_id: String = old_stage_id
+	if _stage_editor_stage_id_edit != null:
+		requested_stage_id = _stage_editor_stage_id_edit.text.strip_edges()
+	var stage_id_error: String = _stage_editor_validate_stage_id_for_save(requested_stage_id)
+	if not stage_id_error.is_empty():
+		_set_stage_editor_status(stage_id_error, false)
+		return
 	_stage_editor_apply_puzzle_goal_from_ui()
 	var validation_error: String = _stage_editor_validate_rounds_for_save()
 	if not validation_error.is_empty():
@@ -5753,17 +5805,163 @@ func _on_stage_editor_save_pressed() -> void:
 	current_stage.rounds_init_cd = []
 	current_stage.rounds_enemy_levels = []
 	current_stage.rounds_main_bosses = []
-	_stage_editor_ensure_start_round_dialogs()
-	current_stage.start_round_dialogs = _stage_editor_get_start_round_dialogs_snapshot()
-	current_stage.start_stage_dialog = current_stage.start_round_dialogs[0] if not current_stage.start_round_dialogs.is_empty() else null
+	if _stage_editor_rounds.is_empty():
+		current_stage.start_round_dialogs = []
+		current_stage.start_stage_dialog = null
+	else:
+		_stage_editor_ensure_start_round_dialogs()
+		current_stage.start_round_dialogs = _stage_editor_get_start_round_dialogs_snapshot()
+		current_stage.start_stage_dialog = current_stage.start_round_dialogs[0] if not current_stage.start_round_dialogs.is_empty() else null
 	_stage_editor_ensure_start_tutorial_pages()
 	_stage_editor_sanitize_dialog_music_commands()
-	var err: int = ResourceSaver.save(current_stage, current_stage.resource_path)
+	var err: int = _stage_editor_save_with_stage_id_change(old_stage_id, requested_stage_id)
 	if err == OK:
+		if _stage_editor_stage_id_edit != null:
+			_stage_editor_stage_id_edit.text = current_stage.stage_id
 		var file_name: String = current_stage.resource_path.get_file()
-		_set_stage_editor_status("已保存 %s" % file_name)
+		var rename_suffix: String = "；ID %s → %s" % [old_stage_id, requested_stage_id] if old_stage_id != requested_stage_id else ""
+		_set_stage_editor_status("已保存 %s%s" % [file_name, rename_suffix])
 	else:
 		_set_stage_editor_status("保存失敗（%d）" % err, false)
+
+
+func _stage_editor_validate_stage_id_for_save(requested_stage_id: String) -> String:
+	var stage_id: String = requested_stage_id.strip_edges()
+	if stage_id.is_empty():
+		return "保存失敗：Stage ID 不可留空"
+	for index in stage_id.length():
+		var code: int = stage_id.unicode_at(index)
+		var valid_ascii: bool = (
+			(code >= 48 and code <= 57)
+			or (code >= 65 and code <= 90)
+			or (code >= 97 and code <= 122)
+			or code == 45
+			or code == 46
+			or code == 95)
+		if not valid_ascii:
+			return "保存失敗：Stage ID 只可使用英數字、-、_、."
+	if current_stage == null or stage_id == current_stage.stage_id.strip_edges():
+		return ""
+	for stage: StageData in _stage_editor_load_all_stage_resources():
+		if stage == null or stage.resource_path == current_stage.resource_path:
+			continue
+		if stage.stage_id.strip_edges().to_lower() == stage_id.to_lower():
+			return "保存失敗：Stage ID「%s」已由 %s 使用" % [stage_id, stage.resource_path.get_file()]
+	return ""
+
+
+func _stage_editor_load_all_stage_resources() -> Array[StageData]:
+	var result: Array[StageData] = []
+	var dir := DirAccess.open(STAGE_EDITOR_STAGE_ROOT)
+	if dir == null:
+		return result
+	var file_names: PackedStringArray = dir.get_files()
+	file_names.sort()
+	for file_name: String in file_names:
+		if file_name.get_extension().to_lower() != "tres":
+			continue
+		var path: String = "%s/%s" % [STAGE_EDITOR_STAGE_ROOT, file_name]
+		var stage: StageData = load(path) as StageData
+		if stage == null:
+			continue
+		if current_stage != null and stage.resource_path == current_stage.resource_path:
+			stage = current_stage
+		if not result.has(stage):
+			result.append(stage)
+	if current_stage != null and not result.has(current_stage):
+		result.append(current_stage)
+	return result
+
+
+func _stage_editor_load_all_character_resources() -> Array[CharacterData]:
+	var result: Array[CharacterData] = []
+	var dir := DirAccess.open(STAGE_EDITOR_CHARACTER_ROOT)
+	if dir == null:
+		return result
+	var file_names: PackedStringArray = dir.get_files()
+	file_names.sort()
+	for file_name: String in file_names:
+		var extension: String = file_name.get_extension().to_lower()
+		if extension != "tres" and extension != "res":
+			continue
+		var character: CharacterData = load("%s/%s" % [STAGE_EDITOR_CHARACTER_ROOT, file_name]) as CharacterData
+		if character != null:
+			result.append(character)
+	return result
+
+
+func _stage_editor_save_with_stage_id_change(old_stage_id: String, new_stage_id: String) -> int:
+	if old_stage_id == new_stage_id:
+		return ResourceSaver.save(current_stage, current_stage.resource_path)
+
+	var stage_backups: Array[Dictionary] = []
+	var character_backups: Array[Dictionary] = []
+	var changed_resources: Array[Resource] = []
+	for stage: StageData in _stage_editor_load_all_stage_resources():
+		var backup := {
+			"resource": stage,
+			"stage_id": stage.stage_id,
+			"prerequisite_stage_id": stage.prerequisite_stage_id,
+			"connects_to": stage.connects_to.duplicate(),
+		}
+		stage_backups.append(backup)
+		var changed: bool = false
+		if stage.resource_path == current_stage.resource_path:
+			stage.stage_id = new_stage_id
+			changed = true
+		if stage.prerequisite_stage_id == old_stage_id:
+			stage.prerequisite_stage_id = new_stage_id
+			changed = true
+		var updated_connections: Array[String] = []
+		for connected_id: String in stage.connects_to:
+			var updated_id: String = new_stage_id if connected_id == old_stage_id else connected_id
+			if not updated_connections.has(updated_id):
+				updated_connections.append(updated_id)
+		if updated_connections != stage.connects_to:
+			stage.connects_to = updated_connections
+			changed = true
+		if changed and not changed_resources.has(stage):
+			changed_resources.append(stage)
+
+	for character: CharacterData in _stage_editor_load_all_character_resources():
+		if character.active_unlock_stage_id != old_stage_id:
+			continue
+		character_backups.append({
+			"resource": character,
+			"active_unlock_stage_id": character.active_unlock_stage_id,
+		})
+		character.active_unlock_stage_id = new_stage_id
+		changed_resources.append(character)
+
+	var saved_resources: Array[Resource] = []
+	for resource: Resource in changed_resources:
+		var save_error: int = ResourceSaver.save(resource, resource.resource_path)
+		if save_error != OK:
+			_stage_editor_restore_stage_id_backups(stage_backups, character_backups)
+			for saved_resource: Resource in saved_resources:
+				ResourceSaver.save(saved_resource, saved_resource.resource_path)
+			return save_error
+		saved_resources.append(resource)
+
+	GameState.rename_stage_progress(old_stage_id, new_stage_id)
+	return OK
+
+
+func _stage_editor_restore_stage_id_backups(stage_backups: Array[Dictionary], character_backups: Array[Dictionary]) -> void:
+	for backup: Dictionary in stage_backups:
+		var stage: StageData = backup.resource as StageData
+		if stage == null:
+			continue
+		stage.stage_id = String(backup.stage_id)
+		stage.prerequisite_stage_id = String(backup.prerequisite_stage_id)
+		var restored_connections: Array[String] = []
+		for connected_id in backup.connects_to:
+			restored_connections.append(String(connected_id))
+		stage.connects_to = restored_connections
+	for backup: Dictionary in character_backups:
+		var character: CharacterData = backup.resource as CharacterData
+		if character != null:
+			character.active_unlock_stage_id = String(backup.active_unlock_stage_id)
 
 
 func _stage_editor_validate_rounds_for_save() -> String:
@@ -5790,7 +5988,7 @@ func _stage_editor_validate_rounds_for_save() -> String:
 			return "保存失敗：解謎回合必須大於 0"
 		return ""
 	if _stage_editor_rounds.is_empty():
-		return "保存失敗：至少需要一波怪物"
+		return ""
 	for round_index in _stage_editor_rounds.size():
 		var round_list: Array = _stage_editor_rounds[round_index]
 		if round_list.is_empty():
@@ -5958,7 +6156,13 @@ func _on_stage_editor_back_pressed() -> void:
 
 
 func _set_stage_editor_status(message: String, ok: bool = true) -> void:
-	pass
+	if _stage_editor_status_label == null:
+		return
+	_stage_editor_status_label.text = message
+	_stage_editor_status_label.tooltip_text = message
+	_stage_editor_status_label.add_theme_color_override(
+		"font_color",
+		Color(0.62, 0.92, 0.7, 1.0) if ok else Color(1.0, 0.42, 0.42, 1.0))
 
 
 func _layout_stage_editor_ui() -> void:
