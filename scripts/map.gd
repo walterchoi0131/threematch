@@ -16,6 +16,7 @@ const STAGE_DIR: String = "res://stages"
 const NEW_STAGE_OFFSET: Vector2 = Vector2(160.0, 0.0)
 const TUTORIAL_PAGE_LIBRARY_PATH := "res://data/tutorial_page_library.tres"
 const TUTORIAL_IMAGE_ROOT := "res://assets/tutor"
+const DEBUG_LAUNCHER_NAV_CLEARANCE: float = 110.0
 
 enum Page { CHARACTERS, MAP, INVENTORY }
 
@@ -866,8 +867,7 @@ func _play_overlay_close(layer: CanvasLayer, frame: Control, backdrop: Control) 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F4:
-			_toggle_dev_mode()
-			_set_debug_panel_visible(GameState.dev_mode)
+			_toggle_map_dev_mode_and_panel()
 	elif event is InputEventMouseButton and GameState.dev_mode:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
@@ -881,6 +881,11 @@ func _toggle_dev_mode() -> void:
 		_clear_stage_link_draft()
 	_refresh_dev_mode_ui()
 	_refresh_stage_buttons()
+
+
+func _toggle_map_dev_mode_and_panel() -> void:
+	_toggle_dev_mode()
+	_set_debug_panel_visible(GameState.dev_mode)
 
 
 func _build_dev_mode_label() -> void:
@@ -1003,6 +1008,13 @@ func _build_portrait_debug_btn() -> void:
 	attack_vfx_btn.pressed.connect(_open_attack_vfx_debug)
 	_portrait_debug_layer.add_child(attack_vfx_btn)
 
+	var f4_btn: Button = _make_debug_launcher_button("F4", "Toggle Map Dev Mode", 16, -130.0, -76.0)
+	f4_btn.name = "MapDevModeButton"
+	f4_btn.offset_left = -136.0
+	f4_btn.offset_right = -82.0
+	f4_btn.pressed.connect(_toggle_map_dev_mode_and_panel)
+	_portrait_debug_layer.add_child(f4_btn)
+
 
 func _make_debug_launcher_button(label_text: String, tooltip: String, font_size: int, top_offset: float, bottom_offset: float) -> Button:
 	var btn := Button.new()
@@ -1027,9 +1039,9 @@ func _make_debug_launcher_button(label_text: String, tooltip: String, font_size:
 	btn.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	btn.grow_vertical   = Control.GROW_DIRECTION_BEGIN
 	btn.offset_left   = -76.0
-	btn.offset_top    = top_offset
+	btn.offset_top    = top_offset - DEBUG_LAUNCHER_NAV_CLEARANCE
 	btn.offset_right  = -22.0
-	btn.offset_bottom = bottom_offset
+	btn.offset_bottom = bottom_offset - DEBUG_LAUNCHER_NAV_CLEARANCE
 
 	return btn
 

@@ -1,206 +1,16 @@
 [gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest.png" id="1_ryah7"]
 [ext_resource type="AudioStream" path="res://assets/music/Rainforest Parley.ogg" id="2_2uv2x"]
 [ext_resource type="Script" path="res://scripts/dialog_line.gd" id="3_oa5gx"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest_hall.png" id="4_wml0a"]
-[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest_mon_sharing.png" id="5_kei66"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest_feast.png" id="6_7g1d0"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="7_3fvqq"]
 [ext_resource type="Script" path="res://scripts/stage_data.gd" id="13_ipyhe"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="14_bhg7d"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="15_xldgf"]
 
-[sub_resource type="Resource" id="Resource_xbl3v"]
-script = ExtResource("3_oa5gx")
-character_id = "dragon"
-text_zh = "到了嘛，已經沒力了。"
-
-[sub_resource type="Resource" id="Resource_wfcyo"]
-script = ExtResource("3_oa5gx")
-character_id = "panda"
-position = "right"
-text_zh = "我要餓死了。"
-
-[sub_resource type="Resource" id="Resource_qor1t"]
-script = ExtResource("3_oa5gx")
-character_id = "gory"
-text_zh = "看到前方的亮光了嗎? 那裡就是森之國了。"
-
-[sub_resource type="Resource" id="Resource_vm0ds"]
-script = ExtResource("3_oa5gx")
-position = "right"
-action = "exit_all"
-shake = false
-
-[sub_resource type="Resource" id="Resource_kcj62"]
-script = ExtResource("3_oa5gx")
-action = "switch_bg"
-background = ExtResource("4_wml0a")
-
-[sub_resource type="Resource" id="Resource_oogjj"]
-script = ExtResource("3_oa5gx")
-text_zh = "走過一道石門，一行人終於抵達了森之國。"
-
-[sub_resource type="Resource" id="Resource_1of18"]
-script = ExtResource("3_oa5gx")
-text_zh = "森之國四處綠草如恩，房子由木和石磚建成。縱然沒有什麼宏偉的建築，卻有一種悠遊恬靜的感覺，不過城內的村民卻穿著殘舊的破布，愁眉苦臉。"
-
-[sub_resource type="Resource" id="Resource_w7a1h"]
-script = ExtResource("3_oa5gx")
-character_id = "giz"
-text_zh = "大哥!"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_b8ds8"]
-script = ExtResource("3_oa5gx")
-character_id = "gory"
-position = "right"
-text_zh = "古茲!"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_0jom1"]
-script = ExtResource("3_oa5gx")
-character_id = "gory"
-position = "right"
-text_zh = "這是我的弟弟古茲。這邊是我在森林前線遇到冒險者。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_ul1kr"]
-script = ExtResource("3_oa5gx")
-character_id = "dragon"
-position = "right"
-text_zh = "你好！我叫米洛！"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_3f2ix"]
-script = ExtResource("3_oa5gx")
-character_id = "panda"
-position = "right"
-text_zh = "我是阿潘！啊啊！好可愛啊！"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_14vbr"]
-script = ExtResource("3_oa5gx")
-position = "right"
-action = "exit_all"
-shake = false
-
-[sub_resource type="Resource" id="Resource_fckks"]
-script = ExtResource("3_oa5gx")
-character_id = "enemy_villager_rabbit"
-text_zh = "行行好吧! 我已經4天沒吃飯了"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_486m7"]
-script = ExtResource("3_oa5gx")
-character_id = "amon"
-position = "right"
-text_zh = "光之神啊，請賜我力量賦予人民人物吧。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_dalbg"]
-script = ExtResource("3_oa5gx")
-action = "exit_all"
-shake = false
-
-[sub_resource type="Resource" id="Resource_gnbef"]
-script = ExtResource("3_oa5gx")
-action = "switch_bg"
-background = ExtResource("5_kei66")
-
-[sub_resource type="Resource" id="Resource_du426"]
-script = ExtResource("3_oa5gx")
-text_zh = "啊蒙走到村民面前, 用手觸碰頭頂的光之寶石, 一陣閃耀的轉化之光閃過, 啊蒙手中生成了一個香甜美味的綠色水果。"
-
-[sub_resource type="Resource" id="Resource_ovxgv"]
-script = ExtResource("3_oa5gx")
-action = "switch_bg"
-background = ExtResource("4_wml0a")
-
-[sub_resource type="Resource" id="Resource_oomc7"]
-script = ExtResource("3_oa5gx")
-character_id = "amon"
-position = "right"
-text_zh = "願光之神與你同在"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_fucm6"]
-script = ExtResource("3_oa5gx")
-character_id = "enemy_villager_rabbit"
-text_zh = " 謝謝啊蒙, 謝謝光之神!"
-action = "enter"
-shake = false
-
-[sub_resource type="Resource" id="Resource_u6our"]
-script = ExtResource("3_oa5gx")
-character_id = "enemy_villager_rabbit"
-action = "exit"
-shake = false
-
-[sub_resource type="Resource" id="Resource_awhu3"]
-script = ExtResource("3_oa5gx")
-character_id = "amon"
-position = "right"
-text_zh = "啊, 這不是戈爾嗎?"
-action = "enter"
-shake = false
-
-[sub_resource type="Resource" id="Resource_lsak0"]
-script = ExtResource("3_oa5gx")
-character_id = "gory"
-text_zh = "長老好。這三位旅行者從光之國過來，說有要事要找你。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_fx1so"]
-script = ExtResource("3_oa5gx")
-character_id = "dragon"
-text_zh = "你好! 我叫米洛!"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_3aa1g"]
-script = ExtResource("3_oa5gx")
-character_id = "panda"
-text_zh = "我是阿潘!"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_xi4ok"]
-script = ExtResource("3_oa5gx")
-character_id = "shark"
-text_zh = "......埃德。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_g1wjc"]
-script = ExtResource("3_oa5gx")
-character_id = "amon"
-position = "right"
-text_zh = "原來是光之國的貴客啊。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_rt8nc"]
-script = ExtResource("3_oa5gx")
-character_id = "amon"
-position = "right"
-text_zh = "歡迎來到森之國，我的朋友，我是森之國的長老，啊蒙。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_pa0ng"]
-script = ExtResource("3_oa5gx")
-character_id = "amon"
-position = "right"
-text_zh = "周居勞頓，大家都累了吧，來，先吃飯吧。"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_n41tc"]
-script = ExtResource("3_oa5gx")
-position = "right"
-action = "exit_all"
-shake = false
-
-[sub_resource type="Resource" id="Resource_y3ej5"]
-script = ExtResource("3_oa5gx")
-action = "switch_bg"
-background = ExtResource("6_7g1d0")
+[sub_resource type="Resource" id="Resource_vd5pa"]
+script = ExtResource("7_3fvqq")
 
 [sub_resource type="Resource" id="Resource_r8n6p"]
 script = ExtResource("3_oa5gx")
@@ -322,7 +132,7 @@ action = "enter"
 
 [sub_resource type="Resource" id="Resource_rk14x"]
 script = ExtResource("3_oa5gx")
-text_zh = "[M面色一沉]"
+text_zh = "啊蒙面色一沉"
 action = "enter"
 
 [sub_resource type="Resource" id="Resource_dvpjg"]
@@ -389,7 +199,7 @@ action = "enter"
 
 [sub_resource type="Resource" id="Resource_4fpkn"]
 script = ExtResource("7_3fvqq")
-lines = Array[ExtResource("3_oa5gx")]([SubResource("Resource_xbl3v"), SubResource("Resource_wfcyo"), SubResource("Resource_qor1t"), SubResource("Resource_vm0ds"), SubResource("Resource_kcj62"), SubResource("Resource_oogjj"), SubResource("Resource_1of18"), SubResource("Resource_w7a1h"), SubResource("Resource_b8ds8"), SubResource("Resource_0jom1"), SubResource("Resource_ul1kr"), SubResource("Resource_3f2ix"), SubResource("Resource_14vbr"), SubResource("Resource_fckks"), SubResource("Resource_486m7"), SubResource("Resource_dalbg"), SubResource("Resource_gnbef"), SubResource("Resource_du426"), SubResource("Resource_ovxgv"), SubResource("Resource_oomc7"), SubResource("Resource_fucm6"), SubResource("Resource_u6our"), SubResource("Resource_awhu3"), SubResource("Resource_lsak0"), SubResource("Resource_fx1so"), SubResource("Resource_3aa1g"), SubResource("Resource_xi4ok"), SubResource("Resource_g1wjc"), SubResource("Resource_rt8nc"), SubResource("Resource_pa0ng"), SubResource("Resource_n41tc"), SubResource("Resource_y3ej5"), SubResource("Resource_r8n6p"), SubResource("Resource_fchjq"), SubResource("Resource_jgim4"), SubResource("Resource_t2xtl"), SubResource("Resource_ygomd"), SubResource("Resource_6my4h"), SubResource("Resource_yeh2l"), SubResource("Resource_j4leu"), SubResource("Resource_smiko"), SubResource("Resource_3pll8"), SubResource("Resource_7wjh3"), SubResource("Resource_kq75k"), SubResource("Resource_ugmgn"), SubResource("Resource_qtt2a"), SubResource("Resource_yndsc"), SubResource("Resource_n3ivx"), SubResource("Resource_dfaev"), SubResource("Resource_yx200"), SubResource("Resource_7qalj"), SubResource("Resource_sxcen"), SubResource("Resource_rk14x"), SubResource("Resource_dvpjg"), SubResource("Resource_ns5lv"), SubResource("Resource_hrita"), SubResource("Resource_lbrmq"), SubResource("Resource_iyybn"), SubResource("Resource_0koln"), SubResource("Resource_jfcyj"), SubResource("Resource_p68oq"), SubResource("Resource_54a8t"), SubResource("Resource_tdkb5")])
+lines = Array[ExtResource("3_oa5gx")]([SubResource("Resource_r8n6p"), SubResource("Resource_fchjq"), SubResource("Resource_jgim4"), SubResource("Resource_t2xtl"), SubResource("Resource_ygomd"), SubResource("Resource_6my4h"), SubResource("Resource_yeh2l"), SubResource("Resource_j4leu"), SubResource("Resource_smiko"), SubResource("Resource_3pll8"), SubResource("Resource_7wjh3"), SubResource("Resource_kq75k"), SubResource("Resource_ugmgn"), SubResource("Resource_qtt2a"), SubResource("Resource_yndsc"), SubResource("Resource_n3ivx"), SubResource("Resource_dfaev"), SubResource("Resource_yx200"), SubResource("Resource_7qalj"), SubResource("Resource_sxcen"), SubResource("Resource_rk14x"), SubResource("Resource_dvpjg"), SubResource("Resource_ns5lv"), SubResource("Resource_hrita"), SubResource("Resource_lbrmq"), SubResource("Resource_iyybn"), SubResource("Resource_0koln"), SubResource("Resource_jfcyj"), SubResource("Resource_p68oq"), SubResource("Resource_54a8t"), SubResource("Resource_tdkb5")])
 cast = Array[String](["dragon", "panda", "shark", "gory", "amon", "villager", "villagers", "enemy_villager_rabbit", "giz"])
 cast_profiles = {
 "amon": {
@@ -415,7 +225,7 @@ cast_profiles = {
 "name_zh": "村民眾"
 }
 }
-background = ExtResource("1_ryah7")
+background = ExtResource("6_7g1d0")
 initial_music = ExtResource("2_2uv2x")
 
 [resource]
@@ -430,5 +240,6 @@ allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 pre_dialog = SubResource("Resource_4fpkn")
+post_dialog = SubResource("Resource_vd5pa")
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

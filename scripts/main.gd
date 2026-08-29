@@ -63,9 +63,6 @@ signal loot_flights_finished()
 @onready var board = $Board
 @onready var battle_manager: BattleManager = $BattleManager
 @onready var fx_layer: CanvasLayer = $FXLayer
-@onready var score_label: Label = $UILayer/TopBar/ScoreLabel
-@onready var turn_label: Label = $UILayer/TopBar/TurnLabel
-@onready var round_label: Label = $UILayer/TopBar/RoundLabel
 @onready var player_hp_label: Label = $UILayer/PlayerHPBar/HpLabel
 @onready var player_hp_fill: ColorRect = $UILayer/PlayerHPBar/Fill
 @onready var enemy_container: HBoxContainer = $UILayer/EnemyRow
@@ -508,7 +505,6 @@ func _ready() -> void:
 		return
 
 	board.gems_blasted.connect(_on_gems_blasted)
-	board.score_changed.connect(_on_score_changed)
 	board.upper_gem_clicked.connect(_on_upper_gem_clicked)
 	board.enemy_upper_gem_rejected.connect(_on_enemy_upper_gem_rejected)
 	board.upper_blast_completed.connect(_on_upper_blast_completed)
@@ -543,7 +539,6 @@ func _ready() -> void:
 	battle_manager.round_cleared.connect(_on_round_cleared)
 	battle_manager.round_transitioning.connect(_on_round_transitioning)
 	battle_manager.battle_won.connect(_on_battle_won)
-	battle_manager.turn_changed.connect(_on_turn_changed)
 	battle_manager.enemy_attacked.connect(_on_enemy_attacked)
 	battle_manager.enemy_lightbreak_attacked.connect(_on_enemy_lightbreak_attacked)
 	battle_manager.enemy_stone_magic_cast.connect(_on_enemy_stone_magic_cast)
@@ -709,12 +704,7 @@ func _position_combo_ui() -> void:
 
 func _apply_safe_area() -> void:
 	var insets: Vector4 = ViewportUtils.get_safe_insets()
-	var top_inset: float = insets.x
 	var bottom_inset: float = insets.z
-	var top_bar: Control = $UILayer/TopBar
-	if top_bar:
-		top_bar.offset_top = top_inset
-		top_bar.offset_bottom = top_inset + 40.0
 	var char_row: Control = character_panel
 	if char_row:
 		char_row.offset_top = -200.0 - bottom_inset
@@ -752,8 +742,6 @@ func _setup_stage_edit_mode() -> void:
 
 
 func _hide_battle_ui_for_stage_editor() -> void:
-	var top_bar: Control = $UILayer/TopBar
-	top_bar.visible = false
 	var hp_bar: Control = $UILayer/PlayerHPBar
 	hp_bar.visible = false
 	enemy_container.visible = false
@@ -7890,10 +7878,6 @@ func _run_attack_worker() -> void:
 	board.notify_external_attack_busy(false)
 
 
-func _on_score_changed(new_score: int) -> void:
-	score_label.text = "Score: %d" % new_score
-
-
 func _create_trail_projectile() -> Node2D:
 	var p := Node2D.new()
 	p.set_script(TrailProjectileScript)
@@ -12143,12 +12127,6 @@ func _play_player_shield_loss_vfx() -> void:
 	DebrisVfx.play(get_tree().current_scene, SHIELD_ICON_TEXTURE, origin, 7, Vector2(0.35, 0.70), Vector2(0.55, 0.95), 120, Color(0.65, 0.90, 1.0, 0.95))
 
 
-## 回合數變更時更新 UI
-func _on_turn_changed(t: int) -> void:
-	turn_label.text = "Turn: %d" % t
-	round_label.text = "Round: %d" % (battle_manager.current_round + 1)
-
-
 ## 重新整理寶石計量器：合併本回合消除數 + 技能儲存（pending）數
 func _refresh_gem_meter() -> void:
 	if gem_meter == null:
@@ -12470,7 +12448,6 @@ func _on_round_transitioning() -> void:
 
 ## 波次清除
 func _on_round_cleared() -> void:
-	round_label.text = "Round: %d" % (battle_manager.current_round + 1)
 	await _play_round_switch_transition(battle_manager.current_round, battle_manager.stage_rounds.size())
 	# Round 3（0-indexed = 2）教學：敵人意圖 + 切換目標
 	if current_stage.is_tutorial and battle_manager.current_round == 2 and _battle_dialog != null:

@@ -11,53 +11,41 @@
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="10_seq"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="11_f6qc3"]
 
-[sub_resource type="Resource" id="s26_pre_dragon_full"]
-script = ExtResource("9_line")
-character_id = "dragon"
-text_zh = "好飽啊, 原來森之國的食物這麼豐盛好吃"
-
-[sub_resource type="Resource" id="s26_pre_gory_no"]
-script = ExtResource("9_line")
-character_id = "gory"
-position = "right"
-text_zh = "不是這樣的"
-action = "enter"
-
-[sub_resource type="Resource" id="s26_pre_gory_poverty"]
-script = ExtResource("9_line")
-character_id = "gory"
-position = "right"
-text_zh = "我們的國家, 一直陷於貧困飢餓之中"
-
-[sub_resource type="Resource" id="s26_pre_panda_huh"]
-script = ExtResource("9_line")
-character_id = "panda"
-text_zh = "啊…?"
-action = "enter"
-
 [sub_resource type="Resource" id="s26_pre"]
 script = ExtResource("10_seq")
-lines = Array[ExtResource("9_line")]([SubResource("s26_pre_dragon_full"), SubResource("s26_pre_gory_no"), SubResource("s26_pre_gory_poverty"), SubResource("s26_pre_panda_huh")])
 cast = Array[String](["dragon", "gory", "panda"])
 
-[sub_resource type="Resource" id="s26_e1"]
+[sub_resource type="Resource" id="Resource_57s1t"]
 script = ExtResource("2_entry")
 enemy = ExtResource("4_lancer")
 level = 23
 hp_percent = 2100
 
-[sub_resource type="Resource" id="s26_e2"]
+[sub_resource type="Resource" id="Resource_2r8t7"]
+script = ExtResource("2_entry")
+enemy = ExtResource("4_lancer")
+level = 23
+hp_percent = 2100
+init_cd = 1
+
+[sub_resource type="Resource" id="Resource_nn3g6"]
 script = ExtResource("2_entry")
 enemy = ExtResource("4_witch")
 level = 23
 hp_percent = 2400
 
-[sub_resource type="Resource" id="s26_e3"]
+[sub_resource type="Resource" id="Resource_f6qc3"]
 script = ExtResource("2_entry")
 enemy = ExtResource("4_mage")
 level = 23
 hp_percent = 2100
 init_cd = 2
+
+[sub_resource type="Resource" id="Resource_uapnx"]
+script = ExtResource("10_seq")
+
+[sub_resource type="Resource" id="Resource_xr4nl"]
+script = ExtResource("10_seq")
 
 [resource]
 script = ExtResource("1_stage")
@@ -66,12 +54,13 @@ prerequisite_stage_id = "2-5"
 connects_to = Array[String](["2-7"])
 map_position = Vector2(181.72339, 958.99194)
 stage_name = "Stage 2-6 糧倉封鎖"
-element_weights = Array[int]([25, 20, 20, 35])
+element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("s26_e1"), SubResource("s26_e1")], [SubResource("s26_e2"), SubResource("s26_e3")]])
-rounds_init_cd = Array[Array]([[0, 1], [0, 2]])
-rounds_enemy_levels = Array[Array]([[23, 23], [23, 23]])
+rounds = Array[Array]([[SubResource("Resource_57s1t"), SubResource("Resource_2r8t7")], [SubResource("Resource_nn3g6"), SubResource("Resource_f6qc3")]])
 pre_dialog = SubResource("s26_pre")
+start_stage_dialog = SubResource("Resource_uapnx")
+start_round_dialogs = Array[ExtResource("10_seq")]([SubResource("Resource_uapnx"), SubResource("Resource_xr4nl")])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

@@ -39,36 +39,6 @@ layer = 10
 
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=673824219]
 
-[node name="TopBar" type="HBoxContainer" parent="UILayer" unique_id=36024439]
-anchor_right = 1.0
-offset_bottom = 40.0
-alignment = 1
-
-[node name="ScoreLabel" type="Label" parent="UILayer/TopBar" unique_id=544831753]
-layout_mode = 2
-text = "Score: 0"
-label_settings = SubResource("LabelSettings_title")
-
-[node name="Sep1" type="Label" parent="UILayer/TopBar" unique_id=341663730]
-layout_mode = 2
-text = "  |  "
-label_settings = SubResource("LabelSettings_title")
-
-[node name="TurnLabel" type="Label" parent="UILayer/TopBar" unique_id=653153534]
-layout_mode = 2
-text = "Turn: 0"
-label_settings = SubResource("LabelSettings_title")
-
-[node name="Sep2" type="Label" parent="UILayer/TopBar" unique_id=855623439]
-layout_mode = 2
-text = "  |  "
-label_settings = SubResource("LabelSettings_title")
-
-[node name="RoundLabel" type="Label" parent="UILayer/TopBar" unique_id=304478099]
-layout_mode = 2
-text = "Round: 1"
-label_settings = SubResource("LabelSettings_title")
-
 [node name="EscapeRefillLabel" type="Label" parent="UILayer" unique_id=948372615]
 visible = false
 anchor_left = 1.0

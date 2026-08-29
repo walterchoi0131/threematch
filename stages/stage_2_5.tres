@@ -13,189 +13,8 @@
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="10_o7cwm"]
 [ext_resource type="Script" path="res://scripts/start_stage_tutorial_page.gd" id="15_ggcse"]
 
-[sub_resource type="Resource" id="s25_pre_villager_beg"]
-script = ExtResource("3_line")
-character_id = "villager"
-text_zh = "行行好吧! 我已經4天沒吃飯了"
-
-[sub_resource type="Resource" id="s25_pre_amon_transmute"]
-script = ExtResource("3_line")
-text_zh = "[啊蒙走到村民面前, 用手觸碰頭頂的光之寶石, 一陣閃耀的轉化之光閃過, 啊蒙手中生成了一個香甜美味的綠色水果。]"
-
-[sub_resource type="Resource" id="s25_pre_amon_bless"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "願光之神與你同在"
-action = "enter"
-
-[sub_resource type="Resource" id="s25_pre_villager_thanks"]
-script = ExtResource("3_line")
-character_id = "villager"
-text_zh = "謝謝啊蒙, 謝謝光之神!"
-
-[sub_resource type="Resource" id="s25_pre_villagers_thanks"]
-script = ExtResource("3_line")
-character_id = "villagers"
-text_zh = "謝謝啊蒙, 謝謝光之神!"
-
-[sub_resource type="Resource" id="s25_pre_amon_welcome"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "歡迎來到森之國, 我的朋友, 我是森之國的長老, 啊蒙"
-
-[sub_resource type="Resource" id="s25_pre_amon_meal"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "舟車勞頓, 大家都累了吧, 來, 先吃飯吧"
-
-[sub_resource type="Resource" id="s25_pre_panda_senbei"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "哇! 是竹子仙貝!"
-action = "enter"
-
-[sub_resource type="Resource" id="s25_pre_dragon_steak"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "是牛扒!"
-action = "enter"
-
-[sub_resource type="Resource" id="s25_pre_shark_careful"]
-script = ExtResource("3_line")
-character_id = "shark"
-position = "right"
-text_zh = "小心!! 我們還不知道..."
-action = "enter"
-
-[sub_resource type="Resource" id="s25_pre_dragon_trust"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "放心啦, 一國之君怎麼會對我們下手"
-
-[sub_resource type="Resource" id="s25_pre_gory_food"]
-script = ExtResource("3_line")
-character_id = "gory"
-position = "right"
-text_zh = "長老, 這些食物..."
-action = "enter"
-
-[sub_resource type="Resource" id="s25_pre_amon_later"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "好了戈爾, 拿出森之國的待客之道, 有什麼之後再說吧"
-
-[sub_resource type="Resource" id="s25_pre_gory_silent"]
-script = ExtResource("3_line")
-character_id = "gory"
-position = "right"
-text_zh = "..."
-
-[sub_resource type="Resource" id="s25_pre_panda_remember"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "啊姆啊姆啊姆... 對了, 那件事!!"
-
-[sub_resource type="Resource" id="s25_pre_dragon_owen"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "對了, 奧雲!!"
-
-[sub_resource type="Resource" id="s25_pre_dragon_crystal"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "我們來是要保護光之水晶! 奧雲在光之國偷走了光之水晶!"
-
-[sub_resource type="Resource" id="s25_pre_amon_smile"]
-script = ExtResource("3_line")
-text_zh = "啊蒙與衛兵們相視而笑"
-
-[sub_resource type="Resource" id="s25_pre_amon_safe"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "放心, 光之水晶很安全"
-
-[sub_resource type="Resource" id="s25_pre_amon_system"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "木之國的經濟、防禦系統, 都賴光之水晶"
-
-[sub_resource type="Resource" id="s25_pre_amon_interest"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "如果光之水晶有什麼不測, 我們肯定是第一個身受其害的"
-
-[sub_resource type="Resource" id="s25_pre_shark_fallen"]
-script = ExtResource("3_line")
-character_id = "shark"
-text_zh = "光之國淪陷了! 裡面全是奧雲的士兵"
-
-[sub_resource type="Resource" id="s25_pre_amon_confident"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "喔, 我跟老國王認識很久了, 光之國的防禦, 我很有信心"
-
-[sub_resource type="Resource" id="s25_pre_dragon_husky"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "我親眼看見 Husky 和國王被抓捕扣押的! 我們需要對抗奧雲"
-
-[sub_resource type="Resource" id="s25_pre_amon_darkens"]
-script = ExtResource("3_line")
-text_zh = "[啊蒙面色一沉]"
-
-[sub_resource type="Resource" id="s25_pre_amon_understand"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "我知道了"
-
-[sub_resource type="Resource" id="s25_pre_amon_leave"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "時候不早了, 你們先回吧"
-
-[sub_resource type="Resource" id="s25_pre_shark_tch"]
-script = ExtResource("3_line")
-character_id = "shark"
-text_zh = "切"
-
-[sub_resource type="Resource" id="s25_pre_panda_hard"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "看來沒那麼容易呢"
-
-[sub_resource type="Resource" id="s25_pre_shark_not_care"]
-script = ExtResource("3_line")
-character_id = "shark"
-text_zh = "我看他根本沒當回事"
-
-[sub_resource type="Resource" id="s25_pre_dragon_ambush"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "只能暫時停留在這裡一會兒嘍，就當作是埋伏奧雲大作戰！"
-
-[sub_resource type="Resource" id="s25_pre_panda_accept"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "也只能這樣了"
-
-[sub_resource type="Resource" id="s25_pre_shark_sigh"]
-script = ExtResource("3_line")
-character_id = "shark"
-text_zh = "唉"
-
 [sub_resource type="Resource" id="s25_pre"]
 script = ExtResource("4_seq")
-lines = Array[ExtResource("3_line")]([SubResource("s25_pre_villager_beg"), SubResource("s25_pre_amon_transmute"), SubResource("s25_pre_amon_bless"), SubResource("s25_pre_villager_thanks"), SubResource("s25_pre_villagers_thanks"), SubResource("s25_pre_amon_welcome"), SubResource("s25_pre_amon_meal"), SubResource("s25_pre_panda_senbei"), SubResource("s25_pre_dragon_steak"), SubResource("s25_pre_shark_careful"), SubResource("s25_pre_dragon_trust"), SubResource("s25_pre_gory_food"), SubResource("s25_pre_amon_later"), SubResource("s25_pre_gory_silent"), SubResource("s25_pre_panda_remember"), SubResource("s25_pre_dragon_owen"), SubResource("s25_pre_dragon_crystal"), SubResource("s25_pre_amon_smile"), SubResource("s25_pre_amon_safe"), SubResource("s25_pre_amon_system"), SubResource("s25_pre_amon_interest"), SubResource("s25_pre_shark_fallen"), SubResource("s25_pre_amon_confident"), SubResource("s25_pre_dragon_husky"), SubResource("s25_pre_amon_darkens"), SubResource("s25_pre_amon_understand"), SubResource("s25_pre_amon_leave"), SubResource("s25_pre_shark_tch"), SubResource("s25_pre_panda_hard"), SubResource("s25_pre_shark_not_care"), SubResource("s25_pre_dragon_ambush"), SubResource("s25_pre_panda_accept"), SubResource("s25_pre_shark_sigh")])
 cast = Array[String](["amon", "villager", "villagers", "dragon", "panda", "shark", "gory"])
 cast_profiles = {
 "amon": {
@@ -218,24 +37,30 @@ cast_profiles = {
 background = ExtResource("5_bg")
 initial_music = ExtResource("6_music")
 
-[sub_resource type="Resource" id="s25_e1"]
+[sub_resource type="Resource" id="Resource_g4ij5"]
 script = ExtResource("2_entry")
 enemy = ExtResource("8_archer")
 level = 22
 hp_percent = 2000
 
-[sub_resource type="Resource" id="s25_e1_lancer"]
+[sub_resource type="Resource" id="Resource_xfgoe"]
 script = ExtResource("2_entry")
 enemy = ExtResource("8_lancer")
 level = 22
 hp_percent = 2000
 init_cd = 1
 
-[sub_resource type="Resource" id="s25_e2"]
+[sub_resource type="Resource" id="Resource_ewxqx"]
 script = ExtResource("2_entry")
 enemy = ExtResource("7_amon")
 level = 22
 hp_percent = 3200
+
+[sub_resource type="Resource" id="Resource_04jpd"]
+script = ExtResource("4_seq")
+
+[sub_resource type="Resource" id="Resource_o7cwm"]
+script = ExtResource("4_seq")
 
 [resource]
 script = ExtResource("1_stage")
@@ -243,13 +68,14 @@ stage_id = "2-5"
 prerequisite_stage_id = "2-4"
 connects_to = Array[String](["2-S1", "2-6", "2-S2"])
 map_position = Vector2(105.16235, 913.1968)
-stage_name = "Stage 2-5 長老阿蒙"
-element_weights = Array[int]([25, 20, 20, 35])
+stage_name = "Stage 2-5"
+element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("s25_e1"), SubResource("s25_e1_lancer")], [SubResource("s25_e2")]])
-rounds_init_cd = Array[Array]([[0, 1], [0]])
-rounds_enemy_levels = Array[Array]([[22, 22], [22]])
+rounds = Array[Array]([[SubResource("Resource_g4ij5"), SubResource("Resource_xfgoe")], [SubResource("Resource_ewxqx")]])
 pre_dialog = SubResource("s25_pre")
+start_stage_dialog = SubResource("Resource_04jpd")
+start_round_dialogs = Array[ExtResource("4_seq")]([SubResource("Resource_04jpd"), SubResource("Resource_o7cwm")])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

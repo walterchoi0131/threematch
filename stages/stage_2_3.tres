@@ -7,7 +7,6 @@
 [ext_resource type="Script" path="res://scripts/loot_item.gd" id="3_nvbwk"]
 [ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest_mon_sharing.png" id="4_jya1o"]
 [ext_resource type="Script" path="res://scripts/dialog_sequence.gd" id="4_seq"]
-[ext_resource type="Texture2D" path="res://assets/dialog_background/dialog_bg_forest_feast.png" id="5_736kx"]
 [ext_resource type="Script" path="res://scripts/character_data.gd" id="6_jya1o"]
 [ext_resource type="Resource" path="res://enemies/tree_man.tres" id="6_tree"]
 [ext_resource type="Resource" path="res://enemies/forest_archer.tres" id="7_archer"]
@@ -202,199 +201,9 @@ position = "right"
 action = "exit_all"
 shake = false
 
-[sub_resource type="Resource" id="s23_post_bg_hall"]
-script = ExtResource("3_line")
-action = "switch_bg"
-background = ExtResource("5_736kx")
-
-[sub_resource type="Resource" id="s23_post_evening"]
-script = ExtResource("3_line")
-text_zh = "天色漸暗，米洛一行人被邀請到城鎖中心大堂吃飯。"
-
-[sub_resource type="Resource" id="s23_post_foods"]
-script = ExtResource("3_line")
-text_zh = "燒雞，麵包，水果，牛奶，蜂蜜。"
-
-[sub_resource type="Resource" id="s23_post_hungry_party"]
-script = ExtResource("3_line")
-text_zh = "米洛一行人早就餓壞了。"
-
-[sub_resource type="Resource" id="s23_post_panda_senbei"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "哇! 是竹葉仙貝!"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_dragon_chicken"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "是雞腿!"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_shark_careful"]
-script = ExtResource("3_line")
-character_id = "shark"
-position = "right"
-text_zh = "小心!! 我們還不知道..."
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_dragon_trust"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "放心啦，一國之君怎麼會對我們下手"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_gory_food"]
-script = ExtResource("3_line")
-character_id = "gory"
-text_zh = "長老，這些食物..."
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_later"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "好了戈爾，拿出森之國的待客之道，有什麼之後再說吧。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_gory_silent"]
-script = ExtResource("3_line")
-character_id = "gory"
-text_zh = "..."
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_panda_remember"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "啊姆啊姆啊姆... 對了，那件事！！"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_dragon_owen"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "對了，奧雲！"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_dragon_crystal"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "我們來是要保護光之水晶! 奧云在光之國偷走了光之水晶!"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_smile"]
-script = ExtResource("3_line")
-text_zh = "啊蒙與衛兵們相視而笑"
-
-[sub_resource type="Resource" id="s23_post_amon_safe"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "放心， 光之水晶很安全"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_system"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "木之國的經濟、防禦系統，都仰賴光之水晶。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_interest"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "如果光之水晶有什麼不測，我們肯定是第一個身受其害的。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_shark_fallen"]
-script = ExtResource("3_line")
-character_id = "shark"
-text_zh = "光之國淪陷了! 裡面全是奧雲的士兵。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_confident"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "喔，我跟老國王認識很久了，光之國的防禦，我很有信心。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_dragon_husky"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "我親眼看見 Husky 和國王被抓捕扣押的! 我們需要對抗奧雲！"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_darkens"]
-script = ExtResource("3_line")
-text_zh = "[M面色一沉]"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_understand"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "我知道了。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_amon_leave"]
-script = ExtResource("3_line")
-character_id = "amon"
-position = "right"
-text_zh = "時候不早了, 你們先回吧。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_shark_tch"]
-script = ExtResource("3_line")
-character_id = "shark"
-text_zh = "切"
-action = "enter"
-
-[sub_resource type="Resource" id="Resource_pnv1c"]
-script = ExtResource("3_line")
-action = "exit_all"
-shake = false
-
-[sub_resource type="Resource" id="s23_post_bg_after"]
-script = ExtResource("3_line")
-action = "switch_bg"
-background = ExtResource("11_hall")
-
-[sub_resource type="Resource" id="s23_post_panda_hard"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "看來沒那麼容易呢"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_shark_not_care"]
-script = ExtResource("3_line")
-character_id = "shark"
-position = "right"
-text_zh = "我看他根本沒當回事"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_dragon_ambush"]
-script = ExtResource("3_line")
-character_id = "dragon"
-text_zh = "只能暫時停留在這裡一會兒嘍，就當作是埋伏奧雲大作戰！"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_panda_accept"]
-script = ExtResource("3_line")
-character_id = "panda"
-text_zh = "也只能這樣了。"
-action = "enter"
-
-[sub_resource type="Resource" id="s23_post_shark_sigh"]
-script = ExtResource("3_line")
-character_id = "shark"
-position = "right"
-text_zh = "哎。"
-action = "enter"
-
 [sub_resource type="Resource" id="s23_post"]
 script = ExtResource("4_seq")
-lines = Array[ExtResource("3_line")]([SubResource("s23_post_dragon_tired"), SubResource("s23_post_panda_hungry"), SubResource("s23_post_gory_light"), SubResource("Resource_736kx"), SubResource("s23_post_bg_street"), SubResource("s23_post_gate"), SubResource("s23_post_city"), SubResource("Resource_xs6sv"), SubResource("Resource_k1yoa"), SubResource("Resource_3524s"), SubResource("Resource_56hxs"), SubResource("Resource_7gkfx"), SubResource("Resource_jesap"), SubResource("s23_post_villager_beg"), SubResource("s23_post_amon_pray"), SubResource("Resource_05tal"), SubResource("s23_post_bg_transmute"), SubResource("s23_post_amon_fruit"), SubResource("s23_post_bg_back_street"), SubResource("s23_post_amon_bless"), SubResource("s23_post_villager_thanks"), SubResource("Resource_fp5d3"), SubResource("s23_post_amon_gory"), SubResource("s23_post_gory_elder"), SubResource("s23_post_dragon_intro"), SubResource("s23_post_panda_intro"), SubResource("s23_post_shark_intro"), SubResource("s23_post_amon_guests"), SubResource("s23_post_amon_welcome"), SubResource("s23_post_amon_meal"), SubResource("Resource_01typ"), SubResource("s23_post_bg_hall"), SubResource("s23_post_evening"), SubResource("s23_post_foods"), SubResource("s23_post_hungry_party"), SubResource("s23_post_panda_senbei"), SubResource("s23_post_dragon_chicken"), SubResource("s23_post_shark_careful"), SubResource("s23_post_dragon_trust"), SubResource("s23_post_gory_food"), SubResource("s23_post_amon_later"), SubResource("s23_post_gory_silent"), SubResource("s23_post_panda_remember"), SubResource("s23_post_dragon_owen"), SubResource("s23_post_dragon_crystal"), SubResource("s23_post_amon_smile"), SubResource("s23_post_amon_safe"), SubResource("s23_post_amon_system"), SubResource("s23_post_amon_interest"), SubResource("s23_post_shark_fallen"), SubResource("s23_post_amon_confident"), SubResource("s23_post_dragon_husky"), SubResource("s23_post_amon_darkens"), SubResource("s23_post_amon_understand"), SubResource("s23_post_amon_leave"), SubResource("s23_post_shark_tch"), SubResource("Resource_pnv1c"), SubResource("s23_post_bg_after"), SubResource("s23_post_panda_hard"), SubResource("s23_post_shark_not_care"), SubResource("s23_post_dragon_ambush"), SubResource("s23_post_panda_accept"), SubResource("s23_post_shark_sigh")])
+lines = Array[ExtResource("3_line")]([SubResource("s23_post_dragon_tired"), SubResource("s23_post_panda_hungry"), SubResource("s23_post_gory_light"), SubResource("Resource_736kx"), SubResource("s23_post_bg_street"), SubResource("s23_post_gate"), SubResource("s23_post_city"), SubResource("Resource_xs6sv"), SubResource("Resource_k1yoa"), SubResource("Resource_3524s"), SubResource("Resource_56hxs"), SubResource("Resource_7gkfx"), SubResource("Resource_jesap"), SubResource("s23_post_villager_beg"), SubResource("s23_post_amon_pray"), SubResource("Resource_05tal"), SubResource("s23_post_bg_transmute"), SubResource("s23_post_amon_fruit"), SubResource("s23_post_bg_back_street"), SubResource("s23_post_amon_bless"), SubResource("s23_post_villager_thanks"), SubResource("Resource_fp5d3"), SubResource("s23_post_amon_gory"), SubResource("s23_post_gory_elder"), SubResource("s23_post_dragon_intro"), SubResource("s23_post_panda_intro"), SubResource("s23_post_shark_intro"), SubResource("s23_post_amon_guests"), SubResource("s23_post_amon_welcome"), SubResource("s23_post_amon_meal"), SubResource("Resource_01typ")])
 cast = Array[String](["dragon", "panda", "shark", "gory", "amon", "villager", "villagers", "enemy_villager_rabbit", "giz"])
 cast_profiles = {
 "amon": {
@@ -427,19 +236,19 @@ initial_music = ExtResource("2_736kx")
 script = ExtResource("4_seq")
 cast = Array[String](["gory", "panda", "dragon", "shark"])
 
-[sub_resource type="Resource" id="Resource_575m6"]
+[sub_resource type="Resource" id="Resource_jya1o"]
 script = ExtResource("2_entry")
 enemy = ExtResource("7_archer")
 level = 20
 hp_percent = 1800
 
-[sub_resource type="Resource" id="Resource_pg5mc"]
+[sub_resource type="Resource" id="Resource_pnv1c"]
 script = ExtResource("2_entry")
 enemy = ExtResource("8_lancer")
 level = 20
 hp_percent = 1800
 
-[sub_resource type="Resource" id="Resource_smb6l"]
+[sub_resource type="Resource" id="Resource_575m6"]
 script = ExtResource("2_entry")
 enemy = ExtResource("6_tree")
 level = 20
@@ -450,7 +259,7 @@ init_cd = 1
 script = ExtResource("4_seq")
 cast = Array[String](["gory", "dragon"])
 
-[sub_resource type="Resource" id="Resource_yv4bo"]
+[sub_resource type="Resource" id="Resource_pg5mc"]
 script = ExtResource("4_seq")
 
 [resource]
@@ -464,10 +273,10 @@ element_weights = Array[int]([10, 10, 10, 10])
 allowed_types = Array[int]([0, 1, 2, 6])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
-rounds = Array[Array]([[SubResource("Resource_575m6")], [SubResource("Resource_pg5mc"), SubResource("Resource_smb6l")]])
+rounds = Array[Array]([[SubResource("Resource_jya1o")], [SubResource("Resource_pnv1c"), SubResource("Resource_575m6")]])
 pre_dialog = SubResource("s23_pre")
 post_dialog = SubResource("s23_post")
 start_stage_dialog = SubResource("s23_start")
-start_round_dialogs = Array[ExtResource("4_seq")]([SubResource("s23_start"), SubResource("Resource_yv4bo")])
+start_round_dialogs = Array[ExtResource("4_seq")]([SubResource("s23_start"), SubResource("Resource_pg5mc")])
 fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])
