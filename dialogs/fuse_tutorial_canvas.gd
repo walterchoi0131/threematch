@@ -39,6 +39,7 @@ const NAME_TO_UPPER: Dictionary = {
 	"Water Slash": Block.UpperType.WATER_SLASH,
 	"Justice Slash": Block.UpperType.SAINT_CROSS,
 	"Saint Cross": Block.UpperType.SAINT_CROSS,
+	"Electric": Block.UpperType.ELECTRIC,
 	"Leaf Shield": Block.UpperType.LEAF_SHIELD,
 	"Snowball": Block.UpperType.SNOWBALL,
 	"Iceball": Block.UpperType.ICEBALL,
@@ -429,6 +430,8 @@ static func _upper_gem_summary(upper_type: int) -> String:
 			return Locale.tr_ui("FUSE_SUMMARY_HEAL")
 		Block.UpperType.SAINT_CROSS:
 			return Locale.tr_ui("FUSE_SUMMARY_BLAST_HEAL_ATTACK")
+		Block.UpperType.ELECTRIC:
+			return Locale.tr_ui("FUSE_SUMMARY_BOARD_BLAST")
 		Block.UpperType.ICEBALL:
 			return Locale.tr_ui("FUSE_SUMMARY_SINGLE_BURST")
 		Block.UpperType.LEAF_SHIELD, Block.UpperType.TURTLE:
@@ -461,6 +464,12 @@ static func _blast_pattern_for(upper_type: int) -> Array:
 		Block.UpperType.SAINT_CROSS:
 			return [Vector2i(2, 0), Vector2i(2, 1), Vector2i(0, 2), Vector2i(1, 2), Vector2i(2, 2),
 					Vector2i(3, 2), Vector2i(4, 2), Vector2i(2, 3), Vector2i(2, 4)]
+		Block.UpperType.ELECTRIC:
+			var cells_all: Array = []
+			for x in 5:
+				for y in 5:
+					cells_all.append(Vector2i(x, y))
+			return cells_all
 		Block.UpperType.SNOWBALL:
 			var cells_b: Array = []
 			for x in range(1, 4):

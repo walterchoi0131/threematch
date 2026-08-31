@@ -6,9 +6,12 @@ extends Node2D
 
 ## 每種 VFX 同時存在的上限（連鎖過多時會回收最舊的實例重用）
 const MAX_PER_TYPE := 24
+const MAX_IDLE_PER_TYPE := 8
 
 # 每種 VFX path -> Array[BlastVfx]（依生成順序，front = 最舊）
 static var _active_by_path: Dictionary = {}
+# 每種 VFX path -> 已播放完、可直接重用的 BlastVfx[]
+static var _idle_by_path: Dictionary = {}
 # 每種 VFX path -> 預先載入的 AtlasTexture[]（避免每幀 new AtlasTexture）
 static var _atlas_cache: Dictionary = {}
 
@@ -18,6 +21,7 @@ var _atlases: Array = []
 var _frame_speed: float = 0.03
 var _total_frames: int = 0
 var _play_seq: int = 0  # 自增序號 — 回收時讓舊協程提早結束
+var _pixel_snap: bool = false
 
 
 ## 在 parent 節點上的 global_pos 位置播放爆炸 VFX。
@@ -32,18 +36,31 @@ static func play(parent: Node, global_pos: Vector2, ut: Block.UpperType, rotatio
 		return
 
 	# 將起始幀納入快取鍵，避免同一張 sprite sheet 被不同裁切覆蓋
-	var path: String = "%s#%d:%d" % [def.blast_vfx_path, def.blast_vfx_start_frame, def.blast_vfx_frames]
-	var pool: Array = _active_by_path.get(path, []) as Array
+	var path: String = "%s#%d:%d:%d:%d:%.3f:%.3f:%d" % [
+		def.blast_vfx_path,
+		def.blast_vfx_start_frame,
+		def.blast_vfx_frames,
+		def.blast_vfx_cols,
+		def.blast_vfx_rows,
+		def.blast_vfx_scale,
+		def.blast_vfx_speed,
+		int(def.blast_vfx_nearest_filter),
+	]
+	var pool: Array = _valid_nodes(_active_by_path.get(path, []) as Array)
+	var idle: Array = _valid_nodes(_idle_by_path.get(path, []) as Array)
 
 	var node: BlastVfx
-	if pool.size() >= MAX_PER_TYPE:
+	if not idle.is_empty():
+		node = idle.pop_back() as BlastVfx
+	elif pool.size() >= MAX_PER_TYPE:
 		# 池滿：回收最舊的 — 從 front 取出並重置（同物件移到尾端）
 		node = pool.pop_front() as BlastVfx
 		if not is_instance_valid(node):
 			node = _create_node(parent, path, tex, def)
 	else:
 		node = _create_node(parent, path, tex, def)
-		_active_by_path[path] = pool
+	_active_by_path[path] = pool
+	_idle_by_path[path] = idle
 
 	# 重新父接（若原 parent 已釋放）
 	if node.get_parent() != parent:
@@ -51,11 +68,20 @@ static func play(parent: Node, global_pos: Vector2, ut: Block.UpperType, rotatio
 			node.get_parent().remove_child(node)
 		parent.add_child(node)
 
-	node.global_position = global_pos
+	node.global_position = Vector2(round(global_pos.x), round(global_pos.y)) if node._pixel_snap else global_pos
 	if node._sprite != null:
 		node._sprite.rotation = rotation
 	pool.append(node)
+	_active_by_path[path] = pool
 	node._restart()
+
+
+static func _valid_nodes(nodes: Array) -> Array:
+	var valid: Array = []
+	for value in nodes:
+		if is_instance_valid(value):
+			valid.append(value)
+	return valid
 
 
 static func _create_node(parent: Node, path: String, tex: Texture2D, def: UpperGemDefs.Def) -> BlastVfx:
@@ -83,12 +109,15 @@ static func _create_node(parent: Node, path: String, tex: Texture2D, def: UpperG
 	node._atlases = atlases
 	node._frame_speed = def.blast_vfx_speed
 	node._total_frames = def.blast_vfx_frames
+	node._pixel_snap = def.blast_vfx_nearest_filter
 	node.z_index = 20
 	parent.add_child(node)
 
 	var spr := Sprite2D.new()
 	spr.centered = true
 	spr.scale = Vector2(def.blast_vfx_scale, def.blast_vfx_scale)
+	if def.blast_vfx_nearest_filter:
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	node.add_child(spr)
 	node._sprite = spr
 	return node
@@ -128,3 +157,9 @@ func _release_to_pool() -> void:
 	var pool: Array = _active_by_path.get(_vfx_path, []) as Array
 	pool.erase(self)
 	_active_by_path[_vfx_path] = pool
+	var idle: Array = _valid_nodes(_idle_by_path.get(_vfx_path, []) as Array)
+	if idle.size() < MAX_IDLE_PER_TYPE:
+		idle.append(self)
+		_idle_by_path[_vfx_path] = idle
+	else:
+		queue_free()

@@ -504,6 +504,12 @@ func _blast_pattern_for(upper_type: int) -> Array:
 			# X 形
 			return [Vector2i(2, 2), Vector2i(0, 0), Vector2i(1, 1), Vector2i(3, 3), Vector2i(4, 4),
 					Vector2i(0, 4), Vector2i(1, 3), Vector2i(3, 1), Vector2i(4, 0)]
+		Block.UpperType.ELECTRIC:
+			var cells_all: Array = []
+			for x in 5:
+				for y in 5:
+					cells_all.append(Vector2i(x, y))
+			return cells_all
 		Block.UpperType.SNOWBALL:
 			# 3x3 中心區
 			var cells_b: Array = []

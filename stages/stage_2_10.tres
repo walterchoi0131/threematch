@@ -70,25 +70,31 @@ cast_profiles = {
 }
 }
 
-[sub_resource type="Resource" id="s210_guard"]
+[sub_resource type="Resource" id="Resource_xprda"]
 script = ExtResource("2_entry")
 enemy = ExtResource("7_lancer")
 level = 27
 hp_percent = 2400
 
-[sub_resource type="Resource" id="s210_mage"]
+[sub_resource type="Resource" id="Resource_koc1p"]
 script = ExtResource("2_entry")
 enemy = ExtResource("8_mage")
 level = 27
 hp_percent = 2400
 init_cd = 1
 
-[sub_resource type="Resource" id="s210_amon"]
+[sub_resource type="Resource" id="Resource_j007l"]
 script = ExtResource("2_entry")
 enemy = ExtResource("5_amon")
 level = 28
 hp_percent = 7600
 main_boss = true
+
+[sub_resource type="Resource" id="Resource_25way"]
+script = ExtResource("4_seq")
+
+[sub_resource type="Resource" id="Resource_cbtps"]
+script = ExtResource("4_seq")
 
 [resource]
 script = ExtResource("1_stage")
@@ -96,15 +102,15 @@ stage_id = "2-10"
 prerequisite_stage_id = "2-9"
 map_position = Vector2(295, 1060)
 stage_name = "Stage 2-10 光神長老阿蒙"
-element_weights = Array[int]([25, 20, 20, 35])
-allowed_types = Array[int]([0, 1, 2, 6])
+element_weights = Array[int]([10, 10, 10, 8])
+allowed_types = Array[int]([0, 1, 6, 7])
 area = "forest"
 battle_music_override_path = "res://assets/music/Rainforest Clash.mp3"
 boss_bgm = ExtResource("12_boss")
-rounds = Array[Array]([[SubResource("s210_guard"), SubResource("s210_mage")], [SubResource("s210_amon")]])
-rounds_init_cd = Array[Array]([[0, 1], [0]])
-rounds_enemy_levels = Array[Array]([[27, 27], [28]])
-rounds_main_bosses = Array[Array]([[false, false], [true]])
+rounds = Array[Array]([[SubResource("Resource_xprda"), SubResource("Resource_koc1p")], [SubResource("Resource_j007l")]])
 pre_dialog = SubResource("s210_pre")
 post_dialog = SubResource("s210_post")
+start_stage_dialog = SubResource("Resource_25way")
+start_round_dialogs = Array[ExtResource("4_seq")]([SubResource("Resource_25way"), SubResource("Resource_cbtps")])
+fixed_layout = [[-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1, -1, -1]]
 drop_start_rows = Array[int]([0, 0, 0, 0, 0, 0, 0, 0])

@@ -10,6 +10,11 @@ const TrailProjectileScript := preload("res://scripts/trail_projectile.gd")
 const SwordSwingVfxScript := preload("res://scripts/sword_swing_vfx.gd")
 const PLANK_DEBRIS_TEXTURE := preload("res://assets/blocks/wood.png")
 const WOOD_SPEAR_THRUST_TEXTURE := preload("res://assets/leafspear.png")
+const ELECTRIC_CHAIN_TEXTURE := preload("res://assets/vfx/lightchain/Sprite-sheet/Sprite-sheet.png")
+const ELECTRIC_CHAIN_FRAMES := 4
+const ELECTRIC_CHAIN_FRAME_TIME := 0.035
+const ELECTRIC_CHAIN_VERTICAL_SCALE := 0.65
+const ELECTRIC_CHAIN_VISIBLE_WIDTH_RATIO := 0.82
 const GEM_DEBRIS_Z_INDEX := 90
 const OBSTACLE_DEBRIS_Z_INDEX := 100
 const WOOD_SPEAR_THRUST_Z_INDEX := 110
@@ -3556,6 +3561,8 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 			continue
 
 		# 交由連鎖路徑處理（由「逘一觸發」路徑代勞）
+		var d_positions: Array[Vector2i] = _get_blast_positions_for_upper(dp, dut)
+		await _play_pre_blast_animation_for(dp, dut, d_positions)
 		chain_data[0] += 1
 		upper_gem_chain_triggered.emit(dut)
 		_play_blast_vfx_for(dp, dut, dub.global_position)
@@ -3579,7 +3586,6 @@ func _handle_water_sword_sequence(start_pos: Vector2i, chain_data: Array = [], t
 			continue
 
 		# 其他 upper：取其爆炸範圍並走常規連鎖递迴
-		var d_positions: Array[Vector2i] = _get_blast_positions_for_upper(dp, dut)
 		d_positions.erase(dp)
 		var d_valid: Array[Vector2i] = []
 		for pp in d_positions:
@@ -3680,6 +3686,9 @@ func _play_blast_vfx_for(center_pos: Vector2i, ut: Block.UpperType, center_globa
 
 
 func _play_pre_blast_animation_for(center_pos: Vector2i, ut: Block.UpperType, positions: Array[Vector2i]) -> void:
+	if ut == Block.UpperType.ELECTRIC:
+		_play_electric_chain_vfx(center_pos, positions)
+		return
 	if ut != Block.UpperType.FIRE_GREATSWORD:
 		return
 	var vfx_key: int = center_pos.x * 1000 + center_pos.y
@@ -3714,6 +3723,47 @@ func _play_fire_greatsword_swing_vfx(center_pos: Vector2i, positions: Array[Vect
 	var anchor_cell: Vector2i = _fire_greatsword_left_diagonal_anchor_cell(center_pos, positions)
 	var anchor_screen: Vector2 = to_global(grid_to_world(anchor_cell))
 	await vfx.play(endpoints[0], endpoints[1], width_px, anchor_screen)
+
+
+func _play_electric_chain_vfx(center_pos: Vector2i, positions: Array[Vector2i]) -> void:
+	if ELECTRIC_CHAIN_TEXTURE == null or not _is_valid(center_pos):
+		return
+	var start_pos: Vector2 = grid_to_world(center_pos)
+	var frame_width: float = float(ELECTRIC_CHAIN_TEXTURE.get_width()) / float(ELECTRIC_CHAIN_FRAMES)
+	var visible_width: float = frame_width * ELECTRIC_CHAIN_VISIBLE_WIDTH_RATIO
+	var sprites: Array[Sprite2D] = []
+	for target_pos in positions:
+		if target_pos == center_pos or not _is_valid(target_pos):
+			continue
+		var target_block: Block = grid[target_pos.x][target_pos.y]
+		if target_block == null or target_block.block_type != Block.Type.DARK:
+			continue
+		var end_pos: Vector2 = grid_to_world(target_pos)
+		var offset: Vector2 = end_pos - start_pos
+		if offset.length_squared() <= 0.01:
+			continue
+		var sprite := Sprite2D.new()
+		sprite.texture = ELECTRIC_CHAIN_TEXTURE
+		sprite.hframes = ELECTRIC_CHAIN_FRAMES
+		sprite.vframes = 1
+		sprite.frame = 0
+		sprite.position = (start_pos + end_pos) * 0.5
+		sprite.rotation = offset.angle()
+		sprite.scale = Vector2(offset.length() / visible_width, ELECTRIC_CHAIN_VERTICAL_SCALE)
+		sprite.z_index = WOOD_SPEAR_THRUST_Z_INDEX + 6
+		add_child(sprite)
+		sprites.append(sprite)
+	if sprites.is_empty():
+		return
+
+	for frame_index in ELECTRIC_CHAIN_FRAMES:
+		for sprite in sprites:
+			if is_instance_valid(sprite):
+				sprite.frame = frame_index
+		await get_tree().create_timer(ELECTRIC_CHAIN_FRAME_TIME).timeout
+	for sprite in sprites:
+		if is_instance_valid(sprite):
+			sprite.queue_free()
 
 
 func _fire_greatsword_left_diagonal_anchor_cell(center_pos: Vector2i, positions: Array[Vector2i]) -> Vector2i:
@@ -3817,6 +3867,8 @@ func _get_blast_positions_for_upper(pos: Vector2i, ut: Block.UpperType) -> Array
 			return _get_dark_pawn_positions(pos)
 		Block.UpperType.DARK_QUEEN:
 			return _get_dark_queen_positions(pos)
+		Block.UpperType.ELECTRIC:
+			return _get_electric_positions(pos)
 	return [pos]
 
 
@@ -3880,6 +3932,19 @@ func _get_dark_queen_positions(origin: Vector2i) -> Array[Vector2i]:
 			if _cell_accepts_block(current):
 				_append_unique_valid_position(result, current)
 			current += direction
+	return result
+
+
+func _get_electric_positions(origin: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = [origin]
+	for x in columns:
+		for y in rows:
+			var pos := Vector2i(x, y)
+			if pos == origin:
+				continue
+			var block: Block = grid[x][y]
+			if block != null and not block.is_obstacle() and block.block_type == Block.Type.DARK:
+				result.append(pos)
 	return result
 
 
@@ -4521,6 +4586,7 @@ func _enemy_trigger_owned_upper_recursive(pos: Vector2i, owner_id: int, visited:
 	var counts_by_type: Dictionary = {}
 	var positions_by_type: Dictionary = {}
 
+	await _play_pre_blast_animation_for(pos, ut, positions)
 	_play_blast_vfx_for(pos, ut, block.global_position)
 	var upper_element: Block.Type = block.block_type as Block.Type
 	var upper_value: int = block.get_blast_value()

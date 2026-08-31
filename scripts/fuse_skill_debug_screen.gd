@@ -427,6 +427,12 @@ func _blast_pattern_for(upper_type: int) -> Array:
 		Block.UpperType.SAINT_CROSS:
 			return [Vector2i(2, 2), Vector2i(0, 0), Vector2i(1, 1), Vector2i(3, 3), Vector2i(4, 4),
 					Vector2i(0, 4), Vector2i(1, 3), Vector2i(3, 1), Vector2i(4, 0)]
+		Block.UpperType.ELECTRIC:
+			var cells_all: Array = []
+			for x in 5:
+				for y in 5:
+					cells_all.append(Vector2i(x, y))
+			return cells_all
 		Block.UpperType.SNOWBALL:
 			var cells_b: Array = []
 			for x in range(1, 4):
@@ -564,6 +570,7 @@ func _upper_gem_templates() -> Array[Dictionary]:
 		_skill_template("Fireball", "Fireball", "Fireball", Block.UpperType.FIREBALL, "count", "create a Fireball gem at tapped cell. Tap to blast cross area."),
 		_skill_template("Fire Pillar", "Fire Pillar", "Pillar", Block.UpperType.FIRE_PILLAR_X, "line", "create a Fire Pillar gem. Tap to blast entire row or column."),
 		_skill_template("Justice Slash", "Saint Cross", "Cross", Block.UpperType.SAINT_CROSS, "count", "create a Saint Cross upper gem at tapped cell."),
+		_skill_template("Electric", "Electric", "Electric", Block.UpperType.ELECTRIC, "count", "link to every dark gem on the board and blast each linked gem."),
 		_skill_template("Leaf Shield", "Leaf Shield", "Leaf", Block.UpperType.LEAF_SHIELD, "count", "create a Leaf Shield gem at tapped cell."),
 		_skill_template("Snowball", "Snowball", "Snow", Block.UpperType.SNOWBALL, "count", "create a Snowball gem at tapped cell. Click to blast 8 surrounding gems."),
 		_skill_template("Iceball", "Iceball", "Ice", Block.UpperType.ICEBALL, "count", "create an Iceball gem at tapped cell."),

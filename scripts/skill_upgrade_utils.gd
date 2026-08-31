@@ -191,6 +191,8 @@ static func responding_upper_type_from_name(skill_name: String) -> Block.UpperTy
 			return Block.UpperType.FIRE_PILLAR_X
 		"Justice Slash", "Saint Cross":
 			return Block.UpperType.SAINT_CROSS
+		"Electric":
+			return Block.UpperType.ELECTRIC
 		"Leaf Shield":
 			return Block.UpperType.LEAF_SHIELD
 		"Snowball":

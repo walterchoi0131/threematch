@@ -30,20 +30,31 @@ func add_world_node(node: Node3D) -> void:
 		return
 	_ensure_viewport()
 	if node.get_parent() != viewport:
-		viewport.add_child(node)
+		if node.get_parent() != null:
+			node.reparent(viewport)
+		else:
+			viewport.add_child(node)
 	_active_nodes[node.get_instance_id()] = node
+	_update_render_mode()
+
+
+func deactivate_world_node(node: Node3D) -> void:
+	if node == null:
+		return
+	_active_nodes.erase(node.get_instance_id())
+	if is_instance_valid(node):
+		node.visible = false
 	_update_render_mode()
 
 
 func remove_world_node(node: Node3D) -> void:
 	if node == null:
 		return
-	_active_nodes.erase(node.get_instance_id())
+	deactivate_world_node(node)
 	if is_instance_valid(node):
 		if node.get_parent() == viewport:
 			viewport.remove_child(node)
 		node.queue_free()
-	_update_render_mode()
 
 
 func screen_to_world(screen_pos: Vector2) -> Vector3:

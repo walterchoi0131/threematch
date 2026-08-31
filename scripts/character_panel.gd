@@ -7,6 +7,10 @@ signal active_skill_selection_cancelled(char_index: int)  # 主動技能選格�
 
 const BATTLE_CHARACTER_ROW_MARGIN_X: float = 16.0
 const BATTLE_CHARACTER_ROW_HEIGHT: float = 60.0
+const SKILL_READY_BACKLIGHT_SHADER: Shader = preload("res://shaders/skill_ready_card_backlight.gdshader")
+const SKILL_READY_BACKLIGHT_INTENSITY: float = 0.92
+# 對應來源 shader 的 vec2(0.372, 0.374)，讓程序式發光邊緣貼合實際卡片。
+const SKILL_READY_PADDING_RATIO := Vector2(0.172043, 0.168449)
 
 var _cards: Array[Control] = []        # 角色卡片陣列
 var _slot_nodes: Array[Control] = []   # 實際 HBox slot 節點；空槽不進入 _cards
@@ -19,6 +23,7 @@ var _char_data: Array[CharacterData] = []  # 角色資料陣列
 var _portraits: Dictionary = {}        # 角色索引 -> TextureRect（用於即時調整）
 var _gem_icons: Dictionary = {}        # 角色索引 -> TextureRect（元素寶石圖示）
 var _gem_rays: Dictionary = {}         # 角色索引 -> Node2D（技能就緒放射光芒）
+var _skill_ready_borders: Dictionary = {} # 角色索引 -> 參考卡牌獎勵 rarity backlight
 var _debug_panel: Control = null       # 即時調整面板
 var _active_selection_cancel_index: int = -1
 var _active_selection_badge: Control = null
@@ -49,6 +54,7 @@ func setup(characters: Array[CharacterData]) -> void:
 	_portraits.clear()
 	_gem_icons.clear()
 	_gem_rays.clear()
+	_skill_ready_borders.clear()
 	_char_data = characters.duplicate()
 	for child in get_children():
 		child.queue_free()
@@ -146,9 +152,11 @@ func _battle_character_panel_card_size() -> Vector2:
 func _apply_battle_slot_size(slot: Control) -> void:
 	if slot == null:
 		return
-	slot.custom_minimum_size = _battle_character_panel_card_size()
+	var card_size := _battle_character_panel_card_size()
+	slot.custom_minimum_size = card_size
 	slot.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	slot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_sync_skill_ready_border(slot, card_size)
 
 
 func _make_empty_battle_slot() -> Control:
@@ -266,6 +274,7 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	var result: Dictionary = CharacterCard.make_battle(c)
 	var panel: PanelContainer = result.panel
 	_glow_panels[index] = result.glow
+	_skill_ready_borders[index] = _create_skill_ready_border(panel, c, index)
 	if result.portrait != null:
 		_portraits[index] = result.portrait
 
@@ -287,15 +296,17 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	grad_tex.width = 64
 	grad_tex.height = 64
 	var gem_bg := TextureRect.new()
+	gem_bg.name = "GemCornerGradient"
 	gem_bg.texture = grad_tex
 	gem_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	gem_bg.stretch_mode = TextureRect.STRETCH_SCALE
 	gem_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gem_bg.offset_left = -2.0
-	gem_bg.offset_top = -2.0
-	gem_bg.offset_right = 46.0
-	gem_bg.offset_bottom = 46.0
-	gem_bg.z_index = -1
+	# 黑色漸層只留在 4px 彩色框內，不得伸到卡片外圍遮住技能背光。
+	gem_bg.offset_left = 4.0
+	gem_bg.offset_top = 4.0
+	gem_bg.offset_right = 52.0
+	gem_bg.offset_bottom = 52.0
+	gem_bg.z_index = 0
 	if gem_parent != null:
 		gem_parent.add_child(gem_bg)
 		gem_parent.move_child(gem_bg, gem_icon.get_index())
@@ -350,6 +361,53 @@ func _make_card(c: CharacterData, index: int) -> PanelContainer:
 	panel.gui_input.connect(_on_card_gui_input.bind(index))
 
 	return panel
+
+
+func _create_skill_ready_border(panel: Control, character: CharacterData, index: int) -> ColorRect:
+	# PanelContainer 會強制重排直接掛上的 Control；用非 Control host 才能讓
+	# 背光保留負 padding 並伸出卡片範圍。
+	var host := Node2D.new()
+	host.name = "SkillReadyBacklightHost"
+	host.show_behind_parent = true
+	host.z_index = -1
+	panel.add_child(host)
+
+	var light := ColorRect.new()
+	light.name = "SkillReadyBacklight"
+	light.color = Color.WHITE
+	light.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	light.visible = false
+	host.add_child(light)
+
+	var material := ShaderMaterial.new()
+	material.shader = SKILL_READY_BACKLIGHT_SHADER
+	var element_color: Color = Block.COLORS.get(character.gem_type, Color.WHITE)
+	if element_color.get_luminance() < 0.35:
+		element_color = element_color.lightened(0.28)
+	element_color.a = 1.0
+	material.set_shader_parameter("glow_color", element_color)
+	material.set_shader_parameter("phase", float(index) * 2.17)
+	material.set_shader_parameter("intensity", SKILL_READY_BACKLIGHT_INTENSITY)
+	light.material = material
+
+	panel.set_meta("_skill_ready_backlight", light)
+	panel.resized.connect(_sync_skill_ready_border.bind(panel))
+	_sync_skill_ready_border(panel, _battle_character_panel_card_size())
+	return light
+
+
+func _sync_skill_ready_border(panel: Control, size_override: Vector2 = Vector2.ZERO) -> void:
+	if panel == null or not is_instance_valid(panel) or not panel.has_meta("_skill_ready_backlight"):
+		return
+	var light := panel.get_meta("_skill_ready_backlight") as ColorRect
+	if not is_instance_valid(light):
+		return
+	var card_size := size_override if size_override.x > 0.0 and size_override.y > 0.0 else panel.size
+	if card_size.x <= 0.0 or card_size.y <= 0.0:
+		return
+	var padding := card_size * SKILL_READY_PADDING_RATIO
+	light.position = -padding
+	light.size = card_size + padding * 2.0
 
 
 ## _process：Flutter 風格長按 — 按住期間每幀檢查，達閾值立即觸發（不等放手）。
@@ -780,8 +838,14 @@ func start_glow(index: int) -> void:
 		return
 	# 已經在發光中 → 跳過，避免重複播放彈跳動畫
 	if _glow_tweens.has(index) and _glow_tweens[index].is_valid():
+		var active_border: ColorRect = _skill_ready_borders.get(index) as ColorRect
+		if is_instance_valid(active_border):
+			active_border.visible = true
 		return
 	_stop_glow(index)
+	var ready_border: ColorRect = _skill_ready_borders.get(index) as ColorRect
+	if is_instance_valid(ready_border):
+		ready_border.visible = true
 	var glow: ColorRect = _glow_panels[index]
 	var tween := create_tween().set_loops()
 	tween.tween_property(glow, "color:a", 0.35, 0.5).set_ease(Tween.EASE_IN_OUT)
@@ -799,6 +863,9 @@ func _stop_glow(index: int) -> void:
 		_glow_tweens.erase(index)
 	if _glow_panels.has(index):
 		_glow_panels[index].color.a = 0.0
+	var ready_border: ColorRect = _skill_ready_borders.get(index) as ColorRect
+	if is_instance_valid(ready_border):
+		ready_border.visible = false
 	_stop_gem_effects(index)
 
 

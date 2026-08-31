@@ -104,6 +104,8 @@ var _translations: Dictionary = {
 	"Fire Pillar DESC": {"zh": "在點擊處生成火柱寶石；點擊後依方向引發整列/整欄爆炸。", "en": "Create a Fire Pillar gem; row/column blast on click."},
 	"Justice Slash": {"zh": "正義斬", "en": "Justice Slash"},
 	"Justice Slash DESC": {"zh": "在點擊處生成聖十字寶石；點擊後造成 X 形範圍傷害並回血。", "en": "Create a Saint Cross gem. X-shaped blast and heal on click."},
+	"Electric": {"zh": "電光", "en": "Electric"},
+	"Electric DESC": {"zh": "6 顆以上光寶石合成電光寶石。爆破時以閃電連接場上所有暗寶石，並使每顆相連的暗寶石爆破。", "en": "Fuse 6+ light gems into an Electric gem. On blast, lightning links it to every dark gem on the board and blasts each linked dark gem."},
 	"Water Slash": {"zh": "狂鯊連撃", "en": "Shark Frenzy"},
 	"Water Slash DESC": {"zh": "在點擊處生成狂鯊寶石。點擊後連鎖貫穿所有狂鯊並沿欄縱向爆炸。", "en": "Place a Shark Frenzy gem. On tap, chain through all Shark gems and blast each column."},
 	"Snowball": {"zh": "雪球", "en": "Snowball"},

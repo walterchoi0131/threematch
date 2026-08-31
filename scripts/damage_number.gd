@@ -7,7 +7,7 @@ extends Node2D
 
 
 ## 顯示傷害數字（彈跳上升 + 淡出）
-func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool = false, is_super: bool = false) -> void:
+func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool = false, is_super: bool = false, prefix: String = "") -> void:
 	var bounce_x: float = 0.0
 	if random_x_offset:
 		pos.x += randf_range(-6.0, 6.0)
@@ -15,7 +15,7 @@ func show_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool 
 	global_position = pos
 
 	var label := Label.new()
-	label.text = str(amount) + ("!!" if is_super else "")
+	label.text = prefix + str(amount) + ("!!" if is_super else "")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 

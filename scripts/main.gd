@@ -12,6 +12,7 @@ const PuzzleGoalPulseParticlesScript := preload("res://scripts/upper_gem_pulse_p
 const PuzzleGoalRayBurstScript := preload("res://scripts/ray_burst.gd")
 const GoldCoin3DProxyScript := preload("res://scripts/gold_coin_3d_proxy.gd")
 const BattleVfx3DLayerScript := preload("res://scripts/battle_vfx_3d_layer.gd")
+const PlayerProjectileImpactVfxScript := preload("res://scripts/player_projectile_impact_vfx.gd")
 const ActiveSkillResolverRegistryScript := preload("res://scripts/active_skill_resolver_registry.gd")
 const SimpleConversionActiveSkillsScript := preload("res://scripts/active_skills/simple_conversion_active_skills.gd")
 const EmeraldTowerActiveSkillsScript := preload("res://scripts/active_skills/emerald_tower_active_skills.gd")
@@ -141,7 +142,7 @@ const CHAR_POLARZ := preload("res://characters/char_polarz.tres")
 const CHAR_DRAGON := preload("res://characters/char_dragon.tres")
 const CHAR_SHARK := preload("res://characters/char_shark.tres")
 const CHAR_GORY := preload("res://characters/char_gory.tres")
-const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer", "Emerald Tower", "Dark Emerald Tower", "Pawn", "Queen"]
+const UPPER_GEM_SKILLS: Array[String] = ["Fireball", "Fire Pillar", "Justice Slash", "Electric", "Leaf Shield", "Snowball", "Iceball", "Water Slash", "Porcupine", "Turtle", "Bamboo Supply", "Wood Spear", "光之盾", "Leaf Ray", "Light Triangle", "Fire Greatsword", "Fire Hammer", "Emerald Tower", "Dark Emerald Tower", "Pawn", "Queen"]
 const ICEBALL_MAGIC_MULT := 10
 const ICEBALL_DEBRIS_SHARDS := 7
 const LEAF_RAY_MAGIC_MULT := 3.5
@@ -292,6 +293,7 @@ const UPPER_GEM_ICON_PATHS := {
 	Block.UpperType.FIRE_HAMMER: "res://assets/gems/gem_fire_hammer_1.png",
 	Block.UpperType.EMERALD_TOWER: "res://assets/gems/gem_emerald_tower.png",
 	Block.UpperType.DARK_EMERALD_TOWER: "res://assets/gems/gem_dark_emerald_tower.png",
+	Block.UpperType.ELECTRIC: "res://assets/gems/gem_electric.png",
 }
 var _log_scroll: ScrollContainer = null
 var _log_vbox: VBoxContainer = null
@@ -329,6 +331,7 @@ var _active_loot_toasts: Array[Dictionary] = []
 var _loot_toast_queue: Array[Dictionary] = []
 var _loot_toast_starting: bool = false
 var _battle_vfx_3d_layer: BattleVfx3DLayer = null
+var _player_projectile_impact_vfx: PlayerProjectileImpactVfx = null
 var _defeat_overlay: Control = null  # 敗戰覆蓋層
 var _victory_overlay: Control = null  # 勝利覆蓋層
 const BGM_PREVIEW_VOLUME_DB := -5.0         # 預覽模式音量 (dB)
@@ -560,6 +563,7 @@ func _ready() -> void:
 	_setup_escape_hud()
 	_setup_puzzle_goal_hud()
 	_prewarm_trail_projectile_pool(TRANSMUTE_TRAIL_POOL_SIZE)
+	_setup_player_projectile_impact_vfx()
 
 	_se_blast = _load_audio_stream("res://assets/se/111.wav")
 	_se_freeze = _load_audio_stream("res://assets/se/skef_freeze.mp3")
@@ -595,6 +599,7 @@ func _ready() -> void:
 		_setup_dev_log() # 關掉 dev character action log：註解這個 if 區塊。
 
 	call_deferred("_prewarm_gold_coin_renderer")
+	call_deferred("_prewarm_player_projectile_impact_vfx")
 	_play_stage_intro()
 
 
@@ -7767,11 +7772,11 @@ func _add_log_entry(bbcode_text: String, gem_type: Block.Type = Block.Type.RED, 
 # ── 傷害數字輔助方法 ──────────────────────────────────────────
 
 ## 在指定位置生成浮動傷害數字
-func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool = false, is_super: bool = false) -> void:
+func _spawn_damage_number(pos: Vector2, amount: int, color: Color, random_x_offset: bool = false, is_super: bool = false, prefix: String = "") -> void:
 	var dn := Node2D.new()
 	dn.set_script(DamageNumberScript)
 	fx_layer.add_child(dn)
-	dn.show_number(pos, amount, color, random_x_offset, is_super)
+	dn.show_number(pos, amount, color, random_x_offset, is_super, prefix)
 
 
 # ── 棋盤回呼 ─────────────────────────────────────────────────
@@ -9576,12 +9581,15 @@ func _play_attack_sequence(attack: Dictionary) -> void:
 				var captured_target := target
 				var captured_dmg := damage
 				trail.deduct_hp.connect(func():
+					var impact_position := target_pos
 					if is_instance_valid(captured_target) and (captured_target.current_hp > 0 or captured_target.defer_death):
+						impact_position = _get_enemy_image_center(captured_target)
 						applied_damage = _apply_enemy_damage_with_stage13_floor(captured_target, captured_dmg, gem_type, hit_power_level)
 						_dev_add_turn_damage(char_index, applied_damage)
 						_spawn_damage_number(_get_enemy_image_center(captured_target), applied_damage, color, true, is_super)
 						if bool(vfx_profile.get("shake", false)):
 							_play_attack_hit_screen_shake(int(vfx_profile.get("power_level", 2)))
+					_play_player_projectile_impact_vfx(gem_type, impact_position, float(vfx_profile.get("visual_scale", 1.0)))
 					_play_player_attack_impact_sfx(gem_type)
 				, CONNECT_ONE_SHOT)
 				var attack_duration: float = float(attack.get("attack_vfx_duration", 0.5 * float(vfx_profile.get("duration_scale", 1.0))))
@@ -9661,6 +9669,15 @@ func _execute_responding_skill(resp: Dictionary) -> void:
 			var _hc: CharacterData = party[resp.char_index]
 			var _hc_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
 			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _hc_count, Block.UpperType.SAINT_CROSS), fuse_gem_type, _hc)
+			await get_tree().create_timer(0.15).timeout
+		Block.UpperType.ELECTRIC:
+			var pos: Vector2i = board.last_tapped_pos
+			if not board.place_upper_gem(pos, Block.UpperType.ELECTRIC, Block.Type.LIGHT):
+				return
+			_play_sfx(_se_freeze)
+			var _ec: CharacterData = party[resp.char_index]
+			var _ec_count: int = int(battle_manager.turn_gem_blasts.get(fuse_gem_type, 0))
+			_add_log_entry(_format_fuse_bbcode(fuse_gem_type, _ec_count, Block.UpperType.ELECTRIC), fuse_gem_type, _ec)
 			await get_tree().create_timer(0.15).timeout
 		Block.UpperType.LEAF_SHIELD:
 			# Place a Leaf Shield upper gem at the tapped position
@@ -10247,17 +10264,16 @@ func _on_upper_gem_chain_triggered(upper_type: Block.UpperType) -> void:
 		Block.UpperType.BAMBOO_SUPPLY:
 			# 竹葉補給：治療 Pan magic × BAMBOO_SUPPLY_HEAL_MULT
 			var panda_data2: CharacterData = null
-			var panda_index2 := -1
 			for i in party.size():
 				if party[i].character_name == "Pan":
 					panda_data2 = party[i]
-					panda_index2 = i
 					break
 			var magic_val: int = panda_data2.get_magic() if panda_data2 != null else 5
 			var heal_amount2: int = int(round(float(magic_val) * BAMBOO_SUPPLY_HEAL_MULT))
 			battle_manager.apply_heal(heal_amount2)
-			if panda_index2 >= 0:
-				character_panel.show_heal_text(panda_index2, heal_amount2)
+			var hp_bar := player_hp_fill.get_parent() as Control
+			var heal_number_pos: Vector2 = hp_bar.get_global_rect().get_center() if hp_bar != null else player_hp_fill.get_global_rect().get_center()
+			_spawn_damage_number(heal_number_pos, heal_amount2, Color(0.2, 0.9, 0.3), false, false, "+")
 			_add_log_entry("[b]%s[/b] %s %s %d HP" % [Locale.tr_ui("Bamboo Supply"), _gem_bbcode(Block.Type.GREEN), Locale.tr_ui("LOG_HEAL"), heal_amount2], Block.Type.GREEN, panda_data2)
 		Block.UpperType.LIGHT_SHIELD:
 			var duan_data: CharacterData = null
@@ -10349,17 +10365,12 @@ func _on_upper_blast_completed(chain_count: int, blasted_by_type: Dictionary, _t
 		_add_log_entry("[b]%s[/b] %s%s %d × ⚔%d%s = %d %s%d" % [Locale.tr_ui("LOG_SAINT_CROSS"), cross_str, _gem_bbcode(Block.Type.LIGHT), total_enemy_gems, base_atk, chain_str, holy_damage, Locale.tr_ui("LOG_HEAL"), heal_amount], Block.Type.LIGHT, husky_data)
 		_pending_saint_cross_count = 0
 
-	# ── 處理所有非聖十字的寶石類型：透過通用管線播放 VFX → 攻擊 ──
+	# 聖十字的獨有效果是額外效果；實際爆破的光符石仍須參與飛卡與角色普通攻擊。
 	var vfx_blasted: Dictionary = {}
 	var vfx_positions: Dictionary = {}
 	for bt in blasted_by_type:
-		# 聖十字已用獨有公式處理 LIGHT 傷害，跳過避免重複
-		if bt as Block.Type == Block.Type.LIGHT and had_saint_cross:
-			continue
 		vfx_blasted[bt] = blasted_by_type[bt]
 	for bt in _upper_blast_positions:
-		if bt as Block.Type == Block.Type.LIGHT and had_saint_cross:
-			continue
 		vfx_positions[bt] = _upper_blast_positions[bt]
 
 	_chain_atk_bonus = (chain_count - 1) * 0.10
@@ -12552,6 +12563,26 @@ func _get_battle_vfx_3d_layer() -> BattleVfx3DLayer:
 	_battle_vfx_3d_layer.name = "BattleVfx3DLayer"
 	fx_layer.add_child(_battle_vfx_3d_layer)
 	return _battle_vfx_3d_layer
+
+
+func _setup_player_projectile_impact_vfx() -> void:
+	if is_instance_valid(_player_projectile_impact_vfx) or fx_layer == null:
+		return
+	_player_projectile_impact_vfx = PlayerProjectileImpactVfxScript.new() as PlayerProjectileImpactVfx
+	_player_projectile_impact_vfx.name = "PlayerProjectileImpactVfx"
+	fx_layer.add_child(_player_projectile_impact_vfx)
+	_player_projectile_impact_vfx.configure(_get_battle_vfx_3d_layer())
+
+
+func _prewarm_player_projectile_impact_vfx() -> void:
+	if is_instance_valid(_player_projectile_impact_vfx):
+		await _player_projectile_impact_vfx.prewarm_gpu()
+
+
+func _play_player_projectile_impact_vfx(gem_type: Block.Type, screen_position: Vector2, visual_scale: float = 1.0) -> void:
+	if not is_instance_valid(_player_projectile_impact_vfx):
+		return
+	_player_projectile_impact_vfx.play_impact(gem_type, screen_position, visual_scale)
 
 
 func _prewarm_gold_coin_renderer() -> void:

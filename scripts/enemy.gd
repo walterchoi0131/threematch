@@ -53,6 +53,7 @@ var _long_press_fired: bool = false
 var _spin_tween: Tween = null  # 目標指示器旋轉動畫
 var _base_minimum_size: Vector2 = Vector2.ZERO
 var _hit_bounce_tween: Tween = null
+var _hp_bar_tween: Tween = null
 var _hit_bounce_home_scale: Vector2 = Vector2.ONE
 var _base_portrait_minimum_size: Vector2 = Vector2.ZERO
 var _passive_badge: Control = null
@@ -690,8 +691,7 @@ func take_applied_damage_tick(applied_amount: int, hit_power_level: int = HIT_BO
 		hp_bar_label.text = "%d" % current_hp
 	if hp_bar_fill:
 		var target_ratio: float = float(current_hp) / float(max_hp) if max_hp > 0 else 0.0
-		var bar_tween := create_tween()
-		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.12).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		_tween_hp_bar_to(target_ratio, 0.12)
 	if applied_amount > 0:
 		play_hit_bounce(hit_power_level)
 
@@ -738,8 +738,7 @@ func _take_damage_internal(amount: int, hp_floor: int, hit_power_level: int = HI
 	if hp_bar_fill:
 		var prev_ratio: float = float(prev_hp) / float(max_hp) if max_hp > 0 else 0.0
 		var target_ratio: float = float(current_hp) / float(max_hp) if max_hp > 0 else 0.0
-		var bar_tween := create_tween()
-		bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		_tween_hp_bar_to(target_ratio, 0.3)
 		_play_hp_damage_preview(prev_ratio, target_ratio)
 	if applied_amount > 0:
 		play_hit_bounce(hit_power_level)
@@ -821,3 +820,11 @@ func _on_gui_input(event: InputEvent) -> void:
 ## HP 條傷害預覽白條：與內層 Fill 對齊（同 padding），停留 0.45s 後右邊崩往新 HP 邊界
 func _play_hp_damage_preview(prev_ratio: float, new_ratio: float) -> void:
 	HpDamagePreview.show(hp_bar_fill, prev_ratio, new_ratio)
+
+
+func _tween_hp_bar_to(target_ratio: float, duration: float) -> void:
+	if _hp_bar_tween != null and _hp_bar_tween.is_valid():
+		_hp_bar_tween.kill()
+	_hp_bar_tween = create_tween()
+	_hp_bar_tween.tween_property(hp_bar_fill, "scale:x", target_ratio, duration) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)

@@ -32,4 +32,13 @@ responding_skills = Array[Dictionary]([{
 "priority": 1,
 "threshold": 9,
 "trigger_type": "count"
+}, {
+"desc": "6+ light gems create an Electric upper gem. Blasting it links to every dark gem on the board and blasts each linked dark gem.",
+"fuse_label": "6",
+"gem_type": 6,
+"name": "Electric",
+"priority": 1,
+"threshold": 6,
+"trigger_type": "count",
+"upper_type": 23
 }])

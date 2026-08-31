@@ -16,6 +16,7 @@ class Def:
 	var blast_vfx_scale: float     ## VFX 縮放倍率
 	var blast_vfx_speed: float     ## 每幀秒數
 	var blast_vfx_start_frame: int ## sprite sheet 起始幀（從第幾格開始播放）
+	var blast_vfx_nearest_filter: bool ## 低解像度 pixel-art sprite sheet 使用 nearest sampling
 	# ── 爆炸音效（預留）──
 	var blast_se_path: String      ## 音效資源路徑
 
@@ -31,6 +32,7 @@ class Def:
 		p_blast_vfx_speed: float = 0.03,
 		p_blast_se_path: String = "",
 		p_blast_vfx_start_frame: int = 0,
+		p_blast_vfx_nearest_filter: bool = false,
 	) -> void:
 		element = p_element
 		preview_color = p_preview_color
@@ -43,6 +45,7 @@ class Def:
 		blast_vfx_speed = p_blast_vfx_speed
 		blast_se_path = p_blast_se_path
 		blast_vfx_start_frame = p_blast_vfx_start_frame
+		blast_vfx_nearest_filter = p_blast_vfx_nearest_filter
 
 
 ## 所有高階寶石定義（不含 NONE）
@@ -71,6 +74,7 @@ const DEFAULT_FUSE_THRESHOLD: Dictionary = {
 	Block.UpperType.DARK_EMERALD_TOWER: 6,
 	Block.UpperType.DARK_PAWN: 5,
 	Block.UpperType.DARK_QUEEN: 12,
+	Block.UpperType.ELECTRIC: 6,
 }
 
 const UPGRADE_EFFECTS: Dictionary = {
@@ -133,7 +137,12 @@ static func _ensure_init() -> void:
 		Block.Type.LIGHT,
 		Color(1.0, 0.92, 0.23),
 		"Saint Cross",
-		"res://assets/animation/Smite_spritesheet.png", 11, 1, 11, 2.0, 0.04,
+		"res://assets/vfx/lightcross/sprite-sheet.png", 5, 2, 10, 3.0, 0.04, "", 0, true,
+	)
+	_defs[Block.UpperType.ELECTRIC] = Def.new(
+		Block.Type.LIGHT,
+		Color(0.96, 0.91, 0.24),
+		"Electric",
 	)
 	_defs[Block.UpperType.LEAF_SHIELD] = Def.new(
 		Block.Type.GREEN,
@@ -174,7 +183,7 @@ static func _ensure_init() -> void:
 		Block.Type.GREEN,
 		Color(0.30, 0.80, 0.35),
 		"Bamboo Supply",
-		"res://assets/vfx/green_burst.png", 6, 2, 12, 6.0, 0.03,
+		"res://assets/vfx/green_burst.png", 6, 2, 12, 6.0, 0.03, "", 0, true,
 	)
 	_defs[Block.UpperType.WOOD_SPEAR_UP] = Def.new(
 		Block.Type.GREEN,

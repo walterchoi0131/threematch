@@ -9,7 +9,7 @@ extends Node2D
 # WOOD_STRUCTURE：stationary + breakable obstacle.
 # PUZZLE_KEY：解謎鑰匙 — 固定障礙物；只會被上級寶石爆發解鎖。
 enum Type { RED = 0, BLUE = 1, GREEN = 2, LIGHT = 6, DARK = 7, PLANK = 8, ROCK = 9, WOOD_STRUCTURE = 10, PUZZLE_KEY = 11 }  # 紅(火)、藍(水)、綠(葉)、光、暗、木板、岩石、木結構、解謎鑰匙
-enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE, FIRE_GREATSWORD, FIRE_HAMMER, EMERALD_TOWER, DARK_EMERALD_TOWER, DARK_PAWN, DARK_QUEEN }  # 無、火球、橫火柱、縱火柱、聖十字、葉盾、雪球、狂鯊連撃、豪豬、琉龜、竹葉補給、木槍上、木槍下、冰球、光之盾、葉光射線、聖光三角、火焰巨劍、火焰巨鎔、綠寶石之塔、暗靈之塔、暗兵士、暗皇后
+enum UpperType { NONE, FIREBALL, FIRE_PILLAR_X, FIRE_PILLAR_Y, SAINT_CROSS, LEAF_SHIELD, SNOWBALL, WATER_SLASH, PORCUPINE, TURTLE, BAMBOO_SUPPLY, WOOD_SPEAR_UP, WOOD_SPEAR_DOWN, ICEBALL, LIGHT_SHIELD, LEAF_RAY, LIGHT_TRIANGLE, FIRE_GREATSWORD, FIRE_HAMMER, EMERALD_TOWER, DARK_EMERALD_TOWER, DARK_PAWN, DARK_QUEEN, ELECTRIC }  # 新類型只追加在尾端，避免既有 .tres 數字 ID 位移
 enum UpperOwnerTeam { PLAYER, ENEMY }
 
 # 額外效果（可同時掛載多個於單一寶石上）
@@ -91,6 +91,7 @@ const UPPER_GEM_TEXTURES: Dictionary = {
 	UpperType.DARK_EMERALD_TOWER: preload("res://assets/gems/gem_dark_emerald_tower.png"),
 	UpperType.DARK_PAWN: preload("res://assets/gems/gem_pawn.png"),
 	UpperType.DARK_QUEEN: preload("res://assets/gems/gem_queen.png"),
+	UpperType.ELECTRIC: preload("res://assets/gems/gem_electric.png"),
 }
 
 const UPPER_FORGE_TEXTURES: Dictionary = {
@@ -152,6 +153,7 @@ const UPPER_INTRINSIC_VALUE: Dictionary = {
 	UpperType.DARK_EMERALD_TOWER: 6,
 	UpperType.DARK_PAWN: 5,
 	UpperType.DARK_QUEEN: 12,
+	UpperType.ELECTRIC: 6,
 }
 
 const UPPER_FORGE_INTRINSIC_VALUE: Dictionary = {
@@ -191,6 +193,7 @@ const UPPER_ELEMENT: Dictionary = {
 	UpperType.DARK_EMERALD_TOWER: Type.DARK,
 	UpperType.DARK_PAWN: Type.DARK,
 	UpperType.DARK_QUEEN: Type.DARK,
+	UpperType.ELECTRIC: Type.LIGHT,
 }
 
 const UPPER_INSTANT: Dictionary = {
