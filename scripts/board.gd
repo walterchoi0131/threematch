@@ -128,6 +128,7 @@ func clear_deferred_clicks() -> void:
 func set_board_input_paused(paused: bool) -> void:
 	_board_input_paused = paused
 	if paused:
+		_cancel_pending_board_tap()
 		clear_deferred_clicks()
 		if _longpress_active:
 			_hide_blast_preview()
@@ -139,6 +140,7 @@ func set_board_input_paused(paused: bool) -> void:
 func _block_input_after_defeat() -> bool:
 	if not _player_is_defeated():
 		return false
+	_cancel_pending_board_tap()
 	clear_deferred_clicks()
 	if _longpress_active:
 		_hide_blast_preview()
@@ -171,10 +173,15 @@ var _row_column_drag_preview_blocks: Array = []
 
 # ── 長按預覽系統（長按高階寶石顯示爆炸範圍）──
 const LONGPRESS_THRESHOLD := 0.35         # 長按觸發閾值（秒）
+const TAP_MAX_TRAVEL := 18.0              # 指標移動超過此距離即視為拖曳，不觸發爆破
 const BUILDING_DISMANTLE_HOLD_DURATION := 1.5
 const PREVIEW_FADE_DUR := 0.18            # 預覽進出漸變時間（秒）
 const CircleProgressRingScript := preload("res://scripts/circle_progress_ring.gd")
+var _pending_tap_pos: Vector2i = Vector2i(-1, -1)
+var _pending_tap_local_pos: Vector2 = Vector2.ZERO
+var _pending_tap_started_msec: int = 0
 var _longpress_pos: Vector2i = Vector2i(-1, -1)  # 長按追蹤的網格位置
+var _longpress_press_local_pos: Vector2 = Vector2.ZERO
 var _longpress_timer: float = 0.0          # 已按住時間
 var _longpress_active: bool = false        # 長按預覽是否已顯示
 var _building_dismantle_progress: CircleProgressRing = null
@@ -1032,6 +1039,7 @@ func set_edit_mode(enabled: bool) -> void:
 	_edit_dragging = false
 	_edit_last_painted = Vector2i(-1, -1)
 	if enabled:
+		_cancel_pending_board_tap()
 		clear_deferred_clicks()
 		is_busy = false
 		_selection_mode = false
@@ -1248,6 +1256,64 @@ func _normalize_edit_value(value: int) -> int:
 	return EDIT_RANDOM
 
 
+func _begin_pending_board_tap(pos: Vector2i, local_pos: Vector2) -> void:
+	_pending_tap_pos = pos
+	_pending_tap_local_pos = local_pos
+	_pending_tap_started_msec = Time.get_ticks_msec()
+
+
+func _cancel_pending_board_tap() -> void:
+	_pending_tap_pos = Vector2i(-1, -1)
+	_pending_tap_local_pos = Vector2.ZERO
+	_pending_tap_started_msec = 0
+
+
+func _dispatch_confirmed_board_tap(pos: Vector2i, local_pos: Vector2) -> void:
+	if not _cell_accepts_block(pos):
+		return
+	if is_busy:
+		if is_fusing:
+			_try_concurrent_fuse(pos, local_pos)
+			return
+		if _input_queue_locked or _is_no_enemy_mode():
+			return
+		_try_queue_click(pos)
+		return
+	if grid[pos.x][pos.y] == null:
+		return
+	set_last_tapped_input(pos, local_pos)
+	_handle_click(pos)
+
+
+func _handle_pending_board_tap_input(event: InputEvent) -> bool:
+	if _pending_tap_pos == Vector2i(-1, -1):
+		return false
+	if event is InputEventMouseMotion:
+		if get_local_mouse_position().distance_to(_pending_tap_local_pos) > TAP_MAX_TRAVEL:
+			_cancel_pending_board_tap()
+		return true
+	if event is InputEventMouseButton:
+		var mouse_button: InputEventMouseButton = event as InputEventMouseButton
+		if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		if mouse_button.pressed:
+			return true
+		var release_local_pos := get_local_mouse_position()
+		var release_pos := world_to_grid(release_local_pos)
+		var saved_pos := _pending_tap_pos
+		var held_seconds := float(Time.get_ticks_msec() - _pending_tap_started_msec) / 1000.0
+		var is_tap := (
+			held_seconds < LONGPRESS_THRESHOLD
+			and release_pos == saved_pos
+			and release_local_pos.distance_to(_pending_tap_local_pos) <= TAP_MAX_TRAVEL
+		)
+		_cancel_pending_board_tap()
+		if is_tap:
+			_dispatch_confirmed_board_tap(saved_pos, release_local_pos)
+		return true
+	return false
+
+
 ## 處理滑鼠輸入：選擇模式下懸停／拖曳預覽並於放開時確認；長按高階寶石預覽爆炸範圍
 func _unhandled_input(event: InputEvent) -> void:
 	if _edit_mode:
@@ -1286,18 +1352,30 @@ func _unhandled_input(event: InputEvent) -> void:
 			_confirm_current_selection_preview()
 		return
 
+	if _handle_pending_board_tap_input(event):
+		return
+
 	# ── 長按追蹤中：處理放開、移動 ──
 	if _longpress_pos != Vector2i(-1, -1):
 		if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var release_local_pos := get_local_mouse_position()
+			var release_pos := world_to_grid(release_local_pos)
 			if _longpress_active:
 				# 長按預覽中放開 → 隱藏預覽，不觸發點擊
 				_hide_blast_preview()
 			else:
-				# 未達長按閾值就放開 → 觸發原本的點擊
+				# 未達長按閾值、未拖曳且仍在原格才算 tap。
 				var saved_pos: Vector2i = _longpress_pos
+				var held_seconds: float = _longpress_timer
 				_longpress_pos = Vector2i(-1, -1)
 				_longpress_timer = 0.0
-				if not is_busy:
+				if (
+					held_seconds < LONGPRESS_THRESHOLD
+					and release_pos == saved_pos
+					and release_local_pos.distance_to(_longpress_press_local_pos) <= TAP_MAX_TRAVEL
+					and not is_busy
+				):
+					set_last_tapped_input(saved_pos, release_local_pos)
 					_handle_click(saved_pos)
 				return
 			_longpress_pos = Vector2i(-1, -1)
@@ -1306,7 +1384,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventMouseMotion:
 			var local_pos := get_local_mouse_position()
 			var gp := world_to_grid(local_pos)
-			if gp != _longpress_pos:
+			if gp != _longpress_pos or local_pos.distance_to(_longpress_press_local_pos) > TAP_MAX_TRAVEL:
 				# 移出格子 → 取消長按追蹤
 				if _longpress_active:
 					_hide_blast_preview()
@@ -1316,38 +1394,38 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if is_busy:
-		# 融合動畫期間允許立即觸發並行融合
+		# 融合動畫期間仍允許並行融合，但需等放開確認為 tap。
 		if is_fusing and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var fuse_local_pos := get_local_mouse_position()
 			var fuse_gp := world_to_grid(fuse_local_pos)
 			if _cell_accepts_block(fuse_gp):
-				_try_concurrent_fuse(fuse_gp, fuse_local_pos)
+				_begin_pending_board_tap(fuse_gp, fuse_local_pos)
 			return
 		if _input_queue_locked:
 			return
 		# 逃脫/無敵人關卡沒有敵人攻擊節奏可吸收預輸入；busy 期間直接忽略點擊。
 		if _is_no_enemy_mode():
 			return
-		# State/UI 分離：在動畫期間預先 queue 普通爆破點擊
+		# State/UI 分離：在動畫期間放開確認後預先 queue 普通爆破點擊
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			var queue_local_pos := get_local_mouse_position()
 			var queue_gp := world_to_grid(queue_local_pos)
 			if _cell_accepts_block(queue_gp):
-				_try_queue_click(queue_gp)
+				_begin_pending_board_tap(queue_gp, queue_local_pos)
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var local_pos := get_local_mouse_position()
 		var gp := world_to_grid(local_pos)
 		if _cell_accepts_block(gp) and grid[gp.x][gp.y] != null:
 			var clicked_block: Block = grid[gp.x][gp.y]
-			set_last_tapped_input(gp, local_pos)
 			if _is_player_upper_gem(clicked_block):
 				# 高階寶石 → 開始長按追蹤（延遲點擊）
 				_longpress_pos = gp
+				_longpress_press_local_pos = local_pos
 				_longpress_timer = 0.0
 				_longpress_active = false
 				return
-			_handle_click(gp)
+			_begin_pending_board_tap(gp, local_pos)
 
 
 # ── 邏輯端 BFS / Queue / Drain（State/UI 分離）────────────────────
@@ -4963,6 +5041,7 @@ func _get_cross_positions(center: Vector2i) -> Array[Vector2i]:
 
 ## 進入選擇模式（由 main.gd 呼叫，預設置中預覽，放開指標時確認轉換）
 func enter_selection_mode(convert_type: Block.Type, pattern: String = "cross", max_count: int = 1) -> void:
+	_cancel_pending_board_tap()
 	if _selection_mode:
 		cancel_selection_mode()
 	_selection_mode = true
@@ -4991,6 +5070,7 @@ func cancel_selection_mode() -> void:
 
 
 func enter_row_column_drag_mode(max_distance: int = 1) -> void:
+	_cancel_pending_board_tap()
 	if _selection_mode:
 		cancel_selection_mode()
 	if _row_column_drag_mode:
